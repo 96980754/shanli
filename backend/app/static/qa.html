@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>知识库问答</title>
+  </head>
+  <body>
+    <h1>知识库问答</h1>
+    <p><a href="/admin">返回管理台</a></p>
+    <section id="qa-user"></section>
+    <p id="qa-kb-empty-state">当前账号暂无可访问知识库。</p>
+    <section id="qa-kb-selector">
+      <select id="qa-kb-select"></select>
+    </section>
+    <section id="qa-history">
+      <h2>历史会话</h2>
+      <section id="qa-conversation-list"></section>
+    </section>
+    <section id="qa-message-history">
+      <h2>历史消息</h2>
+      <section id="qa-message-list"></section>
+    </section>
+    <section id="qa-compose">
+      <textarea id="qa-question"></textarea>
+      <button id="qa-submit" type="button">提问</button>
+    </section>
+    <section id="qa-answer">
+      <h2>回答</h2>
+      <div id="qa-answer-content"></div>
+      <section id="qa-sources"></section>
+    </section>
+    <section id="qa-feedback">
+      <textarea id="qa-feedback-text"></textarea>
+      <button id="qa-feedback-helpful" type="button">有用</button>
+      <button id="qa-feedback-unhelpful" type="button">无用</button>
+    </section>
+    <p id="qa-message"></p>
+    <script src="/static/qa.js"></script>
+  </body>
+</html>

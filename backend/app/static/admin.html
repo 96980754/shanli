@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>知识库管理台</title>
+  </head>
+  <body>
+    <h1>知识库管理台</h1>
+    <p><a href="/qa">进入问答页</a></p>
+    <p id="admin-message"></p>
+    <section id="kb-create">
+      <form id="kb-create-form">
+        <input id="kb-create-name" name="name" placeholder="知识库名称" />
+        <input id="kb-create-description" name="description" placeholder="知识库描述" />
+        <select id="kb-create-visibility" name="visibility">
+          <option value="department">department</option>
+          <option value="all">all</option>
+          <option value="project">project</option>
+          <option value="personal">personal</option>
+        </select>
+        <button id="kb-create-submit" type="submit">创建知识库</button>
+      </form>
+    </section>
+    <main>
+      <section id="kb-list"></section>
+      <p id="kb-empty-state">暂无知识库，请先创建知识库。</p>
+      <section id="document-workspace">
+        <section id="document-upload">
+          <form id="document-upload-form">
+            <input id="document-file" name="file" type="file" />
+            <button id="upload-document" type="submit">上传文档</button>
+          </form>
+          <p id="document-empty-state">当前知识库暂无文档。</p>
+        </section>
+        <section id="document-list"></section>
+        <section id="document-detail">
+          <h2 id="document-detail-title">未选择文档</h2>
+          <p id="document-detail-type"></p>
+          <p id="document-detail-status"></p>
+          <p id="document-detail-block-count"></p>
+          <p id="document-detail-chunk-count"></p>
+          <p id="document-detail-department"></p>
+          <p id="document-detail-product-line"></p>
+          <p id="document-detail-visibility"></p>
+          <p id="document-detail-security-level"></p>
+          <p id="document-detail-tags"></p>
+        </section>
+      </section>
+      <aside id="permission-list"></aside>
+      <p id="permission-empty-state">当前暂无授权用户。</p>
+      <section id="issue-workspace">
+        <h2>知识缺口</h2>
+        <section id="issue-list"></section>
+        <p id="issue-empty-state">当前暂无待处理知识缺口。</p>
+      </section>
+    </main>
+    <section id="permission-editor">
+      <label>用户 ID <input id="permission-user-id" /></label>
+      <label><input id="perm-view" type="checkbox" />查看</label>
+      <label><input id="perm-upload" type="checkbox" />上传</label>
+      <label><input id="perm-delete" type="checkbox" />删除</label>
+      <label><input id="perm-grant" type="checkbox" />授权</label>
+      <button id="save-permission" type="button">保存权限</button>
+      <button id="delete-kb-button" type="button">删除知识库</button>
+    </section>
+    <section id="delete-panel" hidden>
+      <h2>确认删除</h2>
+      <p id="delete-target"></p>
+      <p id="delete-message">删除后不可恢复。</p>
+      <button id="confirm-delete" type="button">确认删除</button>
+      <button id="cancel-delete" type="button">取消</button>
+    </section>
+    <script src="/static/admin.js"></script>
+  </body>
+</html>
