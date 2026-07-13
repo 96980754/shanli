@@ -578,7 +578,11 @@ curl -X POST \
 | `product` | 统一产品编码；默认参与产品匹配重排，存在产品授权范围时参与硬过滤 |
 | `priority` | 运营优先级；参与检索策略重排 |
 | `file_type` | 从文件名后缀提取 |
-| `file_size` | 内存模式返回文件字节数 |
+| `file_size` | 原始文件字节数 |
+| `storage_key` | 仅数据库模式返回的内部相对存储键；不含服务器绝对路径 |
+| `original_filename` | 原始上传文件名 |
+| `content_type` | 上传时记录的 MIME 类型 |
+| `download_available` | 原始文件当前是否存在且可下载 |
 
 **当前实现说明：**
 
@@ -651,7 +655,8 @@ Authorization: Bearer <token>
 - 数据库模式还会将当前用户的有效文档 Filter 应用于列表：规则外文档不返回，避免泄露标题、ID 或元数据
 - 文档详情采用相同 Filter；文档存在但不符合当前知识视图时返回 `403 Permission denied`
 - 内存模式直接返回上传时记录的文档元数据
-- 数据库模式从 `documents` 表读取文档列表
+- 数据库模式从 `documents` 表读取文档列表，并返回 `original_filename`、`content_type`、`file_size` 与实时 `download_available`
+- 历史文档的 `storage_key` 为空时仍可查看元数据，但 `download_available=false`
 - 当前未实现分页、状态筛选和上传人筛选
 
 **测试覆盖：**
@@ -719,7 +724,7 @@ Authorization: Bearer <token>
 - 数据库模式会按 `kb_id + doc_id` 查询 `documents`
 - `block_count` 来自该文档最近一次 `parse_task` 关联的 `content_blocks` 数量
 - `chunk_count` 来自 `document_chunks` 中该文档的 chunk 数量
-- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`、`scope`、`document_type`、`product`、`priority`
+- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`、`scope`、`document_type`、`product`、`priority`、`original_filename`、`content_type`、`file_size`、`download_available`
 - `scope`、部门、产品、密级和角色 ACL 在数据库问答链路中属于检索前硬过滤；`document_type`、问题产品匹配、`priority` 属于候选集内的策略重排
 - 文档元数据是向量检索、后续图谱检索、后台与统计共享的唯一权限事实来源（SSOT）
 - 内存模式当前仅返回基础文档元数据，`block_count` / `chunk_count` 固定为 0
@@ -731,6 +736,26 @@ Authorization: Bearer <token>
 - `backend/tests/test_document_detail_api.py::test_document_detail_returns_parse_and_chunk_counts`
 - `backend/tests/test_document_detail_api.py::test_document_detail_returns_404_for_missing_document`
 - `backend/tests/test_document_detail_api.py::test_document_detail_returns_404_when_document_belongs_to_other_kb`
+
+---
+
+### GET `/api/kb/{kb_id}/documents/{doc_id}/download`
+
+下载数据库模式中已保存的原始文件。
+
+**请求头：** `Authorization: Bearer <token>`
+
+**成功响应：** `200` 附件流，使用上传时的 `content_type` 与 `original_filename`，并设置 `Content-Disposition: attachment`。服务端不会暴露绝对存储路径。
+
+**授权与审计：**
+
+- 需要知识库 `can_view`，并与列表、详情共用 V2 `EffectiveDocumentFilter`；规则外文档返回 `403 Permission denied`。
+- `can_grant` 用户可绕过用户级知识视图规则。
+- 仅当授权和文件存在检查均成功时，写入 `audit_log`：`action=download_document`、目标文档、知识库及文件名。
+- 历史文档无 `storage_key`，或原始文件已不存在时返回 `404 File not found`。
+- 内存模式不提供伪下载，返回 `404 File not found`。
+
+**测试覆盖：** `backend/tests/test_document_download_api.py`
 
 ---
 
