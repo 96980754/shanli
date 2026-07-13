@@ -374,7 +374,17 @@ def register_routes(app: FastAPI) -> None:
         session = require_session(app.state.session_store, authorization)
         lookup_id = int(kb_id) if app.state.service_mode == "database" else kb_id
         require_kb_permission(app, lookup_id, resolve_session_user_id(app, session), "can_grant")
-        item = app.state.kb_service.delete(lookup_id)
+        if app.state.service_mode == "database":
+            documents = app.state.document_service.list(lookup_id)
+            storage = LocalFileStorageService(app.state.file_storage_root)
+            storage_keys = [document.storage_key for document in documents if document.storage_key]
+            for document in documents:
+                app.state.document_service.delete(lookup_id, document.id)
+            item = app.state.kb_service.delete(lookup_id)
+            for storage_key in storage_keys:
+                storage.delete(storage_key)
+        else:
+            item = app.state.kb_service.delete(lookup_id)
         if not item:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         return {"deleted": True}
