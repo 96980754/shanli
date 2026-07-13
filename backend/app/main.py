@@ -31,6 +31,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 LOGIN_HTML = STATIC_DIR / "login.html"
 ADMIN_HTML = STATIC_DIR / "admin.html"
 QA_HTML = STATIC_DIR / "qa.html"
+DOCUMENTS_HTML = STATIC_DIR / "documents.html"
 
 
 class SimpleLLM:
@@ -245,6 +246,10 @@ def register_routes(app: FastAPI) -> None:
     @app.get("/qa", response_class=HTMLResponse)
     def qa_page() -> str:
         return QA_HTML.read_text(encoding="utf-8")
+
+    @app.get("/documents", response_class=HTMLResponse)
+    def documents_page() -> str:
+        return DOCUMENTS_HTML.read_text(encoding="utf-8")
 
     @app.post("/api/auth/login")
     def login(request: LoginRequest) -> dict[str, str]:
@@ -715,7 +720,16 @@ def register_routes(app: FastAPI) -> None:
         service_kb_id = int(kb_id) if app.state.service_mode == "database" else kb_id
         require_kb_permission(app, service_kb_id, resolve_session_user_id(app, session), "can_delete")
         service_doc_id = int(doc_id) if app.state.service_mode == "database" else doc_id
-        deleted = app.state.document_service.delete(service_kb_id, service_doc_id)
+        if app.state.service_mode == "database":
+            item = app.state.document_service.get(service_kb_id, service_doc_id)
+            if item is None:
+                raise HTTPException(status_code=404, detail="Document not found")
+            storage_key = item.storage_key
+            deleted = app.state.document_service.delete(service_kb_id, service_doc_id)
+            if storage_key:
+                LocalFileStorageService(app.state.file_storage_root).delete(storage_key)
+        else:
+            deleted = app.state.document_service.delete(service_kb_id, service_doc_id)
         if deleted is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return {"deleted": True}

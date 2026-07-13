@@ -330,3 +330,27 @@ def test_admin_shell_contains_v2_metadata_fields_and_policy_summary():
     assert 'formData.append("product"' in admin_js
     assert 'formData.append("priority"' in admin_js
     assert "/api/retrieval-policy" in admin_js
+
+
+def test_documents_page_contains_kb_selector_document_list_detail_and_download_hook():
+    client = TestClient(create_app())
+
+    response = client.get("/documents")
+
+    assert response.status_code == 200
+    assert 'id="documents-kb-list"' in response.text
+    assert 'id="documents-list"' in response.text
+    assert 'id="documents-detail"' in response.text
+    assert 'id="download-document"' in response.text
+    script = client.get("/static/documents.js")
+    assert script.status_code == 200
+    assert "fetch(" in script.text
+    assert "URL.createObjectURL" in script.text
+    assert "Authorization" in script.text
+
+
+def test_admin_and_qa_shells_link_to_documents_page():
+    client = TestClient(create_app())
+
+    assert 'href="/documents"' in client.get("/admin").text
+    assert 'href="/documents"' in client.get("/qa").text

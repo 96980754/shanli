@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models import Document, KnowledgeBase
+from app.models import ContentBlock, Document, DocumentChunk, KnowledgeBase, ParseTask
 
 
 class DbDocumentService:
@@ -66,6 +66,31 @@ class DbDocumentService:
             .order_by(Document.id)
             .all()
         )
+
+    def delete(self, kb_id: int, doc_id: int) -> Document | None:
+        document = self.get(kb_id, doc_id)
+        if document is None:
+            return None
+        task_ids = [
+            task_id
+            for task_id, in self.session.query(ParseTask.id)
+            .filter(ParseTask.document_id == document.id, ParseTask.kb_id == kb_id)
+            .all()
+        ]
+        if task_ids:
+            self.session.query(ContentBlock).filter(ContentBlock.parse_task_id.in_(task_ids)).delete(
+                synchronize_session=False,
+            )
+            self.session.query(ParseTask).filter(ParseTask.id.in_(task_ids)).delete(synchronize_session=False)
+        self.session.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete(
+            synchronize_session=False,
+        )
+        kb = self.session.get(KnowledgeBase, kb_id)
+        if kb is not None:
+            kb.doc_count = max(0, kb.doc_count - 1)
+        self.session.delete(document)
+        self.session.commit()
+        return document
 
     def get(self, kb_id: int, doc_id: int) -> Document | None:
         return (
