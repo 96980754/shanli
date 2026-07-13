@@ -5,17 +5,18 @@ from typing import Any, Mapping
 import json
 
 from fastapi import FastAPI, Header, HTTPException, UploadFile, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.core.db import create_session_factory
-from app.models import ContentBlock, DocumentChunk, ParseTask
+from app.models import AuditLog, ContentBlock, DocumentChunk, ParseTask
 from app.services.auth_service import AuthService
 from app.services.db_chunk_loader import DbChunkLoader
 from app.services.db_document_service import DbDocumentService
 from app.services.db_kb_service import DbKnowledgeBaseService
 from app.services.document_service import InMemoryDocumentService
+from app.services.document_access_service import DocumentAccessService
 from app.services.document_filter_service import DocumentFilterService
 from app.services.file_storage import LocalFileStorageService
 from app.services.ingestion_service import IngestionService
@@ -131,6 +132,30 @@ def resolve_session_user_id(app: FastAPI, session: dict[str, str]) -> str | int:
     return user_id
 
 
+def serialize_database_document(item: Any, storage: LocalFileStorageService) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "kb_id": item.kb_id,
+        "title": item.title,
+        "file_type": item.file_type,
+        "status": item.status,
+        "department": item.department,
+        "product_line": item.product_line,
+        "visibility": item.visibility,
+        "security_level": item.security_level,
+        "tags": item.tags,
+        "scope": item.scope,
+        "document_type": item.document_type,
+        "product": item.product,
+        "priority": item.priority,
+        "storage_key": item.storage_key,
+        "original_filename": item.original_filename,
+        "content_type": item.content_type,
+        "file_size": item.file_size,
+        "download_available": bool(item.storage_key and storage.exists(item.storage_key)),
+    }
+
+
 def build_app_state_services(
     mode: str = "memory",
     session: Any | None = None,
@@ -182,6 +207,11 @@ def create_app(
     app.state.document_filter_service = (
         DocumentFilterService(app.state.kb_service, app.state.view_rule_service)
         if services["mode"] == "database"
+        else None
+    )
+    app.state.document_access_service = (
+        DocumentAccessService(app.state.document_filter_service)
+        if app.state.document_filter_service is not None
         else None
     )
     app.state.review_queue = []
@@ -538,26 +568,9 @@ def register_routes(app: FastAPI) -> None:
                 app.state.db_session.rollback()
                 storage.delete(stored.storage_key)
                 raise
+            body = serialize_database_document(doc, storage)
             return {
-                "id": doc.id,
-                "kb_id": doc.kb_id,
-                "title": doc.title,
-                "file_type": doc.file_type,
-                "status": doc.status,
-                "department": doc.department,
-                "product_line": doc.product_line,
-                "visibility": doc.visibility,
-                "security_level": doc.security_level,
-                "tags": doc.tags,
-                "scope": doc.scope,
-                "document_type": doc.document_type,
-                "product": doc.product,
-                "priority": doc.priority,
-                "storage_key": doc.storage_key,
-                "original_filename": doc.original_filename,
-                "content_type": doc.content_type,
-                "file_size": doc.file_size,
-                "download_available": storage.exists(doc.storage_key),
+                **body,
                 "parse_task_id": staged["task_id"],
                 "staged_filename": staged["staged_filename"],
                 "block_count": staged["block_count"],
@@ -593,28 +606,13 @@ def register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         if app.state.service_mode == "database":
             database_user_id = int(user_id)
-            document_filter = app.state.document_filter_service.build_filter(
-                kb_id=service_kb_id,
-                user_id=database_user_id,
-                user_roles=app.state.document_filter_service.roles_for_user(database_user_id),
+            items = app.state.document_access_service.filter_accessible_documents(
+                service_kb_id,
+                database_user_id,
+                items,
             )
-            items = [item for item in items if document_filter.matches(item)]
-            return {
-                "items": [
-                    {
-                        "id": item.id,
-                        "kb_id": item.kb_id,
-                        "title": item.title,
-                        "file_type": item.file_type,
-                        "status": item.status,
-                        "scope": item.scope,
-                        "document_type": item.document_type,
-                        "product": item.product,
-                        "priority": item.priority,
-                    }
-                    for item in items
-                ]
-            }
+            storage = LocalFileStorageService(app.state.file_storage_root)
+            return {"items": [serialize_database_document(item, storage) for item in items]}
         return {"items": items}
 
     @app.get("/api/kb/{kb_id}/documents/{doc_id}")
@@ -629,12 +627,7 @@ def register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Document not found")
         if app.state.service_mode == "database":
             database_user_id = int(user_id)
-            document_filter = app.state.document_filter_service.build_filter(
-                kb_id=service_kb_id,
-                user_id=database_user_id,
-                user_roles=app.state.document_filter_service.roles_for_user(database_user_id),
-            )
-            if not document_filter.matches(item):
+            if not app.state.document_access_service.can_access_document(service_kb_id, database_user_id, item):
                 raise HTTPException(status_code=403, detail="Permission denied")
             parse_task = (
                 app.state.db_session.query(ParseTask)
@@ -655,20 +648,7 @@ def register_routes(app: FastAPI) -> None:
                 .count()
             )
             return {
-                "id": item.id,
-                "kb_id": item.kb_id,
-                "title": item.title,
-                "status": item.status,
-                "file_type": item.file_type,
-                "department": item.department,
-                "product_line": item.product_line,
-                "visibility": item.visibility,
-                "security_level": item.security_level,
-                "tags": item.tags,
-                "scope": item.scope,
-                "document_type": item.document_type,
-                "product": item.product,
-                "priority": item.priority,
+                **serialize_database_document(item, LocalFileStorageService(app.state.file_storage_root)),
                 "block_count": block_count,
                 "chunk_count": chunk_count,
             }
@@ -690,6 +670,40 @@ def register_routes(app: FastAPI) -> None:
             "block_count": 0,
             "chunk_count": 0,
         }
+
+    @app.get("/api/kb/{kb_id}/documents/{doc_id}/download")
+    def download_document(
+        kb_id: str,
+        doc_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> FileResponse:
+        session = require_session(app.state.session_store, authorization)
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=404, detail="File not found")
+        service_kb_id = int(kb_id)
+        database_user_id = int(resolve_session_user_id(app, session))
+        item = app.state.document_service.get(service_kb_id, int(doc_id))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if not app.state.document_access_service.can_access_document(service_kb_id, database_user_id, item):
+            raise HTTPException(status_code=403, detail="Permission denied")
+        storage = LocalFileStorageService(app.state.file_storage_root)
+        if not item.storage_key or not storage.exists(item.storage_key):
+            raise HTTPException(status_code=404, detail="File not found")
+        app.state.db_session.add(AuditLog(
+            user_id=database_user_id,
+            action="download_document",
+            target_type="document",
+            target_id=str(item.id),
+            kb_id=item.kb_id,
+            detail=item.original_filename or item.title,
+        ))
+        app.state.db_session.commit()
+        return FileResponse(
+            path=storage.path_for(item.storage_key),
+            media_type=item.content_type or "application/octet-stream",
+            filename=item.original_filename or item.title,
+        )
 
     @app.delete("/api/kb/{kb_id}/documents/{doc_id}")
     def delete_document(
