@@ -17,6 +17,7 @@ from app.services.db_document_service import DbDocumentService
 from app.services.db_kb_service import DbKnowledgeBaseService
 from app.services.document_service import InMemoryDocumentService
 from app.services.document_filter_service import DocumentFilterService
+from app.services.file_storage import LocalFileStorageService
 from app.services.ingestion_service import IngestionService
 from app.services.kb_service import InMemoryKnowledgeBaseService
 from app.services.rag_service import RAGService
@@ -189,6 +190,7 @@ def create_app(
     app.state.knowledge_issues = []
     app.state.default_owner_id = None
     app.state.upload_root = Path("uploads")
+    app.state.file_storage_root = Path("uploads/files")
     app.state.retrieval_policy_path = Path(__file__).resolve().parents[1] / "config" / "retrieval_policy.yaml"
     app.state.rag_service.tools.set_retrieval_policy_path(app.state.retrieval_policy_path)
     if services["mode"] == "database":
@@ -502,6 +504,64 @@ def register_routes(app: FastAPI) -> None:
         allowed_priorities = {"P0", "P1", "P2"}
         if scope not in allowed_scopes or document_type not in allowed_types or product not in allowed_products or priority not in allowed_priorities:
             raise HTTPException(status_code=422, detail="Invalid document metadata")
+        if app.state.service_mode == "database":
+            storage = LocalFileStorageService(app.state.file_storage_root)
+            stored = storage.save(
+                content=content,
+                original_filename=file.filename or "uploaded",
+                content_type=file.content_type or "application/octet-stream",
+                kb_id=service_kb_id,
+            )
+            try:
+                doc = app.state.document_service.upload(
+                    kb_id=service_kb_id,
+                    filename=stored.original_filename,
+                    content=content,
+                    department=department,
+                    product_line=product_line,
+                    visibility=visibility,
+                    security_level=security_level,
+                    tags=tags,
+                    scope=scope,
+                    document_type=document_type,
+                    product=product,
+                    priority=priority,
+                    storage_key=stored.storage_key,
+                    original_filename=stored.original_filename,
+                    content_type=stored.content_type,
+                    file_size=stored.file_size,
+                )
+                ingestion = IngestionService(session=app.state.db_session, file_storage=storage)
+                staged = ingestion.ingest_uploaded_document(document=doc)
+            except Exception:
+                storage.delete(stored.storage_key)
+                raise
+            return {
+                "id": doc.id,
+                "kb_id": doc.kb_id,
+                "title": doc.title,
+                "file_type": doc.file_type,
+                "status": doc.status,
+                "department": doc.department,
+                "product_line": doc.product_line,
+                "visibility": doc.visibility,
+                "security_level": doc.security_level,
+                "tags": doc.tags,
+                "scope": doc.scope,
+                "document_type": doc.document_type,
+                "product": doc.product,
+                "priority": doc.priority,
+                "storage_key": doc.storage_key,
+                "original_filename": doc.original_filename,
+                "content_type": doc.content_type,
+                "file_size": doc.file_size,
+                "download_available": storage.exists(doc.storage_key),
+                "parse_task_id": staged["task_id"],
+                "staged_filename": staged["staged_filename"],
+                "block_count": staged["block_count"],
+                "chunk_count": staged["chunk_count"],
+            }
+
         doc = app.state.document_service.upload(
             kb_id=service_kb_id,
             filename=file.filename or "uploaded",
@@ -518,29 +578,6 @@ def register_routes(app: FastAPI) -> None:
         )
         if not doc:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
-        if app.state.service_mode == "database":
-            ingestion = IngestionService(session=app.state.db_session, upload_root=app.state.upload_root)
-            staged = ingestion.ingest_uploaded_document(document=doc, content=content)
-            return {
-                "id": doc.id,
-                "kb_id": doc.kb_id,
-                "title": doc.title,
-                "file_type": doc.file_type,
-                "status": doc.status,
-                "department": doc.department,
-                "product_line": doc.product_line,
-                "visibility": doc.visibility,
-                "security_level": doc.security_level,
-                "tags": doc.tags,
-                "scope": doc.scope,
-                "document_type": doc.document_type,
-                "product": doc.product,
-                "priority": doc.priority,
-                "parse_task_id": staged["task_id"],
-                "staged_filename": staged["staged_filename"],
-                "block_count": staged["block_count"],
-                "chunk_count": staged["chunk_count"],
-            }
         return doc
 
     @app.get("/api/kb/{kb_id}/documents")

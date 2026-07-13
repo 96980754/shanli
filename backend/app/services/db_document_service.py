@@ -25,6 +25,10 @@ class DbDocumentService:
         document_type: str = "OTH",
         product: str = "GEN",
         priority: str = "P2",
+        storage_key: str = "",
+        original_filename: str = "",
+        content_type: str = "",
+        file_size: int = 0,
     ) -> Document:
         file_type = filename.rsplit(".", 1)[-1] if "." in filename else "unknown"
         document = Document(
@@ -41,6 +45,10 @@ class DbDocumentService:
             document_type=document_type,
             product=product,
             priority=priority,
+            storage_key=storage_key,
+            original_filename=original_filename,
+            content_type=content_type,
+            file_size=file_size,
         )
         self.session.add(document)
 

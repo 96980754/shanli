@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import uuid4
 
 from app.models import ContentBlock, DocumentChunk, ParseTask
+from app.services.file_storage import FileStorageService
 from app.services.parser_service import parse_file_to_elements
 
 
 class IngestionService:
-    """Stage uploaded files and create parse task records."""
+    """Create parse records from an already persisted original file."""
 
-    def __init__(self, session, upload_root: Path) -> None:
+    def __init__(self, session, file_storage: FileStorageService) -> None:
         self.session = session
-        self.upload_root = upload_root
+        self.file_storage = file_storage
 
-    def stage_uploaded_document(self, document, content: bytes) -> dict[str, str | int]:
-        self.upload_root.mkdir(parents=True, exist_ok=True)
-        filename = document.title or f"document-{document.id}.bin"
-        staged_name = f"{document.id}-{uuid4().hex}-{filename}"
-        file_path = self.upload_root / staged_name
-        file_path.write_bytes(content)
+    def stage_uploaded_document(self, document) -> dict[str, str | int]:
+        if not document.storage_key or not self.file_storage.exists(document.storage_key):
+            raise FileNotFoundError("File not found")
 
         task = ParseTask(document_id=document.id, kb_id=document.kb_id, status="pending")
         self.session.add(task)
@@ -28,15 +25,15 @@ class IngestionService:
 
         return {
             "task_id": task.id,
-            "file_path": str(file_path),
-            "staged_filename": file_path.name,
+            "storage_key": document.storage_key,
+            "staged_filename": Path(document.storage_key).name,
         }
 
-    def ingest_uploaded_document(self, document, content: bytes) -> dict[str, str | int]:
-        staged = self.stage_uploaded_document(document=document, content=content)
+    def ingest_uploaded_document(self, document) -> dict[str, str | int]:
+        staged = self.stage_uploaded_document(document=document)
         task = self.session.get(ParseTask, staged["task_id"])
         try:
-            elements = parse_file_to_elements(Path(staged["file_path"]))
+            elements = parse_file_to_elements(self.file_storage.path_for(document.storage_key))
         except ValueError:
             return {
                 **staged,

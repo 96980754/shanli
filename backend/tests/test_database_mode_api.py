@@ -63,6 +63,51 @@ def test_database_mode_kb_api_persists_knowledge_base():
     assert client.get("/api/kb", headers={"Authorization": f"Bearer {token}"}).json()["items"][0]["name"] == "数据库知识库"
 
 
+def test_database_mode_upload_saves_original_file_metadata(tmp_path):
+    app = build_database_app()
+    app.state.file_storage_root = tmp_path
+    client = TestClient(app)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "文件库"}).json()
+
+    response = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("产品手册.txt", b"SOS alarm", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["original_filename"] == "产品手册.txt"
+    assert body["content_type"] == "text/plain"
+    assert body["file_size"] == 9
+    assert body["storage_key"].startswith(f"knowledge-bases/{kb['id']}/documents/")
+    assert body["download_available"] is True
+    assert (tmp_path / body["storage_key"]).read_bytes() == b"SOS alarm"
+
+
+def test_database_mode_upload_removes_saved_file_when_ingestion_fails(tmp_path, monkeypatch):
+    app = build_database_app()
+    app.state.file_storage_root = tmp_path
+    client = TestClient(app, raise_server_exceptions=False)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "文件库"}).json()
+
+    def fail_ingestion(self, document):
+        raise RuntimeError("parse failure")
+
+    monkeypatch.setattr("app.main.IngestionService.ingest_uploaded_document", fail_ingestion)
+
+    response = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("manual.txt", b"SOS alarm", "text/plain")},
+    )
+
+    assert response.status_code == 500
+    assert not any(path.is_file() for path in tmp_path.rglob("*"))
+
+
 def test_database_mode_document_upload_updates_persisted_doc_count():
     client = TestClient(build_database_app())
     token = login_default_admin(client)
@@ -75,7 +120,7 @@ def test_database_mode_document_upload_updates_persisted_doc_count():
 
 def test_database_mode_upload_stages_file_and_returns_parse_task(tmp_path):
     app = build_database_app()
-    app.state.upload_root = tmp_path
+    app.state.file_storage_root = tmp_path
     client = TestClient(app)
     token = login_default_admin(client)
     kb = client.post("/api/kb", json={"name": "入库知识库", "visibility": "department"}).json()
@@ -85,12 +130,12 @@ def test_database_mode_upload_stages_file_and_returns_parse_task(tmp_path):
     assert body["parse_task_id"] is not None
     assert body["block_count"] == 1
     assert body["chunk_count"] == 1
-    assert (tmp_path / body["staged_filename"]).read_bytes() == b"SOS alarm"
+    assert (tmp_path / body["storage_key"]).read_bytes() == b"SOS alarm"
 
 
 def test_database_mode_upload_docx_creates_blocks_and_chunks(tmp_path):
     app = build_database_app()
-    app.state.upload_root = tmp_path
+    app.state.file_storage_root = tmp_path
     client = TestClient(app)
     token = login_default_admin(client)
     kb = client.post("/api/kb", json={"name": "Word知识库", "visibility": "department"}).json()
@@ -103,7 +148,7 @@ def test_database_mode_upload_docx_creates_blocks_and_chunks(tmp_path):
 
 def test_database_mode_upload_persists_metadata_fields(tmp_path):
     app = build_database_app()
-    app.state.upload_root = tmp_path
+    app.state.file_storage_root = tmp_path
     client = TestClient(app)
     token = login_default_admin(client)
     kb = client.post("/api/kb", json={"name": "元数据知识库", "visibility": "department"}).json()
@@ -119,7 +164,7 @@ def test_database_mode_upload_persists_metadata_fields(tmp_path):
 
 def test_database_mode_qa_uses_uploaded_document_chunks(tmp_path):
     app = build_database_app()
-    app.state.upload_root = tmp_path
+    app.state.file_storage_root = tmp_path
     client = TestClient(app)
     token = login_default_admin(client)
     kb = client.post("/api/kb", json={"name": "问答知识库", "visibility": "department"}).json()
@@ -131,7 +176,7 @@ def test_database_mode_qa_uses_uploaded_document_chunks(tmp_path):
 
 def test_database_mode_qa_builds_bm25_index_from_uploaded_chunks(tmp_path):
     app = build_database_app()
-    app.state.upload_root = tmp_path
+    app.state.file_storage_root = tmp_path
     client = TestClient(app)
     token = login_default_admin(client)
     kb = client.post("/api/kb", json={"name": "BM25知识库", "visibility": "department"}).json()
