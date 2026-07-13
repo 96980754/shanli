@@ -56,8 +56,7 @@ class DbDocumentService:
         if kb is not None:
             kb.doc_count += 1
 
-        self.session.commit()
-        self.session.refresh(document)
+        self.session.flush()
         return document
 
     def list(self, kb_id: int) -> list[Document]:

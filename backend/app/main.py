@@ -533,7 +533,9 @@ def register_routes(app: FastAPI) -> None:
                 )
                 ingestion = IngestionService(session=app.state.db_session, file_storage=storage)
                 staged = ingestion.ingest_uploaded_document(document=doc)
+                app.state.db_session.commit()
             except Exception:
+                app.state.db_session.rollback()
                 storage.delete(stored.storage_key)
                 raise
             return {

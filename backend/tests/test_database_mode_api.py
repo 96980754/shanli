@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.db import Base
 from app.main import create_app
-from app.models import Role, User
+from app.models import ContentBlock, Document, DocumentChunk, ParseTask, Role, User
 
 
 def build_database_app():
@@ -106,6 +106,11 @@ def test_database_mode_upload_removes_saved_file_when_ingestion_fails(tmp_path, 
 
     assert response.status_code == 500
     assert not any(path.is_file() for path in tmp_path.rglob("*"))
+    assert app.state.db_session.query(Document).count() == 0
+    assert app.state.db_session.query(ParseTask).count() == 0
+    assert app.state.db_session.query(ContentBlock).count() == 0
+    assert app.state.db_session.query(DocumentChunk).count() == 0
+    assert app.state.kb_service.get(kb["id"]).doc_count == 0
 
 
 def test_database_mode_document_upload_updates_persisted_doc_count():

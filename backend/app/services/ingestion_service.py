@@ -20,8 +20,7 @@ class IngestionService:
 
         task = ParseTask(document_id=document.id, kb_id=document.kb_id, status="pending")
         self.session.add(task)
-        self.session.commit()
-        self.session.refresh(task)
+        self.session.flush()
 
         return {
             "task_id": task.id,
@@ -59,7 +58,6 @@ class IngestionService:
                 chunk_index += 1
 
         task.status = "parsed"
-        self.session.commit()
 
         return {
             **staged,
