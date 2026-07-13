@@ -118,6 +118,47 @@ def test_document_model_persists_metadata_fields_with_defaults():
     assert saved.tags == "FAQ,报警"
 
 
+def test_document_and_audit_log_persist_file_storage_and_download_fields():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    role = Role(name="管理员", level=3)
+    user = User(username="admin", password_hash="hash", role=role)
+    kb = KnowledgeBase(name="产品知识库", visibility="department", owner=user)
+    document = Document(
+        kb=kb,
+        title="manual.txt",
+        file_type="txt",
+        storage_key="knowledge-bases/1/documents/manual.txt",
+        original_filename="产品手册.txt",
+        content_type="text/plain",
+        file_size=9,
+    )
+    audit = AuditLog(
+        user=user,
+        action="download_document",
+        target_type="document",
+        target_id="1",
+        kb_id=1,
+        detail="manual.txt",
+    )
+    session.add_all([role, user, kb, document, audit])
+    session.commit()
+
+    saved_document = session.query(Document).one()
+    saved_audit = session.query(AuditLog).one()
+    assert saved_document.storage_key == "knowledge-bases/1/documents/manual.txt"
+    assert saved_document.original_filename == "产品手册.txt"
+    assert saved_document.content_type == "text/plain"
+    assert saved_document.file_size == 9
+    assert saved_audit.target_id == "1"
+    assert saved_audit.kb_id == 1
+    assert saved_audit.detail == "manual.txt"
+    assert saved_audit.created_at is not None
+
+
 def test_knowledge_view_rule_persists_json_scopes_and_security_level():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

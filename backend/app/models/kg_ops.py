@@ -127,5 +127,10 @@ class AuditLog(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(100))
     target_type: Mapped[str] = mapped_column(String(50), default="")
+    target_id: Mapped[str] = mapped_column(String(100), default="")
+    kb_id: Mapped[int | None] = mapped_column(ForeignKey("knowledge_bases.id"), nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship()
+    kb: Mapped["KnowledgeBase | None"] = relationship()
