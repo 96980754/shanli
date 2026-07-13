@@ -24,6 +24,10 @@ class InMemoryDocumentService:
         visibility: str = "internal",
         security_level: int = 1,
         tags: str = "",
+        scope: str = "I",
+        document_type: str = "OTH",
+        product: str = "GEN",
+        priority: str = "P2",
     ) -> dict[str, Any] | None:
         if self.kb_service.get(kb_id) is None:
             return None
@@ -41,6 +45,10 @@ class InMemoryDocumentService:
             "visibility": visibility,
             "security_level": security_level,
             "tags": tags,
+            "scope": scope,
+            "document_type": document_type,
+            "product": product,
+            "priority": priority,
         }
         self._documents_by_kb[kb_id].append(doc)
         self.kb_service.increment_doc_count(kb_id)

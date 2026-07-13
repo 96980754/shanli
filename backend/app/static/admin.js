@@ -36,7 +36,11 @@ function renderDocumentDetail(detail) {
   const visibilityNode = document.getElementById('document-detail-visibility')
   const securityLevelNode = document.getElementById('document-detail-security-level')
   const tagsNode = document.getElementById('document-detail-tags')
-  if (!titleNode || !typeNode || !statusNode || !blockNode || !chunkNode || !departmentNode || !productLineNode || !visibilityNode || !securityLevelNode || !tagsNode) {
+  const scopeNode = document.getElementById('document-detail-scope')
+  const documentTypeNode = document.getElementById('document-detail-document-type')
+  const productNode = document.getElementById('document-detail-product')
+  const priorityNode = document.getElementById('document-detail-priority')
+  if (!titleNode || !typeNode || !statusNode || !blockNode || !chunkNode || !departmentNode || !productLineNode || !visibilityNode || !securityLevelNode || !tagsNode || !scopeNode || !documentTypeNode || !productNode || !priorityNode) {
     return
   }
   if (!detail) {
@@ -50,6 +54,10 @@ function renderDocumentDetail(detail) {
     visibilityNode.textContent = ''
     securityLevelNode.textContent = ''
     tagsNode.textContent = ''
+    scopeNode.textContent = ''
+    documentTypeNode.textContent = ''
+    productNode.textContent = ''
+    priorityNode.textContent = ''
     return
   }
   titleNode.textContent = detail.title
@@ -62,6 +70,10 @@ function renderDocumentDetail(detail) {
   visibilityNode.textContent = `可见范围：${detail.visibility || ''}`
   securityLevelNode.textContent = `密级：${detail.security_level ?? ''}`
   tagsNode.textContent = `标签：${detail.tags || ''}`
+  scopeNode.textContent = `范围：${detail.scope || 'I'}`
+  documentTypeNode.textContent = `分类：${detail.document_type || 'OTH'}`
+  productNode.textContent = `规范产品：${detail.product || 'GEN'}`
+  priorityNode.textContent = `优先级：${detail.priority || 'P2'}`
 }
 
 async function handleLoginSubmit(event) {
@@ -285,21 +297,112 @@ async function handleDocumentUpload(event) {
     return
   }
   uploading = true
-  const formData = new FormData()
-  formData.append('file', input.files[0])
-  const result = await authorizedJson(`/api/kb/${activeKbId}/documents/upload`, {
-    method: 'POST',
-    body: formData,
-  })
-  uploading = false
-  if (!result?.id) {
-    setAdminMessage('上传失败。')
+  try {
+    const formData = new FormData()
+    formData.append('file', input.files[0])
+    formData.append("scope", document.getElementById('document-scope')?.value || 'I')
+    formData.append("document_type", document.getElementById('document-type')?.value || 'OTH')
+    formData.append("product", document.getElementById('document-product')?.value || 'GEN')
+    formData.append("priority", document.getElementById('document-priority')?.value || 'P2')
+    const result = await authorizedJson(`/api/kb/${activeKbId}/documents/upload`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!result?.id) {
+      setAdminMessage('上传失败。')
+      return
+    }
+    setAdminMessage('上传成功。')
+    await refreshKnowledgeBaseView()
+    await loadDocumentDetail(result.id)
+    input.value = ''
+  } finally {
+    uploading = false
+  }
+}
+
+function parseCommaList(value) {
+  return value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function clearViewRuleForm() {
+  const departments = document.getElementById('view-rule-departments')
+  const productLines = document.getElementById('view-rule-product-lines')
+  const maxLevel = document.getElementById('view-rule-max-security-level')
+  if (departments) departments.value = ''
+  if (productLines) productLines.value = ''
+  if (maxLevel) maxLevel.value = ''
+  for (const id of ['view-rule-public', 'view-rule-internal', 'view-rule-restricted']) {
+    const checkbox = document.getElementById(id)
+    if (checkbox) checkbox.checked = false
+  }
+}
+
+async function loadViewRule() {
+  if (!activeKbId) return
+  const userId = document.getElementById('permission-user-id')?.value
+  if (!userId) {
+    setAdminMessage('请先输入用户 ID。')
     return
   }
-  setAdminMessage('上传成功。')
-  await refreshKnowledgeBaseView()
-  await loadDocumentDetail(result.id)
-  input.value = ''
+  const result = await authorizedJson(`/api/kb/${activeKbId}/view-rules/${userId}`)
+  if (!result) {
+    setAdminMessage('加载知识视图失败。')
+    return
+  }
+  clearViewRuleForm()
+  if (result.rule === null) {
+    setAdminMessage('该用户当前可查看全部文档。')
+    return
+  }
+  document.getElementById('view-rule-departments').value = (result.allowed_departments || []).join(',')
+  document.getElementById('view-rule-product-lines').value = (result.allowed_product_lines || []).join(',')
+  document.getElementById('view-rule-public').checked = (result.allowed_visibilities || []).includes('public')
+  document.getElementById('view-rule-internal').checked = (result.allowed_visibilities || []).includes('internal')
+  document.getElementById('view-rule-restricted').checked = (result.allowed_visibilities || []).includes('restricted')
+  document.getElementById('view-rule-max-security-level').value = result.max_security_level ?? ''
+  setAdminMessage('知识视图已加载。')
+}
+
+async function saveViewRule() {
+  if (!activeKbId) return
+  const userId = document.getElementById('permission-user-id')?.value
+  if (!userId) {
+    setAdminMessage('请先输入用户 ID。')
+    return
+  }
+  const allowedVisibilities = []
+  if (document.getElementById('view-rule-public')?.checked) allowedVisibilities.push('public')
+  if (document.getElementById('view-rule-internal')?.checked) allowedVisibilities.push('internal')
+  if (document.getElementById('view-rule-restricted')?.checked) allowedVisibilities.push('restricted')
+  const maxLevelValue = document.getElementById('view-rule-max-security-level')?.value || ''
+  const result = await authorizedJson(`/api/kb/${activeKbId}/view-rules/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      allowed_departments: parseCommaList(document.getElementById('view-rule-departments')?.value || ''),
+      allowed_product_lines: parseCommaList(document.getElementById('view-rule-product-lines')?.value || ''),
+      allowed_visibilities: allowedVisibilities,
+      max_security_level: maxLevelValue ? Number(maxLevelValue) : null,
+    }),
+  })
+  setAdminMessage(result ? '知识视图保存成功。' : '知识视图保存失败。')
+}
+
+async function deleteViewRule() {
+  if (!activeKbId) return
+  const userId = document.getElementById('permission-user-id')?.value
+  if (!userId) {
+    setAdminMessage('请先输入用户 ID。')
+    return
+  }
+  const result = await authorizedJson(`/api/kb/${activeKbId}/view-rules/${userId}`, { method: 'DELETE' })
+  if (!result) {
+    setAdminMessage('删除知识视图失败。')
+    return
+  }
+  clearViewRuleForm()
+  setAdminMessage('知识视图已删除，恢复查看全部文档。')
 }
 
 async function savePermission() {
@@ -410,8 +513,22 @@ async function refreshKnowledgeBaseView() {
   await loadIssues()
 }
 
+async function loadRetrievalPolicy() {
+  const result = await authorizedJson('/api/retrieval-policy')
+  const node = document.getElementById('retrieval-policy-content')
+  if (!node) return
+  if (!result?.formula || !result?.top_k) {
+    node.textContent = '检索策略加载失败。'
+    return
+  }
+  const formula = result.formula
+  const topK = result.top_k
+  node.textContent = `相似度 ${formula.similarity_ratio} / 类型 ${formula.type_ratio} / 产品 ${formula.product_ratio} / 优先级 ${formula.priority_ratio}；Top-K：${topK.initial} → ${topK.after_rerank} → ${topK.final}`
+}
+
 async function loadAdminShell() {
   authProfile = await authorizedJson('/api/auth/me')
+  await loadRetrievalPolicy()
   await refreshKnowledgeBases()
   activeKbId = knowledgeBases[0]?.id || null
   documents = []
@@ -449,6 +566,24 @@ window.addEventListener('DOMContentLoaded', () => {
   if (savePermissionButton) {
     savePermissionButton.addEventListener('click', () => {
       void savePermission()
+    })
+  }
+  const loadViewRuleButton = document.getElementById('load-view-rule')
+  if (loadViewRuleButton) {
+    loadViewRuleButton.addEventListener('click', () => {
+      void loadViewRule()
+    })
+  }
+  const saveViewRuleButton = document.getElementById('save-view-rule')
+  if (saveViewRuleButton) {
+    saveViewRuleButton.addEventListener('click', () => {
+      void saveViewRule()
+    })
+  }
+  const deleteViewRuleButton = document.getElementById('delete-view-rule')
+  if (deleteViewRuleButton) {
+    deleteViewRuleButton.addEventListener('click', () => {
+      void deleteViewRule()
     })
   }
   const deleteKbButton = document.getElementById('delete-kb-button')

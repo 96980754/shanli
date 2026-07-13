@@ -62,6 +62,31 @@ def test_document_detail_returns_parse_and_chunk_counts(tmp_path):
     assert body["chunk_count"] == 1
 
 
+def test_document_detail_returns_v2_metadata_fields(tmp_path):
+    app = build_database_app()
+    app.state.upload_root = tmp_path
+    client = TestClient(app)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "V2 知识库", "visibility": "department"}).json()
+    uploaded = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"scope": "I", "document_type": "WP", "product": "MC", "priority": "P0"},
+        files={"file": ("whitepaper.txt", b"MCSTARS", "text/plain")},
+    ).json()
+
+    response = client.get(
+        f"/api/kb/{kb['id']}/documents/{uploaded['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "I"
+    assert response.json()["document_type"] == "WP"
+    assert response.json()["product"] == "MC"
+    assert response.json()["priority"] == "P0"
+
+
 def test_document_detail_returns_metadata_fields(tmp_path):
     app = build_database_app()
     app.state.upload_root = tmp_path

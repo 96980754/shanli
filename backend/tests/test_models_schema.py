@@ -164,6 +164,41 @@ def test_knowledge_view_rules_reject_duplicate_kb_user_pairs():
         session.commit()
 
 
+def test_document_persists_v2_metadata_with_compatible_defaults():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    role = Role(name="管理员", level=3)
+    user = User(username="admin", password_hash="hash", role=role)
+    kb = KnowledgeBase(name="产品库", visibility="department", owner=user)
+    explicit = Document(
+        kb=kb,
+        title="whitepaper.pdf",
+        file_type="pdf",
+        scope="I",
+        document_type="WP",
+        product="MC",
+        priority="P0",
+        acl_roles='["sales"]',
+    )
+    legacy = Document(kb=kb, title="legacy.txt", file_type="txt")
+    session.add_all([role, user, kb, explicit, legacy])
+    session.commit()
+
+    assert explicit.scope == "I"
+    assert explicit.document_type == "WP"
+    assert explicit.product == "MC"
+    assert explicit.priority == "P0"
+    assert explicit.acl_roles == '["sales"]'
+    assert legacy.scope == "I"
+    assert legacy.document_type == "OTH"
+    assert legacy.product == "GEN"
+    assert legacy.priority == "P2"
+    assert legacy.acl_roles == "[]"
+
+
 def test_qa_ops_models_can_persist_conversation_message_feedback_and_issue():
     engine = create_engine("sqlite://", poolclass=StaticPool)
     Base.metadata.create_all(engine)

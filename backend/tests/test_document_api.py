@@ -54,6 +54,30 @@ def test_list_documents_returns_uploaded_document():
     assert response.json()["items"][0]["id"] == uploaded["id"]
 
 
+def test_upload_document_records_v2_metadata_fields():
+    client = TestClient(app)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "V2 产品知识库"}).json()
+
+    response = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "scope": "I",
+            "document_type": "WP",
+            "product": "MC",
+            "priority": "P0",
+        },
+        files={"file": ("whitepaper.txt", b"MCSTARS", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "I"
+    assert response.json()["document_type"] == "WP"
+    assert response.json()["product"] == "MC"
+    assert response.json()["priority"] == "P0"
+
+
 def test_upload_document_records_metadata_fields():
     client = TestClient(app)
     token = login_default_admin(client)

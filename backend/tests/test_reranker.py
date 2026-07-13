@@ -1,4 +1,32 @@
 from app.services.reranker import RuleReranker
+from app.services.retrieval_policy import RetrievalPolicy
+
+
+def test_reranker_uses_retrieval_policy_when_provided(tmp_path):
+    policy_path = tmp_path / "policy.yaml"
+    policy_path.write_text(
+        """
+type_weight: {WP: 1.0, DG: 0.8, OTH: 0.3}
+product_weight: {MC: 1.0, MS: 0.9, GEN: 0.8}
+priority_boost: {P0: 1.2, P1: 1.0, P2: 0.8}
+formula: {similarity_ratio: 0.75, type_ratio: 0.10, product_ratio: 0.10, priority_ratio: 0.05}
+top_k: {initial: 100, after_rerank: 20, final: 10}
+""",
+        encoding="utf-8",
+    )
+    result = RuleReranker().rerank(
+        "MCSTARS 部署",
+        [
+            {"chunk_id": "mc", "score": 0.91, "document_type": "DG", "product": "MC", "priority": "P0"},
+            {"chunk_id": "ms", "score": 0.93, "document_type": "DG", "product": "MS", "priority": "P0"},
+        ],
+        top_k=1,
+        policy=RetrievalPolicy.load(policy_path),
+        matched_products={"MC"},
+    )
+
+    assert result[0]["chunk_id"] == "mc"
+    assert "metadata_score" in result[0]
 
 
 def test_reranker_prefers_chunks_with_query_terms_in_content_and_heading():

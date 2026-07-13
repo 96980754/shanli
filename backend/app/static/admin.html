@@ -29,8 +29,13 @@
         <section id="document-upload">
           <form id="document-upload-form">
             <input id="document-file" name="file" type="file" />
+            <label>可见范围 <select id="document-scope" name="scope"><option value="I">I（内部）</option><option value="C">C（客户）</option><option value="R">R（受限）</option></select></label>
+            <label>文档类型 <select id="document-type" name="document_type"><option value="OTH">OTH（其他）</option><option value="WP">WP（白皮书）</option><option value="PI">PI（产品介绍）</option><option value="UM">UM（用户手册）</option><option value="DG">DG（部署指南）</option><option value="SOL">SOL（解决方案）</option><option value="SM">SM（销售话术）</option><option value="SLA">SLA</option><option value="IG">IG（安装手册）</option><option value="OM">OM（运维管理）</option><option value="FT">FT（故障处理）</option><option value="SPEC">SPEC（产品规格）</option><option value="QG">QG（快速指南）</option><option value="FL">FL（功能清单）</option><option value="CP">CP（竞品分析）</option><option value="CERT">CERT（认证/合规）</option><option value="IMG">IMG（图片）</option></select></label>
+            <label>产品 <select id="document-product" name="product"><option value="GEN">GEN（通用）</option><option value="MC">MC（MCSTARS）</option><option value="MS">MS（MiniServer）</option><option value="MD">MD（MDM）</option><option value="MNO">MNO</option><option value="PRO">PRO</option><option value="UC">UC</option><option value="LOC">LOC（定位）</option></select></label>
+            <label>优先级 <select id="document-priority" name="priority"><option value="P2">P2（参考）</option><option value="P1">P1（重要）</option><option value="P0">P0（核心）</option></select></label>
             <button id="upload-document" type="submit">上传文档</button>
           </form>
+          <section id="retrieval-policy-summary"><h3>当前检索策略</h3><p id="retrieval-policy-content">加载中……</p></section>
           <p id="document-empty-state">当前知识库暂无文档。</p>
         </section>
         <section id="document-list"></section>
@@ -45,6 +50,10 @@
           <p id="document-detail-visibility"></p>
           <p id="document-detail-security-level"></p>
           <p id="document-detail-tags"></p>
+          <p id="document-detail-scope"></p>
+          <p id="document-detail-document-type"></p>
+          <p id="document-detail-product"></p>
+          <p id="document-detail-priority"></p>
         </section>
       </section>
       <aside id="permission-list"></aside>
@@ -63,6 +72,24 @@
       <label><input id="perm-grant" type="checkbox" />授权</label>
       <button id="save-permission" type="button">保存权限</button>
       <button id="delete-kb-button" type="button">删除知识库</button>
+    </section>
+    <section id="view-rule-editor">
+      <label>允许部门 <input id="view-rule-departments" placeholder="售后,交付" /></label>
+      <label>允许产品（编码） <input id="view-rule-product-lines" placeholder="MC,MS,GEN" /></label>
+      <label><input id="view-rule-public" type="checkbox" />public</label>
+      <label><input id="view-rule-internal" type="checkbox" />internal</label>
+      <label><input id="view-rule-restricted" type="checkbox" />restricted</label>
+      <label>最大密级
+        <select id="view-rule-max-security-level">
+          <option value="">不限制</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <button id="load-view-rule" type="button">加载知识视图</button>
+      <button id="save-view-rule" type="button">保存知识视图</button>
+      <button id="delete-view-rule" type="button">删除知识视图</button>
     </section>
     <section id="delete-panel" hidden>
       <h2>确认删除</h2>

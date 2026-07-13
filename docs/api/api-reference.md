@@ -429,6 +429,66 @@ Authorization: Bearer <token>
 
 ---
 
+### GET `/api/kb/{kb_id}/view-rules/{user_id}`
+
+查询指定用户在知识库下的知识视图规则。
+
+**权限要求：** 当前操作人必须拥有该知识库的 `can_grant`。
+
+没有规则时返回：
+
+```json
+{
+  "kb_id": 1,
+  "user_id": 1001,
+  "rule": null,
+  "effective_scope": "all_documents"
+}
+```
+
+有规则时返回允许部门、产品线、visibility、最大密级以及 `effective_scope=restricted`。
+
+---
+
+### PUT `/api/kb/{kb_id}/view-rules/{user_id}`
+
+创建或整体覆盖指定用户的知识视图规则。
+
+**权限要求：**
+
+- 当前操作人拥有 `can_grant`；
+- 目标用户必须已经拥有该知识库的 `can_view`。
+
+**请求示例：**
+
+```json
+{
+  "allowed_departments": ["售后", "交付"],
+  "allowed_product_lines": ["P368"],
+  "allowed_visibilities": ["public", "internal"],
+  "max_security_level": 2
+}
+```
+
+空集合表示对应维度不限制。不同维度之间使用 AND，同一维度多个值使用 OR。
+
+---
+
+### DELETE `/api/kb/{kb_id}/view-rules/{user_id}`
+
+删除指定用户的知识视图规则。删除后，若用户仍拥有 `can_view`，其有效范围恢复为 `all_documents`。
+
+**权限要求：** 当前操作人必须拥有 `can_grant`。
+
+**当前阶段说明：**
+
+- 规则已支持持久化、配置和文档可见性逻辑判断；
+- 数据库模式问答已在 `DbChunkLoader` 加载候选 Chunk 前应用有效文档 Filter，规则外来源不会进入向量候选集或 BM25 索引；
+- `KnowledgeViewRule` 不能替代知识库 `can_view` 授权；
+- 内存模式当前返回 `501 Knowledge view rules require database mode`。
+
+---
+
 ### POST `/api/kb/{kb_id}/documents/upload`
 
 上传文档到指定知识库。
@@ -456,6 +516,10 @@ Authorization: Bearer <token>
 | `visibility` | string | 否 | 文档可见范围，默认 `internal` |
 | `security_level` | integer | 否 | 文档密级，默认 `1` |
 | `tags` | string | 否 | 文档标签，当前阶段使用逗号分隔字符串 |
+| `scope` | string | 否 | 规范可见范围：`C`（客户）/`I`（内部）/`R`（受限），默认 `I` |
+| `document_type` | string | 否 | 规范文档类型编码，默认 `OTH` |
+| `product` | string | 否 | 规范产品编码，默认 `GEN` |
+| `priority` | string | 否 | 运营优先级：`P0`/`P1`/`P2`，默认 `P2` |
 | `file` | binary | 是 | 上传文件 |
 
 **示例：**
@@ -509,6 +573,10 @@ curl -X POST \
 | `visibility` | 文档可见范围；默认 `internal` |
 | `security_level` | 文档密级；默认 `1` |
 | `tags` | 文档标签；当前阶段使用逗号分隔字符串 |
+| `scope` | 统一权限范围编码：`C`/`I`/`R`；数据库检索时参与硬过滤 |
+| `document_type` | 统一文档类型编码；参与检索策略重排 |
+| `product` | 统一产品编码；默认参与产品匹配重排，存在产品授权范围时参与硬过滤 |
+| `priority` | 运营优先级；参与检索策略重排 |
 | `file_type` | 从文件名后缀提取 |
 | `file_size` | 内存模式返回文件字节数 |
 
@@ -580,6 +648,8 @@ Authorization: Bearer <token>
 **当前实现说明：**
 
 - 当前要求用户对该知识库拥有 `can_view`
+- 数据库模式还会将当前用户的有效文档 Filter 应用于列表：规则外文档不返回，避免泄露标题、ID 或元数据
+- 文档详情采用相同 Filter；文档存在但不符合当前知识视图时返回 `403 Permission denied`
 - 内存模式直接返回上传时记录的文档元数据
 - 数据库模式从 `documents` 表读取文档列表
 - 当前未实现分页、状态筛选和上传人筛选
@@ -649,8 +719,9 @@ Authorization: Bearer <token>
 - 数据库模式会按 `kb_id + doc_id` 查询 `documents`
 - `block_count` 来自该文档最近一次 `parse_task` 关联的 `content_blocks` 数量
 - `chunk_count` 来自 `document_chunks` 中该文档的 chunk 数量
-- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`
-- 这些字段用于后续“元数据硬过滤 + 标签辅助分类”权限演进
+- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`、`scope`、`document_type`、`product`、`priority`
+- `scope`、部门、产品、密级和角色 ACL 在数据库问答链路中属于检索前硬过滤；`document_type`、问题产品匹配、`priority` 属于候选集内的策略重排
+- 文档元数据是向量检索、后续图谱检索、后台与统计共享的唯一权限事实来源（SSOT）
 - 内存模式当前仅返回基础文档元数据，`block_count` / `chunk_count` 固定为 0
 - 若文档不存在，或文档属于其他知识库，都会返回 `404 Document not found`
 - 若用户无查看权限，则返回 `403 Permission denied`
@@ -663,7 +734,32 @@ Authorization: Bearer <token>
 
 ---
 
-## 5. 问答 API
+## 5. 检索策略 API
+
+### GET `/api/retrieval-policy`
+
+读取当前生效的只读检索策略，要求 Bearer 登录态；不提供在线写入。策略来自 `backend/config/retrieval_policy.yaml`，每次检索会重新读取，因此调整权重不需要重新上传或解析文档。
+
+**响应：**
+
+```json
+{
+  "type_weight": {"WP": 1.0, "OTH": 0.3},
+  "product_weight": {"MC": 1.0, "GEN": 0.8},
+  "priority_boost": {"P0": 1.2, "P2": 0.8},
+  "formula": {
+    "similarity_ratio": 0.75,
+    "type_ratio": 0.10,
+    "product_ratio": 0.10,
+    "priority_ratio": 0.05
+  },
+  "top_k": {"initial": 100, "after_rerank": 20, "final": 10}
+}
+```
+
+---
+
+## 6. 问答 API
 
 ### POST `/api/qa/ask/sync`
 

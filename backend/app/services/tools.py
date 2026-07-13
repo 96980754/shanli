@@ -3,9 +3,11 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import Any
 
 from app.services.reranker import RuleReranker
+from app.services.retrieval_policy import RetrievalPolicy
 
 
 class KnowledgeTools:
@@ -17,6 +19,28 @@ class KnowledgeTools:
         self._bm25_doc_freqs_by_kb: dict[str, Counter[str]] = {}
         self._bm25_avg_len_by_kb: dict[str, float] = {}
         self.reranker = RuleReranker()
+        self._retrieval_policy_path: Path | None = None
+
+    def set_retrieval_policy_path(self, path: Path | None) -> None:
+        self._retrieval_policy_path = path
+
+    def _retrieval_policy(self) -> RetrievalPolicy | None:
+        if self._retrieval_policy_path is None:
+            return None
+        return RetrievalPolicy.load(self._retrieval_policy_path)
+
+    def _apply_retrieval_policy(
+        self,
+        query: str,
+        chunks: list[dict[str, Any]],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        policy = self._retrieval_policy()
+        if policy is None:
+            return chunks[:top_k]
+        initial_candidates = chunks[: policy.top_k.initial]
+        ranked = policy.rerank(initial_candidates, policy.detect_products(query))
+        return ranked[: min(top_k, policy.top_k.final)]
 
     def build_bm25_index(self, kb_id: str, chunks: list[dict[str, Any]]) -> None:
         self._bm25_chunks_by_kb[kb_id] = list(chunks)
@@ -48,7 +72,7 @@ class KnowledgeTools:
             item["score"] = max(float(item.get("score", 0.0)), overlap)
             results.append(item)
         results.sort(key=lambda item: item.get("score", 0.0), reverse=True)
-        return results[:top_k]
+        return self._apply_retrieval_policy(query, results, top_k)
 
     async def bm25_search(self, query: str, kb_id: str, top_k: int = 20) -> list[dict[str, Any]]:
         chunks = self._bm25_chunks_by_kb.get(kb_id, [])
@@ -82,7 +106,7 @@ class KnowledgeTools:
                 scored.append(item)
 
         scored.sort(key=lambda item: item["score"], reverse=True)
-        return scored[:top_k]
+        return self._apply_retrieval_policy(query, scored, top_k)
 
     async def rerank(self, query: str, results: list[dict[str, Any]], top_k: int = 10) -> list[dict[str, Any]]:
         return self.reranker.rerank(query, results, top_k=top_k)

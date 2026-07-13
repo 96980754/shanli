@@ -1,0 +1,44 @@
+type_weight:
+  WP: 1.0
+  PI: 1.0
+  UM: 0.9
+  DG: 0.8
+  SOL: 0.8
+  SM: 0.8
+  SLA: 0.7
+  IG: 0.7
+  OM: 0.6
+  FT: 0.6
+  SPEC: 0.6
+  QG: 0.5
+  FL: 0.5
+  CP: 0.5
+  OTH: 0.3
+  CERT: 0.2
+  IMG: 0.0
+
+product_weight:
+  MC: 1.0
+  MS: 0.9
+  MD: 0.9
+  MNO: 0.9
+  PRO: 0.9
+  UC: 0.9
+  LOC: 0.9
+  GEN: 0.8
+
+priority_boost:
+  P0: 1.2
+  P1: 1.0
+  P2: 0.8
+
+formula:
+  similarity_ratio: 0.75
+  type_ratio: 0.10
+  product_ratio: 0.10
+  priority_ratio: 0.05
+
+top_k:
+  initial: 100
+  after_rerank: 20
+  final: 10

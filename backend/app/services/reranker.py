@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.retrieval_policy import RetrievalPolicy
 
 
 class RuleReranker:
@@ -12,7 +15,12 @@ class RuleReranker:
         question: str,
         chunks: list[dict[str, Any]],
         top_k: int = 10,
+        policy: RetrievalPolicy | None = None,
+        matched_products: set[str] | None = None,
     ) -> list[dict[str, Any]]:
+        if policy is not None:
+            return policy.rerank(chunks, matched_products or set())[:top_k]
+
         query_tokens = set(self._tokenize(question))
         ranked: list[dict[str, Any]] = []
 

@@ -198,6 +198,26 @@ def test_admin_shell_contains_issue_list_region_and_issue_hooks():
     assert "updateIssueStatus" in admin_js
 
 
+def test_admin_shell_contains_knowledge_view_rule_editor():
+    client = TestClient(create_app())
+    response = client.get("/admin")
+    admin_js = ADMIN_JS_PATH.read_text(encoding="utf-8")
+
+    assert response.status_code == 200
+    assert 'id="view-rule-editor"' in response.text
+    assert 'id="view-rule-departments"' in response.text
+    assert 'id="view-rule-product-lines"' in response.text
+    assert 'id="view-rule-public"' in response.text
+    assert 'id="view-rule-internal"' in response.text
+    assert 'id="view-rule-restricted"' in response.text
+    assert 'id="view-rule-max-security-level"' in response.text
+    assert 'id="save-view-rule"' in response.text
+    assert 'id="delete-view-rule"' in response.text
+    assert "loadViewRule" in admin_js
+    assert "saveViewRule" in admin_js
+    assert "deleteViewRule" in admin_js
+
+
 def test_qa_page_is_served():
     client = TestClient(create_app())
 
@@ -292,3 +312,21 @@ def test_qa_static_js_contains_feedback_hooks():
     assert "/api/qa/feedback" in qa_js
     assert "qa-feedback-helpful" in qa_js
     assert "qa-feedback-unhelpful" in qa_js
+
+
+def test_admin_shell_contains_v2_metadata_fields_and_policy_summary():
+    client = TestClient(create_app())
+    response = client.get("/admin")
+    admin_js = ADMIN_JS_PATH.read_text(encoding="utf-8")
+
+    assert response.status_code == 200
+    assert 'id="document-scope"' in response.text
+    assert 'id="document-type"' in response.text
+    assert 'id="document-product"' in response.text
+    assert 'id="document-priority"' in response.text
+    assert 'id="retrieval-policy-summary"' in response.text
+    assert 'formData.append("scope"' in admin_js
+    assert 'formData.append("document_type"' in admin_js
+    assert 'formData.append("product"' in admin_js
+    assert 'formData.append("priority"' in admin_js
+    assert "/api/retrieval-policy" in admin_js

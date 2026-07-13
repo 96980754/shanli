@@ -1,8 +1,7 @@
 import os
 import tempfile
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, inspect, text
 
 from app.core.db import Base, create_session_factory
 from app.main import build_app_state_services, create_app_from_env
@@ -74,5 +73,34 @@ def test_create_app_from_env_sets_default_owner_id_from_env():
         )
 
         assert app.state.default_owner_id == 7
+    finally:
+        os.remove(db_path)
+
+
+def test_runtime_database_mode_adds_v2_document_columns_to_existing_schema():
+    db_fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(db_fd)
+    try:
+        engine = create_engine(f"sqlite:///{db_path}")
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE documents (
+                    id INTEGER PRIMARY KEY,
+                    kb_id INTEGER NOT NULL,
+                    title VARCHAR(512) NOT NULL,
+                    file_type VARCHAR(16) NOT NULL,
+                    status VARCHAR(16),
+                    department VARCHAR(100),
+                    product_line VARCHAR(100),
+                    visibility VARCHAR(30),
+                    security_level INTEGER,
+                    tags TEXT
+                )
+            """))
+
+        create_app_from_env({"DATABASE_URL": f"sqlite:///{db_path}"})
+
+        columns = {column["name"] for column in inspect(engine).get_columns("documents")}
+        assert {"scope", "document_type", "product", "priority", "acl_roles"}.issubset(columns)
     finally:
         os.remove(db_path)
