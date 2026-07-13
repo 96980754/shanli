@@ -21,6 +21,10 @@ class DbDocumentService:
         visibility: str = "internal",
         security_level: int = 1,
         tags: str = "",
+        scope: str = "I",
+        document_type: str = "OTH",
+        product: str = "GEN",
+        priority: str = "P2",
     ) -> Document:
         file_type = filename.rsplit(".", 1)[-1] if "." in filename else "unknown"
         document = Document(
@@ -33,6 +37,10 @@ class DbDocumentService:
             visibility=visibility,
             security_level=security_level,
             tags=tags,
+            scope=scope,
+            document_type=document_type,
+            product=product,
+            priority=priority,
         )
         self.session.add(document)
 

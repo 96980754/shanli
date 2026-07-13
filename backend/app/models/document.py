@@ -19,6 +19,11 @@ class Document(Base):
     visibility: Mapped[str] = mapped_column(String(30), default="internal")
     security_level: Mapped[int] = mapped_column(Integer, default=1)
     tags: Mapped[str] = mapped_column(Text, default="")
+    scope: Mapped[str] = mapped_column(String(1), default="I")
+    document_type: Mapped[str] = mapped_column(String(16), default="OTH")
+    product: Mapped[str] = mapped_column(String(16), default="GEN")
+    priority: Mapped[str] = mapped_column(String(2), default="P2")
+    acl_roles: Mapped[str] = mapped_column(Text, default="[]")
 
     kb: Mapped["KnowledgeBase"] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document")

@@ -16,11 +16,13 @@ from app.services.db_chunk_loader import DbChunkLoader
 from app.services.db_document_service import DbDocumentService
 from app.services.db_kb_service import DbKnowledgeBaseService
 from app.services.document_service import InMemoryDocumentService
+from app.services.document_filter_service import DocumentFilterService
 from app.services.ingestion_service import IngestionService
 from app.services.kb_service import InMemoryKnowledgeBaseService
 from app.services.rag_service import RAGService
 from app.services.session_store import SessionStore
 from app.services.qa_ops_service import QaOpsService
+from app.services.retrieval_policy import RetrievalPolicy
 from app.services.view_rule_service import KnowledgeViewRuleService
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -145,6 +147,7 @@ def build_app_state_services(
             "kb_service": kb_service,
             "document_service": document_service,
             "qa_ops_service": QaOpsService(session),
+            "view_rule_service": KnowledgeViewRuleService(session),
             "session": session,
         }
 
@@ -155,6 +158,7 @@ def build_app_state_services(
         "kb_service": kb_service,
         "document_service": document_service,
         "qa_ops_service": None,
+        "view_rule_service": None,
     }
 
 
@@ -173,12 +177,20 @@ def create_app(
     app.state.kb_service = services["kb_service"]
     app.state.document_service = services["document_service"]
     app.state.qa_ops_service = services["qa_ops_service"]
+    app.state.view_rule_service = services["view_rule_service"]
+    app.state.document_filter_service = (
+        DocumentFilterService(app.state.kb_service, app.state.view_rule_service)
+        if services["mode"] == "database"
+        else None
+    )
     app.state.review_queue = []
     app.state.conflict_log = []
     app.state.parse_tasks = []
     app.state.knowledge_issues = []
     app.state.default_owner_id = None
     app.state.upload_root = Path("uploads")
+    app.state.retrieval_policy_path = Path(__file__).resolve().parents[1] / "config" / "retrieval_policy.yaml"
+    app.state.rag_service.tools.set_retrieval_policy_path(app.state.retrieval_policy_path)
     if services["mode"] == "database":
         app.state.db_session = services["session"]
     register_routes(app)
@@ -212,6 +224,27 @@ def register_routes(app: FastAPI) -> None:
     @app.get("/api/auth/me")
     def me(authorization: str | None = Header(default=None)) -> dict[str, str]:
         return require_session(app.state.session_store, authorization)
+
+    @app.get("/api/retrieval-policy")
+    def get_retrieval_policy(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+        require_session(app.state.session_store, authorization)
+        policy = RetrievalPolicy.load(app.state.retrieval_policy_path)
+        return {
+            "type_weight": policy.type_weights,
+            "product_weight": policy.product_weights,
+            "priority_boost": policy.priority_boosts,
+            "formula": {
+                "similarity_ratio": policy.similarity_ratio,
+                "type_ratio": policy.type_ratio,
+                "product_ratio": policy.product_ratio,
+                "priority_ratio": policy.priority_ratio,
+            },
+            "top_k": {
+                "initial": policy.top_k.initial,
+                "after_rerank": policy.top_k.after_rerank,
+                "final": policy.top_k.final,
+            },
+        }
 
     @app.post("/api/kb")
     def create_knowledge_base(request: KnowledgeBaseCreate) -> dict[str, Any]:
@@ -382,6 +415,68 @@ def register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         return {"deleted": True}
 
+    @app.get("/api/kb/{kb_id}/view-rules/{user_id}")
+    def get_knowledge_view_rule(
+        kb_id: str,
+        user_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        session = require_session(app.state.session_store, authorization)
+        lookup_id = int(kb_id) if app.state.service_mode == "database" else kb_id
+        require_kb_permission(app, lookup_id, resolve_session_user_id(app, session), "can_grant")
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=501, detail="Knowledge view rules require database mode")
+        lookup_user_id = int(user_id)
+        rule = app.state.view_rule_service.get_rule(int(kb_id), lookup_user_id)
+        if rule is None:
+            return {
+                "kb_id": int(kb_id),
+                "user_id": lookup_user_id,
+                "rule": None,
+                "effective_scope": "all_documents",
+            }
+        return {**app.state.view_rule_service.serialize_rule(rule), "effective_scope": "restricted"}
+
+    @app.put("/api/kb/{kb_id}/view-rules/{user_id}")
+    def set_knowledge_view_rule(
+        kb_id: str,
+        user_id: str,
+        request: KnowledgeViewRuleUpdate,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        session = require_session(app.state.session_store, authorization)
+        lookup_id = int(kb_id) if app.state.service_mode == "database" else kb_id
+        current_user_id = resolve_session_user_id(app, session)
+        require_kb_permission(app, lookup_id, current_user_id, "can_grant")
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=501, detail="Knowledge view rules require database mode")
+        lookup_user_id = int(user_id)
+        if not app.state.kb_service.has_permission(int(kb_id), lookup_user_id, "can_view"):
+            raise HTTPException(status_code=422, detail="Target user requires can_view permission")
+        rule = app.state.view_rule_service.set_rule(
+            kb_id=int(kb_id),
+            user_id=lookup_user_id,
+            allowed_departments=request.allowed_departments,
+            allowed_product_lines=request.allowed_product_lines,
+            allowed_visibilities=request.allowed_visibilities,
+            max_security_level=request.max_security_level,
+        )
+        return {**app.state.view_rule_service.serialize_rule(rule), "effective_scope": "restricted"}
+
+    @app.delete("/api/kb/{kb_id}/view-rules/{user_id}")
+    def delete_knowledge_view_rule(
+        kb_id: str,
+        user_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        session = require_session(app.state.session_store, authorization)
+        lookup_id = int(kb_id) if app.state.service_mode == "database" else kb_id
+        require_kb_permission(app, lookup_id, resolve_session_user_id(app, session), "can_grant")
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=501, detail="Knowledge view rules require database mode")
+        deleted = app.state.view_rule_service.delete_rule(int(kb_id), int(user_id))
+        return {"deleted": deleted is not None, "effective_scope": "all_documents"}
+
     @app.post("/api/kb/{kb_id}/documents/upload")
     async def upload_document(
         kb_id: str,
@@ -391,12 +486,22 @@ def register_routes(app: FastAPI) -> None:
         visibility: str = Form(default="internal"),
         security_level: int = Form(default=1),
         tags: str = Form(default=""),
+        scope: str = Form(default="I"),
+        document_type: str = Form(default="OTH"),
+        product: str = Form(default="GEN"),
+        priority: str = Form(default="P2"),
         authorization: str | None = Header(default=None),
     ) -> dict[str, Any]:
         session = require_session(app.state.session_store, authorization)
         service_kb_id = int(kb_id) if app.state.service_mode == "database" else kb_id
         require_kb_permission(app, service_kb_id, resolve_session_user_id(app, session), "can_upload")
         content = await file.read()
+        allowed_scopes = {"C", "I", "R"}
+        allowed_types = {"WP", "PI", "UM", "DG", "SOL", "SM", "SLA", "IG", "OM", "FT", "SPEC", "QG", "FL", "CP", "OTH", "CERT", "IMG"}
+        allowed_products = {"MC", "MS", "MD", "MNO", "PRO", "UC", "LOC", "GEN"}
+        allowed_priorities = {"P0", "P1", "P2"}
+        if scope not in allowed_scopes or document_type not in allowed_types or product not in allowed_products or priority not in allowed_priorities:
+            raise HTTPException(status_code=422, detail="Invalid document metadata")
         doc = app.state.document_service.upload(
             kb_id=service_kb_id,
             filename=file.filename or "uploaded",
@@ -406,6 +511,10 @@ def register_routes(app: FastAPI) -> None:
             visibility=visibility,
             security_level=security_level,
             tags=tags,
+            scope=scope,
+            document_type=document_type,
+            product=product,
+            priority=priority,
         )
         if not doc:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -423,6 +532,10 @@ def register_routes(app: FastAPI) -> None:
                 "visibility": doc.visibility,
                 "security_level": doc.security_level,
                 "tags": doc.tags,
+                "scope": doc.scope,
+                "document_type": doc.document_type,
+                "product": doc.product,
+                "priority": doc.priority,
                 "parse_task_id": staged["task_id"],
                 "staged_filename": staged["staged_filename"],
                 "block_count": staged["block_count"],
@@ -434,11 +547,19 @@ def register_routes(app: FastAPI) -> None:
     def list_documents(kb_id: str, authorization: str | None = Header(default=None)) -> dict[str, list[dict[str, Any]]]:
         session = require_session(app.state.session_store, authorization)
         service_kb_id = int(kb_id) if app.state.service_mode == "database" else kb_id
-        require_kb_permission(app, service_kb_id, resolve_session_user_id(app, session), "can_view")
+        user_id = resolve_session_user_id(app, session)
+        require_kb_permission(app, service_kb_id, user_id, "can_view")
         items = app.state.document_service.list(service_kb_id)
         if items is None:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         if app.state.service_mode == "database":
+            database_user_id = int(user_id)
+            document_filter = app.state.document_filter_service.build_filter(
+                kb_id=service_kb_id,
+                user_id=database_user_id,
+                user_roles=app.state.document_filter_service.roles_for_user(database_user_id),
+            )
+            items = [item for item in items if document_filter.matches(item)]
             return {
                 "items": [
                     {
@@ -447,6 +568,10 @@ def register_routes(app: FastAPI) -> None:
                         "title": item.title,
                         "file_type": item.file_type,
                         "status": item.status,
+                        "scope": item.scope,
+                        "document_type": item.document_type,
+                        "product": item.product,
+                        "priority": item.priority,
                     }
                     for item in items
                 ]
@@ -457,12 +582,21 @@ def register_routes(app: FastAPI) -> None:
     def get_document_detail(kb_id: str, doc_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
         session = require_session(app.state.session_store, authorization)
         service_kb_id = int(kb_id) if app.state.service_mode == "database" else kb_id
-        require_kb_permission(app, service_kb_id, resolve_session_user_id(app, session), "can_view")
+        user_id = resolve_session_user_id(app, session)
+        require_kb_permission(app, service_kb_id, user_id, "can_view")
         service_doc_id = int(doc_id) if app.state.service_mode == "database" else doc_id
         item = app.state.document_service.get(service_kb_id, service_doc_id)
         if item is None:
             raise HTTPException(status_code=404, detail="Document not found")
         if app.state.service_mode == "database":
+            database_user_id = int(user_id)
+            document_filter = app.state.document_filter_service.build_filter(
+                kb_id=service_kb_id,
+                user_id=database_user_id,
+                user_roles=app.state.document_filter_service.roles_for_user(database_user_id),
+            )
+            if not document_filter.matches(item):
+                raise HTTPException(status_code=403, detail="Permission denied")
             parse_task = (
                 app.state.db_session.query(ParseTask)
                 .filter(ParseTask.document_id == item.id, ParseTask.kb_id == item.kb_id)
@@ -492,6 +626,10 @@ def register_routes(app: FastAPI) -> None:
                 "visibility": item.visibility,
                 "security_level": item.security_level,
                 "tags": item.tags,
+                "scope": item.scope,
+                "document_type": item.document_type,
+                "product": item.product,
+                "priority": item.priority,
                 "block_count": block_count,
                 "chunk_count": chunk_count,
             }
@@ -506,6 +644,10 @@ def register_routes(app: FastAPI) -> None:
             "visibility": item.get("visibility", "internal"),
             "security_level": item.get("security_level", 1),
             "tags": item.get("tags", ""),
+            "scope": item.get("scope", "I"),
+            "document_type": item.get("document_type", "OTH"),
+            "product": item.get("product", "GEN"),
+            "priority": item.get("priority", "P2"),
             "block_count": 0,
             "chunk_count": 0,
         }
@@ -665,12 +807,24 @@ def register_routes(app: FastAPI) -> None:
         service_kb_id = int(request.kb_id) if app.state.service_mode == "database" else request.kb_id
         require_kb_permission(app, service_kb_id, user_id, "can_view")
         if app.state.service_mode == "database":
-            chunks = DbChunkLoader(app.state.db_session).load_chunks(kb_id=int(request.kb_id))
-            app.state.rag_service.tools.vector_chunks_by_kb[request.kb_id] = chunks
-            app.state.rag_service.tools.build_bm25_index(request.kb_id, chunks)
+            database_user_id = int(user_id)
+            document_filter = app.state.document_filter_service.build_filter(
+                kb_id=int(request.kb_id),
+                user_id=database_user_id,
+                user_roles=app.state.document_filter_service.roles_for_user(database_user_id),
+            )
+            chunks = DbChunkLoader(app.state.db_session).load_chunks(
+                kb_id=int(request.kb_id),
+                document_filter=document_filter,
+            )
+            retrieval_kb_id = f"{request.kb_id}:user:{database_user_id}"
+            app.state.rag_service.tools.vector_chunks_by_kb[retrieval_kb_id] = chunks
+            app.state.rag_service.tools.build_bm25_index(retrieval_kb_id, chunks)
+        else:
+            retrieval_kb_id = request.kb_id
         result = await app.state.rag_service.ask(
             question=request.question,
-            kb_id=request.kb_id,
+            kb_id=retrieval_kb_id,
             conversation_id=request.conversation_id,
         )
         if app.state.service_mode == "database":

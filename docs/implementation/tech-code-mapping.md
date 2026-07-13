@@ -34,7 +34,10 @@
 | FastAPI 应用入口 | `backend/app/main.py` | ✅ 已实现 MVP | 已支持 `create_app_from_env()` 按 `DATABASE_URL` 切换内存/数据库服务，并托管 `/login`、`/admin` 和 `/static` |
 | 健康检查 API | `backend/app/main.py` | ✅ 已实现 `/health` | 无 |
 | 知识库管理 API | `backend/app/main.py` | ✅ 内存版实现 + 数据库版服务已接入 | 已支持 create/list/get/update/delete，并接入知识库级 `can_view/can_grant` 权限；后续迁移到 `app/api/kb.py` + 请求级 session 注入 |
-| 文档上传 API | `backend/app/main.py` | ✅ 内存版元数据记录 + 数据库模式已接文件落盘/解析任务/`.txt`/`.docx`/基础 `.pdf` 内容块/文档 chunk | 已支持文档详情读取与文档元数据字段（department/product_line/visibility/security_level/tags）；后续接 Unstructured.io、OCR/VLM、Milvus 向量化 |
+| 用户知识视图规则 | `backend/app/models/user.py::KnowledgeViewRule`, `backend/app/services/view_rule_service.py`, `backend/app/main.py`, `backend/app/static/admin.html`, `backend/app/static/admin.js` | ✅ 已实现配置底座并接入数据库问答检索 | 知识库 `can_view` 是第一道门槛；数据库问答通过 `EffectiveDocumentFilter` 将规则转换为检索前硬过滤，后续扩展角色/部门/项目规则只需生成最终有效规则 |
+| 统一文档元数据 SSOT | `backend/app/models/document.py`, `backend/app/services/document_filter_service.py`, `backend/app/services/db_chunk_loader.py` | ✅ V2 已实现数据库检索闭环 | `scope/document_type/product/priority/acl_roles` 与既有部门、密级字段构成 Document Metadata；Chunk 仅从文档派生元数据，后续 Milvus/图谱复用 `EffectiveDocumentFilter` |
+| 配置化检索策略 | `backend/config/retrieval_policy.yaml`, `backend/app/services/retrieval_policy.py`, `backend/app/services/tools.py`, `backend/app/services/reranker.py` | ✅ 已实现 Type/Product/Priority 元数据重排 | YAML 每次检索重新加载；后续可接策略版本、灰度和在线治理，不改变文档数据 |
+| 文档上传 API | `backend/app/main.py` | ✅ 内存版元数据记录 + 数据库模式已接文件落盘/解析任务/`.txt`/`.docx`/基础 `.pdf` 内容块/文档 chunk | 已支持旧元数据及 V2 `scope/document_type/product/priority`；后续接 Unstructured.io、OCR/VLM、Milvus 向量化 |
 | 文档元数据底座 | `backend/app/models/document.py`, `backend/app/services/document_service.py`, `backend/app/services/db_document_service.py`, `backend/app/main.py` | ✅ 已实现阶段基础能力 | 已支持元数据落库、上传写入、详情回显和管理员文档详情展示；后续接用户知识视图规则与检索前元数据硬过滤 |
 | 文档解析 | `backend/app/services/parser_service.py` | ✅ 已接 Unstructured adapter，`.docx`/`.pdf` 优先走 `partition()`，失败回退基础解析 | 后续增强 OCR/VLM/复杂表格解析 |
 | 同步问答 API | `backend/app/main.py` | ✅ 已实现 `/api/qa/ask/sync` | 数据库模式下已写入问答会话和消息；后续补 `/api/qa/ask` SSE 流式接口 |
@@ -48,7 +51,7 @@
 | 前端登录页/管理台壳 | `backend/app/static/login.html`, `backend/app/static/admin.html`, `backend/app/static/admin.js` | ✅ 已实现最小静态壳 | 管理员工作台已补齐知识库区、单文件上传区、文档列表区、文档详情区、权限区、知识缺口区、删除确认区与消息区；后续再做更强的前端行为测试 |
 | 查询用户问答页 | `backend/app/static/qa.html`, `backend/app/static/qa.js`, `backend/app/main.py` | ✅ 已实现阶段 3 v1 | 已支持当前用户加载、可见知识库选择、同步提问、答案/来源展示、有用/无用反馈、会话历史侧栏和历史消息展示；后续接 Markdown、SSE 流式输出和来源跳转 |
 | Docker Compose 三库基础设施 | `docker-compose.yml` | ✅ 已实现 | PostgreSQL + Redis + Milvus + Neo4j Community |
-| PostgreSQL 全量 Schema | `backend/app/models/*` | ✅ 已实现骨架 | 下一步接真实数据库会话与迁移 |
+| PostgreSQL 全量 Schema | `backend/app/models/*`, `backend/app/core/db.py::ensure_runtime_schema` | ✅ 已实现骨架及 V2 SQLite/PostgreSQL 兼容补列 | 当前启动数据库模式时为已有 `documents` 表补齐 V2 元数据列；正式生产迁移后续接 Alembic 版本化迁移 |
 | 数据库服务层 | `backend/app/services/db_kb_service.py`, `backend/app/services/db_document_service.py` | ✅ 已实现最小能力 | 后续接迁移工具与请求级 session 生命周期 |
 | Service Provider | `backend/app/main.py::build_app_state_services`, `backend/app/main.py::create_app_from_env` | ✅ 已实现 | `DATABASE_URL` 存在时自动进入数据库模式；`DEFAULT_OWNER_ID` 提供临时 owner |
 | Neo4j 约束与索引 | `backend/neo4j/*.cypher` | ❌ 未实现 | 使用英文 Schema 重写约束 |
@@ -364,7 +367,11 @@ async def generate_with_tools(
 | `test_runtime_database_mode.py` | 环境变量驱动的数据库模式启动、session_factory、DEFAULT_OWNER_ID |
 | `test_upload_ingest_flow.py` | IngestionService：文件落盘、parse_task 创建、`.txt` 解析为 content_blocks |
 | `test_qa_ops_api.py` | 问答记录、会话消息、答案反馈、知识缺口和权限边界 |
-| `test_frontend_shell.py` | 登录页、管理台壳、查询用户问答页静态结构和 JS 关键交互钩子 |
+| `test_view_rule_service.py` | 知识视图规则 CRUD、JSON 序列化和文档可见性判断 |
+| `test_document_filter_service.py` | EffectiveDocumentFilter 对 KB 权限、scope、部门、产品、密级和角色 ACL 的硬过滤边界 |
+| `test_db_chunk_loader.py` | 数据库 Chunk 加载与有效文档 Filter；规则外 Chunk 不进入候选集 |
+| `test_retrieval_policy.py` | YAML 策略校验、编码回退、产品别名识别与元数据重排 |
+| `test_database_mode_api.py` | 数据库模式 API：知识库持久化、上传、解析、受控 QA 来源过滤与策略重排 |
 
 ---
 
