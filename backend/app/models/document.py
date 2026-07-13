@@ -28,10 +28,6 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String(255), default="")
     file_size: Mapped[int] = mapped_column(Integer, default=0)
     acl_roles: Mapped[str] = mapped_column(Text, default="[]")
-    storage_key: Mapped[str] = mapped_column(String(1024), default="")
-    original_filename: Mapped[str] = mapped_column(String(512), default="")
-    content_type: Mapped[str] = mapped_column(String(255), default="")
-    file_size: Mapped[int] = mapped_column(Integer, default=0)
 
     kb: Mapped["KnowledgeBase"] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document")

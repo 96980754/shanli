@@ -97,10 +97,24 @@ def test_runtime_database_mode_adds_v2_document_columns_to_existing_schema():
                     tags TEXT
                 )
             """))
+            connection.execute(text("""
+                CREATE TABLE audit_log (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    action VARCHAR(100) NOT NULL,
+                    target_type VARCHAR(50)
+                )
+            """))
 
         create_app_from_env({"DATABASE_URL": f"sqlite:///{db_path}"})
+        create_app_from_env({"DATABASE_URL": f"sqlite:///{db_path}"})
 
-        columns = {column["name"] for column in inspect(engine).get_columns("documents")}
-        assert {"scope", "document_type", "product", "priority", "acl_roles"}.issubset(columns)
+        document_columns = {column["name"] for column in inspect(engine).get_columns("documents")}
+        audit_columns = {column["name"] for column in inspect(engine).get_columns("audit_log")}
+        assert {
+            "scope", "document_type", "product", "priority", "acl_roles",
+            "storage_key", "original_filename", "content_type", "file_size",
+        }.issubset(document_columns)
+        assert {"target_id", "kb_id", "detail", "created_at"}.issubset(audit_columns)
     finally:
         os.remove(db_path)
