@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.db import Base
 from app.main import create_app
-from app.models import ContentBlock, Document, DocumentChunk, ParseTask, Role, User
+from app.models import AuditLog, ContentBlock, Document, DocumentChunk, ParseTask, Role, User
 
 
 def build_database_app():

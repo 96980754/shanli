@@ -49,7 +49,13 @@ class LocalFileStorageService:
         storage_key = f"knowledge-bases/{kb_id}/documents/{uuid4()}-{safe_filename}"
         path = self.path_for(storage_key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
+        temporary_path = path.with_name(f".{path.name}.tmp")
+        try:
+            temporary_path.write_bytes(content)
+            temporary_path.replace(path)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
         return StoredFile(
             storage_key=storage_key,
             original_filename=original_filename,
