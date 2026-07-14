@@ -57,7 +57,9 @@ def test_document_detail_returns_parse_and_chunk_counts(tmp_path):
     assert body["id"] == uploaded["id"]
     assert body["kb_id"] == kb["id"]
     assert body["title"] == "manual.txt"
-    assert body["status"] == "pending"
+    assert body["status"] == "parsed"
+    assert body["parse_available"] is True
+    assert body["parse_status_label"] == "已解析，可用于问答"
     assert body["file_type"] == "txt"
     assert body["block_count"] == 1
     assert body["chunk_count"] == 1

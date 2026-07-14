@@ -149,6 +149,9 @@ def test_database_mode_upload_docx_creates_blocks_and_chunks(tmp_path):
     assert response.status_code == 200
     assert response.json()["block_count"] == 2
     assert response.json()["chunk_count"] == 2
+    assert response.json()["status"] == "parsed"
+    assert response.json()["parse_available"] is True
+    assert response.json()["parse_status_label"] == "已解析，可用于问答"
     assert client.post("/api/qa/ask/sync", headers={"Authorization": f"Bearer {token}"}, json={"kb_id": str(kb["id"]), "question": "MCSTARS 调度"}).json()["sources"]
 
 
@@ -216,3 +219,61 @@ def test_database_mode_document_list_and_detail_hide_documents_outside_view_rule
     assert [item["id"] for item in listed.json()["items"]] == [allowed.id]
     assert detail.status_code == 403
     assert detail.json()["detail"] == "Permission denied"
+
+
+def test_database_mode_upload_keeps_pptx_downloadable_without_chunks(tmp_path):
+    app = build_database_app()
+    app.state.file_storage_root = tmp_path
+    client = TestClient(app)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "方案库"}).json()
+
+    response = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "file": (
+                "方案.pptx",
+                b"presentation",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "stored_unsupported"
+    assert body["parse_available"] is False
+    assert body["parse_status_label"] == "仅可下载（暂不支持内容解析）"
+    assert body["block_count"] == 0
+    assert body["chunk_count"] == 0
+    assert body["download_available"] is True
+    assert app.state.db_session.query(ParseTask).count() == 0
+
+
+def test_database_mode_upload_keeps_xlsx_downloadable_without_chunks(tmp_path):
+    app = build_database_app()
+    app.state.file_storage_root = tmp_path
+    client = TestClient(app)
+    token = login_default_admin(client)
+    kb = client.post("/api/kb", json={"name": "清单库"}).json()
+
+    response = client.post(
+        f"/api/kb/{kb['id']}/documents/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "file": (
+                "功能清单.xlsx",
+                b"spreadsheet",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "stored_unsupported"
+    assert body["parse_available"] is False
+    assert body["download_available"] is True
+    assert body["chunk_count"] == 0
+    assert app.state.db_session.query(ParseTask).count() == 0

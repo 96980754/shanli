@@ -140,6 +140,16 @@ def resolve_session_user_id(app: FastAPI, session: dict[str, str]) -> str | int:
     return user_id
 
 
+def parse_state_payload(status: str) -> dict[str, bool | str]:
+    if status == "parsed":
+        return {"parse_available": True, "parse_status_label": "已解析，可用于问答"}
+    if status == "stored_unsupported":
+        return {"parse_available": False, "parse_status_label": "仅可下载（暂不支持内容解析）"}
+    if status == "pending":
+        return {"parse_available": False, "parse_status_label": "等待处理"}
+    return {"parse_available": False, "parse_status_label": "解析未完成"}
+
+
 def serialize_database_document(item: Any, storage: LocalFileStorageService) -> dict[str, Any]:
     return {
         "id": item.id,
@@ -161,6 +171,7 @@ def serialize_database_document(item: Any, storage: LocalFileStorageService) -> 
         "content_type": item.content_type,
         "file_size": item.file_size,
         "download_available": bool(item.storage_key and storage.exists(item.storage_key)),
+        **parse_state_payload(item.status),
     }
 
 
@@ -646,9 +657,20 @@ def register_routes(app: FastAPI) -> None:
                     content_type=stored.content_type,
                     file_size=stored.file_size,
                 )
-                ingestion = IngestionService(session=app.state.db_session, file_storage=storage)
-                staged = ingestion.ingest_uploaded_document(document=doc)
-                app.state.db_session.commit()
+                suffix = Path(stored.original_filename).suffix.lower()
+                if suffix in {".pptx", ".xlsx"}:
+                    doc.status = "stored_unsupported"
+                    app.state.db_session.commit()
+                    staged = {
+                        "task_id": None,
+                        "staged_filename": Path(stored.storage_key).name,
+                        "block_count": 0,
+                        "chunk_count": 0,
+                    }
+                else:
+                    ingestion = IngestionService(session=app.state.db_session, file_storage=storage)
+                    staged = ingestion.ingest_uploaded_document(document=doc)
+                    app.state.db_session.commit()
             except Exception:
                 app.state.db_session.rollback()
                 storage.delete(stored.storage_key)

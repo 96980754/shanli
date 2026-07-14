@@ -58,6 +58,7 @@ class IngestionService:
                 chunk_index += 1
 
         task.status = "parsed"
+        document.status = "parsed"
 
         return {
             **staged,
