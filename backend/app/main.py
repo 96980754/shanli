@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Any, Mapping
 import json
 
-from fastapi import FastAPI, Header, HTTPException, UploadFile, Form
+from fastapi import FastAPI, Header, HTTPException, UploadFile, Form, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.core.db import create_session_factory
-from app.models import AuditLog, ContentBlock, DocumentChunk, ParseTask
+from app.models import AuditLog, ContentBlock, DocumentChunk, ParseTask, KnowledgeBasePermission, Role, User
 from app.services.auth_service import AuthService
 from app.services.db_chunk_loader import DbChunkLoader
 from app.services.db_document_service import DbDocumentService
@@ -21,6 +21,7 @@ from app.services.document_filter_service import DocumentFilterService
 from app.services.file_storage import LocalFileStorageService
 from app.services.ingestion_service import IngestionService
 from app.services.kb_service import InMemoryKnowledgeBaseService
+from app.services.password_service import hash_password, validate_registration, verify_password
 from app.services.rag_service import RAGService
 from app.services.session_store import SessionStore
 from app.services.qa_ops_service import QaOpsService
@@ -65,6 +66,12 @@ class AskRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class RegistrationRequest(BaseModel):
+    username: str
+    password: str
+    password_confirmation: str
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -198,13 +205,24 @@ def create_app(
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.state.rag_service = RAGService(llm=SimpleLLM())
     app.state.session_store = SessionStore()
-    app.state.auth_service = AuthService(app.state.session_store)
     services = build_app_state_services(mode=mode, session=session, session_factory=session_factory)
     app.state.service_mode = services["mode"]
     app.state.kb_service = services["kb_service"]
     app.state.document_service = services["document_service"]
     app.state.qa_ops_service = services["qa_ops_service"]
     app.state.view_rule_service = services["view_rule_service"]
+    if services["mode"] == "database":
+        db_session = services["session"]
+
+        def authenticate(username: str, password: str) -> User | None:
+            user = db_session.query(User).filter(User.username == username).one_or_none()
+            if user is None:
+                return None
+            return user if verify_password(password, user.password_hash) else None
+
+        app.state.auth_service = AuthService(app.state.session_store, authenticate=authenticate)
+    else:
+        app.state.auth_service = AuthService(app.state.session_store)
     app.state.document_filter_service = (
         DocumentFilterService(app.state.kb_service, app.state.view_rule_service)
         if services["mode"] == "database"
@@ -258,6 +276,37 @@ def register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         return {"token": token}
 
+    @app.post("/api/auth/register")
+    def register(request: RegistrationRequest, response: Response) -> dict[str, Any]:
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=501, detail="Registration requires database mode")
+        try:
+            normalized_username = validate_registration(
+                request.username,
+                request.password,
+                request.password_confirmation,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        existing = app.state.db_session.query(User).filter(User.username == normalized_username).one_or_none()
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Username already exists")
+        role = app.state.db_session.query(Role).filter(Role.name == "普通用户").one_or_none()
+        if role is None:
+            role = Role(name="普通用户", level=1)
+            app.state.db_session.add(role)
+            app.state.db_session.flush()
+        user = User(
+            username=normalized_username,
+            password_hash=hash_password(request.password),
+            role=role,
+        )
+        app.state.db_session.add(user)
+        app.state.db_session.commit()
+        app.state.db_session.refresh(user)
+        response.status_code = 201
+        return {"id": user.id, "username": user.username}
+
     @app.get("/api/auth/me")
     def me(authorization: str | None = Header(default=None)) -> dict[str, str]:
         return require_session(app.state.session_store, authorization)
@@ -281,6 +330,27 @@ def register_routes(app: FastAPI) -> None:
                 "after_rerank": policy.top_k.after_rerank,
                 "final": policy.top_k.final,
             },
+        }
+
+    @app.get("/api/users")
+    def list_users(authorization: str | None = Header(default=None)) -> dict[str, list[dict[str, str]]]:
+        if app.state.service_mode != "database":
+            raise HTTPException(status_code=501, detail="User listing requires database mode")
+        session = require_session(app.state.session_store, authorization)
+        user_id = int(resolve_session_user_id(app, session))
+        has_grant = any(
+            permission.can_grant
+            for permission in app.state.db_session.query(KnowledgeBasePermission)
+            .filter(KnowledgeBasePermission.user_id == user_id)
+            .all()
+        )
+        if not has_grant:
+            raise HTTPException(status_code=403, detail="Permission denied")
+        return {
+            "items": [
+                {"id": str(user.id), "username": user.username, "role": user.role.name}
+                for user in app.state.db_session.query(User).order_by(User.username).all()
+            ]
         }
 
     @app.post("/api/kb")

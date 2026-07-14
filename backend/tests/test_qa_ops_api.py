@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.db import Base
 from app.main import create_app
 from app.models import Role, User
+from app.services.password_service import hash_password
 
 
 def build_database_app():
@@ -18,7 +19,7 @@ def build_database_app():
     Session = sessionmaker(bind=engine)
     session = Session()
     role = Role(name="管理员", level=3)
-    owner = User(username="admin", password_hash="hash", role=role)
+    owner = User(username="admin", password_hash=hash_password("admin"), role=role)
     session.add_all([role, owner])
     session.commit()
     app = create_app(mode="database", session=session)
