@@ -26,6 +26,16 @@ _AUDIT_LOG_COLUMNS = {
 }
 
 
+_PRODUCT_LINE_TO_PRODUCT = {
+    "MCSTARS": "MC",
+    "MINISERVER": "MS",
+    "定位": "LOC",
+    "POCSTARS-MNO": "MNO",
+    "POCSTARS-PRO": "PRO",
+    "POCSTARS-UC": "UC",
+}
+
+
 def ensure_runtime_schema(engine) -> None:
     inspector = inspect(engine)
     table_columns = {
@@ -46,6 +56,32 @@ def ensure_runtime_schema(engine) -> None:
     with engine.begin() as connection:
         for table_name, name, ddl in migrations:
             connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {ddl}"))
+        added_document_columns = {
+            name for table_name, name, _ in migrations if table_name == "documents"
+        }
+        if "scope" in added_document_columns:
+            connection.execute(text("""
+                UPDATE documents
+                SET scope = CASE visibility
+                    WHEN 'public' THEN 'C'
+                    WHEN 'restricted' THEN 'R'
+                    ELSE 'I'
+                END
+                WHERE scope IS NULL OR scope = 'I'
+            """))
+        if "product" in added_document_columns:
+            product_case = " ".join(
+                f"WHEN {value!r} THEN {product!r}"
+                for value, product in _PRODUCT_LINE_TO_PRODUCT.items()
+            )
+            connection.execute(text(f"""
+                UPDATE documents
+                SET product = CASE product_line
+                    {product_case}
+                    ELSE 'GEN'
+                END
+                WHERE product IS NULL OR product = 'GEN'
+            """))
 
 
 def create_session_factory(database_url: str):

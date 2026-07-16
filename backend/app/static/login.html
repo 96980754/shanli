@@ -3,21 +3,55 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>登录</title>
+    <title>登录 | 知识库工作台</title>
+    <link rel="stylesheet" href="/static/app.css" />
   </head>
   <body>
-    <h1>登录</h1>
-    <form id="login-form">
-      <label>
-        用户名
-        <input name="username" value="admin" />
-      </label>
-      <label>
-        密码
-        <input name="password" type="password" value="admin" />
-      </label>
-      <button type="submit">登录</button>
-    </form>
-    <script src="/static/admin.js"></script>
+    <main class="app-shell auth-layout login-hero">
+      <section class="panel login-intro">
+        <p class="status-badge status-badge--success">AI Knowledge Base</p>
+        <div>
+          <h1>企业 AI 知识库</h1>
+          <p>统一管理产品资料、权限访问、原文件下载与问答检索。面向销售、产品、客服和交付团队提供可控的资料入口。</p>
+        </div>
+        <div class="split-panel">
+          <article class="data-card">
+            <strong>权限分级</strong>
+            <p class="message">按资料分类授权访问、下载与编辑，支持管理员维护知识视图。</p>
+          </article>
+          <article class="data-card">
+            <strong>原文件下载</strong>
+            <p class="message">DOCX/PDF/PPTX/XLSX 均保留原文件；PPTX/XLSX 仅下载不入问答。</p>
+          </article>
+        </div>
+        <section class="data-card acceptance-accounts">
+          <h2>验收账号</h2>
+          <p>admin / Demo12345</p>
+          <p>sales_cn / Demo12345</p>
+          <p>delivery_user / Demo12345</p>
+          <p>finance_user / Demo12345</p>
+        </section>
+      </section>
+
+      <section class="panel auth-card">
+        <p class="status-badge">安全登录</p>
+        <h1>进入知识库工作台</h1>
+        <p id="login-message" class="message">登录后访问已获授权的知识库。</p>
+        <form id="login-form" class="form-stack">
+          <label>用户名 <input name="username" autocomplete="username" required /></label>
+          <label>密码 <input name="password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary-action" type="submit">登录并进入文档库</button>
+        </form>
+        <p><button id="show-registration" class="secondary-action" type="button">创建普通用户账号</button></p>
+        <form id="registration-form" class="form-stack" hidden>
+          <label>用户名 <input name="username" autocomplete="username" required /></label>
+          <label>密码 <input name="password" type="password" autocomplete="new-password" required /></label>
+          <label>确认密码 <input name="password_confirmation" type="password" autocomplete="new-password" required /></label>
+          <button class="primary-action" type="submit">注册账号</button>
+          <button id="show-login" class="secondary-action" type="button">返回登录</button>
+        </form>
+      </section>
+    </main>
+    <script src="/static/login.js"></script>
   </body>
 </html>

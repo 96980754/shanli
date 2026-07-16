@@ -4,7 +4,7 @@ import tempfile
 from sqlalchemy import create_engine, inspect, text
 
 from app.core.db import Base, create_session_factory
-from app.main import build_app_state_services, create_app_from_env
+from app.main import build_app_state_services, create_app_from_env, resolve_session_user_id
 from app.models import Role, User
 
 
@@ -61,18 +61,62 @@ def test_create_app_from_env_uses_database_mode_when_database_url_exists():
         os.remove(db_path)
 
 
-def test_create_app_from_env_sets_default_owner_id_from_env():
+def test_create_app_from_env_sets_file_storage_root_from_env():
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(db_fd)
     try:
         app = create_app_from_env(
             {
                 "DATABASE_URL": f"sqlite:///{db_path}",
-                "DEFAULT_OWNER_ID": "7",
+                "FILE_STORAGE_ROOT": "/tmp/acceptance-files",
             }
         )
 
-        assert app.state.default_owner_id == 7
+        assert str(app.state.file_storage_root) == "/tmp/acceptance-files"
+    finally:
+        os.remove(db_path)
+
+def test_database_mode_does_not_fallback_to_default_owner_for_non_numeric_admin_session():
+    app = create_app_from_env({})
+    app.state.service_mode = "database"
+    app.state.default_owner_id = 1
+
+    assert resolve_session_user_id(app, {"user_id": "admin", "username": "admin"}) == "admin"
+
+
+    db_fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(db_fd)
+    try:
+        engine = create_engine(f"sqlite:///{db_path}")
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE documents (
+                    id INTEGER PRIMARY KEY,
+                    kb_id INTEGER,
+                    title VARCHAR(512),
+                    file_type VARCHAR(16),
+                    status VARCHAR(16),
+                    department VARCHAR(100),
+                    product_line VARCHAR(100),
+                    visibility VARCHAR(30),
+                    security_level INTEGER,
+                    tags TEXT
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO documents (id, kb_id, title, file_type, status, department, product_line, visibility, security_level, tags)
+                VALUES
+                    (1, 1, 'restricted.pdf', 'pdf', 'parsed', '', 'MCSTARS', 'restricted', 3, ''),
+                    (2, 1, 'public.pdf', 'pdf', 'parsed', '', 'MINISERVER', 'public', 1, ''),
+                    (3, 1, 'internal.pdf', 'pdf', 'parsed', '', 'POCSTARS-MNO', 'internal', 2, ''),
+                    (4, 1, 'unknown.pdf', 'pdf', 'parsed', '', 'Unknown', '', 1, '')
+            """))
+
+        create_app_from_env({"DATABASE_URL": f"sqlite:///{db_path}"})
+        create_app_from_env({"DATABASE_URL": f"sqlite:///{db_path}"})
+
+        rows = engine.connect().execute(text("SELECT id, scope, product FROM documents ORDER BY id")).all()
+        assert rows == [(1, "R", "MC"), (2, "C", "MS"), (3, "I", "MNO"), (4, "I", "GEN")]
     finally:
         os.remove(db_path)
 

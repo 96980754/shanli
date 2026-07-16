@@ -218,7 +218,22 @@ def test_admin_shell_contains_knowledge_view_rule_editor():
     assert "deleteViewRule" in admin_js
 
 
-def test_qa_page_is_served():
+
+def test_shells_load_shared_workbench_styles_and_login_registration_script():
+    client = TestClient(create_app())
+
+    for path in ["/login", "/admin", "/qa", "/documents"]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert '<link rel="stylesheet" href="/static/app.css"' in response.text
+
+    login = client.get("/login").text
+    assert 'id="login-form"' in login
+    assert 'id="registration-form"' in login
+    assert 'id="show-registration"' in login
+    assert '<script src="/static/login.js"></script>' in login
+    assert 'value="admin"' not in login
+
     client = TestClient(create_app())
 
     response = client.get("/qa")
@@ -349,8 +364,85 @@ def test_documents_page_contains_kb_selector_document_list_detail_and_download_h
     assert "Authorization" in script.text
 
 
-def test_admin_and_qa_shells_link_to_documents_page():
-    client = TestClient(create_app())
 
-    assert 'href="/documents"' in client.get("/admin").text
-    assert 'href="/documents"' in client.get("/qa").text
+
+def test_documents_shell_contains_filters_empty_access_and_admin_user_controls():
+    client = TestClient(create_app())
+    page = client.get("/documents").text
+    script = (Path(__file__).resolve().parents[1] / "app" / "static" / "documents.js").read_text(encoding="utf-8")
+
+    assert 'id="documents-current-user"' in page
+    assert 'id="documents-no-access"' in page
+    assert 'id="documents-status-filter"' in page
+    assert 'id="documents-visibility-filter"' in page
+    assert 'id="documents-product-filter"' in page
+    assert 'id="documents-admin-panel"' in page
+    assert 'id="documents-permission-user"' in page
+    assert "applyDocumentFilters" in script
+    assert "loadRegisteredUsers" in script
+    assert "saveWorkbenchPermission" in script
+    assert "saveWorkbenchViewRule" in script
+
+
+def test_shared_styles_define_dashboard_workbench_components():
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text(encoding="utf-8")
+
+    assert ".layout-dashboard" in css
+    assert ".sidebar" in css
+    assert ".toolbar" in css
+    assert ".data-card" in css
+    assert ".metric-card" in css
+    assert ".status-badge--success" in css
+    assert ".status-badge--warning" in css
+    assert ".status-badge--danger" in css
+    assert ".primary-action" in css
+    assert ".field-list" in css
+
+
+def test_login_page_contains_product_intro_and_acceptance_accounts():
+    client = TestClient(create_app())
+    page = client.get("/login").text
+
+    assert 'class="app-shell auth-layout login-hero"' in page
+    assert "权限分级" in page
+    assert "原文件下载" in page
+    assert "验收账号" in page
+    assert "admin / Demo12345" in page
+    assert "sales_cn / Demo12345" in page
+    assert "finance_user / Demo12345" in page
+
+
+def test_documents_workbench_contains_search_metrics_and_download_guidance():
+    client = TestClient(create_app())
+    page = client.get("/documents").text
+    script = (Path(__file__).resolve().parents[1] / "app" / "static" / "documents.js").read_text(encoding="utf-8")
+
+    assert 'class="layout-dashboard documents-dashboard"' in page
+    assert 'id="documents-search"' in page
+    assert 'id="documents-total-count"' in page
+    assert 'id="documents-download-hint"' in page
+    assert "matchesDocumentSearch" in script
+    assert "statusBadgeClass" in script
+    assert "仅可下载，不进入问答索引" in script
+
+
+def test_admin_page_contains_dashboard_layout_sections():
+    client = TestClient(create_app())
+    page = client.get("/admin").text
+
+    assert 'class="layout-dashboard admin-dashboard"' in page
+    assert 'class="panel sidebar admin-kb-panel"' in page
+    assert 'class="content-grid admin-document-panel"' in page
+    assert 'class="panel admin-detail-panel"' in page
+    assert 'class="panel admin-permission-panel split-panel"' in page
+
+
+def test_qa_page_contains_chat_workbench_layout():
+    client = TestClient(create_app())
+    page = client.get("/qa").text
+
+    assert 'class="layout-dashboard qa-dashboard"' in page
+    assert 'class="panel sidebar qa-sidebar"' in page
+    assert 'class="panel qa-chat-panel"' in page
+    assert 'class="panel qa-source-panel"' in page
+    assert 'id="qa-source-panel"' in page

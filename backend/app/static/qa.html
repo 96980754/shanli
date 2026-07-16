@@ -4,38 +4,70 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>知识库问答</title>
+    <link rel="stylesheet" href="/static/app.css" />
   </head>
   <body>
-    <h1>知识库问答</h1>
-    <p><a href="/admin">返回管理台</a> <a href="/documents">进入文档库</a></p>
-    <section id="qa-user"></section>
-    <p id="qa-kb-empty-state">当前账号暂无可访问知识库。</p>
-    <section id="qa-kb-selector">
-      <select id="qa-kb-select"></select>
-    </section>
-    <section id="qa-history">
-      <h2>历史会话</h2>
-      <section id="qa-conversation-list"></section>
-    </section>
-    <section id="qa-message-history">
-      <h2>历史消息</h2>
-      <section id="qa-message-list"></section>
-    </section>
-    <section id="qa-compose">
-      <textarea id="qa-question"></textarea>
-      <button id="qa-submit" type="button">提问</button>
-    </section>
-    <section id="qa-answer">
-      <h2>回答</h2>
-      <div id="qa-answer-content"></div>
-      <section id="qa-sources"></section>
-    </section>
-    <section id="qa-feedback">
-      <textarea id="qa-feedback-text"></textarea>
-      <button id="qa-feedback-helpful" type="button">有用</button>
-      <button id="qa-feedback-unhelpful" type="button">无用</button>
-    </section>
-    <p id="qa-message"></p>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="status-badge status-badge--success">RAG Chat</p>
+          <h1>知识库问答</h1>
+          <section id="qa-user" class="message"></section>
+        </div>
+        <nav>
+          <a class="button" href="/documents">进入文档库</a>
+          <a class="button" href="/admin">返回管理台</a>
+        </nav>
+      </header>
+
+      <p id="qa-message" class="message"></p>
+      <section class="layout-dashboard qa-dashboard">
+        <aside class="panel sidebar qa-sidebar">
+          <section class="data-card">
+            <h2>选择知识库</h2>
+            <p id="qa-kb-empty-state" class="empty-state">当前账号暂无可访问知识库。</p>
+            <section id="qa-kb-selector">
+              <select id="qa-kb-select"></select>
+            </section>
+          </section>
+          <section id="qa-history" class="data-card">
+            <h2>历史会话</h2>
+            <section id="qa-conversation-list" class="button-list"></section>
+          </section>
+        </aside>
+
+        <section class="panel qa-chat-panel">
+          <section id="qa-message-history" class="data-card">
+            <h2>历史消息</h2>
+            <section id="qa-message-list" class="document-card-list"></section>
+          </section>
+          <section id="qa-answer" class="data-card">
+            <h2>回答</h2>
+            <div id="qa-answer-content"></div>
+          </section>
+          <section id="qa-compose" class="form-stack">
+            <label>输入问题
+              <textarea id="qa-question" placeholder="例如：MCSTARS 如何关闭 SOS 报警？"></textarea>
+            </label>
+            <button id="qa-submit" class="primary-action" type="button">提问</button>
+          </section>
+        </section>
+
+        <aside id="qa-source-panel" class="panel qa-source-panel">
+          <h2>来源与反馈</h2>
+          <p class="message">回答来源只会包含当前账号有权限访问的文档。</p>
+          <section id="qa-sources" class="document-card-list"></section>
+          <section id="qa-feedback" class="form-stack data-card">
+            <h3>反馈</h3>
+            <textarea id="qa-feedback-text" placeholder="如果答案不准确，请描述缺口。"></textarea>
+            <div class="toolbar">
+              <button id="qa-feedback-helpful" class="primary-action" type="button">有帮助</button>
+              <button id="qa-feedback-unhelpful" class="danger-action" type="button">没有帮助</button>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
     <script src="/static/qa.js"></script>
   </body>
 </html>

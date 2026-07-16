@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from app.services.tools import KnowledgeTools
@@ -48,6 +50,27 @@ top_k: {initial: 100, after_rerank: 20, final: 10}
     assert retrieved[0]["chunk_id"] == "mc"
     assert bm25[0]["chunk_id"] == "mc"
     assert "metadata_score" in retrieved[0]
+
+@pytest.mark.asyncio
+async def test_retrieval_policy_applies_after_rerank_before_final_limit(monkeypatch):
+    tools = KnowledgeTools()
+    fake_policy = SimpleNamespace(
+        top_k=SimpleNamespace(initial=5, after_rerank=2, final=4),
+        detect_products=lambda query: set(),
+        rerank=lambda chunks, matched_products: list(chunks),
+    )
+    monkeypatch.setattr(tools, "_retrieval_policy", lambda: fake_policy)
+    tools.vector_chunks_by_kb["kb-1"] = [
+        {"chunk_id": "a", "content": "policy", "score": 0.9},
+        {"chunk_id": "b", "content": "policy", "score": 0.8},
+        {"chunk_id": "c", "content": "policy", "score": 0.7},
+        {"chunk_id": "d", "content": "policy", "score": 0.6},
+        {"chunk_id": "e", "content": "policy", "score": 0.5},
+    ]
+
+    result = await tools.retrieve("policy", "kb-1", top_k=4)
+
+    assert [item["chunk_id"] for item in result] == ["a", "b"]
 
 
 @pytest.mark.asyncio

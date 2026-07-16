@@ -551,11 +551,14 @@ curl -X POST \
   "kb_id": 1,
   "title": "P368用户手册.txt",
   "file_type": "txt",
-  "status": "pending",
+  "status": "parsed",
+  "parse_available": true,
+  "parse_status_label": "已解析，可用于问答",
   "parse_task_id": 1,
   "staged_filename": "1-<uuid>-P368用户手册.txt",
   "block_count": 1,
-  "chunk_count": 1
+  "chunk_count": 1,
+  "download_available": true
 }
 ```
 
@@ -563,8 +566,11 @@ curl -X POST \
 
 | 字段 | 说明 |
 |------|------|
-| `status=pending` | 文件已记录；数据库模式会同步创建解析任务 |
-| `parse_task_id` | 数据库模式返回，表示 `parse_tasks` 中的新任务 ID |
+| `status=parsed` | DOCX/PDF 等已解析文档，可进入问答索引 |
+| `status=stored_unsupported` | PPTX/XLSX 已保存但暂不支持内容解析，仅可下载 |
+| `parse_available` | 是否已解析并可用于问答 |
+| `parse_status_label` | 给前端展示的解析状态文案，例如“已解析，可用于问答”或“仅可下载（暂不支持内容解析）” |
+| `parse_task_id` | 数据库模式返回；可解析文件表示 `parse_tasks` 中的新任务 ID，仅下载格式为 `null` |
 | `staged_filename` | 数据库模式返回，表示已落盘的临时文件名 |
 | `block_count` | 数据库模式返回；当前 `.txt` 可解析为 `content_blocks`，未支持格式返回 0 |
 | `chunk_count` | 数据库模式返回；当前基于空行分段写入 `document_chunks`，未支持格式返回 0 |
@@ -590,7 +596,9 @@ curl -X POST \
 - 通过 `create_app(mode="database", session=...)` 可切换到数据库版上传链路
 - 上传接口当前要求用户对该知识库拥有 `can_upload`
 - 数据库版 `DbDocumentService` 已支持：写入 `documents` 元数据、按知识库查询文档、按知识库/文档 ID 读取单文档详情、同步更新 `KnowledgeBase.doc_count`
-- 数据库模式上传会调用 `IngestionService.ingest_uploaded_document()`：文件落盘到 `app.state.upload_root`、创建 `parse_tasks`、对 `.txt` 文件写入 `content_blocks` 和 `document_chunks`
+- 数据库模式上传会先保存原文件，再根据后缀决定解析策略；
+- `.pptx` 和 `.xlsx` 保存为 `stored_unsupported`，保留下载能力，不创建 `ParseTask`，不写入 `content_blocks` 或 `document_chunks`；
+- DOCX/PDF 等可解析文件会调用 `IngestionService.ingest_uploaded_document()`：创建 `parse_tasks`、写入 `content_blocks` 和 `document_chunks`，成功后状态为 `parsed`；
 - 当前 `.txt` chunk 规则为按空行分段；后续会替换为面向 token 长度与语义边界的 splitter
 - 当前解析器已接入 Unstructured adapter：`.docx` / `.pdf` 会优先调用 `unstructured.partition.auto.partition()`，失败时回退到基础解析器
 - 当前基础 fallback 支持 `.txt`、基础 `.docx` 段落文本、基础 `.pdf` 文本流；复杂 PDF、扫描件、复杂表格和图片知识仍需 OCR/VLM/表格专项解析增强
@@ -689,10 +697,13 @@ Authorization: Bearer <token>
   "id": 1,
   "kb_id": 1,
   "title": "manual.txt",
-  "status": "pending",
+  "status": "parsed",
+  "parse_available": true,
+  "parse_status_label": "已解析，可用于问答",
   "file_type": "txt",
   "block_count": 1,
-  "chunk_count": 1
+  "chunk_count": 1,
+  "download_available": true
 }
 ```
 
@@ -724,7 +735,7 @@ Authorization: Bearer <token>
 - 数据库模式会按 `kb_id + doc_id` 查询 `documents`
 - `block_count` 来自该文档最近一次 `parse_task` 关联的 `content_blocks` 数量
 - `chunk_count` 来自 `document_chunks` 中该文档的 chunk 数量
-- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`、`scope`、`document_type`、`product`、`priority`、`original_filename`、`content_type`、`file_size`、`download_available`
+- 当前详情接口已返回文档元数据字段：`department`、`product_line`、`visibility`、`security_level`、`tags`、`scope`、`document_type`、`product`、`priority`、`original_filename`、`content_type`、`file_size`、`download_available`、`parse_available`、`parse_status_label`
 - `scope`、部门、产品、密级和角色 ACL 在数据库问答链路中属于检索前硬过滤；`document_type`、问题产品匹配、`priority` 属于候选集内的策略重排
 - 文档元数据是向量检索、后续图谱检索、后台与统计共享的唯一权限事实来源（SSOT）
 - 内存模式当前仅返回基础文档元数据，`block_count` / `chunk_count` 固定为 0
@@ -1146,11 +1157,61 @@ Authorization: Bearer <token>
 
 ---
 
-## 8. 已实现的认证与 CRUD 增量
+## 8. 认证、注册与用户列表
+
+### POST `/api/auth/register`
+
+开放普通用户注册，仅数据库模式可用。
+
+**请求体：**
+
+```json
+{
+  "username": "alice",
+  "password": "correctpass",
+  "password_confirmation": "correctpass"
+}
+```
+
+字段规则：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `username` | string | 是 | 去除首尾空格后必须为 3–64 个字符，仅允许字母、数字、点、下划线和连字符 |
+| `password` | string | 是 | 至少 8 个字符 |
+| `password_confirmation` | string | 是 | 必须与 `password` 完全一致 |
+
+**成功响应：** `201 Created`
+
+```json
+{
+  "id": 2,
+  "username": "alice"
+}
+```
+
+**错误响应：**
+
+| 状态码 | `detail` | 说明 |
+|---|---|---|
+| 409 | `Username already exists` | 用户名重复 |
+| 422 | 校验错误说明 | 用户名、密码或确认密码不符合规则 |
+| 501 | `Registration requires database mode` | 内存模式不支持注册 |
+
+**当前实现说明：**
+
+- 密码使用 bcrypt 哈希保存；
+- 注册用户自动绑定“普通用户”角色；
+- 注册不会创建任何知识库权限或知识视图规则；
+- 响应不返回 `password` 或 `password_hash`。
+
+**测试覆盖：** `backend/tests/test_registration_api.py`
+
+---
 
 ### POST `/api/auth/login`
 
-最小登录接口，当前仅接受默认账号：`admin / admin`。
+登录接口。
 
 **请求体：**
 
@@ -1177,9 +1238,16 @@ Authorization: Bearer <token>
 }
 ```
 
+**当前实现说明：**
+
+- 内存模式保留 `admin/admin`；
+- 数据库模式按精确用户名查询用户，并使用 bcrypt 校验密码；
+- 数据库模式不再使用 `DEFAULT_OWNER_ID`、硬编码 `admin/admin` 或明文密码比较绕过认证。
+
 **测试覆盖：**
 
 - `backend/tests/test_auth_api.py::test_login_returns_session_token_for_default_admin`
+- `backend/tests/test_registration_api.py::test_registered_user_can_log_in_with_hashed_password_and_me_returns_numeric_id`
 
 ---
 
@@ -1197,8 +1265,8 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "user_id": "admin",
-  "username": "admin"
+  "user_id": "2",
+  "username": "alice"
 }
 ```
 
@@ -1207,14 +1275,6 @@ Authorization: Bearer <token>
 ```json
 {
   "detail": "Missing authorization header"
-}
-```
-
-或：
-
-```json
-{
-  "detail": "Invalid authorization header"
 }
 ```
 
@@ -1231,7 +1291,54 @@ Authorization: Bearer <token>
 - `backend/tests/test_auth_api.py::test_login_then_me_returns_default_admin_profile`
 - `backend/tests/test_auth_api.py::test_me_requires_valid_session_token`
 - `backend/tests/test_auth_api.py::test_me_rejects_invalid_session_token`
-- `backend/tests/test_auth_api.py::test_me_rejects_invalid_authorization_header_format`
+
+---
+
+### GET `/api/users`
+
+返回已注册用户列表，用于管理员授权工作台。
+
+**请求头：**
+
+```text
+Authorization: Bearer <token>
+```
+
+**权限要求：** 当前用户至少对一个知识库拥有 `can_grant`。
+
+**成功响应：**
+
+```json
+{
+  "items": [
+    {
+      "id": "1",
+      "username": "admin",
+      "role": "管理员"
+    },
+    {
+      "id": "2",
+      "username": "alice",
+      "role": "普通用户"
+    }
+  ]
+}
+```
+
+**错误响应：**
+
+| 状态码 | `detail` | 说明 |
+|---|---|---|
+| 401 | 授权错误说明 | 未登录或 token 无效 |
+| 403 | `Permission denied` | 当前用户没有任何 `can_grant` 权限 |
+| 501 | `User listing requires database mode` | 内存模式不支持用户列表 |
+
+**当前实现说明：**
+
+- 响应只包含 `id`、`username`、`role`；
+- 不返回 `password`、`password_hash` 或任何密码字段。
+
+**测试覆盖：** `backend/tests/test_registration_api.py::test_users_endpoint_requires_can_grant_and_omits_password_fields`
 
 ---
 
@@ -1323,9 +1430,29 @@ Authorization: Bearer <token>
 
 ---
 
-### GET `/static/{path}`
+### GET `/documents`
 
-静态资源入口，用于托管 `backend/app/static` 下的前端资源。
+返回权限感知文档工作台。
+
+**当前实现说明：**
+
+- 页面文件：`backend/app/static/documents.html`；
+- 交互脚本：`backend/app/static/documents.js`；
+- 页面加载 `/static/app.css` 共享深色工作台样式；
+- 未登录时跳转 `/login`；
+- 调用 `/api/auth/me` 显示当前账号；
+- 调用 `/api/kb` 只加载当前用户可见知识库；
+- 调用 `/api/kb/{kb_id}/documents` 只展示后端已授权文档；
+- 支持解析状态、visibility、产品筛选；
+- 详情展示 `parse_status_label`、元数据、block/chunk 数和 `download_available`；
+- 下载通过 `/api/kb/{kb_id}/documents/{doc_id}/download`，仍由后端鉴权；
+- 当前用户对选中知识库具备 `can_grant` 时，显示管理员授权区；
+- 管理员授权区调用 `/api/users`、权限 API 和知识视图规则 API，完成用户授权和规则维护。
+
+**测试覆盖：**
+
+- `backend/tests/test_frontend_shell.py::test_documents_page_contains_kb_selector_document_list_detail_and_download_hook`
+- `backend/tests/test_frontend_shell.py::test_documents_shell_contains_filters_empty_access_and_admin_user_controls`
 
 ---
 

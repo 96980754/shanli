@@ -40,7 +40,8 @@ class KnowledgeTools:
             return chunks[:top_k]
         initial_candidates = chunks[: policy.top_k.initial]
         ranked = policy.rerank(initial_candidates, policy.detect_products(query))
-        return ranked[: min(top_k, policy.top_k.final)]
+        reranked_candidates = ranked[: policy.top_k.after_rerank]
+        return reranked_candidates[: min(top_k, policy.top_k.final)]
 
     def build_bm25_index(self, kb_id: str, chunks: list[dict[str, Any]]) -> None:
         self._bm25_chunks_by_kb[kb_id] = list(chunks)

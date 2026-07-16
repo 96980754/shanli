@@ -33,13 +33,14 @@
 |-------------|-------------|-------------|---------------|
 | FastAPI 应用入口 | `backend/app/main.py` | ✅ 已实现 MVP | 已支持 `create_app_from_env()` 按 `DATABASE_URL` 切换内存/数据库服务，并托管 `/login`、`/admin` 和 `/static` |
 | 健康检查 API | `backend/app/main.py` | ✅ 已实现 `/health` | 无 |
+| 注册、认证与用户列表 | `backend/app/services/password_service.py`, `backend/app/services/auth_service.py`, `backend/app/main.py` | ✅ 已实现自助注册与 bcrypt 数据库认证 | 注册用户默认无知识库权限；数据库登录只走 bcrypt 校验；`/api/users` 仅 `can_grant` 用户可读且不暴露密码字段 |
 | 知识库管理 API | `backend/app/main.py` | ✅ 内存版实现 + 数据库版服务已接入 | 已支持 create/list/get/update/delete，并接入知识库级 `can_view/can_grant` 权限；后续迁移到 `app/api/kb.py` + 请求级 session 注入 |
 | 用户知识视图规则 | `backend/app/models/user.py::KnowledgeViewRule`, `backend/app/services/view_rule_service.py`, `backend/app/main.py`, `backend/app/static/admin.html`, `backend/app/static/admin.js` | ✅ 已实现配置底座并接入数据库问答检索 | 知识库 `can_view` 是第一道门槛；数据库问答通过 `EffectiveDocumentFilter` 将规则转换为检索前硬过滤，后续扩展角色/部门/项目规则只需生成最终有效规则 |
 | 统一文档元数据 SSOT | `backend/app/models/document.py`, `backend/app/services/document_filter_service.py`, `backend/app/services/db_chunk_loader.py` | ✅ V2 已实现数据库检索闭环 | `scope/document_type/product/priority/acl_roles` 与既有部门、密级字段构成 Document Metadata；Chunk 仅从文档派生元数据，后续 Milvus/图谱复用 `EffectiveDocumentFilter` |
 | 配置化检索策略 | `backend/config/retrieval_policy.yaml`, `backend/app/services/retrieval_policy.py`, `backend/app/services/tools.py`, `backend/app/services/reranker.py` | ✅ 已实现 Type/Product/Priority 元数据重排 | YAML 每次检索重新加载；后续可接策略版本、灰度和在线治理，不改变文档数据 |
-| 文档上传与原件存储 | `backend/app/main.py`, `backend/app/services/file_storage.py`, `backend/app/services/ingestion_service.py` | ✅ 数据库模式先原子保存原件，再在同一数据库事务中写入文档、解析任务、内容块和 chunk | `storage_key` 是安全相对路径；解析失败回滚数据库并删除原件；后续可将本地实现替换为 MinIO |
+| 文档上传与原件存储 | `backend/app/main.py`, `backend/app/services/file_storage.py`, `backend/app/services/ingestion_service.py` | ✅ 数据库模式先原子保存原件，再按文件类型解析或仅保存 | `storage_key` 是安全相对路径；DOCX/PDF 等可解析文件成功后为 `parsed`；PPTX/XLSX 为 `stored_unsupported`，不创建解析任务或 chunk，但保留下载；解析失败回滚数据库并删除原件；后续可将本地实现替换为 MinIO |
 | 文档受控访问与下载 | `backend/app/services/document_access_service.py`, `backend/app/main.py`, `backend/app/models/kg_ops.py` | ✅ 列表、详情和下载复用 `EffectiveDocumentFilter`；成功下载写审计 | 后续将下载审计扩展为运营查询和异步归档 |
-| 用户文档库 | `backend/app/static/documents.html`, `backend/app/static/documents.js`, `backend/app/main.py` | ✅ `/documents` 可加载可见知识库、文档详情并通过 Bearer Blob 下载 | 后续增加分页、搜索、文件预览和批量操作 |
+| 用户文档库 | `backend/app/static/documents.html`, `backend/app/static/documents.js`, `backend/app/static/app.css`, `backend/app/main.py` | ✅ 已升级为权限感知工作台 | 未登录跳转登录；只展示后端已授权知识库和文档；支持解析状态/visibility/产品筛选、详情、下载；具备 `can_grant` 时显示注册用户授权和知识视图规则维护区 |
 | 文档元数据底座 | `backend/app/models/document.py`, `backend/app/services/document_service.py`, `backend/app/services/db_document_service.py`, `backend/app/main.py` | ✅ 已支持元数据、原件存储字段、详情回显和生命周期删除 | 旧数据库通过 `ensure_runtime_schema()` 补列；正式生产迁移后续接 Alembic |
 | 文档解析 | `backend/app/services/parser_service.py` | ✅ 已接 Unstructured adapter，`.docx`/`.pdf` 优先走 `partition()`，失败回退基础解析 | 后续增强 OCR/VLM/复杂表格解析 |
 | 同步问答 API | `backend/app/main.py` | ✅ 已实现 `/api/qa/ask/sync` | 数据库模式下已写入问答会话和消息；后续补 `/api/qa/ask` SSE 流式接口 |
@@ -50,10 +51,10 @@
 | 规则重排序 | `backend/app/services/reranker.py` | ✅ 已实现 | 二期可接 BGE-Reranker-v2-m3 |
 | 测试体系 | `backend/tests/*` | ✅ 已覆盖核心行为 | 每新增 API/模块补测试 |
 | API 文档 | `docs/api/api-reference.md` | ✅ 已建立 | 每次 API 变更同步维护 |
-| 前端登录页/管理台壳 | `backend/app/static/login.html`, `backend/app/static/admin.html`, `backend/app/static/admin.js` | ✅ 已实现最小静态壳 | 管理员工作台已补齐知识库区、单文件上传区、文档列表区、文档详情区、权限区、知识缺口区、删除确认区与消息区；后续再做更强的前端行为测试 |
+| 前端登录页/管理台壳 | `backend/app/static/login.html`, `backend/app/static/login.js`, `backend/app/static/admin.html`, `backend/app/static/admin.js`, `backend/app/static/app.css` | ✅ 已实现登录注册和共享深色样式 | 登录页支持注册/登录切换且不预填演示凭据；管理台已接入共享样式并保留知识库区、单文件上传区、文档列表区、文档详情区、权限区、知识缺口区、删除确认区与消息区 |
 | 查询用户问答页 | `backend/app/static/qa.html`, `backend/app/static/qa.js`, `backend/app/main.py` | ✅ 已实现阶段 3 v1 | 已支持当前用户加载、可见知识库选择、同步提问、答案/来源展示、有用/无用反馈、会话历史侧栏和历史消息展示；后续接 Markdown、SSE 流式输出和来源跳转 |
 | Docker Compose 三库基础设施 | `docker-compose.yml` | ✅ 已实现 | PostgreSQL + Redis + Milvus + Neo4j Community |
-| PostgreSQL 全量 Schema | `backend/app/models/*`, `backend/app/core/db.py::ensure_runtime_schema` | ✅ 已实现骨架及 V2 SQLite/PostgreSQL 兼容补列 | 当前启动数据库模式时为已有 `documents` 表补齐 V2 元数据列；正式生产迁移后续接 Alembic 版本化迁移 |
+| PostgreSQL 全量 Schema | `backend/app/models/*`, `backend/app/core/db.py::ensure_runtime_schema` | ✅ 已实现骨架及 V2 SQLite/PostgreSQL 兼容补列 | 当前启动数据库模式时为已有 `documents` 表补齐 V2 元数据列；若本次新增 `scope` 或 `product`，会从旧 `visibility` 和 `product_line` 幂等回填；正式生产迁移后续接 Alembic 版本化迁移 |
 | 数据库服务层 | `backend/app/services/db_kb_service.py`, `backend/app/services/db_document_service.py` | ✅ 已实现最小能力 | 后续接迁移工具与请求级 session 生命周期 |
 | Service Provider | `backend/app/main.py::build_app_state_services`, `backend/app/main.py::create_app_from_env` | ✅ 已实现 | `DATABASE_URL` 存在时自动进入数据库模式；`DEFAULT_OWNER_ID` 提供临时 owner |
 | Neo4j 约束与索引 | `backend/neo4j/*.cypher` | ❌ 未实现 | 使用英文 Schema 重写约束 |
@@ -366,7 +367,8 @@ async def generate_with_tools(
 | `test_language_selection.py` | 中英文 embedding 模型切换 |
 | `test_db_chunk_loader.py` | DbChunkLoader 将 PostgreSQL `document_chunks` 转换为检索 chunk |
 | `test_database_mode_api.py` | 数据库模式 API：知识库持久化、文档上传、文件落盘、解析任务返回、问答读取 document_chunks |
-| `test_runtime_database_mode.py` | 环境变量驱动的数据库模式启动、session_factory、DEFAULT_OWNER_ID |
+| `test_registration_api.py` | 自助注册、bcrypt 密码哈希与登录、默认无权限、用户列表授权和密码字段隐藏 |
+| `test_runtime_database_mode.py` | 环境变量驱动的数据库模式启动、session_factory、DEFAULT_OWNER_ID、运行时补列和历史 `scope/product` 回填 |
 | `test_upload_ingest_flow.py` | IngestionService：文件落盘、parse_task 创建、`.txt` 解析为 content_blocks |
 | `test_qa_ops_api.py` | 问答记录、会话消息、答案反馈、知识缺口和权限边界 |
 | `test_view_rule_service.py` | 知识视图规则 CRUD、JSON 序列化和文档可见性判断 |

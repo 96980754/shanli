@@ -4,20 +4,138 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>我的文档库</title>
+    <link rel="stylesheet" href="/static/app.css" />
   </head>
   <body>
-    <h1>我的文档库</h1>
-    <p><a href="/qa">进入问答页</a> <a href="/admin">进入管理台</a></p>
-    <p id="documents-message"></p>
-    <section id="documents-kb-list"></section>
-    <p id="documents-kb-empty-state">暂无可访问知识库。</p>
-    <section id="documents-list"></section>
-    <p id="documents-empty-state">当前知识库暂无可访问文档。</p>
-    <section id="documents-detail">
-      <h2 id="documents-detail-title">未选择文档</h2>
-      <p id="documents-detail-metadata"></p>
-      <button id="download-document" type="button" disabled>下载原文件</button>
-    </section>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="status-badge status-badge--success">资料权限工作台</p>
+          <h1>我的文档库</h1>
+          <p id="documents-current-user" class="message">正在加载账号……</p>
+        </div>
+        <nav>
+          <a class="button" href="/qa">进入问答页</a>
+          <a class="button" href="/admin">进入管理台</a>
+          <button id="documents-logout" class="secondary-action" type="button">退出登录</button>
+        </nav>
+      </header>
+
+      <p id="documents-message" class="message"></p>
+      <p id="documents-no-access" class="empty-state panel" hidden>当前账号暂无可访问资料。请联系管理员授予资料分类权限。</p>
+
+      <section class="layout-dashboard documents-dashboard">
+        <aside class="panel sidebar documents-sidebar">
+          <div>
+            <p class="status-badge">资料分类</p>
+            <h2>知识库</h2>
+            <p class="message">仅展示当前账号已授权的分类。</p>
+          </div>
+          <section id="documents-kb-list" class="button-list"></section>
+          <p id="documents-kb-empty-state" class="empty-state">暂无可访问知识库。</p>
+
+          <div class="data-card">
+            <h3>筛选</h3>
+            <div class="form-stack">
+              <label>解析状态
+                <select id="documents-status-filter">
+                  <option value="all">全部状态</option>
+                </select>
+              </label>
+              <label>可见范围
+                <select id="documents-visibility-filter">
+                  <option value="">全部可见范围</option>
+                </select>
+              </label>
+              <label>产品
+                <select id="documents-product-filter">
+                  <option value="">全部产品</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </aside>
+
+        <section class="content-grid">
+          <section class="panel toolbar">
+            <div>
+              <p class="status-badge">真实样本文件</p>
+              <h2>文档列表</h2>
+            </div>
+            <div class="toolbar">
+              <input id="documents-search" placeholder="搜索文件名、产品、资料分类" />
+              <span id="documents-total-count" class="status-badge">0 份文档</span>
+            </div>
+          </section>
+
+          <section class="panel documents-main">
+            <section id="documents-list" class="document-card-list"></section>
+            <p id="documents-empty-state" class="empty-state">当前知识库暂无可访问文档。</p>
+          </section>
+        </section>
+
+        <aside class="panel documents-detail-panel">
+          <section id="documents-detail">
+            <p class="status-badge">文档详情</p>
+            <h2 id="documents-detail-title">未选择文档</h2>
+            <p id="documents-detail-status" class="status-badge">请选择文档</p>
+            <dl class="field-list">
+              <div><dt>基础信息</dt><dd id="documents-detail-metadata"></dd></div>
+              <div><dt>权限元数据</dt><dd id="documents-detail-parse"></dd></div>
+              <div><dt>解析统计</dt><dd id="documents-detail-counts"></dd></div>
+              <div><dt>下载状态</dt><dd id="documents-detail-access"></dd></div>
+            </dl>
+            <p id="documents-download-hint" class="message"></p>
+            <button id="download-document" class="primary-action" type="button" disabled>下载原文件</button>
+          </section>
+        </aside>
+      </section>
+
+      <section id="documents-admin-panel" class="panel" hidden>
+        <p class="status-badge status-badge--warning">管理员授权</p>
+        <h2>分类权限与知识视图</h2>
+        <p class="message">仅当你对当前知识库拥有授权权限时显示。</p>
+        <div class="workbench-admin-grid">
+          <section class="form-stack data-card">
+            <h3>用户权限</h3>
+            <label>已注册用户
+              <select id="documents-permission-user"></select>
+            </label>
+            <label><input id="documents-perm-view" type="checkbox" /> 查看 / 下载</label>
+            <label><input id="documents-perm-upload" type="checkbox" /> 上传</label>
+            <label><input id="documents-perm-delete" type="checkbox" /> 删除</label>
+            <label><input id="documents-perm-grant" type="checkbox" /> 授权管理</label>
+            <button id="documents-save-permission" class="primary-action" type="button">保存权限</button>
+          </section>
+
+          <section class="form-stack data-card">
+            <h3>知识视图规则</h3>
+            <label>允许部门
+              <input id="documents-view-rule-departments" placeholder="售后,交付" />
+            </label>
+            <label>允许产品
+              <input id="documents-view-rule-products" placeholder="MC,MS,GEN" />
+            </label>
+            <label><input id="documents-view-rule-public" type="checkbox" /> public</label>
+            <label><input id="documents-view-rule-internal" type="checkbox" /> internal</label>
+            <label><input id="documents-view-rule-restricted" type="checkbox" /> restricted</label>
+            <label>最大密级
+              <select id="documents-view-rule-max-security-level">
+                <option value="">不限制</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <div class="toolbar">
+              <button id="documents-load-view-rule" class="secondary-action" type="button">加载知识视图</button>
+              <button id="documents-save-view-rule" class="primary-action" type="button">保存知识视图</button>
+              <button id="documents-delete-view-rule" class="danger-action" type="button">删除知识视图</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
     <script src="/static/documents.js"></script>
   </body>
 </html>

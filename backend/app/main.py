@@ -131,12 +131,8 @@ def require_kb_permission(app: FastAPI, kb_id: str | int, user_id: str, permissi
 
 def resolve_session_user_id(app: FastAPI, session: dict[str, str]) -> str | int:
     user_id = session["user_id"]
-    if app.state.service_mode == "database":
-        if user_id.isdigit():
-            return int(user_id)
-        default_owner_id = app.state.default_owner_id
-        if default_owner_id is not None and session.get("username") == "admin":
-            return default_owner_id
+    if app.state.service_mode == "database" and user_id.isdigit():
+        return int(user_id)
     return user_id
 
 
@@ -1017,6 +1013,12 @@ def create_app_from_env(env: Mapping[str, str]) -> FastAPI:
         default_owner_id = env.get("DEFAULT_OWNER_ID")
         if default_owner_id:
             app.state.default_owner_id = int(default_owner_id)
+        file_storage_root = env.get("FILE_STORAGE_ROOT")
+        if file_storage_root:
+            app.state.file_storage_root = Path(file_storage_root)
+        upload_root = env.get("UPLOAD_ROOT")
+        if upload_root:
+            app.state.upload_root = Path(upload_root)
         return app
     return create_app()
 
