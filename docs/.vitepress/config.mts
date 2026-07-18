@@ -5,9 +5,9 @@ import markdownItTaskCheckbox from 'markdown-it-task-checkbox'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   lang: 'zh-CN',
-  title: "Yuxi",
-  description: "语析",
-  base: '/Yuxi/',
+  title: "AI知识库",
+  description: "AI知识库",
+  base: '/',
   ignoreDeadLinks: [
     /localhost/,
     /CONTRIBUTING$/,
@@ -31,7 +31,7 @@ export default defineConfig({
       {
         text: '简介',
         items: [
-          { text: '什么是 Yuxi？', link: '/intro/project-overview' },
+          { text: '什么是 AI知识库？', link: '/intro/project-overview' },
           { text: '快速开始', link: '/intro/quick-start' },
           { text: '命令行工具', link: '/intro/cli' },
           { text: '模型配置', link: '/intro/model-config' },
@@ -76,18 +76,9 @@ export default defineConfig({
       }
     ],
 
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/xerrors/Yuxi' }
-    ],
-
     footer: {
       message: '本项目基于 MIT License 开源，欢迎使用和贡献。',
-      copyright: 'Copyright © 2025-present Yuxi'
-    },
-
-    editLink: {
-      pattern: 'https://github.com/xerrors/Yuxi/edit/main/docs/:path',
-      text: '在 GitHub 上编辑此页'
+      copyright: 'Copyright © 2025-present AI知识库'
     },
 
     lastUpdated: {

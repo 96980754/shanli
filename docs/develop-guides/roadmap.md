@@ -1,6 +1,6 @@
 # 开发路线图
 
-路线图可能会经常变更，如果有强烈的建议，可以在 [issue](https://github.com/xerrors/Yuxi/issues) 中提。
+路线图可能会经常变更，如果有强烈的建议，可以在 [issue](git@github.com:96980754/shanli/issues) 中提。
 
 项目看板（Maintainer Only）：[GitHub Project](https://github.com/users/xerrors/projects/2)
 
@@ -10,7 +10,7 @@
 ### 看板
 
 **知识库**
-- [ ] 知识库工具接口化与 CLI 集成：将当前知识库的主要工具（如上传、检索、建索引等）封装为后端 API 接口，并集成到 Yuxi CLI 工具中
+- [ ] 知识库工具接口化与 CLI 集成：将当前知识库的主要工具（如上传、检索、建索引等）封装为后端 API 接口，并集成到 AI知识库 CLI 工具中
 - [ ] 知识库 Mindmap 扩展：新增基于文件名的文件“边”构建，支持聚类算法形成社区节点，并提供思维导图 (Mindmap) 可视化结构展示
 - [ ] 知识库工具新增 query_keywords 工具，专门用于基于关键词命中的排序 <Badge text="v0.7.1" />
 - [ ] 增强知识库检索体验：增强 metadata、标签等
@@ -31,15 +31,15 @@
 - [x] 反馈接入到 Langfuse
 
 **其他**
-- [x] 历史对话新增搜索能力（[#790](https://github.com/xerrors/Yuxi/issues/790)）
-- [x] 消息中的代码块增加快速复制按钮（[#790](https://github.com/xerrors/Yuxi/issues/790)）
+- [x] 历史对话新增搜索能力（[#790](git@github.com:96980754/shanli/issues/790)）
+- [x] 消息中的代码块增加快速复制按钮（[#790](git@github.com:96980754/shanli/issues/790)）
 - [ ] 集成 Memory，基于 deepagents 的文件后端实现，需要考虑定位
 - [x] 优化 Task 模块定位：区分真正的后台任务实体与进度条管理工具，重新定义任务中心/Tasker 的职责边界
 - [x] 模型供应商类型继续补齐非 OpenAI 兼容适配，并清理不再支持的 provider type 字样 <Badge text="v0.7.1" />
-- [ ] 优化 Agent 向用户追问交互：支持较长文本回答输入，并在流式输出时保持聊天区跟随最新内容（[#753](https://github.com/xerrors/Yuxi/issues/753)）
+- [ ] 优化 Agent 向用户追问交互：支持较长文本回答输入，并在流式输出时保持聊天区跟随最新内容（[#753](git@github.com:96980754/shanli/issues/753)）
 
 **仅设想**
-- [ ] Yuxi CLI 更多管理命令，放在后续版本中实现（不是类似于编程助手，而是管理平台工具，等各个 router 接口优化之后）
+- [ ] AI知识库 CLI 更多管理命令，放在后续版本中实现（不是类似于编程助手，而是管理平台工具，等各个 router 接口优化之后）
 
 
 ### Bugs

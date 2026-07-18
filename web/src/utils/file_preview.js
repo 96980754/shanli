@@ -173,7 +173,7 @@ export const normalizePreviewResponse = async (response, baseFile = {}) => {
   }
 
   const previewType =
-    response?.headers?.get?.('x-yuxi-preview-type') || getPreviewTypeByContentType(contentType)
+    response?.headers?.get?.('x-ai-kb-preview-type') || getPreviewTypeByContentType(contentType)
   const blob = await response.blob()
 
   return {

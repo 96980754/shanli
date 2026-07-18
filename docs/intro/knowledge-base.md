@@ -1,6 +1,6 @@
 # 知识库与知识图谱
 
-Yuxi 提供文档知识库、向量检索、知识导图和知识图谱构建能力。当前支持 Milvus 知识库、Milvus 知识库内的图谱构建/展示/检索，以及 Dify Dataset、Notion Data Source 只读检索。
+AI知识库 提供文档知识库、向量检索、知识导图和知识图谱构建能力。当前支持 Milvus 知识库、Milvus 知识库内的图谱构建/展示/检索，以及 Dify Dataset、Notion Data Source 只读检索。
 
 ## 为什么需要知识库
 
@@ -107,7 +107,7 @@ Neo4j 连接信息可以在 `.env` 中配置：
 
 ## API 使用
 
-程序化上传应先将文件上传到 MinIO，再创建文档记录；CLI 可使用 `yuxi kb upload` 完成这条链路。接口如下：
+程序化上传应先将文件上传到 MinIO，再创建文档记录；CLI 可使用 `ai-kb kb upload` 完成这条链路。接口如下：
 
 ```bash
 # 1. 上传文件

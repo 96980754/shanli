@@ -1191,7 +1191,7 @@ const rememberRemoteSource = (source) => {
     history = history.slice(0, 10)
   }
   repoHistory.value = history
-  localStorage.setItem('yuxi_remote_repo_history', JSON.stringify(history))
+  localStorage.setItem('ai_kb_remote_repo_history', JSON.stringify(history))
 }
 
 const handleListRemoteSkills = async () => {
@@ -1274,7 +1274,7 @@ const handleRecommendedSkillInstall = async (skill) => {
 
 const loadHistory = () => {
   try {
-    const raw = localStorage.getItem('yuxi_remote_repo_history')
+    const raw = localStorage.getItem('ai_kb_remote_repo_history')
     if (raw) {
       repoHistory.value = JSON.parse(raw)
     }
@@ -1285,12 +1285,12 @@ const loadHistory = () => {
 
 const deleteHistoryItem = (item) => {
   repoHistory.value = repoHistory.value.filter((h) => h !== item)
-  localStorage.setItem('yuxi_remote_repo_history', JSON.stringify(repoHistory.value))
+  localStorage.setItem('ai_kb_remote_repo_history', JSON.stringify(repoHistory.value))
 }
 
 const clearAllHistory = () => {
   repoHistory.value = []
-  localStorage.removeItem('yuxi_remote_repo_history')
+  localStorage.removeItem('ai_kb_remote_repo_history')
   message.success('历史记录已清空')
 }
 

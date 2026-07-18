@@ -80,5 +80,5 @@ async def test_read_viewer_workspace_office_file_returns_pdf_preview(
         body += chunk
 
     assert response.media_type == "application/pdf"
-    assert response.headers["x-yuxi-preview-type"] == "pdf"
+    assert response.headers["x-ai-kb-preview-type"] == "pdf"
     assert body == b"%PDF-1.4\npreview"

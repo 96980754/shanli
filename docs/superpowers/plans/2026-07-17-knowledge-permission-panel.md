@@ -2,7 +2,7 @@
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
-**目标：** 完善 Yuxi 知识库详情页的权限设置面板，让管理员可以按用户、部门、角色选择授权对象，并用常用预设快速配置 8 个知识库操作权限。
+**目标：** 完善 AI知识库 知识库详情页的权限设置面板，让管理员可以按用户、部门、角色选择授权对象，并用常用预设快速配置 8 个知识库操作权限。
 
 **架构：** 保留现有 `KnowledgePermissionPanel.vue` 和 `knowledge_api.js` 的后端接口调用，不新增后端接口。权限面板在组件内加载用户与部门选项，按 `subject_type` 切换选择器，保存时仍向现有 `PUT /api/knowledge/databases/{kb_id}/permissions` 提交 `subject_type`、`subject_id` 和 8 个布尔权限位。
 
@@ -603,7 +603,7 @@ cd /home/hmy/demo/shanli/yuxi-eval && git status --short
 在最终回复中写明以下手工验收路径：
 
 ```text
-1. admin 登录 Yuxi 前端。
+1. admin 登录 AI知识库 前端。
 2. 进入任一知识库详情页。
 3. 点击顶部“权限设置”或权限 tab。
 4. 授权类型选择“用户”，授权对象选择一个用户，点击“只读”，保存。

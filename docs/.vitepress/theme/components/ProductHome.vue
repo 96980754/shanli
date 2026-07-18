@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { withBase } from 'vitepress'
 
-const GITHUB = 'https://github.com/xerrors/Yuxi'
+const REPO_URL = 'git@github.com:96980754/shanli.git'
 const DEMO = 'https://www.bilibili.com/video/BV1TZEx6NEit/'
 
 // 关键数字（占位，后续替换为真实数据）
@@ -210,7 +210,7 @@ const vReveal = {
       </div>
       <div class="yx-container yx-hero__inner">
         <span class="yx-badge">v0.7.0 · MIT 开源 · LangGraph 驱动</span>
-        <h1 class="yx-hero__title">语析 <span class="yx-accent">Yuxi</span></h1>
+        <h1 class="yx-hero__title"><span class="yx-accent">AI知识库</span></h1>
         <p class="yx-hero__subtitle">融合 RAG 与知识图谱的智能体 Harness 平台</p>
         <p class="yx-hero__desc">
           管理员配置知识库、模型与权限，用户在类 ChatGPT 的界面中，
@@ -219,14 +219,14 @@ const vReveal = {
         </p>
         <div class="yx-hero__actions">
           <a class="yx-btn yx-btn--primary" :href="withBase('/intro/quick-start')">快速开始</a>
-          <a class="yx-btn yx-btn--ghost" :href="GITHUB" target="_blank" rel="noreferrer">在 GitHub 查看</a>
+          <a class="yx-btn yx-btn--ghost" :href="REPO_URL" target="_blank" rel="noreferrer">在 GitHub 查看</a>
           <a class="yx-btn yx-btn--text" :href="DEMO" target="_blank" rel="noreferrer">▷ 演示视频</a>
         </div>
         <div class="yx-hero__shot">
           <img
             class="yx-hero__img"
             src="https://xerrors.oss-cn-shanghai.aliyuncs.com/github/image-20260608002434299.png"
-            alt="语析 Yuxi 产品界面预览"
+            alt="AI知识库 产品界面预览"
             loading="lazy"
           />
         </div>
@@ -249,7 +249,7 @@ const vReveal = {
         <header v-reveal class="yx-head">
           <span class="yx-head__eyebrow">智能体运行时</span>
           <h2 class="yx-head__title">不止于对话，更能执行与交付</h2>
-          <p class="yx-head__sub">Yuxi 内置一套完整的 Harness——沙盒、技能、工具、子智能体与中间件，让智能体真正动手完成任务。</p>
+          <p class="yx-head__sub">AI知识库 内置一套完整的 Harness——沙盒、技能、工具、子智能体与中间件，让智能体真正动手完成任务。</p>
         </header>
         <div class="yx-bento">
           <article
@@ -453,8 +453,8 @@ const vReveal = {
         </header>
         <div v-reveal class="yx-quick">
           <pre class="yx-code"><code><span class="yx-c-cmt"># 1. 克隆并初始化</span>
-git clone --branch v0.7.1.beta2 --depth 1 https://github.com/xerrors/Yuxi.git
-cd Yuxi && ./scripts/init.sh
+git clone --branch v0.7.1.beta2 --depth 1 git@github.com:96980754/shanli.git
+cd shanli && ./scripts/init.sh
 
 <span class="yx-c-cmt"># 2. 使用 Docker 启动</span>
 docker compose up --build
@@ -473,8 +473,8 @@ open http://localhost:5173</code></pre>
           <span class="yx-head__eyebrow">社区</span>
           <h2 class="yx-head__title">由开源社区共同构建</h2>
         </header>
-        <a v-reveal :href="GITHUB + '/graphs/contributors'" target="_blank" rel="noreferrer" class="yx-contrib">
-          <img src="https://contrib.rocks/image?repo=xerrors/Yuxi&max=60&columns=12" alt="Yuxi 贡献者头像墙" loading="lazy" />
+        <a v-reveal :href="REPO_URL" target="_blank" rel="noreferrer" class="yx-contrib">
+          <img src="https://contrib.rocks/image?repo=96980754/shanli&max=60&columns=12" alt="AI知识库 贡献者头像墙" loading="lazy" />
         </a>
         <p v-reveal class="yx-credits">
           站在巨人的肩上 ——
@@ -492,7 +492,7 @@ open http://localhost:5173</code></pre>
         <p>开源、可自托管、面向真实业务场景。</p>
         <div class="yx-hero__actions yx-cta__actions">
           <a class="yx-btn yx-btn--primary" :href="withBase('/intro/quick-start')">快速开始</a>
-          <a class="yx-btn yx-btn--ghost" :href="GITHUB" target="_blank" rel="noreferrer">前往 GitHub ★</a>
+          <a class="yx-btn yx-btn--ghost" :href="REPO_URL" target="_blank" rel="noreferrer">前往 GitHub ★</a>
         </div>
       </div>
     </section>

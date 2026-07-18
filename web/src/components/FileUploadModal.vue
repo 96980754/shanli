@@ -1433,11 +1433,7 @@ const getAuthHeaders = () => {
 }
 
 const openDocLink = () => {
-  window.open(
-    'https://xerrors.github.io/Yuxi/advanced/document-processing.html',
-    '_blank',
-    'noopener'
-  )
+  message.info('文档解析说明请联系系统管理员获取')
 }
 
 const chunkData = async () => {
