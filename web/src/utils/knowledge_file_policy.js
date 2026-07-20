@@ -4,7 +4,7 @@ export const FILE_ACTIONS = {
 }
 
 const STATUS_VIEW = {
-  uploaded: { label: '待解析', tone: 'status-warning', icon: 'clock' },
+  uploaded: { label: '待审核', tone: 'status-warning', icon: 'clock' },
   parsing: { label: '解析中', tone: 'status-info', icon: 'progress' },
   parsed: { label: '待入库', tone: 'status-primary', icon: 'file' },
   error_parsing: { label: '重试解析', tone: 'status-error', icon: 'error' },
@@ -48,7 +48,7 @@ const STATUS_SORT_ORDER = {
 }
 
 export const FILE_STATUS_FILTER_OPTIONS = [
-  { label: '待解析', value: 'uploaded' },
+  { label: '待审核', value: 'uploaded' },
   { label: '解析中', value: 'parsing' },
   { label: '待入库', value: 'parsed' },
   { label: '重试解析', value: 'error_parsing' },

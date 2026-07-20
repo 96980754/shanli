@@ -73,7 +73,7 @@ class KnowledgePermissionService:
         return (await self.effective_permissions(user, kb_id)).allows(action)
 
     async def effective_permissions(self, user: dict[str, Any], kb_id: str) -> EffectiveKnowledgePermissions:
-        if user.get("role") == "superadmin":
+        if user.get("role") in {"admin", "superadmin"}:
             return self._all_permissions()
 
         kb = await self.kb_repository.get_by_kb_id(kb_id)

@@ -50,6 +50,16 @@ def service_for(kb, permissions=None):
     )
 
 
+async def test_admin_has_all_knowledge_permissions():
+    service = service_for(SimpleNamespace(kb_id="kb-1", created_by="owner", share_config=None))
+
+    permissions = await service.effective_permissions({"role": "admin", "uid": "department-admin"}, "kb-1")
+
+    assert permissions.can_download is True
+    assert permissions.can_manage is True
+    assert permissions.can_grant is True
+
+
 async def test_superadmin_has_all_knowledge_permissions():
     service = service_for(SimpleNamespace(kb_id="kb-1", created_by="owner", share_config=None))
 

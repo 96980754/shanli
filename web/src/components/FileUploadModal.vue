@@ -30,7 +30,7 @@
             class="custom-segmented"
           />
         </div>
-        <div class="auto-index-toggle">
+        <div v-if="!props.deferProcessing" class="auto-index-toggle">
           <a-checkbox v-model:checked="autoIndex">上传后自动入库</a-checkbox>
         </div>
       </div>
@@ -463,6 +463,14 @@ const props = defineProps({
   mode: {
     type: String,
     default: 'file'
+  },
+  canUpload: {
+    type: Boolean,
+    default: true
+  },
+  deferProcessing: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -1437,6 +1445,14 @@ const openDocLink = () => {
 }
 
 const chunkData = async () => {
+  if (!props.canUpload) {
+    message.error('没有上传权限')
+    return
+  }
+  if (props.deferProcessing) {
+    autoIndex.value = false
+  }
+
   if (!kbId.value) {
     message.error('请先选择知识库')
     return
@@ -1490,7 +1506,8 @@ const chunkData = async () => {
         Object.assign(params, buildAutoIndexParams())
       }
 
-      await store.addFiles({
+      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      await addFiles({
         items,
         contentType: 'file',
         params,
@@ -1567,10 +1584,10 @@ const chunkData = async () => {
       }
       params._preprocessed_map = preprocessedMap
 
-      // 调用 addFiles (file mode)
-      await store.addFiles({
+      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      await addFiles({
         items: items,
-        contentType: 'file', // 重要：这里改为 file，因为我们已经转成了 minio 上的文件
+        contentType: 'file',
         params,
         parentId: selectedFolderId.value
       })
@@ -1629,12 +1646,13 @@ const chunkData = async () => {
       Object.assign(params, buildAutoIndexParams())
     }
 
-    await store.addFiles({
-      items,
-      contentType: 'file',
-      params,
-      parentId: selectedFolderId.value
-    })
+      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      await addFiles({
+        items,
+        contentType: 'file',
+        params,
+        parentId: selectedFolderId.value
+      })
 
     emit('success')
     handleCancel()

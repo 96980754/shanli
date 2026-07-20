@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '@/layouts/AppLayout.vue'
-import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useUserStore } from '@/stores/user'
 import { useAgentStore } from '@/stores/agent'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
@@ -10,16 +9,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'main',
-      component: BlankLayout,
-      children: [
-        {
-          path: '',
-          name: 'Home',
-          component: () => import('../views/HomeView.vue'),
-          meta: { keepAlive: true, requiresAuth: false }
-        }
-      ]
+      redirect: '/login'
     },
     {
       path: '/login',
@@ -117,8 +107,7 @@ const router = createRouter({
               component: () => import('../views/DataBaseInfoView.vue'),
               meta: {
                 keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
+                requiresAuth: true
               }
             },
             {
@@ -214,9 +203,10 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 如果用户已登录但访问登录页，按 redirect 参数跳转
+  // 如果用户已登录但访问登录页，优先返回指定页面，否则进入对话页
   if (to.path === '/login' && isLoggedIn) {
-    return sanitizeRedirect(to.query.redirect)
+    const redirect = sanitizeRedirect(to.query.redirect)
+    return redirect === '/' ? '/agent' : redirect
   }
 
   // 其他情况正常导航

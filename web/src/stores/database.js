@@ -458,6 +458,33 @@ export const useDatabaseStore = defineStore('database', () => {
     })
   }
 
+  async function addUploadedFiles({ items, params, parentId }) {
+    if (items.length === 0) {
+      message.error('请先上传文件')
+      return false
+    }
+
+    state.chunkLoading = true
+    try {
+      const requestParams = { ...params, content_type: 'file' }
+      if (parentId) requestParams.parent_id = parentId
+      const data = await documentApi.addUploadedDocuments(kbId.value, items, requestParams)
+      if (data.status === 'success' || data.status === 'partial_failed') {
+        message.success(data.message || '文件已上传，等待管理员处理')
+        await delayedRefresh()
+        return true
+      }
+      message.error(data.message || '文件添加失败')
+      return false
+    } catch (error) {
+      console.error(error)
+      message.error(error.message || '文件添加失败')
+      return false
+    } finally {
+      state.chunkLoading = false
+    }
+  }
+
   async function addFiles({ items, contentType, params, parentId }) {
     if (items.length === 0) {
       message.error(contentType === 'file' ? '请先上传文件' : '请输入有效的网页链接')
@@ -765,6 +792,7 @@ export const useDatabaseStore = defineStore('database', () => {
     handleDeleteFile,
     handleBatchDelete,
     addFiles,
+    addUploadedFiles,
     parseFiles,
     parsePendingFiles,
     indexFiles,

@@ -164,6 +164,7 @@
           </div>
           <div style="display: flex; gap: 2px">
             <a-button
+              v-if="props.canManage"
               type="link"
               @click="handleBatchParse"
               :loading="batchParsing"
@@ -173,6 +174,7 @@
               批量解析
             </a-button>
             <a-button
+              v-if="props.canManage"
               type="link"
               @click="handleBatchIndex"
               :loading="batchIndexing"
@@ -182,6 +184,7 @@
               批量入库
             </a-button>
             <a-button
+              v-if="props.canDelete"
               type="link"
               danger
               @click="handleBatchDelete"
@@ -264,17 +267,26 @@
             <template #content>
               <div class="file-action-list">
                 <template v-if="row.is_folder">
-                  <a-button type="text" block @click="showCreateFolderModal(row.file_id)">
+                  <a-button
+                    v-if="props.canUpload"
+                    type="text" block @click="showCreateFolderModal(row.file_id)">
                     <template #icon><component :is="h(FolderPlus)" size="14" /></template>
                     新建子文件夹
                   </a-button>
-                  <a-button type="text" block danger @click="handleDeleteFolder(row)">
+                  <a-button
+                    v-if="props.canDelete"
+                    type="text"
+                    block
+                    danger
+                    @click="handleDeleteFolder(row)"
+                  >
                     <template #icon><component :is="h(Trash2)" size="14" /></template>
                     删除文件夹
                   </a-button>
                 </template>
                 <template v-else>
                   <a-button
+                    v-if="props.canDownload"
                     type="text"
                     block
                     @click="handleDownloadFile(row)"
@@ -286,7 +298,7 @@
 
                   <!-- Parse Action -->
                   <a-button
-                    v-if="canParseFile(row)"
+                    v-if="props.canManage && canParseFile(row)"
                     type="text"
                     block
                     @click="handleParseFile(row)"
@@ -298,7 +310,7 @@
 
                   <!-- Index Action -->
                   <a-button
-                    v-if="getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
+                    v-if="props.canManage && getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
                     type="text"
                     block
                     @click="handleIndexFile(row)"
@@ -310,7 +322,7 @@
 
                   <!-- Reindex Action -->
                   <a-button
-                    v-if="canReindexFile(row)"
+                    v-if="props.canManage && canReindexFile(row)"
                     type="text"
                     block
                     @click="handleReindexFile(row)"
@@ -321,6 +333,7 @@
                   </a-button>
 
                   <a-button
+                    v-if="props.canDelete"
                     type="text"
                     block
                     danger
@@ -381,6 +394,13 @@ import {
   MoreHorizontal
 } from 'lucide-vue-next'
 
+const props = defineProps({
+  canUpload: { type: Boolean, default: true },
+  canDownload: { type: Boolean, default: true },
+  canDelete: { type: Boolean, default: true },
+  canManage: { type: Boolean, default: true }
+})
+
 const store = useDatabaseStore()
 
 const applyFilters = async (overrides = {}) => {
@@ -424,7 +444,7 @@ const getStatusIcon = (status) => {
 }
 
 const hasStatusAction = (record) => {
-  return Boolean(getFilePrimaryAction(record))
+  return Boolean(props.canManage && getFilePrimaryAction(record))
 }
 
 const getStatusActionTitle = (record) => {
@@ -647,6 +667,7 @@ const emptyText = computed(() => {
 
 // 计算是否可以批量删除
 const canBatchDelete = computed(() => {
+  if (!props.canDelete) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return canSelectFile(file, lock.value)
@@ -655,6 +676,7 @@ const canBatchDelete = computed(() => {
 
 // 计算是否可以批量解析
 const canBatchParse = computed(() => {
+  if (!props.canManage) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canParseFile(file)
@@ -663,6 +685,7 @@ const canBatchParse = computed(() => {
 
 // 计算是否可以批量入库
 const canBatchIndex = computed(() => {
+  if (!props.canManage) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canIndexFile(file)
@@ -868,7 +891,7 @@ const handleParseFile = async (record) => {
 }
 
 const handleStatusAction = async (record) => {
-  if (lock.value || !hasStatusAction(record)) return
+  if (!props.canManage || lock.value || !hasStatusAction(record)) return
 
   const action = getFilePrimaryAction(record)
   if (action?.type === FILE_ACTIONS.PARSE) {

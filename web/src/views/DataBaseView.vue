@@ -26,6 +26,7 @@
       </template>
       <template #actions>
         <a-button
+          v-if="userStore.isAdmin"
           type="primary"
           class="lucide-icon-btn"
           :disabled="!kbTypes.length"
@@ -187,11 +188,12 @@
     <ResourceEmptyState
       v-else-if="!databases || databases.length === 0"
       title="暂无知识库"
-      description="创建知识库后，可以上传文件并配置检索、图谱和评估能力。"
+      :description="userStore.isAdmin ? '创建知识库后，可以上传文件并配置检索、图谱能力。' : '管理员授权后，可在这里查看和维护知识库。'"
       :icon="getKbTypeIcon('milvus')"
     >
       <template #actions>
         <a-button
+          v-if="userStore.isAdmin"
           type="primary"
           size="large"
           class="lucide-icon-btn"
@@ -220,7 +222,7 @@
         <template #icon>
           <component :is="getKbTypeIcon(database.kb_type || 'milvus')" :size="20" />
         </template>
-        <template #card-more-action-corner>
+        <template v-if="userStore.isAdmin" #card-more-action-corner>
           <a-menu @click="({ key }) => handleDatabaseAction(key, database)">
             <a-menu-item key="copy">
               <span class="lucide-menu-item">
@@ -254,6 +256,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
+import { useUserStore } from '@/stores/user'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { message, Modal } from 'ant-design-vue'
@@ -275,6 +278,7 @@ const route = useRoute()
 const router = useRouter()
 const configStore = useConfigStore()
 const databaseStore = useDatabaseStore()
+const userStore = useUserStore()
 const {
   chunkPresetSelectOptions: chunkPresetOptions,
   chunkPresetLoading,
