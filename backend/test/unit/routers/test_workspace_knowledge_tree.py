@@ -17,13 +17,20 @@ class NoDocuments:
     supports_documents = False
 
 
+class FakePermissionService:
+    def __init__(self, allowed: bool = True):
+        self.allowed = allowed
+        self.calls = []
+
+    async def has_permission(self, user, kb_id, action):
+        self.calls.append((user, kb_id, action))
+        return self.allowed
+
+
 class FakeKnowledgeBase:
     def __init__(self, *, supports: bool = True):
         self.supports = supports
         self.list_calls = []
-
-    async def check_accessible(self, _user, _kb_id):
-        return True
 
     async def get_database_info(self, kb_id):
         return {
@@ -72,15 +79,22 @@ class FakeKnowledgeBase:
         }
 
 
-def _build_client(monkeypatch, fake_kb: FakeKnowledgeBase, kb_class) -> TestClient:
+def _build_client(
+    monkeypatch,
+    fake_kb: FakeKnowledgeBase,
+    kb_class,
+    permission_service: FakePermissionService | None = None,
+) -> TestClient:
     app = FastAPI()
     app.include_router(workspace, prefix="/api")
+    permission_service = permission_service or FakePermissionService()
 
     async def fake_required_user():
         return User(username="user", uid="user", password_hash="x", role="user", department_id=1)
 
     app.dependency_overrides[get_required_user] = fake_required_user
     monkeypatch.setattr(workspace_router, "knowledge_base", fake_kb)
+    monkeypatch.setattr(workspace_router, "KnowledgePermissionService", lambda: permission_service)
     monkeypatch.setattr(
         workspace_router.KnowledgeBaseFactory,
         "get_kb_class",
@@ -126,6 +140,33 @@ def test_workspace_knowledge_tree_uses_paginated_document_listing(monkeypatch):
     assert payload["entries"][1]["path"] == "/knowledge/kb_1/file/file_1"
     assert payload["entries"][1]["size"] == 2048
     assert payload["entries"][1]["modified_at"] == "2026-06-20T01:00:00Z"
+
+
+def test_workspace_knowledge_tree_uses_can_view_permission(monkeypatch):
+    fake_kb = FakeKnowledgeBase()
+    permission_service = FakePermissionService()
+    client = _build_client(monkeypatch, fake_kb, SupportsDocuments, permission_service)
+
+    response = client.get("/api/workspace/knowledge/tree", params={"kb_id": "kb_1"})
+
+    assert response.status_code == 200, response.text
+    assert permission_service.calls == [
+        (
+            {"uid": "user", "role": "user", "department_id": 1, "roles": None},
+            "kb_1",
+            "can_view",
+        )
+    ]
+
+
+def test_workspace_knowledge_tree_rejects_missing_view_permission(monkeypatch):
+    permission_service = FakePermissionService(allowed=False)
+    client = _build_client(monkeypatch, FakeKnowledgeBase(), SupportsDocuments, permission_service)
+
+    response = client.get("/api/workspace/knowledge/tree", params={"kb_id": "kb_1"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "知识库权限不足"
 
 
 def test_workspace_knowledge_tree_rejects_non_document_kb(monkeypatch):

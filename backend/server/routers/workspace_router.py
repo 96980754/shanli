@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from server.utils.auth_middleware import get_required_user
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.runtime import knowledge_base
+from yuxi.permissions.knowledge import KnowledgePermissionService
 from yuxi.services.workspace_service import (
     create_workspace_directory,
     delete_workspace_path,
@@ -34,17 +35,19 @@ class UpdateWorkspaceFileContentRequest(BaseModel):
     content: str
 
 
-async def _ensure_knowledge_read_access(current_user: User, kb_id: str) -> None:
-    allowed = await knowledge_base.check_accessible(
+async def _ensure_knowledge_permission(current_user: User, kb_id: str, action: str) -> None:
+    allowed = await KnowledgePermissionService().has_permission(
         {
             "uid": current_user.uid,
             "role": current_user.role,
             "department_id": current_user.department_id,
+            "roles": getattr(current_user, "roles", None),
         },
         kb_id,
+        action,
     )
     if not allowed:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="知识库权限不足")
 
 
 async def _ensure_knowledge_supports_documents(kb_id: str) -> None:
@@ -150,7 +153,7 @@ async def get_workspace_knowledge_tree(
     files_only: bool = Query(False, description="是否仅返回文件"),
     current_user: User = Depends(get_required_user),
 ):
-    await _ensure_knowledge_read_access(current_user, kb_id)
+    await _ensure_knowledge_permission(current_user, kb_id, "can_view")
     await _ensure_knowledge_supports_documents(kb_id)
     try:
         data = await knowledge_base.list_document_files(
@@ -183,7 +186,7 @@ async def get_workspace_knowledge_file(
     file_id: str = Query(..., description="知识库文件 ID"),
     current_user: User = Depends(get_required_user),
 ):
-    await _ensure_knowledge_read_access(current_user, kb_id)
+    await _ensure_knowledge_permission(current_user, kb_id, "can_view")
     try:
         return _preview_response(await knowledge_base.read_file_preview(kb_id=kb_id, file_id=file_id))
     except ValueError as error:
@@ -197,7 +200,7 @@ async def download_workspace_knowledge_file(
     variant: str = Query("original", description="下载模式：original 或 parsed"),
     current_user: User = Depends(get_required_user),
 ):
-    await _ensure_knowledge_read_access(current_user, kb_id)
+    await _ensure_knowledge_permission(current_user, kb_id, "can_download")
     try:
         data = await knowledge_base.get_file_download(kb_id=kb_id, file_id=file_id, variant=variant)
     except ValueError as error:

@@ -20,6 +20,19 @@ class FakePermissionService:
         self.calls.append((user, kb_id, action))
         return self.allowed
 
+    async def effective_permissions(self, user, kb_id):
+        self.calls.append((user, kb_id, "effective"))
+        return SimpleNamespace(
+            can_view=self.allowed,
+            can_search=self.allowed,
+            can_upload=self.allowed,
+            can_download=self.allowed,
+            can_delete=self.allowed,
+            can_manage=self.allowed,
+            can_grant=self.allowed,
+            can_export=self.allowed,
+        )
+
 
 class FakePermissionRepository:
     def __init__(self):
@@ -136,6 +149,35 @@ async def test_delete_database_permission_requires_grant_and_deletes(monkeypatch
 
     assert repository.deleted_id == 3
     assert result == {"message": "permission deleted"}
+
+
+async def test_get_database_access_returns_effective_permissions(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+
+    result = await knowledge_router.get_database_access("kb-1", current_user=user(uid="viewer", role="user"))
+
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "effective")
+    ]
+    assert result == {
+        "can_view": True,
+        "can_search": True,
+        "can_upload": True,
+        "can_download": True,
+        "can_delete": True,
+        "can_manage": True,
+        "can_grant": True,
+        "can_export": True,
+    }
+
+
+async def test_get_database_access_rejects_user_without_view_permission(monkeypatch):
+    install_fakes(monkeypatch, allowed=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.get_database_access("kb-1", current_user=user(uid="viewer", role="user"))
+
+    assert exc_info.value.status_code == 403
 
 
 async def test_get_database_info_requires_view_permission(monkeypatch):

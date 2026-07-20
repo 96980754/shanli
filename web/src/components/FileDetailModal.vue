@@ -26,7 +26,7 @@
           </div>
 
           <!-- 下载按钮下拉菜单 -->
-          <a-dropdown trigger="click" v-if="file">
+          <a-dropdown trigger="click" v-if="file && props.canDownload">
             <a-button type="default" class="download-btn" title="下载" aria-label="下载">
               <Download :size="16" />
               <ChevronDown :size="14" />
@@ -149,6 +149,10 @@ const props = defineProps({
   fileId: {
     type: [String, Number],
     default: ''
+  },
+  canDownload: {
+    type: Boolean,
+    default: true
   }
 })
 

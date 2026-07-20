@@ -297,9 +297,13 @@ class KnowledgeBaseManager:
         if user_info.get("role") == "superadmin":
             return {"databases": all_databases}
 
-        filtered_databases = [
-            database for database in all_databases if self._database_info_accessible(user_info, database)
-        ]
+        from yuxi.permissions.knowledge import KnowledgePermissionService
+
+        permission_service = KnowledgePermissionService()
+        filtered_databases = []
+        for database in all_databases:
+            if await permission_service.has_permission(user_info, database["kb_id"], "can_view"):
+                filtered_databases.append(database)
 
         return {"databases": filtered_databases}
 
