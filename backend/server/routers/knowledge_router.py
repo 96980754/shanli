@@ -34,6 +34,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.task_service import TaskContext, tasker
+from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
@@ -101,6 +102,11 @@ class AddUploadedDocumentsRequest(BaseModel):
 
 class PendingIndexDocumentsRequest(BaseModel):
     params: dict | None = None
+
+
+class GlobalKnowledgeSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
 
 
 media_types = {
@@ -1608,6 +1614,17 @@ async def query_knowledge_base(
     except Exception as e:
         logger.error(f"知识库查询失败 {e}, {traceback.format_exc()}")
         return {"message": f"知识库查询失败: {e}", "status": "failed"}
+
+
+@knowledge.post("/search")
+async def global_knowledge_search(
+    request: GlobalKnowledgeSearchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """Search every knowledge base the current user is allowed to search."""
+    limit = min(max(request.limit, 1), 30)
+    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
+    return {"result": result, "status": "success"}
 
 
 @knowledge.post("/databases/{kb_id}/query-test")

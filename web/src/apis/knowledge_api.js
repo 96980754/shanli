@@ -380,6 +380,10 @@ export const mindmapApi = {
 // =============================================================================
 
 export const queryApi = {
+  globalSearch: async (query, limit = 10) => {
+    return apiPost('/api/knowledge/search', { query, limit })
+  },
+
   /**
    * 查询知识库
    * @param {string} kbId - 知识库ID

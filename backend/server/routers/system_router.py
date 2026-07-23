@@ -27,7 +27,7 @@ async def health_check():
 async def discovery():
     """系统能力发现接口（公开接口）"""
     return {
-        "name": "Yuxi",
+        "name": "AI知识库问答系统",
         "version": get_version(),
         "api_prefix": "/api",
         "capabilities": {
