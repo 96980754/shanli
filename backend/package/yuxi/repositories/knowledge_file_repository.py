@@ -7,7 +7,8 @@ from typing import Any
 from sqlalchemy import DateTime, String, case, cast, func, literal, or_, select, union_all, update
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_knowledge import KnowledgeFile
+from yuxi.storage.postgres.models_knowledge import KnowledgeChunk, KnowledgeFile
+from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import utc_now_naive
 
 # asyncpg 单条 SQL 参数上限为 32767；按 file_id 批量查询时统一分批，避免
@@ -77,6 +78,105 @@ class KnowledgeFileRepository:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id))
             return list(result.scalars().all())
+
+    async def search_documents(
+        self,
+        *,
+        kb_ids: list[str],
+        keyword: str | None = None,
+        updated_from=None,
+        updated_to=None,
+        created_by: str | None = None,
+        page: int = 1,
+        page_size: int = 30,
+    ) -> tuple[list[dict], int]:
+        if not kb_ids:
+            return [], 0
+        filters = [KnowledgeFile.kb_id.in_(kb_ids), KnowledgeFile.is_folder.is_(False)]
+        if keyword and keyword.strip():
+            escaped = keyword.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped.lower()}%"
+            filters.append(
+                or_(
+                    func.lower(KnowledgeFile.filename).like(pattern, escape="\\"),
+                    func.lower(KnowledgeChunk.content).like(pattern, escape="\\"),
+                )
+            )
+        if updated_from:
+            filters.append(KnowledgeFile.updated_at >= updated_from)
+        if updated_to:
+            filters.append(KnowledgeFile.updated_at <= updated_to)
+        if created_by and created_by.strip():
+            filters.append(KnowledgeFile.created_by == created_by.strip())
+
+        statement = (
+            select(
+                KnowledgeFile.file_id,
+                KnowledgeFile.kb_id,
+                KnowledgeFile.filename,
+                KnowledgeFile.file_type,
+                KnowledgeFile.status,
+                KnowledgeFile.created_by,
+                KnowledgeFile.updated_at,
+                KnowledgeFile.created_at,
+                KnowledgeFile.view_count,
+                User.username.label("publisher_name"),
+            )
+            .outerjoin(User, User.uid == KnowledgeFile.created_by)
+            .outerjoin(KnowledgeChunk, KnowledgeChunk.file_id == KnowledgeFile.file_id)
+            .where(*filters)
+            .group_by(
+                KnowledgeFile.file_id,
+                KnowledgeFile.kb_id,
+                KnowledgeFile.filename,
+                KnowledgeFile.file_type,
+                KnowledgeFile.status,
+                KnowledgeFile.created_by,
+                KnowledgeFile.updated_at,
+                KnowledgeFile.created_at,
+                KnowledgeFile.view_count,
+                User.username,
+            )
+        )
+        normalized_page_size = min(max(page_size, 1), 100)
+        async with pg_manager.get_async_session_context() as session:
+            total = int((await session.execute(select(func.count()).select_from(statement.subquery()))).scalar_one())
+            result = await session.execute(
+                statement.order_by(KnowledgeFile.updated_at.desc(), KnowledgeFile.file_id.asc())
+                .offset((max(page, 1) - 1) * normalized_page_size)
+                .limit(normalized_page_size)
+            )
+            return [dict(row) for row in result.mappings().all()], total
+
+    async def list_hot_documents(self, *, kb_ids: list[str], limit: int = 10) -> list[dict]:
+        if not kb_ids:
+            return []
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(
+                    KnowledgeFile.file_id,
+                    KnowledgeFile.kb_id,
+                    KnowledgeFile.filename,
+                    KnowledgeFile.created_by,
+                    KnowledgeFile.updated_at,
+                    KnowledgeFile.view_count,
+                    User.username.label("publisher_name"),
+                )
+                .outerjoin(User, User.uid == KnowledgeFile.created_by)
+                .where(KnowledgeFile.kb_id.in_(kb_ids), KnowledgeFile.is_folder.is_(False))
+                .order_by(KnowledgeFile.view_count.desc(), KnowledgeFile.updated_at.desc(), KnowledgeFile.file_id.asc())
+                .limit(min(max(limit, 1), 30))
+            )
+            return [dict(row) for row in result.mappings().all()]
+
+    async def increment_view_count(self, file_id: str) -> None:
+        async with pg_manager.get_async_session_context() as session:
+            await session.execute(
+                update(KnowledgeFile)
+                .where(KnowledgeFile.file_id == file_id, KnowledgeFile.is_folder.is_(False))
+                .values(view_count=KnowledgeFile.view_count + 1)
+            )
+            await session.commit()
 
     async def list_by_kb_id_after(
         self,

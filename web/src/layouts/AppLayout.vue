@@ -99,7 +99,7 @@ const activeConversationThreadId = computed(() => {
   return route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || 'AI知识库问答系统'
+  return infoStore.organization.name || infoStore.branding.name || 'AI知识库'
 })
 
 // 下面是导航菜单部分，添加智能体项
@@ -120,6 +120,13 @@ const mainList = computed(() => {
     path: '/workspace',
     icon: FolderKanban,
     activeIcon: FolderKanban
+  })
+
+  items.push({
+    name: '知识库浏览',
+    path: '/knowledge-browser',
+    icon: LibraryBig,
+    activeIcon: LibraryBig
   })
 
   items.push({

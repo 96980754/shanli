@@ -41,7 +41,7 @@ def _reply_text(content: str) -> str:
 def _format_results(results: list[dict]) -> str:
     if not results:
         return "未找到可访问知识库中的相关内容。"
-    lines = ["AI知识库问答系统检索结果："]
+    lines = ["AI知识库检索结果："]
     for index, result in enumerate(results[:3], start=1):
         content = str(result.get("content") or result.get("text") or "").strip().replace("\n", " ")
         lines.append(f"{index}. [{result['kb_name']}] {content[:180]}")
