@@ -2,7 +2,7 @@
   <main class="cli-auth-view">
     <section class="cli-auth-panel">
       <div class="cli-auth-header">
-        <p class="eyebrow">AI知识库问答系统 CLI</p>
+        <p class="eyebrow">AI知识库 CLI</p>
         <h1>确认命令行登录</h1>
       </div>
 
@@ -29,7 +29,7 @@
           <dl>
             <div>
               <dt>凭据名称</dt>
-              <dd>{{ session?.key_name || 'AI知识库问答系统 CLI' }}</dd>
+              <dd>{{ session?.key_name || 'AI知识库 CLI' }}</dd>
             </div>
             <div>
               <dt>状态</dt>

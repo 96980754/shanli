@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from server.utils.auth_middleware import get_required_user
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.runtime import knowledge_base
+from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from yuxi.permissions.knowledge import KnowledgePermissionService
 from yuxi.services.workspace_service import (
     create_workspace_directory,
@@ -188,7 +189,9 @@ async def get_workspace_knowledge_file(
 ):
     await _ensure_knowledge_permission(current_user, kb_id, "can_view")
     try:
-        return _preview_response(await knowledge_base.read_file_preview(kb_id=kb_id, file_id=file_id))
+        response = _preview_response(await knowledge_base.read_file_preview(kb_id=kb_id, file_id=file_id))
+        await KnowledgeFileRepository().increment_view_count(file_id)
+        return response
     except ValueError as error:
         _raise_knowledge_read_error(error)
 
@@ -206,6 +209,7 @@ async def download_workspace_knowledge_file(
     except ValueError as error:
         _raise_knowledge_read_error(error)
 
+    await KnowledgeFileRepository().increment_view_count(file_id)
     filename = data["filename"]
     return StreamingResponse(
         io.BytesIO(data["content"]),

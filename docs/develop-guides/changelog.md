@@ -6,6 +6,10 @@
 
 ## v0.7.1 (current)
 
+### 开发记录
+
+- 新增知识库浏览页：按知识库类型展示可访问目录，支持跳转到原有目录浏览；全库文档元数据搜索支持文件名关键词、更新时间区间和发布人 UID；热门文档按真实预览/下载次数排序，首次访问会从 0 开始累计。
+
 ### 破坏性变更
 
 - API Key 收紧到具体用户：`api_keys.user_id` 收紧为非空，启动 schema 演进会先清理 `cli_auth_sessions` 中对未绑定 API Key 的引用，再 `DELETE FROM api_keys WHERE user_id IS NULL`，最后 `ALTER COLUMN user_id SET NOT NULL`。**升级前请在 0.7.0 库执行 `SELECT id, name, department_id FROM api_keys WHERE user_id IS NULL;`**，决定每个未绑定 Key 的归属用户并手动 `UPDATE`，未绑定的 Key 升级后会被静默删除且无法恢复；清理前后端日志会输出 `Schema migration will delete N unbound API key(s)` 告警以便回溯。
