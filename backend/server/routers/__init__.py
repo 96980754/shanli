@@ -18,6 +18,7 @@ from server.routers.system_task_router import tasks
 from server.routers.tool_router import tools
 from server.routers.user_router import user_router
 from server.routers.workspace_router import workspace
+from server.routers.wecom_router import wecom
 
 _LITE_MODE = os.environ.get("LITE_MODE", "").lower() in ("true", "1")
 
@@ -43,6 +44,7 @@ router.include_router(user_router)  # /api/user/* 用户级配置与凭据
 router.include_router(filesystem_router)  # /api/viewer/filesystem/* 工作台文件系统视图
 router.include_router(workspace)  # /api/workspace/* 用户个人工作区
 router.include_router(mention_router)  # /api/mention/* 提及文件搜索接口
+router.include_router(wecom)  # /api/wecom/* 企业微信自建应用消息回调
 
 if not _LITE_MODE:
     from server.routers.graph_router import graph

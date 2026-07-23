@@ -6,6 +6,10 @@
 
 ## v0.7.1 (current)
 
+### 开发记录
+
+- 新增知识库浏览页：按知识库类型展示可访问目录，支持跳转到原有目录浏览；全库文档元数据搜索支持文件名关键词、更新时间区间和发布人 UID；热门文档按真实预览/下载次数排序，首次访问会从 0 开始累计。
+
 ### 破坏性变更
 
 - API Key 收紧到具体用户：`api_keys.user_id` 收紧为非空，启动 schema 演进会先清理 `cli_auth_sessions` 中对未绑定 API Key 的引用，再 `DELETE FROM api_keys WHERE user_id IS NULL`，最后 `ALTER COLUMN user_id SET NOT NULL`。**升级前请在 0.7.0 库执行 `SELECT id, name, department_id FROM api_keys WHERE user_id IS NULL;`**，决定每个未绑定 Key 的归属用户并手动 `UPDATE`，未绑定的 Key 升级后会被静默删除且无法恢复；清理前后端日志会输出 `Schema migration will delete N unbound API key(s)` 告警以便回溯。
@@ -14,6 +18,8 @@
 - 系统配置接口权限下放：`GET /api/system/config` 由 admin 收紧到任意登录用户可读，便于普通用户读取 `default_ocr_engine` 等运行时配置；接口会暴露 `sandbox_provisioner_url`、`sandbox_virtual_path_prefix`、默认模型 ID 等基础设施信息（不包含任何密钥/Token），如有更高保密要求请通过反向代理限制该路径。
 
 ### 开发记录
+
+- 新增 AI知识库问答系统一期 P0 基础能力：侧边栏提供全知识库搜索入口，后端只聚合当前用户拥有 `can_search` 权限的知识库结果并保留知识库/文件来源；新增企业微信自建应用消息回调，支持签名校验、AES 加解密、以企业微信 `UserID` 匹配本地 `UID` 后执行相同权限检索，未绑定用户不返回知识库内容；补充回调环境变量、单元测试和部署清单，并统一默认系统展示名称为“AI知识库问答系统”。
 
 - 修复知识库列表与工作区文件浏览未统一操作级权限的问题，并将“智能体扩展 → 知识库”开放给普通用户：用户通过权限面板获得 `can_view` 后，可在扩展页和工作区看到知识库、浏览目录并预览文件；`can_upload` 允许编辑者上传文件并添加为“待审核”记录，但不会触发解析或入库。系统 `admin/superadmin` 对知识库拥有完整操作权限，可创建文件夹、处理待审核文件、执行解析和入库、下载文件并访问检索测试与知识图谱；普通成员下载仍需单独授予 `can_download`，且不能创建文件夹或处理文件。知识库详情下载与工作区统一复用原文件读取逻辑，兼容仅保存 `minio_url` 的文件记录。权限设置校验 `can_grant`，知识库详情页继续隐藏知识导图、RAG 评估和评估基准入口。
 

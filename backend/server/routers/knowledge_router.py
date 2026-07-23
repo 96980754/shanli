@@ -3,6 +3,7 @@ import os
 import textwrap
 import time
 import traceback
+from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
+from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
@@ -34,6 +36,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.task_service import TaskContext, tasker
+from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
@@ -101,6 +104,25 @@ class AddUploadedDocumentsRequest(BaseModel):
 
 class PendingIndexDocumentsRequest(BaseModel):
     params: dict | None = None
+
+
+class GlobalKnowledgeSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+
+async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
+    databases = await knowledge_base.get_databases_by_uid(current_user.uid)
+    context = _user_permission_context(current_user)
+    allowed = []
+    names = {}
+    permission_service = KnowledgePermissionService()
+    for database in databases.get("databases", []):
+        kb_id = database.get("kb_id")
+        if kb_id and await permission_service.has_permission(context, kb_id, "can_view"):
+            allowed.append(kb_id)
+            names[kb_id] = database.get("name") or kb_id
+    return allowed, names
 
 
 media_types = {
@@ -723,6 +745,45 @@ async def export_database(
 # =============================================================================
 # === 知识库文档管理分组 ===
 # =============================================================================
+
+
+@knowledge.get("/documents/search")
+async def search_documents_across_knowledge_bases(
+    keyword: str | None = Query(None, max_length=200),
+    updated_from: datetime | None = Query(None),
+    updated_to: datetime | None = Query(None),
+    publisher: str | None = Query(None, max_length=64),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_required_user),
+):
+    """Search document metadata across every knowledge base the user can browse."""
+    kb_ids, kb_names = await _document_browse_kb_ids(current_user)
+    items, total = await KnowledgeFileRepository().search_documents(
+        kb_ids=kb_ids,
+        keyword=keyword,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        created_by=publisher,
+        page=page,
+        page_size=page_size,
+    )
+    for item in items:
+        item["kb_name"] = kb_names.get(item["kb_id"], item["kb_id"])
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@knowledge.get("/documents/hot")
+async def list_hot_documents(
+    limit: int = Query(10, ge=1, le=30),
+    current_user: User = Depends(get_required_user),
+):
+    """List the most-viewed documents available to the current user."""
+    kb_ids, kb_names = await _document_browse_kb_ids(current_user)
+    items = await KnowledgeFileRepository().list_hot_documents(kb_ids=kb_ids, limit=limit)
+    for item in items:
+        item["kb_name"] = kb_names.get(item["kb_id"], item["kb_id"])
+    return {"items": items}
 
 
 @knowledge.get("/databases/{kb_id}/documents")
@@ -1608,6 +1669,17 @@ async def query_knowledge_base(
     except Exception as e:
         logger.error(f"知识库查询失败 {e}, {traceback.format_exc()}")
         return {"message": f"知识库查询失败: {e}", "status": "failed"}
+
+
+@knowledge.post("/search")
+async def global_knowledge_search(
+    request: GlobalKnowledgeSearchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """Search every knowledge base the current user is allowed to search."""
+    limit = min(max(request.limit, 1), 30)
+    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
+    return {"result": result, "status": "success"}
 
 
 @knowledge.post("/databases/{kb_id}/query-test")

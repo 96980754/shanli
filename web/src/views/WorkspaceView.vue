@@ -197,6 +197,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { ChevronLeft, ChevronRight, CircleHelp, LibraryBig } from 'lucide-vue-next'
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -221,6 +222,7 @@ import {
 import { normalizePreviewResponse } from '@/utils/file_preview'
 
 const userStore = useUserStore()
+const route = useRoute()
 
 const activeSourceKey = ref('personal')
 const currentPath = ref('/')
@@ -860,6 +862,8 @@ let workspaceResizeObserver = null
 
 onMounted(async () => {
   await Promise.all([loadWorkspaceEntries('/'), loadDatabases()])
+  const requestedDatabase = databases.value.find((item) => item.kb_id === route.query.kb_id)
+  if (requestedDatabase) await selectDatabase(requestedDatabase)
 
   if (workspaceMainRef.value && typeof ResizeObserver !== 'undefined') {
     workspaceMainWidth.value = workspaceMainRef.value.clientWidth || 0
