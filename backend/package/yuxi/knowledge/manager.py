@@ -170,15 +170,16 @@ class KnowledgeBaseManager:
             department_id=department_id,
         )
 
-    async def get_databases(self) -> dict:
+    async def get_databases(self, category_id: int | None = None) -> dict:
         """获取所有数据库信息"""
         from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
+        from yuxi.services.knowledge_category_service import KnowledgeCategoryService
 
         kb_repo = KnowledgeBaseRepository()
-        rows = await kb_repo.get_all()
+        rows = await kb_repo.get_all_with_category(category_id)
         all_databases = []
         metadata_reloaded_types: set[str] = set()
-        for row in rows:
+        for row, category in rows:
             kb_type = row.kb_type or "milvus"
             if not KnowledgeBaseFactory.is_type_supported(kb_type):
                 logger.warning(f"Skip unsupported database: kb_id={row.kb_id}, kb_type={kb_type}")
@@ -201,6 +202,8 @@ class KnowledgeBaseManager:
             db_info["share_config"] = row.share_config or DEFAULT_SHARE_CONFIG.copy()
             db_info["additional_params"] = kb_instance.normalize_additional_params(row.additional_params)
             db_info["created_by"] = row.created_by
+            db_info["category_id"] = row.category_id
+            db_info["category"] = KnowledgeCategoryService.serialize(category)
             all_databases.append(db_info)
         return {"databases": all_databases}
 
@@ -262,7 +265,7 @@ class KnowledgeBaseManager:
             },
         )
 
-    async def get_databases_by_uid(self, uid: str) -> dict:
+    async def get_databases_by_uid(self, uid: str, category_id: int | None = None) -> dict:
         """根据 uid 获取知识库列表"""
         from yuxi.repositories.user_repository import UserRepository
 
@@ -272,9 +275,9 @@ class KnowledgeBaseManager:
         if not user:
             logger.warning(f"User not found: {uid}")
             return {"databases": []}
-        return await self.get_databases_by_user(user)
+        return await self.get_databases_by_user(user, category_id=category_id)
 
-    async def get_databases_by_user(self, user: User | dict) -> dict:
+    async def get_databases_by_user(self, user: User | dict, category_id: int | None = None) -> dict:
         """根据用户权限获取知识库列表"""
 
         # 构建用户信息字典（支持 User 对象或 dict）
@@ -291,7 +294,7 @@ class KnowledgeBaseManager:
         user_dept = user_info.get("department_id")
         logger.info(f"Getting databases for user with role {user_role} and department {user_dept}")
 
-        all_databases = (await self.get_databases()).get("databases", [])
+        all_databases = (await self.get_databases(category_id=category_id)).get("databases", [])
 
         # 超级管理员可以看到所有知识库
         if user_info.get("role") == "superadmin":
@@ -335,6 +338,7 @@ class KnowledgeBaseManager:
         kb_type: str = "milvus",
         embedding_model_spec: str | None = None,
         llm_model_spec: str | None = None,
+        category_id: int | None = None,
         share_config: dict | None = None,
         created_by: str | None = None,
         created_by_department_id: int | str | None = None,
@@ -357,6 +361,12 @@ class KnowledgeBaseManager:
         Returns:
             数据库信息字典
         """
+        if category_id is None:
+            raise ValueError("category_id 不能为空")
+        from yuxi.services.knowledge_category_service import KnowledgeCategoryService
+
+        category = await KnowledgeCategoryService().require_category(category_id)
+
         if not KnowledgeBaseFactory.is_type_supported(kb_type):
             available_types = list(KnowledgeBaseFactory.get_available_types().keys())
             raise ValueError(f"Unsupported knowledge base type: {kb_type}. Available types: {available_types}")
@@ -373,7 +383,11 @@ class KnowledgeBaseManager:
 
         kb_instance = self._get_or_create_kb_instance(kb_type)
         kwargs = kb_instance.normalize_additional_params(kwargs)
-        record_fields = {"share_config": share_config, "created_by": created_by}
+        record_fields = {
+            "share_config": share_config,
+            "created_by": created_by,
+            "category_id": category_id,
+        }
         db_info = await kb_instance.create_database(
             database_name,
             description,
@@ -403,6 +417,8 @@ class KnowledgeBaseManager:
 
         logger.info(f"Created {kb_type} database: {database_name} ({kb_id}) with {kwargs}")
         db_info["share_config"] = share_config
+        db_info["category_id"] = category_id
+        db_info["category"] = KnowledgeCategoryService.serialize(category)
         return db_info
 
     async def delete_database(self, kb_id: str) -> dict:
@@ -491,11 +507,13 @@ class KnowledgeBaseManager:
     async def get_database_info(self, kb_id: str, include_files: bool = False) -> dict | None:
         """获取数据库详细信息"""
         from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
+        from yuxi.services.knowledge_category_service import KnowledgeCategoryService
 
         kb_repo = KnowledgeBaseRepository()
-        kb = await kb_repo.get_by_kb_id(kb_id)
-        if kb is None:
+        result = await kb_repo.get_by_kb_id_with_category(kb_id)
+        if result is None:
             return None
+        kb, category = result
 
         kb_instance: KnowledgeBase | None = None
         kb_type = kb.kb_type or "milvus"
@@ -514,6 +532,8 @@ class KnowledgeBaseManager:
             "llm_model_spec": kb.llm_model_spec,
             "query_params": kb.query_params,
             "metadata": normalized_additional_params,
+            "category_id": kb.category_id,
+            "category": KnowledgeCategoryService.serialize(category),
             "created_at": utc_isoformat(kb.created_at) if kb.created_at else None,
             "status": "已连接",
         }
@@ -781,6 +801,8 @@ class KnowledgeBaseManager:
         description: str,
         llm_model_spec: str | None = None,
         update_llm_model_spec: bool = False,
+        category_id: int | None = None,
+        update_category_id: bool = False,
         additional_params: dict | None = None,
         share_config: dict | None = None,
         operator_uid: str | None = None,
@@ -803,6 +825,13 @@ class KnowledgeBaseManager:
         }
         if update_llm_model_spec:
             update_data["llm_model_spec"] = llm_model_spec
+        if update_category_id:
+            if category_id is None:
+                raise ValueError("category_id 不能为空")
+            from yuxi.services.knowledge_category_service import KnowledgeCategoryService
+
+            await KnowledgeCategoryService().require_category(category_id)
+            update_data["category_id"] = category_id
 
         if additional_params is not None:
             current_additional_params = kb.additional_params or {}

@@ -26,7 +26,8 @@ async def test_get_databases_by_user_includes_explicit_view_grant(monkeypatch, t
         },
     ]
 
-    async def get_databases():
+    async def get_databases(category_id=None):
+        assert category_id is None
         return {"databases": databases}
 
     class FakePermissionService:

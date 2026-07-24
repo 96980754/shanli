@@ -57,6 +57,15 @@
           </div>
           <div
             class="sider-item"
+            :class="{ activesec: activeTab === 'ontology' }"
+            @click="activeTab = 'ontology'"
+            v-if="userStore.isAdmin"
+          >
+            <Network class="icon" :size="18" />
+            <span>Core Ontology</span>
+          </div>
+          <div
+            class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
             v-if="userStore.isSuperAdmin"
@@ -120,6 +129,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: activeTab === 'ontology' }"
+          @click="activeTab = 'ontology'"
+          v-if="userStore.isAdmin"
+        >
+          Core Ontology
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
           v-if="userStore.isSuperAdmin"
@@ -151,6 +168,10 @@
             <UserManagementComponent />
           </div>
 
+          <div v-show="activeTab === 'ontology'" v-if="userStore.isAdmin">
+            <OntologyRegistrySettings />
+          </div>
+
           <div v-show="activeTab === 'department'" v-if="userStore.isSuperAdmin">
             <DepartmentManagementComponent />
           </div>
@@ -170,6 +191,7 @@ import {
   SquareTerminal,
   User,
   Users,
+  Network,
 } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
 import AgentEnvSettingsCard from '@/components/AgentEnvSettingsCard.vue'
@@ -177,6 +199,7 @@ import BasicSettingsSection from '@/components/BasicSettingsSection.vue'
 import ApiKeyManagementComponent from '@/components/ApiKeyManagementComponent.vue'
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
+import OntologyRegistrySettings from '@/components/OntologyRegistrySettings.vue'
 
 const props = defineProps({
   visible: {
@@ -201,7 +224,7 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'user')
+  if (userStore.isAdmin) tabs.push('base', 'user', 'ontology')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })

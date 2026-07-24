@@ -1633,7 +1633,7 @@ class KnowledgeBase(ABC):
             "additional_params": meta.get("metadata") or {},
         }
         if record_fields:
-            allowed_fields = {"share_config", "created_by"}
+            allowed_fields = {"share_config", "created_by", "category_id"}
             payload.update({key: value for key, value in record_fields.items() if key in allowed_fields})
 
         if existing is None:

@@ -151,6 +151,46 @@ class KnowledgeChunkRepository:
     async def count_graph_pending_by_kb_id(self, kb_id: str) -> int:
         return await self._count_by_kb_id(kb_id, KnowledgeChunk.graph_indexed.is_not(True))
 
+    async def count_with_extraction_result_by_kb_id(self, kb_id: str) -> int:
+        return await self._count_by_kb_id(
+            kb_id,
+            KnowledgeChunk.extraction_result.is_not(None),
+            func.jsonb_typeof(KnowledgeChunk.extraction_result) != "null",
+        )
+
+    async def count_ontology_extraction_references(
+        self,
+        registry_id: str,
+        version: str,
+        digest: str,
+    ) -> dict[str, int]:
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeChunk.kb_id, func.count())
+                .where(
+                    func.jsonb_extract_path_text(
+                        KnowledgeChunk.extraction_result,
+                        "metadata",
+                        "ontology_registry_id",
+                    )
+                    == registry_id,
+                    func.jsonb_extract_path_text(
+                        KnowledgeChunk.extraction_result,
+                        "metadata",
+                        "ontology_version",
+                    )
+                    == version,
+                    func.jsonb_extract_path_text(
+                        KnowledgeChunk.extraction_result,
+                        "metadata",
+                        "ontology_digest",
+                    )
+                    == digest,
+                )
+                .group_by(KnowledgeChunk.kb_id)
+            )
+            return {str(kb_id): int(count or 0) for kb_id, count in result.all()}
+
     async def _count_by_kb_id(self, kb_id: str, *conditions: Any) -> int:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(

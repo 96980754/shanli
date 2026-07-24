@@ -1,0 +1,90 @@
+properties:
+  Hardware:
+    screen_size:
+      type: float
+      unit: inch
+      description: 屏幕尺寸
+    screen_type:
+      type: string
+      description: 屏幕类型
+    resolution:
+      type: string
+      unit: pixel
+      description: 分辨率
+    battery_capacity:
+      type: int
+      unit: mAh
+      description: 电池容量
+    standby_time:
+      type: string
+      description: 待机时间
+    talk_time:
+      type: string
+      description: 通话时间
+    weight:
+      type: float
+      unit: g
+      description: 重量
+    dimensions:
+      type: string
+      description: 外形尺寸
+    water_resistance:
+      type: string
+      description: 防水等级
+    drop_resistance:
+      type: string
+      description: 抗跌落
+  Performance:
+    max_users:
+      type: int
+      description: 最大用户数
+    concurrent_calls:
+      type: int
+      description: 并发通话数
+    latency:
+      type: string
+      unit: ms
+      description: 延迟
+    battery_life:
+      type: string
+      description: 续航时间
+    range:
+      type: string
+      description: 覆盖范围
+  Software:
+    os_version:
+      type: string
+      description: 操作系统版本
+    sdk_version:
+      type: string
+      description: SDK版本
+    protocol:
+      type: string
+      description: 支持协议
+  Network:
+    wifi:
+      type: string
+      description: WiFi标准
+    bluetooth:
+      type: string
+      description: 蓝牙版本
+    gnss:
+      type: string
+      description: 卫星定位系统
+    frequency:
+      type: string
+      unit: MHz/GHz
+      description: 频率范围
+    network_mode:
+      type: string
+      description: 网络制式
+  Protection:
+    ip_rating:
+      type: string
+      description: 防护等级（如IP68）
+    operating_temp:
+      type: string
+      description: 工作温度
+    storage_temp:
+      type: string
+      description: 存储温度

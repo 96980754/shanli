@@ -1,0 +1,187 @@
+{
+  "registry_id": "shanli-preset",
+  "version": "1.0.0",
+  "name": "善理预设",
+  "status": "active",
+  "entities": {
+    "ProductCategory": {
+      "description": "产品大类",
+      "examples": [
+        "通信",
+        "定位",
+        "企业数字化"
+      ]
+    },
+    "ProductFamily": {
+      "description": "产品族",
+      "examples": [
+        "PTT",
+        "MCSTARS",
+        "Geo-Location"
+      ]
+    },
+    "Product": {
+      "description": "可独立销售的产品/解决方案",
+      "examples": [
+        "POCSTARS-MNO",
+        "F10"
+      ]
+    },
+    "Terminal": {
+      "description": "硬件终端（用Product.type替代）",
+      "examples": []
+    },
+    "Solution": {
+      "description": "产品组合方案",
+      "examples": [
+        "公安执法解决方案"
+      ]
+    },
+    "Feature": {
+      "description": "用户可直接感知的产品功能",
+      "examples": [
+        "蓝牙",
+        "实时视频",
+        "群组通信"
+      ]
+    },
+    "Technology": {
+      "description": "实现功能的后台技术",
+      "examples": [
+        "WebRTC",
+        "微服务架构"
+      ]
+    },
+    "Scenario": {
+      "description": "产品被使用的具体场景",
+      "examples": [
+        "公安执法",
+        "铁路运输"
+      ]
+    },
+    "Industry": {
+      "description": "产品服务的行业领域",
+      "examples": [
+        "公共安全",
+        "交通运输"
+      ]
+    },
+    "Specification": {
+      "description": "产品的规格参数（key-value）",
+      "examples": [
+        "screen_size:2.4inch"
+      ]
+    },
+    "Standard": {
+      "description": "产品遵循的标准",
+      "examples": [
+        "3GPP MCX",
+        "SIP"
+      ]
+    },
+    "Certification": {
+      "description": "产品获得的认证",
+      "examples": [
+        "CE",
+        "FCC",
+        "IP68"
+      ]
+    },
+    "DeploymentMode": {
+      "description": "产品部署方式",
+      "examples": [
+        "SaaS",
+        "私有化部署"
+      ]
+    },
+    "Document": {
+      "description": "知识的原始载体",
+      "examples": [
+        "F10规格书.pdf"
+      ]
+    },
+    "Evidence": {
+      "description": "事实的证据节点",
+      "examples": []
+    }
+  },
+  "relations": {
+    "HAS_FAMILY": {
+      "source": "ProductCategory",
+      "target": "ProductFamily"
+    },
+    "HAS_PRODUCT": {
+      "source": "ProductFamily",
+      "target": "Product"
+    },
+    "SUPPORTS": {
+      "source": "Product",
+      "target": "Feature"
+    },
+    "USES": {
+      "source": "Product",
+      "target": "Technology"
+    },
+    "USED_IN": {
+      "source": "Product",
+      "target": "Scenario"
+    },
+    "APPLICABLE_TO": {
+      "source": "Product",
+      "target": "Industry"
+    },
+    "COMPLIES_WITH": {
+      "source": "Product",
+      "target": "Standard"
+    },
+    "HAS_CERTIFICATION": {
+      "source": "Product",
+      "target": "Certification"
+    },
+    "HAS_DEPLOYMENT": {
+      "source": "Product",
+      "target": "DeploymentMode"
+    },
+    "HAS_SPEC": {
+      "source": "Product",
+      "target": "Specification"
+    },
+    "PART_OF": {
+      "source": "Product",
+      "target": "Solution"
+    },
+    "BELONGS_TO": {
+      "source": "Scenario",
+      "target": "Industry"
+    },
+    "SUPPORTED_BY": {
+      "source": "Any",
+      "target": "Evidence"
+    },
+    "EXTRACTED_FROM": {
+      "source": "Evidence",
+      "target": "Document"
+    }
+  },
+  "feature_vs_technology": {
+    "rule": "Feature=用户可直接感知的能力；Technology=实现能力的后台方法",
+    "examples": [
+      {
+        "name": "实时视频",
+        "type": "Feature"
+      },
+      {
+        "name": "蓝牙",
+        "type": "Feature"
+      },
+      {
+        "name": "WebRTC",
+        "type": "Technology"
+      },
+      {
+        "name": "微服务架构",
+        "type": "Technology"
+      }
+    ]
+  }
+}

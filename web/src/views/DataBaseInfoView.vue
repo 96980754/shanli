@@ -200,7 +200,11 @@
             />
           </div>
 
-          <div v-if="userStore.isAdmin" v-show="activeTab === 'query'" class="tab-panel query-config-panel">
+          <div
+            v-if="userStore.isAdmin"
+            v-show="activeTab === 'query'"
+            class="tab-panel query-config-panel"
+          >
             <div class="query-config-layout">
               <div class="query-test-pane">
                 <QuerySection
@@ -210,11 +214,7 @@
                   @toggle-visible="() => {}"
                 />
               </div>
-              <aside
-                v-if="userStore.isAdmin"
-                class="query-config-pane"
-                aria-label="检索配置"
-              >
+              <aside v-if="userStore.isAdmin" class="query-config-pane" aria-label="检索配置">
                 <div class="search-config-wrapper">
                   <div v-if="kbPermissions.can_manage" class="query-config-header">
                     <div>
@@ -272,6 +272,13 @@
       <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical">
         <a-form-item label="知识库名称" name="name" required>
           <a-input v-model:value="editForm.name" placeholder="请输入知识库名称" />
+        </a-form-item>
+        <a-form-item label="内容分类" name="category_id" required>
+          <a-select
+            v-model:value="editForm.category_id"
+            :options="categoryOptions"
+            placeholder="请选择内容分类"
+          />
         </a-form-item>
         <a-form-item label="知识库描述" name="description">
           <AiTextarea
@@ -409,7 +416,7 @@ import SearchConfigPanel from '@/components/SearchConfigPanel.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
-import { databaseApi } from '@/apis/knowledge_api'
+import { databaseApi, categoryApi } from '@/apis/knowledge_api'
 import { departmentApi } from '@/apis/department_api'
 import { authApi } from '@/apis/auth_api'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
@@ -458,7 +465,6 @@ const loadDatabaseAccess = async (databaseId) => {
 }
 
 const kbTypeIcon = computed(() => getKbTypeIcon(kbType.value || 'milvus'))
-
 
 const databaseSubtitle = computed(() => {
   const typeLabel = getKbTypeLabel(kbType.value || 'milvus')
@@ -753,12 +759,17 @@ const copyDatabaseId = async () => {
 
 const departments = ref([])
 const users = ref([])
+const categories = ref([])
+const categoryOptions = computed(() =>
+  categories.value.map((category) => ({ label: category.name, value: category.id }))
+)
 const editModalVisible = ref(false)
 const editFormRef = ref(null)
 const shareConfigFormRef = ref(null)
 const editForm = reactive({
   name: '',
   description: '',
+  category_id: null,
   auto_generate_questions: false,
   chunk_preset_id: DEFAULT_CHUNK_PRESET_ID,
   dify_api_url: '',
@@ -770,7 +781,8 @@ const editForm = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入知识库名称' }]
+  name: [{ required: true, message: '请输入知识库名称' }],
+  category_id: [{ required: true, message: '请选择内容分类' }]
 }
 
 const editPresetDescription = computed(() => getChunkPresetDescription(editForm.chunk_preset_id))
@@ -836,9 +848,19 @@ const loadUsers = async () => {
   }
 }
 
+const loadCategories = async () => {
+  try {
+    const data = await categoryApi.getCategories()
+    categories.value = data.items || []
+  } catch {
+    categories.value = []
+  }
+}
+
 const showEditModal = () => {
   editForm.name = database.value.name || ''
   editForm.description = database.value.description || ''
+  editForm.category_id = database.value.category_id || null
   editForm.auto_generate_questions =
     database.value.additional_params?.auto_generate_questions || false
   editForm.chunk_preset_id =
@@ -878,6 +900,7 @@ const handleEditSubmit = () => {
       const updateData = {
         name: editForm.name,
         description: editForm.description,
+        category_id: editForm.category_id,
         additional_params: {},
         share_config: {
           access_level: formConfig.access_level,
@@ -938,6 +961,7 @@ const deleteDatabase = () => {
 
 onMounted(() => {
   loadChunkPresetOptions()
+  loadCategories()
   loadDepartments()
   loadUsers()
 })

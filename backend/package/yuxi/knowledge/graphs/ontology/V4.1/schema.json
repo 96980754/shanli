@@ -1,0 +1,12 @@
+{
+  "registry_id": "V4.1",
+  "version": "4.1.1",
+  "name": "Enterprise Core Ontology Scaffold",
+  "status": "scaffold",
+  "entities": {},
+  "relations": {},
+  "feature_vs_technology": {
+    "status": "reserved",
+    "rule": ""
+  }
+}

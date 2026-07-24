@@ -168,6 +168,7 @@ async def test_create_database_persists_allowed_record_fields(tmp_path, monkeypa
         record_fields={
             "share_config": share_config,
             "created_by": "root",
+            "category_id": 7,
             "unexpected_field": "ignored",
         },
         auto_generate_questions=False,
@@ -177,6 +178,7 @@ async def test_create_database_persists_allowed_record_fields(tmp_path, monkeypa
     payload = created_payloads[0]
     assert payload["share_config"] == share_config
     assert payload["created_by"] == "root"
+    assert payload["category_id"] == 7
     assert "unexpected_field" not in payload
     assert "share_config" not in payload["additional_params"]
     assert "created_by" not in payload["additional_params"]

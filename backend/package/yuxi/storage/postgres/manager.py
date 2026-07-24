@@ -123,6 +123,69 @@ class PostgresManager(metaclass=SingletonMeta):
         """确保知识库 schema 包含所有必要字段"""
         self._check_initialized()
         stmts = [
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_base_categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(64) NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                is_protected BOOLEAN NOT NULL DEFAULT FALSE,
+                created_by VARCHAR(64),
+                updated_by VARCHAR(64),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM pg_index index_info
+                    JOIN pg_class index_class ON index_class.oid = index_info.indexrelid
+                    JOIN pg_class table_class ON table_class.oid = index_info.indrelid
+                    JOIN pg_namespace namespace ON namespace.oid = table_class.relnamespace
+                    WHERE namespace.nspname = current_schema()
+                      AND table_class.relname = 'knowledge_base_categories'
+                      AND index_class.relname = 'uq_knowledge_base_categories_lower_name'
+                      AND pg_get_expr(index_info.indexprs, index_info.indrelid) = 'lower(''name''::text)'
+                ) THEN
+                    DROP INDEX uq_knowledge_base_categories_lower_name;
+                END IF;
+            END $$
+            """,
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_base_categories_lower_name "
+                "ON knowledge_base_categories(lower(name))"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_base_categories_default "
+                "ON knowledge_base_categories(is_default) WHERE is_default IS TRUE"
+            ),
+            """
+            INSERT INTO knowledge_base_categories (name, sort_order, is_default, is_protected)
+            SELECT '其他', 10000, TRUE, TRUE
+            WHERE NOT EXISTS (SELECT 1 FROM knowledge_base_categories WHERE is_default IS TRUE)
+            """,
+            "UPDATE knowledge_base_categories SET is_protected = TRUE WHERE is_default IS TRUE",
+            "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS category_id INTEGER",
+            """
+            UPDATE knowledge_bases
+            SET category_id = (SELECT id FROM knowledge_base_categories WHERE is_default IS TRUE LIMIT 1)
+            WHERE category_id IS NULL
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_knowledge_bases_category_id') THEN
+                    ALTER TABLE knowledge_bases
+                    ADD CONSTRAINT fk_knowledge_bases_category_id
+                    FOREIGN KEY (category_id) REFERENCES knowledge_base_categories(id) ON DELETE RESTRICT;
+                END IF;
+            END $$
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_bases_category_id ON knowledge_bases(category_id)",
+            "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS embedding_model_spec VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS llm_model_spec VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_bases DROP COLUMN IF EXISTS embed_info",

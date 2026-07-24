@@ -13,12 +13,42 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    column,
+    func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from yuxi.storage.postgres.models_business import Base
 from yuxi.utils.datetime_utils import utc_now_naive
 
 JSON_VALUE = JSON().with_variant(JSONB, "postgresql")
+EXTRACTION_RESULT_VALUE = JSON(none_as_null=True).with_variant(
+    JSONB(none_as_null=True),
+    "postgresql",
+)
+
+
+class KnowledgeBaseCategory(Base):
+    __tablename__ = "knowledge_base_categories"
+    __table_args__ = (
+        Index("uq_knowledge_base_categories_lower_name", func.lower(column("name")), unique=True),
+        Index(
+            "uq_knowledge_base_categories_default",
+            "is_default",
+            unique=True,
+            postgresql_where=text("is_default IS TRUE"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(64), nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+    is_default = Column(Boolean, nullable=False, default=False)
+    is_protected = Column(Boolean, nullable=False, default=False)
+    created_by = Column(String(64))
+    updated_by = Column(String(64))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class KnowledgeBase(Base):
@@ -32,6 +62,12 @@ class KnowledgeBase(Base):
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
     kb_type = Column(String(32), nullable=False, index=True)
+    category_id = Column(
+        Integer,
+        ForeignKey("knowledge_base_categories.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     embedding_model_spec = Column(String(512))
     llm_model_spec = Column(String(512))
     query_params = Column(JSON_VALUE)
@@ -127,7 +163,7 @@ class KnowledgeChunk(Base):
     graph_indexed = Column(Boolean, default=False)
     ent_ids = Column(JSON_VALUE)
     tags = Column(JSON_VALUE)
-    extraction_result = Column(JSON_VALUE)
+    extraction_result = Column(EXTRACTION_RESULT_VALUE)
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
 
