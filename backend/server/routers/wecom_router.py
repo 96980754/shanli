@@ -77,7 +77,8 @@ async def receive_message(
     user_id = _xml_value(message, "FromUserName")
     query = _xml_value(message, "Content")
     async with pg_manager.get_async_session_context() as session:
-        user = (await session.execute(select(User).where(User.uid == user_id, User.is_deleted == 0))).scalar_one_or_none()
+        result = await session.execute(select(User).where(User.uid == user_id, User.is_deleted == 0))
+        user = result.scalar_one_or_none()
     if user is None:
         reply = "你的企业微信 UserID 尚未绑定到系统账号，请联系管理员将本系统 UID 设置为该 UserID。"
     else:
@@ -86,5 +87,12 @@ async def receive_message(
     encrypted_reply = crypto.encrypt(_reply_text(reply))
     reply_nonce = nonce or str(int(time.time()))
     signature = crypto.signature(timestamp, reply_nonce, encrypted_reply)
-    xml = f"<xml><Encrypt><![CDATA[{encrypted_reply}]]></Encrypt><MsgSignature><![CDATA[{signature}]]></MsgSignature><TimeStamp>{timestamp}</TimeStamp><Nonce><![CDATA[{reply_nonce}]]></Nonce></xml>"
+    xml = (
+        "<xml>"
+        f"<Encrypt><![CDATA[{encrypted_reply}]]></Encrypt>"
+        f"<MsgSignature><![CDATA[{signature}]]></MsgSignature>"
+        f"<TimeStamp>{timestamp}</TimeStamp>"
+        f"<Nonce><![CDATA[{reply_nonce}]]></Nonce>"
+        "</xml>"
+    )
     return Response(content=xml, media_type="application/xml")

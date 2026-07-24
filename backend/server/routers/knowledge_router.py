@@ -43,7 +43,7 @@ from yuxi.services.knowledge_category_service import KnowledgeCategoryError, Kno
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
-from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
+from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path

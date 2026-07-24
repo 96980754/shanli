@@ -8,7 +8,9 @@ from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchS
 @pytest.mark.asyncio
 async def test_global_search_only_queries_knowledge_bases_with_search_permission(monkeypatch):
     service = GlobalKnowledgeSearchService(permission_service=SimpleNamespace())
-    service.permission_service.has_permission = lambda context, kb_id, action: __import__("asyncio").sleep(0, kb_id == "allowed")
+    service.permission_service.has_permission = lambda context, kb_id, action: __import__("asyncio").sleep(
+        0, kb_id == "allowed"
+    )
 
     async def databases(uid):
         return {"databases": [{"kb_id": "allowed", "name": "Allowed"}, {"kb_id": "denied", "name": "Denied"}]}
@@ -30,4 +32,9 @@ async def test_global_search_only_queries_knowledge_bases_with_search_permission
 
 @pytest.mark.asyncio
 async def test_global_search_returns_empty_for_blank_query():
-    assert await GlobalKnowledgeSearchService().search(SimpleNamespace(uid="u1", role="user", department_id=None), "  ") == []
+    result = await GlobalKnowledgeSearchService().search(
+        SimpleNamespace(uid="u1", role="user", department_id=None),
+        "  ",
+    )
+
+    assert result == []
