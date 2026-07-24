@@ -82,12 +82,12 @@ export const useDatabaseStore = defineStore('database', () => {
 
   // Actions
   // 管理员获取所有知识库，普通用户获取有权限访问的知识库
-  async function loadDatabases() {
+  async function loadDatabases(categoryId = null) {
     state.listLoading = true
     try {
       const data = userStore.isAdmin
-        ? await databaseApi.getDatabases()
-        : await databaseApi.getAccessibleDatabases()
+        ? await databaseApi.getDatabases(categoryId)
+        : await databaseApi.getAccessibleDatabases(categoryId)
       const list = data?.databases || []
       databases.value = list.sort((a, b) => {
         const timeA = parseToShanghai(a.created_at)
@@ -117,6 +117,11 @@ export const useDatabaseStore = defineStore('database', () => {
 
     if (!formData.kb_type) {
       message.error('请选择知识库类型')
+      return false
+    }
+
+    if (!formData.category_id) {
+      message.error('请选择内容分类')
       return false
     }
 

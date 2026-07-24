@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { typeApi } from '@/apis/knowledge_api'
 import { DEFAULT_CHUNK_PRESET_ID } from '@/utils/chunkUtils'
+import { useUserStore } from '@/stores/user'
 
 const chunkPresetOptions = ref([])
 const chunkPresetLoading = ref(false)
@@ -20,7 +21,10 @@ const normalizeChunkPresetOptions = (options) => {
 }
 
 export const useChunkPresetOptions = () => {
+  const userStore = useUserStore()
+
   const loadChunkPresetOptions = async () => {
+    if (!userStore.isAdmin) return chunkPresetOptions.value
     if (chunkPresetOptionsLoaded) return chunkPresetOptions.value
     if (chunkPresetOptionsRequest) return chunkPresetOptionsRequest
 

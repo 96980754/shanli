@@ -1,8 +1,25 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateIndex
 
 from yuxi.storage.postgres.manager import PostgresManager
+from yuxi.storage.postgres.models_knowledge import KnowledgeBaseCategory
+
+
+def test_category_name_index_references_name_column():
+    index = next(
+        index
+        for index in KnowledgeBaseCategory.__table__.indexes
+        if index.name == "uq_knowledge_base_categories_lower_name"
+    )
+
+    sql = str(CreateIndex(index).compile(dialect=postgresql.dialect()))
+
+    assert "UNIQUE INDEX" in sql
+    assert "lower(name)" in sql
+    assert "lower('name')" not in sql
 
 
 class _RecordingConnection:
@@ -164,3 +181,42 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "can_grant BOOLEAN NOT NULL DEFAULT FALSE" in statements
     assert "uq_knowledge_base_permissions_subject" in statements
     assert "ix_knowledge_base_permissions_kb_id" in statements
+
+
+@pytest.mark.asyncio
+async def test_ensure_knowledge_schema_backfills_categories_before_requiring_category_id():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "CREATE TABLE IF NOT EXISTS knowledge_base_categories" in statements
+    assert "pg_get_expr(index_info.indexprs, index_info.indrelid)" in statements
+    assert "lower(''name''::text)" in statements
+    assert "DROP INDEX uq_knowledge_base_categories_lower_name" in statements
+    assert "ON knowledge_base_categories(lower(name))" in statements
+    assert "uq_knowledge_base_categories_lower_name" in statements
+    assert "uq_knowledge_base_categories_default" in statements
+    assert "SELECT '其他', 10000, TRUE, TRUE" in statements
+    assert "SET category_id = (SELECT id FROM knowledge_base_categories" in statements
+    assert "FOREIGN KEY (category_id) REFERENCES knowledge_base_categories(id) ON DELETE RESTRICT" in statements
+    assert "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL" in statements
+    assert statements.index("pg_get_expr(index_info.indexprs, index_info.indrelid)") < statements.index(
+        "ON knowledge_base_categories(lower(name))"
+    )
+    assert statements.index("SELECT '其他', 10000, TRUE, TRUE") < statements.index(
+        "SET category_id = (SELECT id FROM knowledge_base_categories"
+    )
+    assert statements.index("SET category_id = (SELECT id FROM knowledge_base_categories") < statements.index(
+        "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL"
+    )

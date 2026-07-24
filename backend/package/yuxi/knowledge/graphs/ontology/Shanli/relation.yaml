@@ -1,0 +1,72 @@
+relations:
+  SUPPORTS:
+    aliases:
+    - 支持
+    - 具备
+    - 拥有
+    - 提供
+    - 集成
+    - 内置
+    - 实现
+    - 可
+    - 能
+  USES:
+    aliases:
+    - 采用
+    - 使用
+    - 基于
+    - 依赖
+    - 应用
+    - 部署
+    - 运行
+    - 搭载
+  USED_IN:
+    aliases:
+    - 用于
+    - 应用于
+    - 适用于
+    - 服务于
+    - 覆盖
+    - 使用于
+  APPLICABLE_TO:
+    aliases:
+    - 适用行业
+    - 行业
+    - 领域
+    - 适合
+    - 面向
+  COMPLIES_WITH:
+    aliases:
+    - 符合
+    - 遵循
+    - 遵守
+    - 通过
+    - 满足
+    - 按照
+    - 依据
+  HAS_CERTIFICATION:
+    aliases:
+    - 获得
+    - 通过认证
+    - 具备认证
+    - 取得
+  HAS_DEPLOYMENT:
+    aliases:
+    - 支持部署
+    - 部署方式
+    - 可部署
+    - 部署于
+    - 部署在
+  HAS_SPEC:
+    aliases:
+    - 规格
+    - 参数
+    - 配置
+    - 尺寸
+    - 容量
+  PART_OF:
+    aliases:
+    - 属于
+    - 组成
+    - 构成
+    - 包含于

@@ -515,9 +515,13 @@ async def test_get_accessible_databases(test_client, admin_headers, knowledge_da
     payload = response.json()
     assert "databases" in payload
 
-    # 验证知识库在列表中
-    kb_ids = [db["kb_id"] for db in payload["databases"]]
-    assert knowledge_database["kb_id"] in kb_ids
+    # 验证知识库在列表中，且轻量投影保留卡片需要的字段
+    databases = {db["kb_id"]: db for db in payload["databases"]}
+    assert knowledge_database["kb_id"] in databases
+    item = databases[knowledge_database["kb_id"]]
+    assert "file_count" in item
+    assert "created_at" in item
+    assert "stats" not in item
 
 
 async def test_create_database_defaults_to_global_share_config(test_client, admin_headers):

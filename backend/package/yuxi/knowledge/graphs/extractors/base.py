@@ -20,6 +20,9 @@ class GraphExtractor(ABC):
     def validate_options(self) -> None:
         return None
 
+    def normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        return normalize_extraction_result(result, self.extractor_type)
+
 
 def normalize_extraction_result(result: dict[str, Any], extractor_type: str) -> dict[str, Any]:
     if not isinstance(result, dict):

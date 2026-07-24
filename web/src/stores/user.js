@@ -417,5 +417,8 @@ export const checkAdminPermission = () => {
 // 检查当前用户是否有超级管理员权限
 export const checkSuperAdminPermission = () => {
   const userStore = useUserStore()
-  return userStore.isSuperAdmin
+  if (!userStore.isSuperAdmin) {
+    throw new Error('需要超级管理员权限')
+  }
+  return true
 }

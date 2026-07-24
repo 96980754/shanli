@@ -5,7 +5,7 @@ import json
 import weakref
 from typing import Any
 
-from yuxi.knowledge.graphs.extractors import GraphExtractor, GraphExtractorFactory, normalize_extraction_result
+from yuxi.knowledge.graphs.extractors import GraphExtractor, GraphExtractorFactory
 from yuxi.knowledge.graphs.graph_utils import (
     build_graph_payload,
     compute_entity_id,
@@ -32,6 +32,12 @@ from yuxi.utils.datetime_utils import utc_isoformat
 GRAPH_CONFIG_KEY = "graph_build_config"
 GRAPH_TASK_TYPE = "knowledge_graph_index"
 NEO4J_QUERY_OFFLOAD_LIMIT = 8
+
+
+class OntologySwitchRequiresResetError(ValueError):
+    pass
+
+
 _neo4j_query_offload_semaphore_refs: dict[
     int,
     tuple[weakref.ReferenceType[asyncio.AbstractEventLoop], weakref.ReferenceType[asyncio.Semaphore]],
@@ -112,10 +118,11 @@ class MilvusGraphService:
         kb = await self._get_milvus_kb(kb_id)
         params = dict(kb.additional_params or {})
         config = params.get(GRAPH_CONFIG_KEY) or {}
-        total_chunks, pending_chunks, indexed_chunks, graph_counts = await asyncio.gather(
+        total_chunks, pending_chunks, indexed_chunks, extraction_result_count, graph_counts = await asyncio.gather(
             self.chunk_repo.count_by_kb_id(kb_id),
             self.chunk_repo.count_graph_pending_by_kb_id(kb_id),
             self.chunk_repo.count_graph_indexed_by_kb_id(kb_id),
+            self.chunk_repo.count_with_extraction_result_by_kb_id(kb_id),
             self.graph_repo.count_by_kb_id(kb_id),
         )
         entity_count, relationship_count = graph_counts
@@ -147,9 +154,11 @@ class MilvusGraphService:
             "configured": bool(config),
             "locked": bool(config.get("locked")),
             "config": self._public_config(config),
+            "ontology": self._ontology_summary(config),
             "total_chunks": total_chunks,
             "pending_chunks": pending_chunks,
             "indexed_chunks": indexed_chunks,
+            "extraction_result_count": extraction_result_count,
             "entity_count": entity_count,
             "relationship_count": relationship_count,
             "build_task_status": build_task_status,
@@ -172,9 +181,22 @@ class MilvusGraphService:
             if normalized_extractor_type != existing_extractor_type:
                 raise ValueError("图谱抽取器类型已锁定，只能修改模型、Schema 等抽取参数")
 
-        extractor_options = extractor_options or {}
+        extractor_options = dict(extractor_options or {})
         if normalized_extractor_type == "llm" and extractor_options.get("prompt"):
             raise ValueError("LLM 图谱抽取器不支持自定义完整 Prompt，请使用 schema 配置抽取约束")
+        extractor_options = self._resolve_ontology_options(extractor_options)
+        if self._ontology_identity(existing_config.get("extractor_options") or {}) != self._ontology_identity(
+            extractor_options
+        ):
+            indexed_chunks, extraction_result_count, graph_counts = await asyncio.gather(
+                self.chunk_repo.count_graph_indexed_by_kb_id(kb_id),
+                self.chunk_repo.count_with_extraction_result_by_kb_id(kb_id),
+                self.graph_repo.count_by_kb_id(kb_id),
+            )
+            if indexed_chunks or extraction_result_count or any(graph_counts):
+                raise OntologySwitchRequiresResetError(
+                    "当前知识库已有图谱或抽取结果。切换 Core Ontology 前请先重置图谱并清空抽取结果。"
+                )
         GraphExtractorFactory.create(normalized_extractor_type, extractor_options)
         config = {
             "locked": True,
@@ -291,9 +313,8 @@ class MilvusGraphService:
         return options
 
     async def _get_chunk_extraction_result(self, kb_id: str, chunk, extractor: GraphExtractor) -> dict[str, Any]:
-        extractor_type = extractor.extractor_type
         if chunk.extraction_result:
-            return normalize_extraction_result(chunk.extraction_result, extractor_type)
+            return extractor.normalize_result(chunk.extraction_result)
 
         extraction_result = await extractor.extract(
             chunk.content,
@@ -304,7 +325,7 @@ class MilvusGraphService:
                 "chunk_index": chunk.chunk_index,
             },
         )
-        normalized_result = normalize_extraction_result(extraction_result, extractor_type)
+        normalized_result = extractor.normalize_result(extraction_result)
         await self.chunk_repo.update_extraction_result(chunk.chunk_id, normalized_result)
         return normalized_result
 
@@ -769,18 +790,62 @@ class MilvusGraphService:
             raise ValueError("图谱抽取配置缺少 extractor_type")
         return config
 
+    @staticmethod
+    def _resolve_ontology_options(options: dict[str, Any]) -> dict[str, Any]:
+        registry_id = str(options.get("ontology_registry_id") or "").strip()
+        if not registry_id:
+            return options
+
+        from yuxi.knowledge.graphs.ontology import resolve_ontology_registry
+
+        version = str(options.get("ontology_version") or "").strip() or None
+        digest = str(options.get("ontology_digest") or "").strip() or None
+        entry = resolve_ontology_registry(registry_id, version, digest)
+        return {
+            **options,
+            "ontology_registry_id": entry.registry_id,
+            "ontology_version": entry.version,
+            "ontology_digest": entry.digest,
+        }
+
+    @staticmethod
+    def _ontology_identity(options: dict[str, Any]) -> tuple[str, str, str]:
+        resolved = MilvusGraphService._resolve_ontology_options(dict(options or {}))
+        return (
+            str(resolved.get("ontology_registry_id") or ""),
+            str(resolved.get("ontology_version") or ""),
+            str(resolved.get("ontology_digest") or ""),
+        )
+
     def _public_config(self, config: dict[str, Any]) -> dict[str, Any] | None:
         if not config:
             return None
         return {
             "locked": bool(config.get("locked")),
             "extractor_type": config.get("extractor_type"),
-            "extractor_options": self._runtime_extractor_options(config),
+            "extractor_options": self._resolve_ontology_options(self._runtime_extractor_options(config)),
             "created_at": config.get("created_at"),
             "created_by": config.get("created_by"),
             "updated_at": config.get("updated_at"),
             "updated_by": config.get("updated_by"),
         }
+
+    @staticmethod
+    def _ontology_summary(config: dict[str, Any]) -> dict[str, Any]:
+        options = config.get("extractor_options") or {}
+        registry_id = str(options.get("ontology_registry_id") or "").strip()
+        if not registry_id:
+            return {"mode": "legacy"}
+
+        from yuxi.knowledge.graphs.ontology import resolve_ontology_registry
+
+        options = MilvusGraphService._resolve_ontology_options(options)
+        entry = resolve_ontology_registry(
+            options["ontology_registry_id"],
+            options["ontology_version"],
+            options["ontology_digest"],
+        )
+        return {"mode": "ontology", **entry.public_dict()}
 
     @staticmethod
     def _build_where(exclude_chunk: bool, keyword: str) -> str:

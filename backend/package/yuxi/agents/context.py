@@ -168,7 +168,7 @@ class BaseContext:
         default="You are a helpful assistant.",
         metadata={"name": "系统提示词", "description": "用来描述智能体的角色和行为", "kind": "prompt"},
     )
-
+# 傻逼
     model: str = field(
         default="",
         metadata={

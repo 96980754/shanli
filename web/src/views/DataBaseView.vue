@@ -13,16 +13,19 @@
     <PageShoulder v-model:search="searchQuery" search-placeholder="搜索知识库...">
       <template #filters>
         <a-select
-          v-model:value="typeFilter"
-          style="width: 120px"
-          placeholder="全部类型"
+          v-model:value="categoryFilter"
+          style="width: 140px"
+          placeholder="全部分类"
           allow-clear
         >
-          <a-select-option :value="null">全部类型</a-select-option>
-          <a-select-option v-for="t in kbTypes" :key="t" :value="t">
-            {{ getKbTypeLabel(t) }}
+          <a-select-option :value="null">全部分类</a-select-option>
+          <a-select-option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
           </a-select-option>
         </a-select>
+        <a-button v-if="userStore.isSuperAdmin" @click="categoryModalOpen = true">
+          分类管理
+        </a-button>
       </template>
       <template #actions>
         <a-button
@@ -67,6 +70,15 @@
               <div class="card-description">{{ getKbTypeDescription(typeInfo) }}</div>
             </div>
           </div>
+        </div>
+
+        <div class="form-section">
+          <h3 class="section-title">内容分类<span class="required-mark">*</span></h3>
+          <a-select
+            v-model:value="newDatabase.category_id"
+            :options="categoryOptions"
+            placeholder="请选择内容分类"
+          />
         </div>
 
         <div class="form-section">
@@ -178,6 +190,12 @@
       </template>
     </a-modal>
 
+    <KnowledgeCategoryManagementModal
+      v-model:open="categoryModalOpen"
+      :items="categories"
+      @changed="loadCategories"
+    />
+
     <!-- 加载状态 -->
     <div v-if="dbState.listLoading" class="loading-container">
       <a-spin size="large" />
@@ -188,7 +206,11 @@
     <ResourceEmptyState
       v-else-if="!databases || databases.length === 0"
       title="暂无知识库"
-      :description="userStore.isAdmin ? '创建知识库后，可以上传文件并配置检索、图谱能力。' : '管理员授权后，可在这里查看和维护知识库。'"
+      :description="
+        userStore.isAdmin
+          ? '创建知识库后，可以上传文件并配置检索、图谱能力。'
+          : '管理员授权后，可在这里查看和维护知识库。'
+      "
       :icon="getKbTypeIcon('milvus')"
     >
       <template #actions>
@@ -260,7 +282,7 @@ import { useUserStore } from '@/stores/user'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-vue-next'
 import { message, Modal } from 'ant-design-vue'
-import { databaseApi, typeApi } from '@/apis/knowledge_api'
+import { databaseApi, categoryApi, typeApi } from '@/apis/knowledge_api'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageShoulder from '@/components/shared/PageShoulder.vue'
 import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
@@ -268,10 +290,11 @@ import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import ExtensionCardGrid from '@/components/extensions/ExtensionCardGrid.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
+import KnowledgeCategoryManagementModal from '@/components/KnowledgeCategoryManagementModal.vue'
 import dayjs, { parseToShanghai } from '@/utils/time'
 import AiTextarea from '@/components/AiTextarea.vue'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
-import { getKbTypeLabel, getKbTypeIcon, getKbTypeColor, kbUtils } from '@/utils/kb_utils'
+import { getKbTypeLabel, getKbTypeIcon, kbUtils } from '@/utils/kb_utils'
 import { DEFAULT_CHUNK_PRESET_ID } from '@/utils/chunkUtils'
 
 const route = useRoute()
@@ -298,9 +321,14 @@ const knowledgeViewItems = [
   { key: 'documents', label: '文档知识库', path: '/extensions?tab=knowledge' }
 ]
 
-const kbTypes = computed(() => Object.keys(supportedKbTypes.value))
+const kbTypes = computed(() => Object.keys(orderedKbTypes.value))
 const searchQuery = ref('')
-const typeFilter = ref(null)
+const categoryFilter = ref(null)
+const categories = ref([])
+const categoryModalOpen = ref(false)
+const categoryOptions = computed(() =>
+  categories.value.map((category) => ({ label: category.name, value: category.id }))
+)
 
 const filteredDatabases = computed(() => {
   let list = databases.value
@@ -312,8 +340,8 @@ const filteredDatabases = computed(() => {
         (db.description && db.description.toLowerCase().includes(q))
     )
   }
-  if (typeFilter.value) {
-    list = list.filter((db) => (db.kb_type || 'milvus') === typeFilter.value)
+  if (categoryFilter.value) {
+    list = list.filter((db) => Number(db.category_id) === Number(categoryFilter.value))
   }
   return list
 })
@@ -336,6 +364,7 @@ const createEmptyDatabaseForm = () => ({
   description: '',
   embedding_model_spec: configStore.config?.embed_model,
   kb_type: '',
+  category_id: null,
   storage: '',
   chunk_preset_id: DEFAULT_CHUNK_PRESET_ID,
   additional_params: {}
@@ -350,8 +379,12 @@ const selectedPresetDescription = computed(() =>
 // 支持的知识库类型
 const supportedKbTypes = ref({})
 
-// 有序的知识库类型
-const orderedKbTypes = computed(() => supportedKbTypes.value)
+// 有序的知识库类型（Dify/Notion 仅保留历史兼容，不再开放新建）
+const orderedKbTypes = computed(() =>
+  Object.fromEntries(
+    Object.entries(supportedKbTypes.value).filter(([type]) => !['dify', 'notion'].includes(type))
+  )
+)
 
 const selectedKbTypeInfo = computed(() => supportedKbTypes.value[newDatabase.kb_type] || null)
 
@@ -369,6 +402,20 @@ const resetCreateParamValues = () => {
     } else {
       newDatabase.additional_params[field.key] = ''
     }
+  }
+}
+
+const loadCategories = async () => {
+  try {
+    const data = await categoryApi.getCategories()
+    categories.value = data.items || []
+    if (!newDatabase.category_id) {
+      newDatabase.category_id = categories.value.find((item) => item.is_default)?.id || null
+    }
+    await databaseStore.loadDatabases(categoryFilter.value)
+  } catch (error) {
+    console.error('加载内容分类失败:', error)
+    message.error('加载内容分类失败，请稍后重试')
   }
 }
 
@@ -391,6 +438,7 @@ const loadSupportedKbTypes = async () => {
 const resetNewDatabase = () => {
   Object.assign(newDatabase, createEmptyDatabaseForm())
   newDatabase.kb_type = kbTypes.value[0] || ''
+  newDatabase.category_id = categories.value.find((item) => item.is_default)?.id || null
   resetCreateParamValues()
   shareConfig.value = createDefaultShareConfig()
 }
@@ -445,6 +493,7 @@ const buildRequestData = () => {
     database_name: newDatabase.name.trim(),
     description: newDatabase.description?.trim() || '',
     kb_type: newDatabase.kb_type,
+    category_id: newDatabase.category_id,
     additional_params: {}
   }
 
@@ -483,6 +532,10 @@ const handleCreateDatabase = async () => {
     message.error('知识库类型加载失败，无法创建知识库')
     return
   }
+  if (!newDatabase.category_id) {
+    message.error('请选择内容分类')
+    return
+  }
 
   for (const field of createParamOptions.value) {
     if (!field.required) continue
@@ -517,25 +570,17 @@ const cardSubtitle = (database) => {
     parts.push(formatCreatedTime(database.created_at))
   }
   if (!kbUtils.isReadOnlyDatabase(database)) {
-    parts.push(`${database.row_count || 0} 文件`)
+    const fileCount = database.file_count ?? database.row_count
+    if (fileCount !== undefined && fileCount !== null) {
+      parts.push(`${fileCount} 文件`)
+    }
   }
   return parts.join(' · ')
 }
 
 const cardTags = (database) => {
-  const tags = [
-    {
-      name: getKbTypeLabel(database.kb_type || 'milvus'),
-      color: getKbTypeColor(database.kb_type || 'milvus')
-    }
-  ]
-  if (database.embedding_model_spec) {
-    tags.push({
-      name: database.embedding_model_spec.split('/').slice(-1)[0],
-      color: 'blue'
-    })
-  }
-  return tags
+  if (!database.category?.name) return []
+  return [{ name: database.category.name, color: 'blue' }]
 }
 
 const navigateToDatabase = (database) => {
@@ -593,6 +638,10 @@ const handleDatabaseAction = (key, database) => {
   }
 }
 
+watch(categoryFilter, (categoryId) => {
+  databaseStore.loadDatabases(categoryId)
+})
+
 watch(
   () => route.path,
   (newPath) => {
@@ -603,9 +652,11 @@ watch(
 )
 
 onMounted(() => {
-  loadChunkPresetOptions()
-  loadSupportedKbTypes()
-  databaseStore.loadDatabases()
+  if (userStore.isAdmin) {
+    loadChunkPresetOptions()
+    loadSupportedKbTypes()
+  }
+  loadCategories()
 })
 
 defineExpose({

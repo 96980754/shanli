@@ -10,7 +10,10 @@ from yuxi.knowledge.graphs.extractors import (
     LLMGraphExtractor,
     normalize_extraction_result,
 )
-from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+from yuxi.knowledge.graphs.milvus_graph_service import (
+    MilvusGraphService,
+    OntologySwitchRequiresResetError,
+)
 
 
 def _raw_graph_node(node_id: str, *, labels: list[str] | None = None, name: str | None = None) -> dict:
@@ -110,6 +113,79 @@ def test_llm_graph_extractor_appends_schema_to_fixed_prompt():
     assert "文本：\n张三任职于公司" in prompt
 
 
+def test_llm_graph_extractor_uses_ontology_messages_and_metadata(monkeypatch):
+    from yuxi.knowledge.graphs.ontology.registry import _build_ontology
+
+    ontology = _build_ontology(
+        {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "name": "Test",
+            "status": "active",
+            "entities": {"Product": {"description": "产品", "examples": []}},
+            "relations": {},
+        },
+        entity_aliases={"Product": {"MCSTARS": ["MCX系统"]}},
+        relation_aliases={},
+        properties={},
+        expected_registry_id="test",
+    )
+    entry = SimpleNamespace(
+        registry_id="test",
+        version="1.0.0",
+        digest="test-digest",
+        public_dict=lambda: {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "digest": "test-digest",
+            "name": "Test",
+            "status": "active",
+            "source": "uploaded",
+        },
+    )
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.resolve_ontology_registry",
+        lambda _registry_id, _version, _digest: entry,
+    )
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.load_ontology",
+        lambda _registry_id, _version, _digest: ontology,
+    )
+    extractor = LLMGraphExtractor(
+        {
+            "model_spec": "test/model",
+            "ontology_registry_id": "test",
+            "ontology_version": "1.0.0",
+        }
+    )
+    extractor.validate_options()
+
+    messages = extractor._build_messages("MCX系统")
+    result = extractor.normalize_result({"entities": [{"text": "MCX系统", "label": "Product"}], "relations": []})
+
+    assert messages[0]["role"] == "system"
+    assert "禁止创建列表之外" in messages[0]["content"]
+    assert messages[1] == {"role": "user", "content": "文本：\nMCX系统"}
+    assert result["entities"][0]["text"] == "MCSTARS"
+    assert result["metadata"]["schema_version"] == 1
+    assert result["metadata"]["ontology_registry_id"] == "test"
+    assert result["metadata"]["ontology_version"] == "1.0.0"
+    assert result["metadata"]["ontology_digest"] == "test-digest"
+
+
+def test_llm_graph_extractor_requires_domain_types_for_empty_scaffold():
+    extractor = LLMGraphExtractor(
+        {
+            "model_spec": "test/model",
+            "ontology_registry_id": "V4.1",
+            "ontology_version": "4.1.1",
+        }
+    )
+
+    with pytest.raises(ValueError, match="没有可用实体类型"):
+        extractor.validate_options()
+
+
 def test_graph_extractor_factory_supports_only_llm():
     assert GraphExtractorFactory.supported_types() == ["llm"]
 
@@ -166,6 +242,7 @@ async def test_milvus_graph_service_configure_persists_updated_concurrency():
         count_by_kb_id=AsyncMock(return_value=0),
         count_graph_pending_by_kb_id=AsyncMock(return_value=0),
         count_graph_indexed_by_kb_id=AsyncMock(return_value=0),
+        count_with_extraction_result_by_kb_id=AsyncMock(return_value=0),
     )
     graph_repo = SimpleNamespace(count_by_kb_id=AsyncMock(return_value=(3, 2)))
     service = MilvusGraphService(kb_repo=Repo(), chunk_repo=chunk_repo, graph_repo=graph_repo)
@@ -179,8 +256,162 @@ async def test_milvus_graph_service_configure_persists_updated_concurrency():
     status = await service.get_status("kb_test")
 
     assert status["config"]["extractor_options"]["concurrency_count"] == 9
+    assert status["ontology"] == {"mode": "legacy"}
     assert status["entity_count"] == 3
     assert status["relationship_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_rejects_ontology_switch_when_cached_results_exist(monkeypatch):
+    old_entry = SimpleNamespace(registry_id="old", version="1.0", digest="old-digest")
+    new_entry = SimpleNamespace(registry_id="new", version="2.0", digest="new-digest")
+    entries = {"old": old_entry, "new": new_entry}
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.ontology.resolve_ontology_registry",
+        lambda registry_id, _version, _digest: entries[registry_id],
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", lambda *_args, **_kwargs: MagicMock())
+    kb = SimpleNamespace(
+        kb_type="milvus",
+        additional_params={
+            "graph_build_config": {
+                "locked": False,
+                "extractor_type": "llm",
+                "extractor_options": {
+                    "model_spec": "test/model",
+                    "ontology_registry_id": "old",
+                    "ontology_version": "1.0",
+                    "ontology_digest": "old-digest",
+                },
+            }
+        },
+    )
+    kb_repo = SimpleNamespace(
+        get_by_kb_id=AsyncMock(return_value=kb),
+        update=AsyncMock(),
+    )
+    chunk_repo = SimpleNamespace(
+        count_graph_indexed_by_kb_id=AsyncMock(return_value=0),
+        count_with_extraction_result_by_kb_id=AsyncMock(return_value=1),
+    )
+    graph_repo = SimpleNamespace(count_by_kb_id=AsyncMock(return_value=(0, 0)))
+    service = MilvusGraphService(kb_repo=kb_repo, chunk_repo=chunk_repo, graph_repo=graph_repo)
+
+    with pytest.raises(OntologySwitchRequiresResetError, match="请先重置"):
+        await service.configure(
+            "kb_test",
+            extractor_type="llm",
+            extractor_options={
+                "model_spec": "test/model",
+                "ontology_registry_id": "new",
+                "ontology_version": "2.0",
+                "ontology_digest": "new-digest",
+            },
+            created_by="user_1",
+        )
+
+    kb_repo.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_allows_ontology_switch_without_graph_data(monkeypatch):
+    old_entry = SimpleNamespace(registry_id="old", version="1.0", digest="old-digest")
+    new_entry = SimpleNamespace(registry_id="new", version="2.0", digest="new-digest")
+    entries = {"old": old_entry, "new": new_entry}
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.ontology.resolve_ontology_registry",
+        lambda registry_id, _version, _digest: entries[registry_id],
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", lambda *_args, **_kwargs: MagicMock())
+    kb = SimpleNamespace(
+        kb_type="milvus",
+        additional_params={
+            "graph_build_config": {
+                "locked": False,
+                "extractor_type": "llm",
+                "extractor_options": {
+                    "model_spec": "test/model",
+                    "ontology_registry_id": "old",
+                    "ontology_version": "1.0",
+                    "ontology_digest": "old-digest",
+                },
+            }
+        },
+    )
+    kb_repo = SimpleNamespace(
+        get_by_kb_id=AsyncMock(return_value=kb),
+        update=AsyncMock(),
+    )
+    chunk_repo = SimpleNamespace(
+        count_graph_indexed_by_kb_id=AsyncMock(return_value=0),
+        count_with_extraction_result_by_kb_id=AsyncMock(return_value=0),
+    )
+    graph_repo = SimpleNamespace(count_by_kb_id=AsyncMock(return_value=(0, 0)))
+    service = MilvusGraphService(kb_repo=kb_repo, chunk_repo=chunk_repo, graph_repo=graph_repo)
+
+    await service.configure(
+        "kb_test",
+        extractor_type="llm",
+        extractor_options={
+            "model_spec": "test/model",
+            "ontology_registry_id": "new",
+            "ontology_version": "2.0",
+            "ontology_digest": "new-digest",
+        },
+        created_by="user_1",
+    )
+
+    kb_repo.update.assert_awaited_once()
+
+
+def test_llm_graph_extractor_rejects_cached_result_from_different_ontology(monkeypatch):
+    from yuxi.knowledge.graphs.ontology.registry import _build_ontology
+
+    ontology = _build_ontology(
+        {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "name": "Test",
+            "status": "active",
+            "entities": {"Product": {"description": "产品", "examples": []}},
+            "relations": {},
+        },
+        entity_aliases={},
+        relation_aliases={},
+        properties={},
+        expected_registry_id="test",
+    )
+    entry = SimpleNamespace(registry_id="test", version="1.0.0", digest="current")
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.resolve_ontology_registry",
+        lambda *_args: entry,
+    )
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.load_ontology",
+        lambda *_args: ontology,
+    )
+    extractor = LLMGraphExtractor(
+        {
+            "model_spec": "test/model",
+            "ontology_registry_id": "test",
+            "ontology_version": "1.0.0",
+            "ontology_digest": "current",
+        }
+    )
+    extractor.validate_options()
+
+    with pytest.raises(ValueError, match="不同的 Core Ontology"):
+        extractor.normalize_result(
+            {
+                "entities": [{"text": "F10", "label": "Product"}],
+                "relations": [],
+                "metadata": {
+                    "ontology_registry_id": "test",
+                    "ontology_version": "1.0.0",
+                    "ontology_digest": "old",
+                },
+            }
+        )
 
 
 def test_milvus_graph_service_writes_chunk_entity_and_relation():

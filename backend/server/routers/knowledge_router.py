@@ -5,16 +5,20 @@ import time
 import traceback
 from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
-from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
+from yuxi.knowledge.graphs.milvus_graph_service import (
+    GRAPH_TASK_TYPE,
+    MilvusGraphService,
+    OntologySwitchRequiresResetError,
+)
 from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
@@ -33,6 +37,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
+from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
@@ -40,7 +45,7 @@ from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
-from server.utils.auth_middleware import get_admin_user, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -57,8 +62,23 @@ class UpdateDatabaseRequest(BaseModel):
     name: str
     description: str
     llm_model_spec: str | None = None
+    category_id: int | None = None
     additional_params: dict | None = None
     share_config: dict | None = None
+
+
+class KnowledgeCategoryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    sort_order: int = 0
+
+
+class KnowledgeCategoryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    sort_order: int | None = None
 
 
 class KnowledgePermissionUpsertRequest(BaseModel):
@@ -258,12 +278,74 @@ async def _require_kb_grant_permission(current_user: User, kb_id: str) -> None:
     await _require_kb_permission(current_user, kb_id, "can_grant")
 
 
+def _raise_category_http_error(exc: KnowledgeCategoryError) -> None:
+    detail = {"code": exc.code, "message": exc.message, **exc.details}
+    raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+
+
+@knowledge.get("/categories")
+async def list_knowledge_categories(current_user: User = Depends(get_required_user)):
+    return {
+        "items": await KnowledgeCategoryService().list_categories(
+            include_usage_count=current_user.role == "superadmin"
+        )
+    }
+
+
+@knowledge.post("/categories", status_code=status.HTTP_201_CREATED)
+async def create_knowledge_category(
+    request: KnowledgeCategoryCreateRequest,
+    current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        item = await KnowledgeCategoryService().create_category(
+            name=request.name,
+            sort_order=request.sort_order,
+            actor_uid=current_user.uid,
+        )
+        return {"item": item}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
+
+@knowledge.put("/categories/{category_id}")
+async def update_knowledge_category(
+    category_id: int,
+    request: KnowledgeCategoryUpdateRequest,
+    current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        item = await KnowledgeCategoryService().update_category(
+            category_id,
+            name=request.name,
+            sort_order=request.sort_order,
+            actor_uid=current_user.uid,
+        )
+        return {"item": item}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
+
+@knowledge.delete("/categories/{category_id}")
+async def delete_knowledge_category(
+    category_id: int,
+    _current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        await KnowledgeCategoryService().delete_category(category_id)
+        return {"message": "分类已删除"}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
 
 @knowledge.get("/databases")
-async def get_databases(current_user: User = Depends(get_admin_user)):
+async def get_databases(
+    category_id: int | None = Query(default=None),
+    current_user: User = Depends(get_admin_user),
+):
     """获取所有知识库（根据用户权限过滤）"""
     try:
-        return await knowledge_base.get_databases_by_uid(current_user.uid)
+        return await knowledge_base.get_databases_by_uid(current_user.uid, category_id=category_id)
     except Exception as e:
         logger.error(f"获取数据库列表失败 {e}, {traceback.format_exc()}")
         return {"message": f"获取数据库列表失败 {e}", "databases": []}
@@ -319,6 +401,7 @@ async def create_database(
     description: str = Body(...),
     embedding_model_spec: str | None = Body(None),
     kb_type: str = Body("milvus"),
+    category_id: int = Body(...),
     additional_params: dict | None = Body(None),
     llm_model_spec: str | None = Body(None),
     share_config: dict | None = Body(None),
@@ -331,6 +414,11 @@ async def create_database(
         f"embedding_model_spec {embedding_model_spec}, share_config {share_config}"
     )
     try:
+        try:
+            await KnowledgeCategoryService().require_category(category_id)
+        except KnowledgeCategoryError as exc:
+            _raise_category_http_error(exc)
+
         # 先检查名称是否已存在
         if await knowledge_base.database_name_exists(database_name):
             raise HTTPException(
@@ -369,6 +457,7 @@ async def create_database(
             kb_type=kb_type,
             embedding_model_spec=embedding_model_spec,
             llm_model_spec=llm_model_spec,
+            category_id=category_id,
             share_config=share_config,
             created_by=current_user.uid,
             created_by_department_id=current_user.department_id,
@@ -389,18 +478,25 @@ async def create_database(
 
 
 @knowledge.get("/databases/accessible")
-async def get_accessible_databases(current_user: User = Depends(get_required_user)):
+async def get_accessible_databases(
+    category_id: int | None = Query(default=None),
+    current_user: User = Depends(get_required_user),
+):
     """获取当前用户有权访问的知识库列表（用于智能体配置）"""
     try:
-        databases = await knowledge_base.get_databases_by_uid(current_user.uid)
+        databases = await knowledge_base.get_databases_by_uid(current_user.uid, category_id=category_id)
 
         accessible = [
             {
                 "name": db.get("name", ""),
                 "kb_id": db.get("kb_id"),
                 "description": db.get("description", ""),
+                "created_at": db.get("created_at"),
                 "created_by": db.get("created_by"),
                 "kb_type": db.get("kb_type"),
+                "category_id": db.get("category_id"),
+                "category": db.get("category"),
+                "file_count": (db.get("stats") or {}).get("file_count", db.get("row_count", 0)),
                 "supports_documents": KnowledgeBaseFactory.get_kb_class(
                     (db.get("kb_type") or "milvus").lower()
                 ).supports_documents,
@@ -530,6 +626,14 @@ async def update_database_info(
     await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         update_llm_model_spec = "llm_model_spec" in data.model_fields_set
+        update_category_id = "category_id" in data.model_fields_set
+        if update_category_id:
+            if data.category_id is None:
+                raise HTTPException(status_code=400, detail="category_id 不能为空")
+            try:
+                await KnowledgeCategoryService().require_category(data.category_id)
+            except KnowledgeCategoryError as exc:
+                _raise_category_http_error(exc)
 
         additional_params = data.additional_params
         if additional_params is not None:
@@ -554,6 +658,8 @@ async def update_database_info(
             data.description,
             data.llm_model_spec,
             update_llm_model_spec=update_llm_model_spec,
+            category_id=data.category_id,
+            update_category_id=update_category_id,
             additional_params=additional_params,
             share_config=data.share_config,
             operator_uid=current_user.uid,
@@ -610,6 +716,8 @@ async def configure_graph_build(
             created_by=current_user.uid,
         )
         return {"message": "图谱抽取配置已锁定", "status": "success", "config": config}
+    except OntologySwitchRequiresResetError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         status_code = 409 if "已锁定" in str(e) else 400
         raise HTTPException(status_code=status_code, detail=str(e))

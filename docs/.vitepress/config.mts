@@ -58,6 +58,7 @@ export default defineConfig({
           { text: '配置系统详解', link: '/advanced/configuration' },
           { text: 'Langfuse 集成', link: '/advanced/langfuse-integration' },
           { text: '文档解析', link: '/advanced/document-processing' },
+          { text: 'Core Ontology 设计', link: '/advanced/core-ontology-design' },
           { text: '品牌自定义', link: '/advanced/branding' },
           { text: '其他配置', link: '/advanced/misc' },
           { text: '生产部署', link: '/advanced/deployment' },

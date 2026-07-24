@@ -1,4 +1,14 @@
-import { apiGet, apiPost, apiPut, apiDelete, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete, apiRequest } from './base'
+import {
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+  apiAdminGet,
+  apiAdminPost,
+  apiAdminPut,
+  apiAdminDelete,
+  apiRequest
+} from './base'
 
 /**
  * 知识库管理API模块
@@ -14,8 +24,9 @@ export const databaseApi = {
    * 获取所有知识库
    * @returns {Promise} - 知识库列表
    */
-  getDatabases: async () => {
-    return apiAdminGet('/api/knowledge/databases')
+  getDatabases: async (categoryId = null) => {
+    const query = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : ''
+    return apiAdminGet(`/api/knowledge/databases${query}`)
   },
 
   /**
@@ -87,8 +98,9 @@ export const databaseApi = {
    * 获取当前用户有权访问的知识库列表（用于智能体配置）
    * @returns {Promise} - 可访问的知识库列表
    */
-  getAccessibleDatabases: async () => {
-    return apiGet('/api/knowledge/databases/accessible')
+  getAccessibleDatabases: async (categoryId = null) => {
+    const query = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : ''
+    return apiGet(`/api/knowledge/databases/accessible${query}`)
   },
 
   /**
@@ -119,6 +131,14 @@ export const databaseApi = {
   deletePermission: async (kbId, permissionId) => {
     return apiAdminDelete(`/api/knowledge/databases/${kbId}/permissions/${permissionId}`)
   }
+}
+
+export const categoryApi = {
+  getCategories: async () => apiGet('/api/knowledge/categories'),
+  createCategory: async (data) => apiAdminPost('/api/knowledge/categories', data),
+  updateCategory: async (categoryId, data) =>
+    apiAdminPut(`/api/knowledge/categories/${categoryId}`, data),
+  deleteCategory: async (categoryId) => apiAdminDelete(`/api/knowledge/categories/${categoryId}`)
 }
 
 // =============================================================================

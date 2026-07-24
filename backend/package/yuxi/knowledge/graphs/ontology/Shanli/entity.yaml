@@ -1,0 +1,203 @@
+entities:
+  Product:
+    MCSTARS:
+    - MCSTARS
+    - MCX系统
+    - MCSTARS平台
+    - MCSTARS客户端
+    - MCSTARS系统
+    POCSTARS-MNO:
+    - POCSTARS-MNO
+    - POCSTARS MNO
+    - MNO
+    - MNO平台
+    - MNO公网对讲平台
+    POCSTARS-PRO:
+    - POCSTARS-PRO
+    - POCSTARS PRO
+    - PRO
+    - PRO方案
+    - PRO平台
+    POCSTARS-UC:
+    - POCSTARS-UC
+    - UC
+    - UC方案
+    POCSTARS MiniServer:
+    - POCSTARS MiniServer
+    - MiniServer
+    - Mini Server
+    - POCSTAR MiniServer
+    POCSTARS MDM:
+    - POCSTARS MDM
+    - MDM
+    - MDM平台
+    - MDM管理平台
+    POCSTARS定位平台:
+    - POCSTARS定位平台
+    - 定位平台
+    - 定位服务
+    - Geo-location
+  Feature:
+    组呼:
+    - 组呼
+    - 群组呼叫
+    - 群组对讲
+    - Group Call
+    - 语音对讲
+    - 语音组呼
+    单呼:
+    - 单呼
+    - 一对一呼叫
+    - Private Call
+    - 语音单呼
+    广播呼叫:
+    - 广播呼叫
+    - 语音广播
+    - 群组广播
+    紧急呼叫:
+    - 紧急呼叫
+    - 紧急通话
+    - 紧急语音呼叫
+    视频单呼:
+    - 视频单呼
+    - 视频呼叫
+    - 视频通话
+    视频组呼:
+    - 视频组呼
+    - 群组视频
+    视频推流:
+    - 视频推流
+    - 视频推拉流
+    - 视频回传
+    GIS定位:
+    - GIS定位
+    - GIS
+    - 地图定位
+    - 位置服务
+    - 实时GIS定位
+    录音录像:
+    - 录音录像
+    - 录音
+    - 录像
+    - 对讲录音
+    实时定位:
+    - 实时定位
+    - 位置定位
+    - 定位
+    轨迹回放:
+    - 轨迹回放
+    - 历史轨迹
+    电子围栏:
+    - 电子围栏
+    - 围栏
+    语音聊天组呼:
+    - 语音聊天组呼
+    - 聊天组呼
+    临时Adhoc组呼:
+    - 临时Adhoc组呼
+    - 临时组呼
+    强插强拆调度:
+    - 强插强拆调度
+    - 强插
+    - 强拆
+    - 强拉
+    SOS报警:
+    - SOS报警
+    - SOS
+    - 跌倒报警
+    - 紧急SOS
+    蓝牙:
+    - 蓝牙
+    - 蓝牙连接
+    - 蓝牙5.2
+    视频联动:
+    - 视频联动
+    - 视频关联
+    视频调度:
+    - 视频调度
+    - 视频指挥
+    - 视频上拉
+  Technology:
+    微服务架构:
+    - 微服务架构
+    - 微服务
+    - Microservices
+    WebRTC:
+    - WebRTC
+    - WebRTC协议
+    容器化:
+    - 容器化
+    - Docker
+    - 容器技术
+    高可用主备方案:
+    - 高可用主备方案
+    - 高可用
+    - 主备切换
+    - HA
+    融合定位技术:
+    - 融合定位技术
+    - 多模定位
+    UWB定位:
+    - UWB定位
+    - 超宽带定位
+    GPS定位:
+    - GPS定位
+    - 卫星定位
+    IMS网络架构:
+    - IMS网络架构
+    - IMS
+    用户数据隔离:
+    - 用户数据隔离
+    - 数据隔离
+    端到端加密:
+    - 端到端加密
+    - E2E加密
+  Scenario:
+    公安执法:
+    - 公安执法
+    - 执法
+    - 巡逻
+    铁路运输:
+    - 铁路运输
+    - 铁路
+    - 列车调度
+    应急救援:
+    - 应急救援
+    - 救援
+    - 应急指挥
+    企业调度:
+    - 企业调度
+    - 调度
+    - 指挥调度
+    大型活动安保:
+    - 大型活动安保
+    - 安保
+    - 活动保障
+    矿山作业:
+    - 矿山作业
+    - 矿业
+    - 井下
+  Industry:
+    公共安全:
+    - 公共安全
+    - 公安
+    - 消防
+    - 应急
+    交通运输:
+    - 交通运输
+    - 交通
+    - 铁路
+    - 航空
+    能源:
+    - 能源
+    - 电力
+    - 采矿
+    - 油气
+    工业制造:
+    - 工业制造
+    - 制造
+    - 工业
+    物流运输:
+    - 物流运输
+    - 物流
+    - 运输

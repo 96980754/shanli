@@ -315,11 +315,32 @@
             @select-model="(spec) => (graphConfigForm.model_spec = spec)"
           />
         </a-form-item>
-        <a-form-item label="Schema">
+        <a-form-item v-if="!isLegacyGraphConfig" label="Core Ontology">
+          <a-select
+            v-model:value="graphConfigForm.ontology_key"
+            :loading="ontologyRegistryLoading"
+            :options="ontologyRegistryOptions"
+            placeholder="选择 Core Ontology"
+            show-search
+            option-filter-prop="label"
+            @change="selectOntologyRegistry"
+          />
+          <div class="ontology-help">
+            Core Ontology 固化企业知识结构；领域扩展只能新增实体、关系、词典和属性，不能覆盖 Core。
+          </div>
+        </a-form-item>
+        <a-form-item :label="isLegacyGraphConfig ? '旧版自由文本 Schema' : '领域 Ontology 扩展（YAML）'">
           <a-textarea
+            v-if="isLegacyGraphConfig"
             v-model:value="graphConfigForm.schema"
             :rows="6"
-            placeholder="描述实体类型、关系类型和属性约束。后端会把 Schema 拼接到固定抽取 Prompt 中。"
+            placeholder="历史配置继续按原方式追加到固定抽取 Prompt。"
+          />
+          <a-textarea
+            v-else
+            v-model:value="graphConfigForm.domain_schema"
+            :rows="10"
+            placeholder="entities:\n  DomainEntity:\n    description: 领域实体\nrelations:\n  DOMAIN_RELATION:\n    source: DomainEntity\n    target: DomainEntity"
           />
         </a-form-item>
         <div class="form-grid two-columns">
@@ -365,6 +386,7 @@ import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
 import { getKbTypeLabel } from '@/utils/kb_utils'
 import { unifiedApi } from '@/apis/graph_api'
 import { graphBuildApi } from '@/apis/knowledge_api'
+import { ontologyRegistryApi } from '@/apis/ontology_api'
 import { Modal, message } from 'ant-design-vue'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import { useGraph } from '@/composables/useGraph'
@@ -400,6 +422,8 @@ const subgraphParams = reactive({
 const searchInput = ref('')
 const graphBuildStatus = ref(null)
 const graphBuildLoading = ref(false)
+const ontologyRegistries = ref([])
+const ontologyRegistryLoading = ref(false)
 const showGraphConfig = ref(false)
 let buildStatusPollTimer = null
 
@@ -470,6 +494,10 @@ const toggleSettingsPanel = () => {
 }
 
 const isEditingGraphConfig = computed(() => Boolean(graphBuildStatus.value?.locked))
+const isLegacyGraphConfig = computed(() => {
+  if (!isEditingGraphConfig.value) return false
+  return !graphBuildStatus.value?.config?.extractor_options?.ontology_registry_id
+})
 
 const graphConfigTitle = computed(() =>
   isEditingGraphConfig.value ? '修改图谱抽取配置' : '配置图谱抽取器'
@@ -503,6 +531,11 @@ watch(
 const graphConfigForm = reactive({
   extractor_type: 'llm',
   model_spec: '',
+  ontology_key: '',
+  ontology_registry_id: '',
+  ontology_version: '',
+  ontology_digest: '',
+  domain_schema: '',
   schema: '',
   concurrency_count: 50,
   model_params_text: ''
@@ -578,11 +611,61 @@ const parseModelParams = () => {
   return params
 }
 
+const ontologyEntryKey = (entry) =>
+  `${entry.registry_id}:${entry.version}:${entry.digest}`
+
+const ontologyRegistryOptions = computed(() =>
+  ontologyRegistries.value.map((entry) => ({
+    value: ontologyEntryKey(entry),
+    label: `${entry.name} · ${entry.registry_id} · ${entry.version}`
+  }))
+)
+
+const selectOntologyRegistry = (key) => {
+  const entry = ontologyRegistries.value.find((item) => ontologyEntryKey(item) === key)
+  if (!entry) return
+  graphConfigForm.ontology_registry_id = entry.registry_id
+  graphConfigForm.ontology_version = entry.version
+  graphConfigForm.ontology_digest = entry.digest
+}
+
+const findConfiguredOntology = (options, ontology) => {
+  const registryId = options.ontology_registry_id || ontology.registry_id
+  const version = options.ontology_version || ontology.version
+  const digest = options.ontology_digest || ontology.digest
+  return ontologyRegistries.value.find((entry) => {
+    if (entry.registry_id !== registryId || entry.version !== version) return false
+    return !digest || entry.digest === digest
+  })
+}
+
+const loadOntologyRegistries = async () => {
+  ontologyRegistryLoading.value = true
+  try {
+    const result = await ontologyRegistryApi.list()
+    ontologyRegistries.value = result.items || []
+  } catch (e) {
+    console.error('Failed to load ontology registries:', e)
+    message.error(getErrorDetail(e, '加载 Core Ontology 失败'))
+  } finally {
+    ontologyRegistryLoading.value = false
+  }
+}
+
 const fillGraphConfigForm = () => {
   const config = graphBuildStatus.value?.config
   const options = config?.extractor_options || {}
+  const ontology = graphBuildStatus.value?.ontology || {}
   graphConfigForm.extractor_type = 'llm'
   graphConfigForm.model_spec = options.model_spec || configStore.config?.default_model || ''
+  const selectedOntology = findConfiguredOntology(options, ontology)
+    || ontologyRegistries.value.find((entry) => entry.source === 'builtin')
+    || ontologyRegistries.value[0]
+  graphConfigForm.ontology_key = selectedOntology ? ontologyEntryKey(selectedOntology) : ''
+  graphConfigForm.ontology_registry_id = selectedOntology?.registry_id || ''
+  graphConfigForm.ontology_version = selectedOntology?.version || ''
+  graphConfigForm.ontology_digest = selectedOntology?.digest || ''
+  graphConfigForm.domain_schema = options.domain_schema || ''
   graphConfigForm.schema = options.schema || ''
   graphConfigForm.concurrency_count = Number(options.concurrency_count || 50)
   graphConfigForm.model_params_text = options.model_params
@@ -590,7 +673,11 @@ const fillGraphConfigForm = () => {
     : ''
 }
 
-const openGraphConfig = () => {
+const openGraphConfig = async () => {
+  if (!isLegacyGraphConfig.value) {
+    await loadOntologyRegistries()
+    if (!ontologyRegistries.value.length) return
+  }
   fillGraphConfigForm()
   showGraphConfig.value = true
 }
@@ -601,16 +688,54 @@ const selectExtractorType = (option) => {
 }
 
 const buildExtractorOptions = () => {
-  return {
+  const options = {
     model_spec: graphConfigForm.model_spec,
-    schema: graphConfigForm.schema.trim(),
     concurrency_count: graphConfigForm.concurrency_count || 50,
     model_params: parseModelParams()
   }
+  if (isLegacyGraphConfig.value) {
+    options.schema = graphConfigForm.schema.trim()
+    return options
+  }
+  options.ontology_registry_id = graphConfigForm.ontology_registry_id
+  options.ontology_version = graphConfigForm.ontology_version
+  options.ontology_digest = graphConfigForm.ontology_digest
+  options.domain_schema = graphConfigForm.domain_schema.trim()
+  return options
+}
+
+const hasExistingGraphData = () => {
+  const status = graphBuildStatus.value || {}
+  return [
+    status.indexed_chunks,
+    status.extraction_result_count,
+    status.entity_count,
+    status.relationship_count
+  ].some((count) => Number(count || 0) > 0)
+}
+
+const isOntologyChanged = () => {
+  const options = graphBuildStatus.value?.config?.extractor_options || {}
+  const ontology = graphBuildStatus.value?.ontology || {}
+  return (
+    graphConfigForm.ontology_registry_id !==
+      (options.ontology_registry_id || ontology.registry_id) ||
+    graphConfigForm.ontology_version !== (options.ontology_version || ontology.version) ||
+    graphConfigForm.ontology_digest !== (options.ontology_digest || ontology.digest)
+  )
 }
 
 const configureGraphBuild = async () => {
   try {
+    if (
+      !isLegacyGraphConfig.value &&
+      isEditingGraphConfig.value &&
+      isOntologyChanged() &&
+      hasExistingGraphData()
+    ) {
+      message.warning('当前知识库已有图谱或抽取数据，请先重置后再切换 Core Ontology')
+      return
+    }
     document.activeElement?.blur()
     await nextTick()
     await graphBuildApi.configure(kbId.value, {
@@ -790,6 +915,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="less">
+.ontology-help {
+  margin-top: 6px;
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .graph-section {
   height: 100%;
   display: flex;
