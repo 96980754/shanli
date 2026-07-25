@@ -102,6 +102,7 @@ class KnowledgeFile(Base):
     token_count = Column(BigInteger, default=0)
     content_type = Column(String(64))
     processing_params = Column(JSON_VALUE)
+    parse_metadata = Column(JSON_VALUE)
     processing_stage = Column(String(64))
     processing_progress = Column(Integer, nullable=False, default=0)
     processing_task_id = Column(String(64))
@@ -145,6 +146,7 @@ class KnowledgeChunk(Base):
     ent_ids = Column(JSON_VALUE)
     tags = Column(JSON_VALUE)
     extraction_result = Column(JSON_VALUE)
+    source_metadata = Column(JSON_VALUE)
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
 

@@ -26,6 +26,7 @@ class KnowledgeChunkRepository:
         "ent_ids",
         "tags",
         "extraction_result",
+        "source_metadata",
     }
 
     @staticmethod

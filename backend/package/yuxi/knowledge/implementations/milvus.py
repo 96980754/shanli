@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import time
 import traceback
 import weakref
@@ -527,6 +528,7 @@ class MilvusKB(KnowledgeBase):
                 "ent_ids": chunk.get("ent_ids"),
                 "tags": chunk.get("tags"),
                 "extraction_result": chunk.get("extraction_result"),
+                "source_metadata": chunk.get("source_metadata"),
             }
             for chunk in chunks
         ]
@@ -621,12 +623,86 @@ class MilvusKB(KnowledgeBase):
         if not file_ids:
             return
 
+        chunk_ids = [str(chunk_id) for chunk in chunks if (chunk_id := (chunk.get("metadata") or {}).get("chunk_id"))]
         filenames = await KnowledgeFileRepository().get_filenames_by_file_ids(kb_id=kb_id, file_ids=file_ids)
+        source_metadata_by_chunk_id = {
+            record.chunk_id: record.source_metadata
+            for record in await KnowledgeChunkRepository().list_by_chunk_ids(chunk_ids)
+            if isinstance(record.source_metadata, dict)
+        }
         for chunk in chunks:
             metadata = chunk.get("metadata")
             if not isinstance(metadata, dict):
                 continue
+            source_metadata = source_metadata_by_chunk_id.get(str(metadata.get("chunk_id") or ""))
+            if source_metadata:
+                metadata["source_metadata"] = source_metadata
             metadata["source"] = filenames.get(str(metadata.get("file_id") or ""), "") or "未知来源"
+
+    @staticmethod
+    def _attach_source_metadata(chunks: list[dict], parse_metadata: dict | None) -> None:
+        if not isinstance(parse_metadata, dict):
+            return
+        parser_metadata = {
+            key: parse_metadata.get(key) for key in ("parser_name", "parser_version") if parse_metadata.get(key)
+        }
+        blocks = parse_metadata.get("blocks")
+        blocks = blocks if isinstance(blocks, list) else []
+        for chunk in chunks:
+            source_metadata = dict(parser_metadata)
+            chunk_start = chunk.get("start_char_pos")
+            chunk_end = chunk.get("end_char_pos")
+            matched_block = None
+            if isinstance(chunk_start, int):
+                effective_end = chunk_end if isinstance(chunk_end, int) else chunk_start + 1
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    block_start = block.get("start_char_pos")
+                    block_end = block.get("end_char_pos")
+                    if not isinstance(block_start, int) or not isinstance(block_end, int):
+                        continue
+                    if effective_end <= block_start or chunk_start >= block_end:
+                        continue
+                    matched_block = block
+                    break
+            if matched_block is None:
+                normalized_chunk = " ".join(str(chunk.get("content") or "").casefold().split())
+                chunk_tokens = {
+                    token for token in re.findall(r"[A-Za-z0-9\u3400-\u9fff]+", normalized_chunk) if len(token) >= 4
+                }
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    normalized_block = " ".join(
+                        str(block.get("text") or block.get("markdown") or "").casefold().split()
+                    )
+                    block_tokens = {
+                        token for token in re.findall(r"[A-Za-z0-9\u3400-\u9fff]+", normalized_block) if len(token) >= 4
+                    }
+                    overlapping_tokens = chunk_tokens & block_tokens
+                    has_distinctive_overlap = len(overlapping_tokens) >= 2 or any(
+                        len(token) >= 8 for token in overlapping_tokens
+                    )
+                    if normalized_block and (
+                        normalized_block in normalized_chunk
+                        or normalized_chunk in normalized_block
+                        or has_distinctive_overlap
+                    ):
+                        matched_block = block
+                        break
+            if matched_block is not None:
+                for target_key, source_key in (
+                    ("block_type", "block_type"),
+                    ("block_order", "order"),
+                    ("page_number", "page_number"),
+                    ("sheet_name", "sheet_name"),
+                    ("slide_number", "slide_number"),
+                ):
+                    if matched_block.get(source_key) is not None:
+                        source_metadata[target_key] = matched_block[source_key]
+            if source_metadata:
+                chunk["source_metadata"] = source_metadata
 
     async def _build_file_name_expr(self, kb_id: str, file_name: str | None) -> str | None:
         if not file_name:
@@ -745,12 +821,15 @@ class MilvusKB(KnowledgeBase):
 
             # Split
             chunks = self._split_text_into_chunks(markdown_content, file_id, filename, params)
+            self._attach_source_metadata(chunks, file_meta.get("parse_metadata"))
             logger.info(
                 f"Split {filename} into {len(chunks)} chunks with params: "
                 f"chunk_preset_id={params.get('chunk_preset_id')}, "
                 f"chunk_parser_config={params.get('chunk_parser_config')}"
             )
 
+            if not chunks:
+                raise ValueError("Parsed document produced no chunks; indexing was not started")
             chunk_stats = self._calculate_chunk_stats(chunks)
 
             # Clean up existing chunks if any (for re-indexing)
@@ -759,8 +838,8 @@ class MilvusKB(KnowledgeBase):
             else:
                 await self.delete_file_chunks_only(kb_id, file_id)
 
-            if chunks:
-                await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
+            await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
+            await asyncio.to_thread(collection.flush)
 
             logger.info(f"Indexed file {file_id} into Milvus")
 
@@ -929,18 +1008,22 @@ class MilvusKB(KnowledgeBase):
 
                 # 重新解析文件为 markdown
                 parse_params = {**resolved_params, "image_bucket": "public", "image_prefix": f"{kb_id}/kb-images"}
-                markdown_content = await Parser.aparse(source=file_path, params=parse_params)
+                parse_result = await Parser.aparse_result(source=file_path, params=parse_params)
+                markdown_content = parse_result.markdown
 
                 # 重新生成 chunks
                 chunks = self._split_text_into_chunks(markdown_content, file_id, filename, resolved_params)
+                self._attach_source_metadata(chunks, parse_result.to_metadata())
                 logger.info(f"Split {filename} into {len(chunks)} chunks")
+                if not chunks:
+                    raise ValueError("Parsed document produced no chunks; indexing was not started")
                 chunk_stats = self._calculate_chunk_stats(chunks)
 
                 # 先删除现有 chunks，保留文件元数据
                 await self.delete_file_chunks_only(kb_id, file_id)
 
-                if chunks:
-                    await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
+                await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
+                await asyncio.to_thread(collection.flush)
 
                 logger.info(f"Updated file {file_path} in Milvus. Done.")
 
@@ -950,7 +1033,12 @@ class MilvusKB(KnowledgeBase):
                 await KnowledgeFileRepository().update_fields(
                     file_id=file_id,
                     kb_id=kb_id,
-                    data={"status": FileStatus.INDEXED, "error_message": None, **chunk_stats},
+                    data={
+                        "status": FileStatus.INDEXED,
+                        "error_message": None,
+                        "parse_metadata": parse_result.to_metadata(),
+                        **chunk_stats,
+                    },
                 )
                 await self.refresh_database_stats(kb_id)
 

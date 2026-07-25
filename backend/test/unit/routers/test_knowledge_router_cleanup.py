@@ -536,7 +536,7 @@ async def test_index_pending_documents_uses_pending_statuses_and_params(monkeypa
     ]
 
 
-async def test_add_documents_auto_index_returns_one_final_result_per_item(monkeypatch):
+async def test_add_documents_defaults_to_auto_index_and_returns_one_final_result_per_item(monkeypatch):
     context = FakeTaskContext()
     item = "minio://knowledgebases/kb_1/upload/demo.txt"
 
@@ -585,7 +585,7 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
     result = await knowledge_router.add_documents(
         "kb_1",
         [item],
-        params={"content_type": "file", "auto_index": True, "content_hashes": {item: "hash_1"}},
+        params={"content_type": "file", "content_hashes": {item: "hash_1"}},
         current_user=SimpleNamespace(uid="uid-user"),
     )
 
@@ -593,6 +593,127 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
     assert context.result["submitted"] == 1
     assert context.result["failed"] == 0
     assert context.result["items"] == [{"file_id": "file_1", "status": "indexed"}]
+
+
+async def test_add_documents_explicit_auto_index_false_stops_after_parse(monkeypatch):
+    context = FakeTaskContext()
+    item = "minio://knowledgebases/kb_1/upload/demo.txt"
+    index_calls = []
+
+    async def allow(*_args, **_kwargs):
+        return None
+
+    async def fake_get_database_info(_kb_id: str) -> dict:
+        return {"name": "测试知识库"}
+
+    async def fake_create_uploaded_document(self, **_kwargs):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded"},
+            existing_file_id=None,
+        )
+
+    async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
+        return {"file_id": file_id, "status": "parsed"}
+
+    async def fail_index(*args, **kwargs):
+        index_calls.append((args, kwargs))
+        raise AssertionError("explicit auto_index=false must not index")
+
+    async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
+        await coroutine(context)
+        return SimpleNamespace(id="task_1")
+
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fail_index)
+    monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
+
+    result = await knowledge_router.add_documents(
+        "kb_1",
+        [item],
+        params={
+            "content_type": "file",
+            "auto_index": False,
+            "content_hashes": {item: "hash_1"},
+        },
+        current_user=SimpleNamespace(uid="uid-user"),
+    )
+
+    assert result["status"] == "queued"
+    assert context.result["items"] == [{"file_id": "file_1", "status": "parsed"}]
+    assert index_calls == []
+
+
+async def test_add_documents_keeps_processing_siblings_when_one_parse_fails(monkeypatch):
+    context = FakeTaskContext()
+    items = [
+        "minio://knowledgebases/kb_1/upload/bad.txt",
+        "minio://knowledgebases/kb_1/upload/good.txt",
+    ]
+    created_index = 0
+
+    async def allow(*_args, **_kwargs):
+        return None
+
+    async def fake_get_database_info(_kb_id: str) -> dict:
+        return {"name": "测试知识库"}
+
+    async def fake_create_uploaded_document(self, **_kwargs):
+        nonlocal created_index
+        created_index += 1
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": f"file_{created_index}", "status": "uploaded"},
+            existing_file_id=None,
+        )
+
+    async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
+        if file_id == "file_1":
+            raise ValueError("文档未提取到有效文本")
+        return {"file_id": file_id, "status": "parsed"}
+
+    async def fake_update_file_params(*_args, **_kwargs):
+        return None
+
+    async def fake_index_file(kb_id: str, file_id: str, operator_id: str | None = None, params=None):
+        return {"file_id": file_id, "status": "indexed"}
+
+    async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
+        await coroutine(context)
+        return SimpleNamespace(id="task_1")
+
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
+    monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.add_documents(
+            "kb_1",
+            items,
+            params={"content_type": "file"},
+            current_user=SimpleNamespace(uid="uid-user"),
+        )
+
+    assert exc_info.value.status_code == 500
+    assert context.result["items"][0]["error_type"] == "parse_failed"
+    assert context.result["items"][1] == {"file_id": "file_2", "status": "indexed"}
+    assert context.result["failed"] == 1
+    assert context.result["submitted"] == 2
 
 
 async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch):

@@ -15,7 +15,12 @@ from yuxi import config
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
-from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
+from yuxi.knowledge.parser.unified import (
+    SUPPORTED_FILE_EXTENSIONS,
+    Parser,
+    is_supported_file_extension,
+    validate_document_bytes,
+)
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url, sanitize_processing_error
 from yuxi.knowledge.utils.mindmap_utils import (
@@ -796,7 +801,7 @@ async def add_documents(
     params = _ensure_document_params(params)
     content_type = params.get("content_type", "file")
     # 自动入库参数
-    auto_index = params.get("auto_index", False)
+    auto_index = params.get("auto_index", True)
     indexing_params = {}
     chunk_preset_id = params.get("chunk_preset_id")
     if chunk_preset_id:
@@ -2063,6 +2068,10 @@ async def import_workspace_files(
             raise HTTPException(status_code=400, detail="文件过大，当前仅支持 100 MB 以内的工作区文件")
 
         file_bytes = await asyncio.to_thread(target.read_bytes)
+        try:
+            validate_document_bytes(filename, file_bytes)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         content_hash = await calculate_content_hash(file_bytes)
 
         file_exists = await knowledge_base.file_existed_in_db(kb_id, content_hash)
@@ -2135,6 +2144,11 @@ async def upload_file(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        validate_document_bytes(filename, file_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     content_hash = await calculate_content_hash(file_bytes)
 

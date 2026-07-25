@@ -272,6 +272,42 @@ async def test_second_stage_hashes_server_object_and_ignores_client_hash(monkeyp
     assert data["filename"] == "folder/Demo.txt"
 
 
+async def test_second_stage_revalidates_server_object_signature_and_removes_invalid_stage(monkeypatch):
+    deleted = []
+
+    class NeverCalledRepository:
+        async def exists_by_storage_path(self, **_kwargs):
+            return False
+
+        async def create_document_with_duplicate_guard(self, **_kwargs):
+            raise AssertionError("invalid staged object must not create a document")
+
+    class FakeMinio:
+        public_endpoint = "localhost:9000"
+
+        async def adownload_file(self, _bucket_name, _object_name):
+            return b"not a real PDF"
+
+        async def adelete_file(self, bucket_name, object_name):
+            deleted.append((bucket_name, object_name))
+
+    fake_minio = FakeMinio()
+    monkeypatch.setattr(ingestion_module, "get_minio_client", lambda: fake_minio)
+
+    service = DocumentIngestionService(file_repository=NeverCalledRepository())
+    with pytest.raises(ValueError, match="PDF 文件签名"):
+        await service.create_uploaded_document(
+            kb_id="kb_1",
+            item="http://localhost:9000/knowledgebases/kb_1/upload/demo_1234567890123.pdf",
+            params={},
+            operator_id="user_1",
+        )
+
+    assert deleted == [
+        ("knowledgebases", "kb_1/upload/demo_1234567890123.pdf"),
+    ]
+
+
 async def test_preprocessed_metadata_cannot_bypass_server_object_hash(monkeypatch):
     class FakeMinio:
         public_endpoint = "localhost:9000"

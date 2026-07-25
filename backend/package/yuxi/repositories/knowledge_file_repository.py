@@ -58,6 +58,7 @@ class KnowledgeFileRepository:
         "token_count",
         "content_type",
         "processing_params",
+        "parse_metadata",
         "processing_stage",
         "processing_progress",
         "processing_task_id",

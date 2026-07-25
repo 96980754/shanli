@@ -181,6 +181,16 @@ class DocumentIngestionService:
             raise
         replace_file_id = self._normalize_optional_string(params.get("replace_file_id"))
         file_bytes = await minio_client.adownload_file(bucket_name, object_name)
+        preprocessed_map = params.get("_preprocessed_map")
+        is_preprocessed = isinstance(preprocessed_map, dict) and item in preprocessed_map
+        if not is_preprocessed:
+            from yuxi.knowledge.parser.unified import validate_document_bytes
+
+            try:
+                validate_document_bytes(staged_filename, file_bytes)
+            except ValueError:
+                await self._delete_staged_object_if_unclaimed(kb_id, item, bucket_name, object_name)
+                raise
         content_hash = await calculate_content_hash(file_bytes)
         file_size = len(file_bytes)
 
@@ -202,8 +212,6 @@ class DocumentIngestionService:
         else:
             requested_source_path = None
         trusted_params["source_path"] = requested_source_path or staged_filename
-        preprocessed_map = params.get("_preprocessed_map")
-        is_preprocessed = isinstance(preprocessed_map, dict) and item in preprocessed_map
         if is_preprocessed:
             preprocessed_info = preprocessed_map[item]
             if not isinstance(preprocessed_info, dict):

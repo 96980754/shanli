@@ -174,3 +174,5 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "processing_task_lease_expires_at TIMESTAMPTZ" in statements
     assert "processing_task_updated_at TIMESTAMPTZ" in statements
     assert "processing_task_attempt INTEGER NOT NULL DEFAULT 0" in statements
+    assert "parse_metadata JSONB" in statements
+    assert "source_metadata JSONB" in statements

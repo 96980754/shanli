@@ -169,6 +169,7 @@ class KnowledgeBase(ABC):
                     file_processing_params=record.processing_params,
                 )
             ),
+            "parse_metadata": getattr(record, "parse_metadata", None),
             "processing_stage": getattr(record, "processing_stage", None),
             "processing_progress": max(0, min(int(getattr(record, "processing_progress", 0) or 0), 100)),
             "processing_task_id": getattr(record, "processing_task_id", None),
@@ -208,6 +209,7 @@ class KnowledgeBase(ABC):
             "token_count": int(meta.get("token_count") or 0),
             "content_type": meta.get("content_type"),
             "processing_params": sanitize_processing_params(meta.get("processing_params")),
+            "parse_metadata": meta.get("parse_metadata"),
             "processing_stage": meta.get("processing_stage"),
             "processing_progress": max(0, min(int(meta.get("processing_progress") or 0), 100)),
             "processing_task_id": meta.get("processing_task_id"),
@@ -421,10 +423,12 @@ class KnowledgeBase(ABC):
             params["image_bucket"] = "public"
             params["image_prefix"] = f"{kb_id}/kb-images"
 
-            markdown_content = await Parser.aparse(
+            parse_result = await Parser.aparse_result(
                 source=file_path,
                 params=params,
             )
+            markdown_content = parse_result.markdown
+            parse_metadata = parse_result.to_metadata()
 
             # Save Markdown to MinIO
             markdown_file_path = await self._save_markdown_to_minio(kb_id, file_id, markdown_content)
@@ -432,6 +436,7 @@ class KnowledgeBase(ABC):
             # Update metadata
             file_meta["status"] = FileStatus.PARSED
             file_meta["markdown_file"] = markdown_file_path
+            file_meta["parse_metadata"] = parse_metadata
             file_meta["error"] = None
             file_meta["updated_at"] = utc_isoformat()
             if operator_id:
@@ -443,6 +448,7 @@ class KnowledgeBase(ABC):
             update_data = {
                 "status": FileStatus.PARSED,
                 "markdown_file": markdown_file_path,
+                "parse_metadata": parse_metadata,
                 "processing_stage": "replacement_preparing" if is_replacement else None,
                 "processing_progress": 55 if is_replacement else 100,
                 "error_message": None,
@@ -515,6 +521,7 @@ class KnowledgeBase(ABC):
         update_data = {
             "status": FileStatus.UPLOADED,
             "markdown_file": None,
+            "parse_metadata": None,
             "processing_stage": None,
             "processing_progress": 0,
             "error_message": None,

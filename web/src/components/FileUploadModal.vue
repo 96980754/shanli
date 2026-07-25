@@ -515,7 +515,7 @@ watch(
   }
 )
 
-const DEFAULT_SUPPORTED_TYPES = ['.txt', '.pdf', '.jpg', '.jpeg', '.md', '.docx']
+const DEFAULT_SUPPORTED_TYPES = ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.pptx']
 
 const normalizeExtensions = (extensions) => {
   if (!Array.isArray(extensions)) {
@@ -545,7 +545,9 @@ const acceptedFileTypes = computed(() => {
     return ''
   }
   const exts = new Set(supportedFileTypes.value)
-  exts.add('.zip')
+  if (isFolderUpload.value) {
+    exts.add('.zip')
+  }
   return Array.from(exts).join(',')
 })
 
@@ -917,7 +919,7 @@ const processingParams = ref({
 })
 
 // 自动入库相关
-const autoIndex = ref(false)
+const autoIndex = ref(true)
 const indexParams = ref({
   chunk_preset_id: '',
   chunk_parser_config: {}
@@ -1501,8 +1503,8 @@ const chunkData = async () => {
       }
 
       const params = { ...processingParams.value, content_hashes, file_sizes }
+      params.auto_index = autoIndex.value
       if (autoIndex.value) {
-        params.auto_index = true
         Object.assign(params, buildAutoIndexParams())
       }
 
@@ -1560,8 +1562,8 @@ const chunkData = async () => {
     try {
       store.state.chunkLoading = true
       const params = { ...processingParams.value }
+      params.auto_index = autoIndex.value
       if (autoIndex.value) {
-        params.auto_index = true
         Object.assign(params, buildAutoIndexParams())
       }
 
@@ -1656,8 +1658,8 @@ const chunkData = async () => {
       replace_file_ids,
       source_paths
     }
+    params.auto_index = autoIndex.value
     if (autoIndex.value) {
-      params.auto_index = true
       Object.assign(params, buildAutoIndexParams())
     }
 

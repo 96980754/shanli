@@ -173,6 +173,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS token_count BIGINT DEFAULT 0",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS content_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_params JSONB",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parse_metadata JSONB",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)",
             (
                 "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
@@ -323,11 +324,13 @@ class PostgresManager(metaclass=SingletonMeta):
                 ent_ids JSONB,
                 tags JSONB,
                 extraction_result JSONB,
+                source_metadata JSONB,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
             """,
             "ALTER TABLE IF EXISTS knowledge_chunks ADD COLUMN IF NOT EXISTS extraction_result JSONB",
+            "ALTER TABLE IF EXISTS knowledge_chunks ADD COLUMN IF NOT EXISTS source_metadata JSONB",
             """
             CREATE TABLE IF NOT EXISTS knowledge_graph_entities (
                 id SERIAL PRIMARY KEY,

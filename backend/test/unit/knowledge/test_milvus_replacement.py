@@ -50,7 +50,7 @@ def build_replacement_kb(monkeypatch, *, verify_result: bool):
     kb._calculate_chunk_stats = lambda _chunks: {"chunk_count": 1, "token_count": 1}
 
     async def get_collection(_kb_id):
-        return object()
+        return SimpleNamespace(flush=lambda: None)
 
     async def load_file_meta(_kb_id, _file_id):
         return dict(file_meta)
@@ -123,7 +123,7 @@ async def test_replacement_parse_failure_does_not_activate_or_modify_old_version
         raise RuntimeError("deterministic parse failure")
 
     monkeypatch.setattr(repository_module, "KnowledgeFileRepository", FakeRepository)
-    monkeypatch.setattr(parser_module.Parser, "aparse", fail_parse)
+    monkeypatch.setattr(parser_module.Parser, "aparse_result", fail_parse)
 
     kb = object.__new__(MilvusKB)
     kb._file_record_to_meta = lambda _record: {
@@ -219,3 +219,53 @@ async def test_replacement_vector_cleanup_preserves_postgres_chunks(monkeypatch)
 
     assert events == ["delete-vectors:old", "flush", "refresh"]
     assert [chunk.chunk_id for chunk in await FakeChunkRepository().list_by_file_id("old")] == ["chunk-old"]
+
+
+async def test_chunk_source_metadata_uses_overlapping_parser_block_without_fake_precision():
+    kb = object.__new__(MilvusKB)
+    chunks = [
+        {
+            "chunk_id": "chunk-1",
+            "start_char_pos": 12,
+            "end_char_pos": 25,
+            "content": "sheet content",
+        }
+    ]
+    parse_metadata = {
+        "parser_name": "openpyxl",
+        "parser_version": "3.1",
+        "blocks": [
+            {
+                "block_type": "table",
+                "order": 0,
+                "sheet_name": "Summary",
+                "start_char_pos": 10,
+                "end_char_pos": 30,
+            }
+        ],
+    }
+
+    kb._attach_source_metadata(chunks, parse_metadata)
+
+    assert chunks[0]["source_metadata"] == {
+        "parser_name": "openpyxl",
+        "parser_version": "3.1",
+        "block_type": "table",
+        "block_order": 0,
+        "sheet_name": "Summary",
+    }
+
+
+async def test_chunk_source_metadata_keeps_parser_identity_when_no_block_overlap():
+    kb = object.__new__(MilvusKB)
+    chunks = [{"chunk_id": "chunk-1", "content": "content"}]
+
+    kb._attach_source_metadata(
+        chunks,
+        {"parser_name": "native_text", "parser_version": "1", "blocks": []},
+    )
+
+    assert chunks[0]["source_metadata"] == {
+        "parser_name": "native_text",
+        "parser_version": "1",
+    }
