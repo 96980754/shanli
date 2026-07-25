@@ -9,8 +9,7 @@ import {
   FolderKanban,
   PanelLeftClose,
   PanelLeftOpen,
-  MessageCirclePlus,
-  Search
+  MessageCirclePlus
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -307,19 +306,6 @@ provide('settingsModal', {
           <span class="nav-text">{{ primaryNavItem.name }}</span>
         </RouterLink>
 
-        <button
-          type="button"
-          class="nav-item"
-          :class="{ active: conversationSearchOpen }"
-          @click.stop="openConversationSearch"
-        >
-          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>搜索对话</template>
-            <Search class="icon" size="18" />
-          </a-tooltip>
-          <span class="nav-text">搜索对话</span>
-        </button>
-
         <RouterLink
           v-for="(item, index) in secondaryNavItems"
           :key="index"
@@ -354,6 +340,7 @@ provide('settingsModal', {
           @rename-chat="handleRenameChat"
           @toggle-pin="handleTogglePinChat"
           @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
+          @search="openConversationSearch"
         />
       </div>
       <div class="foo">
