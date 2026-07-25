@@ -400,10 +400,6 @@ export const mindmapApi = {
 // =============================================================================
 
 export const queryApi = {
-  globalSearch: async (query, limit = 10) => {
-    return apiPost('/api/knowledge/search', { query, limit })
-  },
-
   /**
    * 查询知识库
    * @param {string} kbId - 知识库ID
@@ -471,17 +467,6 @@ export const queryApi = {
   getSampleQuestions: async (kbId) => {
     return apiGet(`/api/knowledge/databases/${kbId}/sample-questions`)
   }
-}
-
-export const documentBrowseApi = {
-  search: async (params = {}) => {
-    const query = new URLSearchParams()
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') query.append(key, value)
-    })
-    return apiGet(`/api/knowledge/documents/search?${query}`)
-  },
-  hot: async (limit = 10) => apiGet(`/api/knowledge/documents/hot?limit=${limit}`)
 }
 
 // =============================================================================

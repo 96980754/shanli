@@ -75,18 +75,6 @@ const router = createRouter({
       ]
     },
     {
-      path: '/knowledge-browser',
-      component: AppLayout,
-      children: [
-        {
-          path: '',
-          name: 'KnowledgeBrowser',
-          component: () => import('../views/KnowledgeBrowserView.vue'),
-          meta: { keepAlive: false, requiresAuth: true }
-        }
-      ]
-    },
-    {
       path: '/model-manage',
       name: 'model-manage',
       component: AppLayout,

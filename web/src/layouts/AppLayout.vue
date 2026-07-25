@@ -28,7 +28,6 @@ import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
-import GlobalKnowledgeSearchModal from '@/components/GlobalKnowledgeSearchModal.vue'
 
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
@@ -51,7 +50,6 @@ const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
-const globalKnowledgeSearchOpen = ref(false)
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -123,13 +121,6 @@ const mainList = computed(() => {
   })
 
   items.push({
-    name: '知识库浏览',
-    path: '/knowledge-browser',
-    icon: LibraryBig,
-    activeIcon: LibraryBig
-  })
-
-  items.push({
     name: '智能体扩展',
     path: '/extensions',
     activePaths: ['/extensions'],
@@ -177,10 +168,6 @@ const toggleSidebar = () => {
 
 const openConversationSearch = () => {
   conversationSearchOpen.value = true
-}
-
-const openGlobalKnowledgeSearch = () => {
-  globalKnowledgeSearchOpen.value = true
 }
 
 const initAgentNavigation = async () => {
@@ -284,18 +271,6 @@ provide('settingsModal', {
           <PanelLeftOpen class="brand-expand-icon" size="20" />
         </button>
 
-        <button
-          type="button"
-          class="nav-item"
-          :class="{ active: globalKnowledgeSearchOpen }"
-          @click.stop="openGlobalKnowledgeSearch"
-        >
-          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>全知识库搜索</template>
-            <Search class="icon" size="18" />
-          </a-tooltip>
-          <span class="nav-text">全库搜索</span>
-        </button>
         <button
           v-if="!sidebarCollapsed"
           type="button"
@@ -419,7 +394,6 @@ provide('settingsModal', {
       @create-thread="handleCreateConversationFromSearch"
       @thread-found="handleSearchThreadFound"
     />
-    <GlobalKnowledgeSearchModal v-model:open="globalKnowledgeSearchOpen" />
 
     <!-- Debug Modal -->
     <a-modal
