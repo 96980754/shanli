@@ -121,7 +121,7 @@ const mainList = computed(() => {
   })
 
   items.push({
-    name: '智能体扩展',
+    name: userStore.isAdmin ? '智能体扩展' : '知识库',
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,

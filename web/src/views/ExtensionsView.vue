@@ -3,7 +3,7 @@
     <PageHeader
       v-if="!isDetailPage"
       v-model:active-key="activeTab"
-      title="智能体扩展"
+      :title="userStore.isAdmin ? '智能体扩展' : '知识库'"
       :tabs="extensionTabs"
       :loading="activeChildLoading"
       :show-border="true"
@@ -54,10 +54,7 @@ const adminExtensionTabs = [
   { key: 'mcp', label: 'MCP' },
   { key: 'skills', label: 'Skills' }
 ]
-const userExtensionTabs = [
-  { key: 'knowledge', label: '知识库' },
-  { key: 'skills', label: 'Skills' }
-]
+const userExtensionTabs = [{ key: 'knowledge', label: '知识库' }]
 const extensionTabs = computed(() => (userStore.isAdmin ? adminExtensionTabs : userExtensionTabs))
 const allowedTabKeys = computed(() => extensionTabs.value.map((tab) => tab.key))
 const defaultTabKey = computed(() => extensionTabs.value[0]?.key || 'skills')
