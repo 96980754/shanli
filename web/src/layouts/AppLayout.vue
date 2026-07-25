@@ -113,12 +113,14 @@ const mainList = computed(() => {
     }
   ]
 
-  items.push({
-    name: '工作区',
-    path: '/workspace',
-    icon: FolderKanban,
-    activeIcon: FolderKanban
-  })
+  if (userStore.isAdmin) {
+    items.push({
+      name: '工作区',
+      path: '/workspace',
+      icon: FolderKanban,
+      activeIcon: FolderKanban
+    })
+  }
 
   items.push({
     name: userStore.isAdmin ? '智能体扩展' : '知识库',
