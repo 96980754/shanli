@@ -83,7 +83,7 @@ const router = createRouter({
           path: '',
           name: 'ModelManageComp',
           component: () => import('../views/ModelManageView.vue'),
-          meta: { keepAlive: false, requiresAuth: true }
+          meta: { keepAlive: false, requiresAuth: true, requiresAdmin: true }
         }
       ]
     },
