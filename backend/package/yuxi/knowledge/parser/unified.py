@@ -10,6 +10,7 @@ import re
 import tempfile
 import threading
 import time
+import warnings
 import zipfile
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
@@ -17,11 +18,22 @@ from pathlib import Path
 from typing import Any
 
 import aiofiles
+import fitz
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter
 from langchain_community.document_loaders import PyPDFLoader
 from markdownify import markdownify as md_convert
+from PIL import Image, UnidentifiedImageError
 
+from yuxi.knowledge.parser.ocr_routing import (
+    OCRRouteResult,
+    OCRRoutingError,
+    OCRRoutingPolicy,
+    assess_text_quality,
+    looks_like_structured_layout,
+    notify_processing_stage,
+    run_ocr_fallback,
+)
 from yuxi.knowledge.parser.zip_utils import process_zip_file as _process_zip_file
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
@@ -33,6 +45,9 @@ SUPPORTED_FILE_EXTENSIONS: tuple[str, ...] = (
     ".docx",
     ".xlsx",
     ".pptx",
+    ".png",
+    ".jpg",
+    ".jpeg",
 )
 
 
@@ -54,6 +69,13 @@ class DocumentBlock:
     slide_number: int | None = None
     start_char_pos: int | None = None
     end_char_pos: int | None = None
+    bbox: list[float] | None = None
+    confidence: float | None = None
+    table_information: dict[str, Any] | None = None
+    image_reference: str | None = None
+    parser_name: str | None = None
+    parser_version: str | None = None
+    warnings: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +90,13 @@ class DocumentBlock:
                 "slide_number": self.slide_number,
                 "start_char_pos": self.start_char_pos,
                 "end_char_pos": self.end_char_pos,
+                "bbox": self.bbox,
+                "confidence": self.confidence,
+                "table_information": self.table_information,
+                "image_reference": self.image_reference,
+                "parser_name": self.parser_name,
+                "parser_version": self.parser_version,
+                "warnings": self.warnings,
             }.items()
             if value is not None
         }
@@ -85,6 +114,9 @@ class MarkdownParseResult:
     blocks: list[DocumentBlock] = field(default_factory=list)
     file_ext: str | None = None
     artifacts: dict[str, Any] = field(default_factory=dict)
+    classification: dict[str, Any] = field(default_factory=dict)
+    attempts: list[dict[str, Any]] = field(default_factory=list)
+    quality: dict[str, Any] = field(default_factory=dict)
 
     def to_metadata(self) -> dict[str, Any]:
         """Serialize metadata used later to map chunks back to source blocks."""
@@ -94,6 +126,10 @@ class MarkdownParseResult:
             "parser_version": self.parser_version,
             "warnings": list(self.warnings),
             "blocks": [block.to_dict() for block in self.blocks],
+            "file_ext": self.file_ext,
+            "classification": dict(self.classification),
+            "attempts": list(self.attempts),
+            "quality": dict(self.quality),
         }
 
 
@@ -199,8 +235,59 @@ def _compose_blocks(
     return "\n\n".join(rendered)
 
 
-def validate_document_bytes(filename: str, content: bytes) -> None:
+def _validate_pdf_bytes(content: bytes, policy: OCRRoutingPolicy) -> None:
+    if not content.startswith(b"%PDF-"):
+        raise ValueError("PDF 文件签名不匹配")
+    try:
+        document = fitz.open(stream=content, filetype="pdf")
+        try:
+            if document.needs_pass:
+                raise ValueError("PDF 文件已加密，无法解析")
+            if document.page_count <= 0:
+                raise ValueError("PDF 文件不包含可解析页面")
+            if document.page_count > policy.max_pdf_pages:
+                raise ValueError(f"PDF 页数超过安全限制（最多 {policy.max_pdf_pages} 页）")
+            document.load_page(0)
+        finally:
+            document.close()
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("PDF 文件损坏或无法读取") from exc
+
+
+def _validate_image_bytes(suffix: str, content: bytes, policy: OCRRoutingPolicy) -> None:
+    expected_format = "PNG" if suffix == ".png" else "JPEG"
+    if expected_format == "PNG" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("PNG 文件签名不匹配")
+    if expected_format == "JPEG" and not (
+        content.startswith(b"\xff\xd8\xff") and content.rstrip().endswith(b"\xff\xd9")
+    ):
+        raise ValueError("JPEG 文件签名不匹配")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as image:
+                if image.format != expected_format:
+                    raise ValueError(f"图片内容不是有效的 {expected_format} 格式")
+                width, height = image.size
+                if width <= 0 or height <= 0:
+                    raise ValueError("图片尺寸无效")
+                if width * height > policy.max_image_pixels:
+                    raise ValueError(f"图片像素数量超过安全限制（最多 {policy.max_image_pixels}）")
+                image.verify()
+    except ValueError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ValueError("图片像素数量超过安全限制") from exc
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValueError(f"{expected_format} 图片损坏或无法读取") from exc
+
+
+def validate_document_bytes(filename: str, content: bytes, params: dict | None = None) -> None:
     """Validate the stable file list and basic file/container signatures."""
+    policy = OCRRoutingPolicy.from_params(params)
     suffix = Path(filename).suffix.lower()
     if suffix not in SUPPORTED_FILE_EXTENSIONS:
         raise ValueError(f"不支持的文件格式: {suffix or '无扩展名'}")
@@ -213,8 +300,10 @@ def validate_document_bytes(filename: str, content: bytes) -> None:
             raise ValueError("文本文件必须使用 UTF-8 编码") from exc
         return
     if suffix == ".pdf":
-        if not content.startswith(b"%PDF-"):
-            raise ValueError("PDF 文件签名不匹配")
+        _validate_pdf_bytes(content, policy)
+        return
+    if suffix in {".png", ".jpg", ".jpeg"}:
+        _validate_image_bytes(suffix, content, policy)
         return
 
     required_members = {
@@ -521,6 +610,251 @@ def _parse_text_pdf(file_path: Path) -> MarkdownParseResult:
     )
 
 
+def _page_text_coverage(page: fitz.Page) -> float:
+    page_area = max(float(page.rect.width * page.rect.height), 1.0)
+    covered_area = 0.0
+    for block in page.get_text("blocks"):
+        if len(block) < 5 or not _contains_semantic_text(str(block[4])):
+            continue
+        rectangle = fitz.Rect(block[:4]) & page.rect
+        if not rectangle.is_empty:
+            covered_area += max(float(rectangle.width * rectangle.height), 0.0)
+    return min(covered_area / page_area, 1.0)
+
+
+def _render_pdf_page_for_ocr(
+    page: fitz.Page,
+    *,
+    page_number: int,
+    policy: OCRRoutingPolicy,
+) -> Path:
+    scale = policy.pdf_render_scale
+    width = max(int(page.rect.width * scale), 1)
+    height = max(int(page.rect.height * scale), 1)
+    if width * height > policy.max_pdf_page_pixels:
+        raise ValueError(f"PDF 第 {page_number} 页渲染像素超过安全限制（最多 {policy.max_pdf_page_pixels}）")
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temporary:
+        output_path = Path(temporary.name)
+    try:
+        pixmap.save(output_path)
+        return output_path
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+
+
+def _ocr_route_block(route: OCRRouteResult, *, order: int, page_number: int) -> DocumentBlock:
+    quality = route.quality or {}
+    return DocumentBlock(
+        block_type="table" if int(quality.get("table_valid_cells") or 0) > 0 else "paragraph",
+        order=order,
+        text=route.markdown,
+        markdown=route.markdown,
+        page_number=page_number,
+        parser_name=route.parser_name,
+        parser_version=route.parser_version,
+        warnings=list(route.warnings),
+    )
+
+
+async def _parse_pdf_auto(file_path: Path, params: dict | None = None) -> MarkdownParseResult:
+    options = dict(params or {})
+    policy = OCRRoutingPolicy.from_params(options)
+    options["_ocr_deadline_monotonic"] = time.monotonic() + policy.max_ocr_seconds
+    await notify_processing_stage(options, "detecting", 15)
+    document = fitz.open(file_path)
+    blocks: list[DocumentBlock] = []
+    prefixes: dict[int, str] = {}
+    attempts: list[dict[str, Any]] = []
+    page_classifications: list[dict[str, Any]] = []
+    warnings_list: list[str] = []
+    native_pages = 0
+    ocr_pages = 0
+    ocr_parser_names: set[str] = set()
+    try:
+        if document.page_count > policy.max_pdf_pages:
+            raise ValueError(f"PDF 页数超过安全限制（最多 {policy.max_pdf_pages} 页）")
+        for page_index in range(document.page_count):
+            page_number = page_index + 1
+            page = document.load_page(page_index)
+            await notify_processing_stage(options, "extracting_text", 25)
+            native_started = time.monotonic()
+            native_text = str(page.get_text("text") or "").strip()
+            coverage = _page_text_coverage(page)
+            native_quality = assess_text_quality(
+                native_text,
+                policy=policy,
+                min_valid_characters=policy.native_pdf_min_valid_characters,
+                page_coverage=coverage,
+            )
+            native_attempt = {
+                "provider": "native_pdf",
+                "stage": "extracting_text",
+                "status": "accepted" if native_quality.accepted else "rejected",
+                "duration_ms": round((time.monotonic() - native_started) * 1000),
+                "page_number": page_number,
+                "quality": native_quality.to_dict(),
+            }
+            attempts.append(native_attempt)
+            page_classification = {
+                "page_number": page_number,
+                "native_quality": native_quality.to_dict(),
+                "route": "native_text" if native_quality.accepted else "ocr",
+                "reasons": native_quality.reasons or ["native_text_quality_accepted"],
+            }
+            page_classifications.append(page_classification)
+
+            if native_quality.accepted:
+                order = len(blocks)
+                prefixes[order] = f"<!-- page: {page_number} -->\n\n"
+                blocks.append(
+                    DocumentBlock(
+                        block_type="paragraph",
+                        order=order,
+                        text=native_text,
+                        markdown=native_text,
+                        page_number=page_number,
+                        parser_name="native_pdf",
+                        parser_version=_package_version("PyMuPDF"),
+                        warnings=[],
+                    )
+                )
+                native_pages += 1
+                continue
+
+            has_visual_content = bool(page.get_images(full=True) or page.get_drawings())
+            if not has_visual_content:
+                native_attempt["status"] = "skipped"
+                native_attempt["failure_reason"] = "blank_page_without_visual_content"
+                page_classification["route"] = "blank_ignored"
+                page_classification["reasons"] = ["blank_page_without_visual_content"]
+                continue
+
+            rendered_page = _render_pdf_page_for_ocr(
+                page,
+                page_number=page_number,
+                policy=policy,
+            )
+            try:
+                page_options = dict(options)
+                page_options["_complex_layout"] = looks_like_structured_layout(rendered_page)
+                try:
+                    route = await run_ocr_fallback(
+                        rendered_page,
+                        params=page_options,
+                        page_number=page_number,
+                    )
+                except OCRRoutingError as exc:
+                    combined_attempts = [
+                        *attempts,
+                        *[
+                            {**attempt, "page_number": page_number}
+                            for attempt in exc.parse_metadata.get("attempts", [])
+                        ],
+                    ]
+                    error = OCRRoutingError(
+                        f"PDF 第 {page_number} 页 OCR 未提取到有效文本",
+                        attempts=combined_attempts,
+                        warnings=[*warnings_list, *exc.parse_metadata.get("warnings", [])],
+                    )
+                    error.parse_metadata["classification"] = {
+                        "type": "pdf_ocr_failed",
+                        "pages": page_classifications,
+                        "thresholds": policy.public_metadata(),
+                    }
+                    raise error from exc
+            finally:
+                rendered_page.unlink(missing_ok=True)
+
+            order = len(blocks)
+            prefixes[order] = f"<!-- page: {page_number} -->\n\n"
+            blocks.append(_ocr_route_block(route, order=order, page_number=page_number))
+            attempts.extend({**attempt, "page_number": page_number} for attempt in route.attempts)
+            warnings_list.extend(route.warnings)
+            ocr_parser_names.add(route.parser_name)
+            ocr_pages += 1
+    finally:
+        document.close()
+
+    if native_pages and ocr_pages:
+        classification_type = "mixed_pdf"
+        parser_name = "hybrid_pdf"
+    elif ocr_pages:
+        classification_type = "scanned_pdf"
+        parser_name = next(iter(ocr_parser_names)) if len(ocr_parser_names) == 1 else "hybrid_pdf"
+    else:
+        classification_type = "text_pdf"
+        parser_name = "native_pdf"
+    markdown = _compose_blocks(blocks, prefixes)
+    quality = assess_text_quality(markdown, policy=policy)
+    return MarkdownParseResult(
+        markdown=markdown,
+        document_title=file_path.stem,
+        parser_name=parser_name,
+        parser_version=_package_version("PyMuPDF") if parser_name == "native_pdf" else "1",
+        warnings=list(dict.fromkeys(warnings_list)),
+        blocks=blocks,
+        file_ext=".pdf",
+        classification={
+            "type": classification_type,
+            "reason": (
+                "all_pages_passed_native_text_quality"
+                if classification_type == "text_pdf"
+                else "all_pages_required_ocr"
+                if classification_type == "scanned_pdf"
+                else "native_and_ocr_pages_combined"
+            ),
+            "native_page_count": native_pages,
+            "ocr_page_count": ocr_pages,
+            "empty_page_ratio": round(
+                sum(not page["native_quality"]["valid_characters"] for page in page_classifications)
+                / max(len(page_classifications), 1),
+                4,
+            ),
+            "pages": page_classifications,
+            "thresholds": policy.public_metadata(),
+        },
+        attempts=attempts,
+        quality=quality.to_dict(),
+    )
+
+
+async def _parse_image_auto(file_path: Path, params: dict | None = None) -> MarkdownParseResult:
+    options = dict(params or {})
+    policy = OCRRoutingPolicy.from_params(options)
+    await notify_processing_stage(options, "detecting", 15)
+    options["_complex_layout"] = looks_like_structured_layout(file_path)
+    try:
+        route = await run_ocr_fallback(file_path, params=options, page_number=1)
+    except OCRRoutingError as exc:
+        exc.parse_metadata["classification"] = {
+            "type": "image",
+            "reason": "ocr_quality_not_accepted",
+            "thresholds": policy.public_metadata(),
+        }
+        raise
+    block = _ocr_route_block(route, order=0, page_number=1)
+    markdown = _compose_blocks([block])
+    return MarkdownParseResult(
+        markdown=markdown,
+        document_title=file_path.stem,
+        parser_name=route.parser_name,
+        parser_version=route.parser_version,
+        warnings=route.warnings,
+        blocks=[block],
+        file_ext=file_path.suffix.lower(),
+        classification={
+            "type": "image",
+            "reason": "automatic_ocr_route",
+            "structured_layout_detected": bool(options["_complex_layout"]),
+            "thresholds": policy.public_metadata(),
+        },
+        attempts=route.attempts,
+        quality=route.quality,
+    )
+
+
 def _parse_text_file(file_path: Path, *, markdown_source: bool) -> MarkdownParseResult:
     try:
         content = file_path.read_bytes().decode("utf-8-sig")
@@ -653,28 +987,24 @@ async def _process_file_to_result_core(
     try:
         suffix = actual_path.suffix.lower()
         if suffix == ".txt":
+            await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_text_file, actual_path, markdown_source=False)
         elif suffix == ".md":
+            await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_text_file, actual_path, markdown_source=True)
         elif suffix == ".pdf":
-            result = await asyncio.to_thread(_parse_text_pdf, actual_path)
+            result = await _parse_pdf_auto(actual_path, params)
         elif suffix == ".docx":
+            await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_docx, actual_path, params)
         elif suffix == ".xlsx":
+            await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_xlsx, actual_path)
         elif suffix == ".pptx":
+            await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_pptx, actual_path)
-        elif suffix in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}:
-            text = await parse_image_async(str(actual_path), params=params)
-            title, blocks = _blocks_from_markdown(str(text))
-            result = MarkdownParseResult(
-                markdown=str(text),
-                document_title=title or actual_path.stem,
-                parser_name="configured_ocr",
-                parser_version="unknown",
-                blocks=blocks,
-                file_ext=suffix,
-            )
+        elif suffix in {".jpg", ".jpeg", ".png"}:
+            result = await _parse_image_auto(actual_path, params)
         elif suffix in {".html", ".htm"}:
             async with aiofiles.open(actual_path, encoding="utf-8") as stream:
                 markdown = await asyncio.to_thread(md_convert, await stream.read(), heading_style="ATX")

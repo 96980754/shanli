@@ -381,8 +381,8 @@ class KnowledgeBase(ABC):
         file_repo = KnowledgeFileRepository()
         claim_data = {
             "status": FileStatus.PARSING,
-            "processing_stage": "parsing",
-            "processing_progress": 20,
+            "processing_stage": "detecting",
+            "processing_progress": 10,
             "error_message": None,
         }
         if operator_id:
@@ -415,13 +415,28 @@ class KnowledgeBase(ABC):
             await file_repo.update_fields(file_id=file_id, kb_id=kb_id, data=update_data)
             raise ValueError(message)
 
+        last_processing_stage = "detecting"
+
+        async def update_processing_stage(stage: str, progress: int) -> None:
+            nonlocal last_processing_stage
+            last_processing_stage = stage
+            stage_data = {
+                "status": FileStatus.PARSING,
+                "processing_stage": stage,
+                "processing_progress": max(0, min(int(progress), 100)),
+            }
+            if operator_id:
+                stage_data["updated_by"] = operator_id
+            await file_repo.update_fields(file_id=file_id, kb_id=kb_id, data=stage_data)
+
         try:
             from yuxi.knowledge.parser.unified import Parser
 
             # Prepare params
-            params = file_meta.get("processing_params", {}) or {}
+            params = dict(file_meta.get("processing_params", {}) or {})
             params["image_bucket"] = "public"
             params["image_prefix"] = f"{kb_id}/kb-images"
+            params["_stage_callback"] = update_processing_stage
 
             parse_result = await Parser.aparse_result(
                 source=file_path,
@@ -462,19 +477,26 @@ class KnowledgeBase(ABC):
         except Exception as e:
             error_msg = sanitize_processing_error(e)
             logger.error(f"Failed to parse file {file_id}: {error_msg}")
+            failed_parse_metadata = getattr(e, "parse_metadata", None)
+            if not isinstance(failed_parse_metadata, dict):
+                failed_parse_metadata = None
 
             file_meta["status"] = FileStatus.ERROR_PARSING
             file_meta["error"] = error_msg
             file_meta["error_message"] = error_msg
-            file_meta["processing_stage"] = "parsing"
+            file_meta["processing_stage"] = last_processing_stage
+            if failed_parse_metadata:
+                file_meta["parse_metadata"] = failed_parse_metadata
             file_meta["updated_at"] = utc_isoformat()
             if operator_id:
                 file_meta["updated_by"] = operator_id
             update_data = {
                 "status": FileStatus.ERROR_PARSING,
-                "processing_stage": "parsing",
+                "processing_stage": last_processing_stage,
                 "error_message": error_msg,
             }
+            if failed_parse_metadata:
+                update_data["parse_metadata"] = failed_parse_metadata
             if operator_id:
                 update_data["updated_by"] = operator_id
             await file_repo.update_fields(file_id=file_id, kb_id=kb_id, data=update_data)

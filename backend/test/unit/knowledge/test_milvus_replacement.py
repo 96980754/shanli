@@ -6,6 +6,7 @@ import pytest
 from yuxi.knowledge.implementations import milvus as milvus_module
 from yuxi.knowledge.implementations.milvus import MilvusKB
 from yuxi.knowledge.parser import unified as parser_module
+from yuxi.knowledge.parser.ocr_routing import OCRRoutingError
 from yuxi.repositories import knowledge_file_repository as repository_module
 from yuxi.services.document_ingestion_service import DocumentIngestionService
 
@@ -140,7 +141,52 @@ async def test_replacement_parse_failure_does_not_activate_or_modify_old_version
     assert old_version.is_active is True
     assert old_version.vectors_available is True
     assert updates[-1]["status"] == "error_parsing"
-    assert updates[-1]["processing_stage"] == "parsing"
+    assert updates[-1]["processing_stage"] == "detecting"
+
+
+async def test_ocr_parse_failure_persists_attempt_history_and_error_status(monkeypatch):
+    new_record = SimpleNamespace(file_id="new")
+    updates = []
+
+    class FakeRepository:
+        async def update_fields_if_status(self, **_kwargs):
+            return new_record
+
+        async def update_fields(self, **kwargs):
+            updates.append(kwargs["data"])
+            return new_record
+
+    async def fail_parse(**_kwargs):
+        raise OCRRoutingError(
+            "OCR failed",
+            attempts=[
+                {
+                    "provider": "rapid_ocr",
+                    "stage": "ocr_processing",
+                    "status": "rejected",
+                    "duration_ms": 3,
+                }
+            ],
+            warnings=["optional providers unavailable"],
+        )
+
+    monkeypatch.setattr(repository_module, "KnowledgeFileRepository", FakeRepository)
+    monkeypatch.setattr(parser_module.Parser, "aparse_result", fail_parse)
+
+    kb = object.__new__(MilvusKB)
+    kb._file_record_to_meta = lambda _record: {
+        "file_id": "new",
+        "path": "minio://knowledgebases/kb_1/upload/scan.png",
+        "processing_params": {},
+        "is_active": True,
+    }
+
+    with pytest.raises(OCRRoutingError, match="OCR failed"):
+        await kb.parse_file("kb_1", "new")
+
+    assert updates[-1]["status"] == "error_parsing"
+    assert updates[-1]["processing_stage"] == "detecting"
+    assert updates[-1]["parse_metadata"]["attempts"][0]["provider"] == "rapid_ocr"
 
 
 async def test_replacement_switch_happens_only_after_vector_verification(monkeypatch):

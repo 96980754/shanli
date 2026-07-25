@@ -66,7 +66,7 @@
           </div>
           <div class="col-item" v-if="uploadMode !== 'url'">
             <div class="setting-label">
-              OCR 引擎（仅应用于 PDF/图片文件）
+              OCR/VL 高级回退（PDF/图片基础解析自动执行）
               <a-tooltip title="检查服务状态">
                 <ReloadOutlined
                   class="action-icon refresh-icon"
@@ -173,10 +173,10 @@
         </div>
       </div>
 
-      <!-- PDF/图片OCR提醒 (Alert样式优化) -->
-      <div v-if="hasPdfOrImageFiles && !isOcrEnabled" class="inline-alert warning">
+      <!-- PDF/图片自动解析提醒 -->
+      <div v-if="hasPdfOrImageFiles" class="inline-alert warning">
         <Info :size="16" />
-        <span>检测到PDF或图片文件，建议启用 OCR 以提取文本内容</span>
+        <span>PDF/图片会自动判断原生文本提取与 OCR 路由，高级 Provider 不可用时将自动跳过</span>
       </div>
 
       <!-- 文件上传区域 -->
@@ -515,7 +515,17 @@ watch(
   }
 )
 
-const DEFAULT_SUPPORTED_TYPES = ['.txt', '.md', '.pdf', '.docx', '.xlsx', '.pptx']
+const DEFAULT_SUPPORTED_TYPES = [
+  '.txt',
+  '.md',
+  '.pdf',
+  '.docx',
+  '.xlsx',
+  '.pptx',
+  '.png',
+  '.jpg',
+  '.jpeg'
+]
 
 const normalizeExtensions = (extensions) => {
   if (!Array.isArray(extensions)) {
@@ -933,11 +943,6 @@ const buildAutoIndexParams = () => {
 
 const isFolderUpload = ref(false)
 
-// 计算属性：是否启用了OCR
-const isOcrEnabled = computed(() => {
-  return processingParams.value.ocr_engine !== 'disable'
-})
-
 // 上传模式切换相关逻辑已移除
 
 // 计算属性：是否有PDF或图片文件
@@ -989,13 +994,13 @@ const hasZipFiles = computed(() => {
 const ocrEngineOptions = [
   {
     value: 'disable',
-    label: '不启用',
-    description: '不启用 OCR，仅处理文本文件'
+    label: '仅自动基础解析',
+    description: '自动使用 RapidOCR → PP-Structure，不调用高级 Provider'
   },
   {
     value: 'rapid_ocr',
-    label: 'RapidOCR (ONNX)',
-    description: 'ONNX with RapidOCR'
+    label: '自动基础解析',
+    description: '自动使用 RapidOCR → PP-Structure'
   },
   {
     value: 'mineru_ocr',
@@ -1121,16 +1126,13 @@ const toggleUnavailableOcrOptions = () => {
   unavailableOcrExpanded.value = !unavailableOcrExpanded.value
 }
 
-// 验证OCR服务可用性
+// 高级 Provider 不可用不阻断上传，后端会记录 warning 并继续受控降级。
 const validateOcrService = () => {
-  if (!isOcrEnabled.value) {
-    return true
-  }
-
   const engine = processingParams.value.ocr_engine
   if (isUnavailableOcrEngine(engine)) {
-    message.error(`OCR服务不可用: ${getOcrDescription(engine)}`)
-    return false
+    message.warning(
+      `高级 OCR/VL Provider 当前不可用，将使用自动基础解析：${getOcrDescription(engine)}`
+    )
   }
 
   return true
@@ -1480,7 +1482,6 @@ const chunkData = async () => {
         return
       }
 
-      const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
       const items = []
       const content_hashes = {}
       const file_sizes = {}
@@ -1491,15 +1492,6 @@ const chunkData = async () => {
         if (item.content_hash) content_hashes[filePath] = item.content_hash
         if (Number.isFinite(item.size)) file_sizes[filePath] = item.size
         mergeSameNameFiles(item.same_name_files)
-
-        const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
-        if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
-          message.error({
-            content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
-            duration: 5
-          })
-          return
-        }
       }
 
       const params = { ...processingParams.value, content_hashes, file_sizes }
@@ -1607,8 +1599,6 @@ const chunkData = async () => {
   }
 
   // 文件模式处理
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
-
   // 提取已上传的文件信息
   const items = []
   const content_hashes = {}
@@ -1631,16 +1621,6 @@ const chunkData = async () => {
       replace_file_ids[file_path] = file.response.replace_file_id
     }
     if (file.response?.filename) source_paths[file_path] = file.response.filename
-
-    // 检查是否需要OCR
-    const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
-    if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
-      message.error({
-        content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
-        duration: 5
-      })
-      return
-    }
   }
 
   if (items.length === 0) {

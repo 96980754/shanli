@@ -187,7 +187,7 @@ class DocumentIngestionService:
             from yuxi.knowledge.parser.unified import validate_document_bytes
 
             try:
-                validate_document_bytes(staged_filename, file_bytes)
+                validate_document_bytes(staged_filename, file_bytes, params=params)
             except ValueError:
                 await self._delete_staged_object_if_unclaimed(kb_id, item, bucket_name, object_name)
                 raise

@@ -172,10 +172,19 @@ def test_parser_parse_png_file_returns_markdown_text_with_mocked_ocr(
     file_path = tmp_path / "parser_test.png"
     _build_png(file_path)
 
-    async def _fake_parse_image_async(file, params=None):
-        return "Parser PNG content"
+    async def _fake_ocr_route(file, params=None, page_number=None):
+        del file, params
+        return SimpleNamespace(
+            markdown="Parser PNG content",
+            parser_name="rapid_ocr",
+            parser_version="test",
+            warnings=[],
+            attempts=[],
+            quality={"accepted": True, "score": 1.0, "table_valid_cells": 0},
+            page_number=page_number,
+        )
 
-    monkeypatch.setattr(parser_unified, "parse_image_async", _fake_parse_image_async)
+    monkeypatch.setattr(parser_unified, "run_ocr_fallback", _fake_ocr_route)
 
     markdown = Parser.parse(str(file_path), params={"ocr_engine": "rapid_ocr"})
 

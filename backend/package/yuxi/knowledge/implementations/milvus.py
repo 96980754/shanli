@@ -698,6 +698,13 @@ class MilvusKB(KnowledgeBase):
                     ("page_number", "page_number"),
                     ("sheet_name", "sheet_name"),
                     ("slide_number", "slide_number"),
+                    ("bbox", "bbox"),
+                    ("confidence", "confidence"),
+                    ("table_information", "table_information"),
+                    ("image_reference", "image_reference"),
+                    ("parser_name", "parser_name"),
+                    ("parser_version", "parser_version"),
+                    ("warnings", "warnings"),
                 ):
                     if matched_block.get(source_key) is not None:
                         source_metadata[target_key] = matched_block[source_key]

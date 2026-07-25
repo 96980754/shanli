@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import fitz
@@ -7,6 +8,7 @@ import pytest
 import yuxi.knowledge.parser.unified as parser_unified
 from docx import Document
 from openpyxl import Workbook
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches
 
@@ -112,9 +114,26 @@ def test_text_pdf_preserves_page_numbers_and_ignores_empty_pages(tmp_path: Path)
     assert result.parser_name == "native_pdf"
 
 
-def test_scanned_or_empty_pdf_fails_with_ocr_guidance(tmp_path: Path) -> None:
+def test_scanned_pdf_fails_when_all_ocr_providers_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     path = tmp_path / "scan.pdf"
-    _build_pdf(path, [""])
+    image = Image.new("RGB", (300, 120), "white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_image(page.rect, stream=buffer.getvalue())
+    document.save(path)
+    document.close()
+
+    async def fail_ocr(*_args, **_kwargs):
+        from yuxi.knowledge.parser.ocr_routing import OCRRoutingError
+
+        raise OCRRoutingError("OCR unavailable", attempts=[], warnings=["providers unavailable"])
+
+    monkeypatch.setattr(parser_unified, "run_ocr_fallback", fail_ocr)
 
     with pytest.raises(ValueError, match="OCR"):
         Parser.parse_result(str(path))
@@ -175,7 +194,6 @@ def test_pptx_preserves_slide_numbers_text_and_tables(tmp_path: Path) -> None:
         ("fake.xlsx", b"not a zip", "XLSX"),
         ("fake.pptx", b"not a zip", "PPTX"),
         ("legacy.doc", b"legacy", "不支持"),
-        ("image.png", b"image", "不支持"),
     ],
 )
 def test_document_signature_validation_rejects_mismatch_or_unsupported(
@@ -198,3 +216,39 @@ def test_document_signature_validation_accepts_real_office_containers(tmp_path: 
     validate_document_bytes(docx_path.name, docx_path.read_bytes())
     validate_document_bytes(xlsx_path.name, xlsx_path.read_bytes())
     validate_document_bytes(pptx_path.name, pptx_path.read_bytes())
+
+
+@pytest.mark.parametrize(("suffix", "format_name"), [(".png", "PNG"), (".jpg", "JPEG"), (".jpeg", "JPEG")])
+def test_image_signature_validation_accepts_real_images(
+    tmp_path: Path,
+    suffix: str,
+    format_name: str,
+) -> None:
+    path = tmp_path / f"real{suffix}"
+    Image.new("RGB", (32, 24), "white").save(path, format=format_name)
+
+    validate_document_bytes(path.name, path.read_bytes())
+
+
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("fake.png", b"\x89PNG\r\n\x1a\nnot-an-image"),
+        ("fake.jpg", b"\xff\xd8not-an-image\xff\xd9"),
+        ("actually.png", b"\xff\xd8not-a-png\xff\xd9"),
+    ],
+)
+def test_image_signature_validation_rejects_corruption_or_extension_mismatch(
+    filename: str,
+    content: bytes,
+) -> None:
+    with pytest.raises(ValueError):
+        validate_document_bytes(filename, content)
+
+
+def test_image_validation_rejects_excessive_pixel_count(tmp_path: Path) -> None:
+    path = tmp_path / "large.png"
+    Image.new("RGB", (11, 11), "white").save(path)
+
+    with pytest.raises(ValueError, match="像素"):
+        validate_document_bytes(path.name, path.read_bytes(), params={"ocr_max_image_pixels": 100})
