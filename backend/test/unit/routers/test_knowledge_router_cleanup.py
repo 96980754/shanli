@@ -11,6 +11,14 @@ from server.routers import knowledge_router
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture(autouse=True)
+def allow_kb_permissions(monkeypatch):
+    async def allow(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow)
+
+
 class FakeTaskContext:
     def __init__(self):
         self.result = None
@@ -87,7 +95,7 @@ async def test_document_file_exists_route_accepts_filename_with_slashes(monkeypa
 
     app = FastAPI()
     app.include_router(knowledge_router.knowledge, prefix="/api")
-    app.dependency_overrides[knowledge_router.get_admin_user] = fake_admin_user
+    app.dependency_overrides[knowledge_router.get_required_user] = fake_admin_user
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
@@ -124,11 +132,22 @@ async def test_document_file_exists_rejects_blank_filename(monkeypatch):
     assert exc_info.value.detail == "filename is required"
 
 
-async def test_upload_file_rejects_jsonl_uploads():
+async def test_upload_file_rejects_jsonl_uploads(monkeypatch):
+    async def allow_permission(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow_permission)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow_permission)
     upload = UploadFile(filename="dataset.jsonl", file=BytesIO(b'{"query":"hello"}\n'))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id=None, current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="kb_1",
+            duplicate_strategy="prompt",
+            replace_file_id=None,
+            current_user=SimpleNamespace(uid="user_1"),
+        )
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Unsupported file type: .jsonl"
@@ -146,10 +165,21 @@ async def test_upload_file_rejects_oversized_file(monkeypatch):
         fake_ensure_database_supports_documents,
     )
 
+    async def allow_permission(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow_permission)
+
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"123456"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="kb_1", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="kb_1",
+            duplicate_strategy="prompt",
+            replace_file_id=None,
+            current_user=SimpleNamespace(uid="user_1"),
+        )
 
     assert exc_info.value.status_code == 400
     assert "100 MB" in exc_info.value.detail
@@ -177,10 +207,21 @@ async def test_upload_file_invalid_kb_fails_before_read_or_minio(monkeypatch):
     monkeypatch.setattr(knowledge_router, "read_upload_with_limit", fake_read_upload_with_limit)
     monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
 
+    async def allow_permission(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow_permission)
+
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="missing", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="missing",
+            duplicate_strategy="prompt",
+            replace_file_id=None,
+            current_user=SimpleNamespace(uid="user_1"),
+        )
 
     assert exc_info.value.status_code == 404
     assert calls == {"read": 0, "upload": 0}
@@ -208,13 +249,92 @@ async def test_upload_file_read_only_kb_fails_before_read_or_minio(monkeypatch):
     monkeypatch.setattr(knowledge_router, "read_upload_with_limit", fake_read_upload_with_limit)
     monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload_to_minio)
 
+    async def allow_permission(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow_permission)
+
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="readonly", current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="readonly",
+            duplicate_strategy="prompt",
+            replace_file_id=None,
+            current_user=SimpleNamespace(uid="user_1"),
+        )
 
     assert exc_info.value.status_code == 400
     assert calls == {"read": 0, "upload": 0}
+
+
+async def test_upload_replace_requires_upload_and_manage_permissions_before_read(monkeypatch):
+    calls = {"permissions": [], "read": 0}
+
+    async def fake_require(_user, kb_id: str, action: str) -> None:
+        calls["permissions"].append((kb_id, action))
+        if action == "can_manage":
+            raise HTTPException(status_code=403, detail="知识库权限不足")
+
+    async def fake_read(*_args, **_kwargs):
+        calls["read"] += 1
+        return b"content"
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", fake_require)
+    monkeypatch.setattr(knowledge_router, "read_upload_with_limit", fake_read)
+
+    upload = UploadFile(filename="demo.txt", file=BytesIO(b"content"))
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.upload_file(
+            upload,
+            kb_id="kb_1",
+            duplicate_strategy="REPLACE",
+            replace_file_id="file_1",
+            current_user=SimpleNamespace(uid="user_1"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert calls == {
+        "permissions": [("kb_1", "can_upload"), ("kb_1", "can_manage")],
+        "read": 0,
+    }
+
+
+async def test_upload_skip_returns_structured_success_without_storage_write(monkeypatch):
+    calls = {"upload": 0}
+
+    async def allow(*_args, **_kwargs):
+        return None
+
+    async def fake_check(self, **_kwargs):
+        return SimpleNamespace(action="skipped", existing_file_id="file_existing", conflicts=())
+
+    async def fake_upload(*_args, **_kwargs):
+        calls["upload"] += 1
+        return "minio://should-not-be-used"
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow)
+    monkeypatch.setattr(knowledge_router.DocumentIngestionService, "check_upload_conflict", fake_check)
+    monkeypatch.setattr(knowledge_router, "aupload_file_to_minio", fake_upload)
+
+    result = await knowledge_router.upload_file(
+        UploadFile(filename="demo.txt", file=BytesIO(b"content")),
+        kb_id="kb_1",
+        duplicate_strategy="skip",
+        replace_file_id=None,
+        current_user=SimpleNamespace(uid="user_1"),
+    )
+
+    assert result == {
+        "message": "Upload skipped because a conflicting document already exists",
+        "uploaded": False,
+        "action": "skipped",
+        "existing_file_id": "file_existing",
+        "kb_id": "kb_1",
+    }
+    assert calls["upload"] == 0
 
 
 async def test_markdown_endpoint_rejects_oversized_file(monkeypatch):
@@ -426,8 +546,12 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
     async def fake_get_database_info(kb_id: str) -> dict:
         return {"name": "测试知识库"}
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
-        return {"file_id": "file_1", "status": "indexing"}
+    async def fake_create_uploaded_document(self, **_kwargs):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "indexing"},
+            existing_file_id=None,
+        )
 
     async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
         return {"file_id": file_id, "status": "parsed"}
@@ -448,7 +572,11 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
         fake_ensure_database_supports_documents,
     )
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
@@ -478,8 +606,12 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
     async def fake_get_database_info(kb_id: str) -> dict:
         return {"name": "测试知识库"}
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
-        return {"file_id": "file_1", "status": "indexing"}
+    async def fake_create_uploaded_document(self, **_kwargs):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "indexing"},
+            existing_file_id=None,
+        )
 
     async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
         return {"file_id": file_id, "status": "parsed", "error": None}
@@ -500,7 +632,11 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
         fake_ensure_database_supports_documents,
     )
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
@@ -540,6 +676,42 @@ async def test_add_uploaded_documents_rejects_empty_items(monkeypatch):
     assert exc_info.value.detail == "items must not be empty"
 
 
+async def test_add_uploaded_replace_rechecks_upload_and_manage_permissions(monkeypatch):
+    item = "minio://knowledgebases/kb_1/upload/demo.txt"
+    checked_actions = []
+
+    async def fake_require(_user, kb_id: str, action: str) -> None:
+        checked_actions.append((kb_id, action))
+        if action == "can_manage":
+            raise HTTPException(status_code=403, detail="知识库权限不足")
+
+    async def fake_ensure_database_supports_documents(_kb_id: str, _operation: str) -> None:
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", fake_require)
+    monkeypatch.setattr(
+        knowledge_router,
+        "_ensure_database_supports_documents",
+        fake_ensure_database_supports_documents,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.add_uploaded_documents(
+            "kb_1",
+            knowledge_router.AddUploadedDocumentsRequest(
+                items=[item],
+                params={
+                    "duplicate_strategies": {item: "replace"},
+                    "replace_file_ids": {item: "file_1"},
+                },
+            ),
+            current_user=SimpleNamespace(uid="uid-user"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert checked_actions == [("kb_1", "can_upload"), ("kb_1", "can_manage")]
+
+
 async def test_add_uploaded_documents_rejects_non_minio_url(monkeypatch):
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
@@ -564,27 +736,67 @@ async def test_add_uploaded_documents_rejects_non_minio_url(monkeypatch):
     assert exc_info.value.detail == "File source must be a MinIO URL"
 
 
-async def test_add_uploaded_documents_rejects_missing_content_hash(monkeypatch):
+async def test_add_uploaded_documents_does_not_require_client_content_hash(monkeypatch):
     item = "minio://knowledgebases/kb_1/upload/demo.txt"
+    captured = {}
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
+
+    async def fake_create_uploaded_document(self, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded"},
+            existing_file_id=None,
+        )
 
     monkeypatch.setattr(
         knowledge_router,
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.add_uploaded_documents(
-            "kb_1",
-            knowledge_router.AddUploadedDocumentsRequest(items=[item], params={}),
-            current_user=SimpleNamespace(uid="uid-user"),
-        )
+    result = await knowledge_router.add_uploaded_documents(
+        "kb_1",
+        knowledge_router.AddUploadedDocumentsRequest(items=[item], params={}),
+        current_user=SimpleNamespace(uid="uid-user"),
+    )
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == f"Missing content_hash for file: {item}"
+    assert result["status"] == "success"
+    assert captured["item"] == item
+    assert "content_hash" not in captured["params"]
+
+
+async def test_add_uploaded_documents_failure_does_not_echo_staged_url(monkeypatch):
+    staged_url = "http://private-minio:9000/knowledgebases/kb_1/upload/private.txt"
+
+    async def allow(*_args, **_kwargs):
+        return None
+
+    class FailingIngestionService:
+        async def create_uploaded_document(self, **_kwargs):
+            raise RuntimeError(f"failed to read {staged_url}")
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow)
+    monkeypatch.setattr(knowledge_router, "DocumentIngestionService", FailingIngestionService)
+
+    result = await knowledge_router.add_uploaded_documents(
+        "kb_1",
+        knowledge_router.AddUploadedDocumentsRequest(items=[staged_url], params={}),
+        current_user=SimpleNamespace(uid="uid-user"),
+    )
+
+    assert result["failed"] == 1
+    assert "item" not in result["failed_items"][0]
+    assert staged_url not in str(result)
+    assert "private-minio" not in result["failed_items"][0]["error"]
 
 
 async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
@@ -594,12 +806,13 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
-        captured["kb_id"] = kb_id
-        captured["item"] = item_path
-        captured["params"] = params
-        captured["operator_id"] = operator_id
-        return {"file_id": "file_1", "status": "uploaded", "filename": "demo.txt"}
+    async def fake_create_uploaded_document(self, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded", "filename": "demo.txt"},
+            existing_file_id=None,
+        )
 
     async def fail_enqueue(*_args, **_kwargs):
         raise AssertionError("documents/add must not enqueue tasker work")
@@ -609,7 +822,11 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        knowledge_router.DocumentIngestionService,
+        "create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fail_enqueue)
 
     result = await knowledge_router.add_uploaded_documents(
@@ -639,3 +856,52 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
         },
         "operator_id": "uid-user",
     }
+
+
+async def test_retry_replacement_cleanup_accepts_stale_pending_task(monkeypatch):
+    record = SimpleNamespace(
+        file_id="new",
+        kb_id="kb_1",
+        status="indexed",
+        is_active=True,
+        previous_version_id="old",
+        replacement_target_file_id="old",
+        processing_stage="replacement_cleanup",
+        processing_task_id="replacement-cleanup:new:1",
+    )
+    calls = []
+
+    class FakeRepository:
+        async def get_by_file_id(self, file_id):
+            assert file_id == "new"
+            return record
+
+    class FakeService:
+        file_repository = FakeRepository()
+
+        async def enqueue_replacement_cleanup(self, **kwargs):
+            calls.append(kwargs)
+            return "replacement-cleanup:new:2"
+
+    async def allow(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", allow)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", allow)
+    monkeypatch.setattr(knowledge_router, "DocumentIngestionService", FakeService)
+
+    result = await knowledge_router.retry_replacement_cleanup(
+        "kb_1",
+        "new",
+        current_user=SimpleNamespace(uid="user_1"),
+    )
+
+    assert result["task_id"] == "replacement-cleanup:new:2"
+    assert calls == [
+        {
+            "kb_id": "kb_1",
+            "new_file_id": "new",
+            "old_file_id": "old",
+            "force_reclaim": False,
+        }
+    ]

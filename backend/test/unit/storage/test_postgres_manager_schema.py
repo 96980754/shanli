@@ -164,3 +164,13 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "can_grant BOOLEAN NOT NULL DEFAULT FALSE" in statements
     assert "uq_knowledge_base_permissions_subject" in statements
     assert "ix_knowledge_base_permissions_kb_id" in statements
+    assert "processing_stage VARCHAR(64)" in statements
+    assert "processing_progress INTEGER NOT NULL DEFAULT 0" in statements
+    assert "ck_knowledge_files_processing_progress" in statements
+    assert "replacement_target_file_id VARCHAR(64)" in statements
+    assert "previous_version_id VARCHAR(64)" in statements
+    assert "is_active BOOLEAN NOT NULL DEFAULT TRUE" in statements
+    assert "superseded_at TIMESTAMPTZ" in statements
+    assert "processing_task_lease_expires_at TIMESTAMPTZ" in statements
+    assert "processing_task_updated_at TIMESTAMPTZ" in statements
+    assert "processing_task_attempt INTEGER NOT NULL DEFAULT 0" in statements

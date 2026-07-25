@@ -1,4 +1,5 @@
 import hashlib
+import re
 import time
 
 from yuxi import config
@@ -9,9 +10,17 @@ from yuxi.utils.datetime_utils import utc_isoformat
 _DROPPED_PROCESSING_PARAM_KEYS = {
     "_preprocessed_map",
     "auto_index",
+    "content_hash",
     "content_hashes",
+    "duplicate_strategy",
     "file_sizes",
+    "file_size",
     "enable_ocr",
+    "duplicate_strategies",
+    "replace_file_id",
+    "replace_file_ids",
+    "source_path",
+    "source_paths",
 }
 
 
@@ -48,6 +57,31 @@ async def calculate_content_hash(data: bytes | bytearray) -> str:
     sha256 = hashlib.sha256()
     sha256.update(data)
     return sha256.hexdigest()
+
+
+def sanitize_processing_error(error: BaseException | str, *, max_length: int = 500) -> str:
+    """Remove storage locations and multiline traceback fragments from user-visible errors."""
+    message = " ".join(str(error).split()) or "Document processing failed"
+    message = re.sub(
+        r"\b[a-z][a-z0-9+.-]*://\S+",
+        "[service location]",
+        message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(
+        r"(?i)\b(api[_-]?key|token|password)\b\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        message,
+    )
+    message = re.sub(
+        r"(?<![\w.-])(?:[\w.-]+/)+(?:upload|parsed|preview|kb-images)/\S+",
+        "[storage location]",
+        message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(r"\b[A-Za-z]:[\\/][^\s]+", "[local path]", message)
+    message = re.sub(r"(?<![\w.-])/(?:[^\s/]+/)+[^\s]+", "[local path]", message)
+    return message[:max_length]
 
 
 async def prepare_item_metadata(item: str, content_type: str, kb_id: str, params: dict | None = None) -> dict:
@@ -106,9 +140,9 @@ async def prepare_item_metadata(item: str, content_type: str, kb_id: str, params
 
     if content_type == "file":
         if not is_minio_url(item):
-            raise ValueError(f"File source must be a MinIO URL: {item}")
+            raise ValueError("File source must be a MinIO URL")
 
-        logger.debug(f"Processing MinIO file: {item}")
+        logger.debug("Processing staged MinIO file")
         _, object_name = parse_minio_url(item)
         filename = object_name.rsplit("/", 1)[-1]
 
@@ -129,7 +163,7 @@ async def prepare_item_metadata(item: str, content_type: str, kb_id: str, params
             content_hash = params["content_hashes"].get(item)
 
         if not content_hash:
-            raise ValueError(f"Missing content_hash for file: {item}")
+            raise ValueError("Missing content_hash for file")
 
         file_sizes = params.get("file_sizes") if params else None
         if not isinstance(file_sizes, dict):
@@ -268,11 +302,11 @@ def parse_minio_url(file_path: str) -> tuple[str, str]:
                 bucket_name = path_parts[0]
                 object_name = unquote(path_parts[1])
             else:
-                raise ValueError(f"无法解析MinIO URL中的bucket名称: {file_path}")
+                raise ValueError("无法解析MinIO URL中的bucket名称")
 
-        logger.debug(f"Parsed MinIO URL: bucket_name={bucket_name}, object_name={object_name}")
+        logger.debug("Parsed MinIO URL for a configured storage bucket")
         return bucket_name, object_name
 
     except Exception as e:
-        logger.error(f"Failed to parse MinIO URL {file_path}: {e}")
-        raise ValueError(f"无法解析MinIO URL: {file_path}")
+        logger.error("Failed to parse MinIO URL: {}", sanitize_processing_error(e))
+        raise ValueError("无法解析MinIO URL")

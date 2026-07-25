@@ -1,4 +1,12 @@
-import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete, apiRequest } from './base'
+import {
+  apiGet,
+  apiPost,
+  apiAdminGet,
+  apiAdminPost,
+  apiAdminPut,
+  apiAdminDelete,
+  apiRequest
+} from './base'
 
 /**
  * 知识库管理API模块
@@ -176,7 +184,7 @@ export const documentApi = {
    * @returns {Promise} - 添加结果
    */
   addDocuments: async (kbId, items, params = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents`, {
       items,
       params
     })
@@ -190,10 +198,17 @@ export const documentApi = {
    * @returns {Promise} - 添加结果
    */
   addUploadedDocuments: async (kbId, items, params = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/add`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/add`, {
       items,
       params
     })
+  },
+
+  retryReplacementCleanup: async (kbId, fileId) => {
+    return apiPost(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`,
+      {}
+    )
   },
 
   /**
@@ -479,20 +494,20 @@ export const fileApi = {
   /**
    * 上传文件
    * @param {File} file - 文件对象
-   * @param {string} kbId - 知识库ID（可选）
+   * @param {string} kbId - 知识库ID
+   * @param {Object} options - 重复处理策略及替换目标
    * @returns {Promise} - 上传结果
    */
-  uploadFile: async (file, kbId = null) => {
+  uploadFile: async (file, kbId, options = {}) => {
     const formData = new FormData()
     formData.append('file', file)
 
-    const url = kbId ? `/api/knowledge/files/upload?kb_id=${kbId}` : '/api/knowledge/files/upload'
-
-    return apiAdminPost(url, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+    const query = buildQuery({
+      kb_id: kbId,
+      duplicate_strategy: options.duplicateStrategy || 'prompt',
+      replace_file_id: options.replaceFileId
     })
+    return apiPost(`/api/knowledge/files/upload?${query}`, formData)
   },
 
   /**
@@ -500,7 +515,7 @@ export const fileApi = {
    * @returns {Promise} - 文件类型列表
    */
   getSupportedFileTypes: async () => {
-    return apiAdminGet('/api/knowledge/files/supported-types')
+    return apiGet('/api/knowledge/files/supported-types')
   },
 
   /**

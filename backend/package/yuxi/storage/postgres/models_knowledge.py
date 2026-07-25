@@ -4,6 +4,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -76,7 +77,13 @@ class KnowledgeFile(Base):
     """知识文件模型"""
 
     __tablename__ = "knowledge_files"
-    __table_args__ = (UniqueConstraint("file_id", name="uq_knowledge_files_file_id"),)
+    __table_args__ = (
+        UniqueConstraint("file_id", name="uq_knowledge_files_file_id"),
+        CheckConstraint(
+            "processing_progress >= 0 AND processing_progress <= 100",
+            name="ck_knowledge_files_processing_progress",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_id = Column(String(64), unique=True, nullable=False, index=True)
@@ -95,6 +102,16 @@ class KnowledgeFile(Base):
     token_count = Column(BigInteger, default=0)
     content_type = Column(String(64))
     processing_params = Column(JSON_VALUE)
+    processing_stage = Column(String(64))
+    processing_progress = Column(Integer, nullable=False, default=0)
+    processing_task_id = Column(String(64))
+    processing_task_attempt = Column(Integer, nullable=False, default=0)
+    processing_task_updated_at = Column(DateTime(timezone=True))
+    processing_task_lease_expires_at = Column(DateTime(timezone=True))
+    replacement_target_file_id = Column(String(64), index=True)
+    previous_version_id = Column(String(64), index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    superseded_at = Column(DateTime(timezone=True))
     is_folder = Column(Boolean, default=False)
     error_message = Column(Text)
     created_by = Column(String(64))

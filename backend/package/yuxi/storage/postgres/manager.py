@@ -86,7 +86,7 @@ class PostgresManager(metaclass=SingletonMeta):
             )
 
             self._initialized = True
-            logger.info(f"PostgreSQL manager initialized for knowledge base: {db_url.split('@')[0]}://***")
+            logger.info("PostgreSQL manager initialized for knowledge base")
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL manager: {e}")
             # 不抛出异常，允许应用启动，但在使用时会报错
@@ -173,6 +173,54 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS token_count BIGINT DEFAULT 0",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS content_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_params JSONB",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "processing_progress INTEGER NOT NULL DEFAULT 0"
+            ),
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('knowledge_files') IS NOT NULL
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM pg_constraint
+                       WHERE conname = 'ck_knowledge_files_processing_progress'
+                         AND conrelid = 'knowledge_files'::regclass
+                   ) THEN
+                    BEGIN
+                        ALTER TABLE knowledge_files
+                        ADD CONSTRAINT ck_knowledge_files_processing_progress
+                        CHECK (processing_progress >= 0 AND processing_progress <= 100);
+                    EXCEPTION WHEN duplicate_object THEN
+                        NULL;
+                    END;
+                END IF;
+            END $$;
+            """,
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_task_id VARCHAR(64)",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "processing_task_attempt INTEGER NOT NULL DEFAULT 0"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_task_updated_at TIMESTAMPTZ",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "processing_task_lease_expires_at TIMESTAMPTZ"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS replacement_target_file_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS previous_version_id VARCHAR(64)",
+            ("ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE"),
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_files_replacement_target_file_id "
+                "ON knowledge_files(replacement_target_file_id)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_files_previous_version_id "
+                "ON knowledge_files(previous_version_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_files_is_active ON knowledge_files(is_active)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS is_folder BOOLEAN",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS error_message TEXT",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS created_by VARCHAR(64)",

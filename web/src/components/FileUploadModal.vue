@@ -440,6 +440,13 @@ import {
   ChevronUp
 } from 'lucide-vue-next'
 import { buildChunkParamsPayload } from '@/utils/chunkUtils'
+import {
+  DUPLICATE_STRATEGIES,
+  buildKnowledgeUploadUrl,
+  getDuplicateConflictDetail,
+  getDuplicateConflictMessage,
+  getSafeUploadErrorMessage
+} from '@/utils/document_duplicate_policy'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
@@ -637,12 +644,11 @@ const failedDetailItems = computed(() => {
     .map((file) => {
       const uid = file.uid
       const rawStatus = uploadTaskStatus.value[uid] || file.status || 'unknown'
-      const detail = file?.response?.detail || file?.error?.message || ''
       return {
         uid,
         name: file.name || '未命名文件',
         status: rawStatus,
-        errorText: detail || '上传失败'
+        errorText: getSafeUploadErrorMessage(file?.response)
       }
     })
     .filter((item) => item.status === 'error')
@@ -1274,7 +1280,7 @@ const processUploadQueue = () => {
 
 const runUploadTask = (task) => {
   const { file, onProgress, onSuccess, onError } = task.options
-  const fileUid = file?.uid
+  const fileUid = task.fileUid || file?.uid
 
   if (fileUid) {
     uploadTaskStatus.value[fileUid] = 'uploading'
@@ -1299,7 +1305,14 @@ const runUploadTask = (task) => {
 
     const xhr = new XMLHttpRequest()
     task.xhr = xhr
-    xhr.open('POST', `/api/knowledge/files/upload?kb_id=${currentKbId}`)
+    xhr.open(
+      'POST',
+      buildKnowledgeUploadUrl(
+        currentKbId,
+        task.duplicateStrategy || DUPLICATE_STRATEGIES.PROMPT,
+        task.replaceFileId
+      )
+    )
 
     const headers = getAuthHeaders()
     for (const [key, value] of Object.entries(headers)) {
@@ -1349,11 +1362,12 @@ const runUploadTask = (task) => {
         errorResp = {}
       }
       file.response = errorResp
-      const error = new Error(errorResp.detail || 'Upload failed')
+      const error = new Error(getSafeUploadErrorMessage(errorResp))
+      error.response = { status: xhr.status, data: errorResp }
       if (fileUid) {
         uploadTaskStatus.value[fileUid] = 'error'
       }
-      onError(error, file)
+      onError(error, errorResp)
       reject(error)
     }
 
@@ -1379,14 +1393,18 @@ const runUploadTask = (task) => {
 }
 
 const handleFileUpload = (info) => {
+  fileList.value = info?.fileList ?? []
+
   if (info?.file?.status === 'error') {
     const file = info.file
-    // 尝试多种方式获取错误信息
-    const detail = file?.response?.detail || file?.error?.message || ''
-    if (detail.includes('same content') || detail.includes('相同内容')) {
-      message.error(`${file.name} 已是相同内容文件，无需重复上传`)
+    const conflictDetail = getDuplicateConflictDetail(file?.response)
+    if (conflictDetail) {
+      message.error(getDuplicateConflictMessage(conflictDetail))
+      fileList.value = fileList.value.filter((item) => item.uid !== file.uid)
+      delete uploadTaskStatus.value[file.uid]
+      delete uploadTaskProgress.value[file.uid]
     } else {
-      message.error(detail || `文件上传失败：${file.name}`)
+      message.error(getSafeUploadErrorMessage(file?.response))
     }
   }
 
@@ -1397,8 +1415,6 @@ const handleFileUpload = (info) => {
       showSameNameFilesInUploadArea(response.same_name_files)
     }
   }
-
-  fileList.value = info?.fileList ?? []
 }
 
 const handleDrop = () => {}
@@ -1595,6 +1611,9 @@ const chunkData = async () => {
   const items = []
   const content_hashes = {}
   const file_sizes = {}
+  const duplicate_strategies = {}
+  const replace_file_ids = {}
+  const source_paths = {}
   for (const file of fileList.value) {
     if (file.status !== 'done') continue
     const file_path = file.response?.file_path
@@ -1604,6 +1623,12 @@ const chunkData = async () => {
     items.push(file_path)
     if (content_hash) content_hashes[file_path] = content_hash
     if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
+    duplicate_strategies[file_path] =
+      file.response?.duplicate_strategy || DUPLICATE_STRATEGIES.PROMPT
+    if (file.response?.replace_file_id) {
+      replace_file_ids[file_path] = file.response.replace_file_id
+    }
+    if (file.response?.filename) source_paths[file_path] = file.response.filename
 
     // 检查是否需要OCR
     const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
@@ -1623,7 +1648,14 @@ const chunkData = async () => {
 
   try {
     store.state.chunkLoading = true
-    const params = { ...processingParams.value, content_hashes, file_sizes }
+    const params = {
+      ...processingParams.value,
+      content_hashes,
+      file_sizes,
+      duplicate_strategies,
+      replace_file_ids,
+      source_paths
+    }
     if (autoIndex.value) {
       params.auto_index = true
       Object.assign(params, buildAutoIndexParams())

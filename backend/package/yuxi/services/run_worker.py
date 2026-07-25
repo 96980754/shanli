@@ -7,6 +7,8 @@ import json
 import time
 from dataclasses import dataclass, field
 
+from arq import cron
+from arq.worker import func
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
@@ -14,6 +16,11 @@ from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import config as sys_config
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
+from yuxi.services.document_ingestion_service import (
+    REPLACEMENT_CLEANUP_MAX_TRIES,
+    DocumentIngestionService,
+    process_document_replacement_cleanup,
+)
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.run_queue_service import (
     append_run_stream_event,
@@ -548,14 +555,19 @@ async def _load_input_message(message_id: int | None) -> Message | None:
 
 
 async def _worker_startup(ctx):
-    del ctx
     pg_manager.initialize()
     await pg_manager.create_business_tables()
     await pg_manager.ensure_business_schema()
+    await pg_manager.ensure_knowledge_schema()
     await ensure_builtin_mcp_servers_in_db()
     async with pg_manager.get_async_session_context() as session:
         await init_builtin_skills(session)
+    await DocumentIngestionService().recover_pending_replacement_cleanups(queue=ctx.get("redis"))
     sys_config.start_runtime_sync()
+
+
+async def recover_document_replacement_cleanups(ctx):
+    await DocumentIngestionService().recover_pending_replacement_cleanups(queue=ctx.get("redis"))
 
 
 async def _worker_shutdown(ctx):
@@ -563,7 +575,17 @@ async def _worker_shutdown(ctx):
 
 
 class WorkerSettings:
-    functions = [process_agent_run]
+    functions = [
+        process_agent_run,
+        func(process_document_replacement_cleanup, max_tries=REPLACEMENT_CLEANUP_MAX_TRIES),
+    ]
+    cron_jobs = [
+        cron(
+            recover_document_replacement_cleanups,
+            minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
+            unique=True,
+        )
+    ]
     max_tries = 2
     retry_jobs = True
     job_timeout = 3600

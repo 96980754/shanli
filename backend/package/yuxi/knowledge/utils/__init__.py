@@ -7,6 +7,7 @@ from .kb_utils import (
     parse_minio_url,
     prepare_item_metadata,
     resolve_processing_params,
+    sanitize_processing_error,
     sanitize_processing_params,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "parse_minio_url",
     "prepare_item_metadata",
     "resolve_processing_params",
+    "sanitize_processing_error",
     "sanitize_processing_params",
 ]

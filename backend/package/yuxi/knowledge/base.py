@@ -14,7 +14,7 @@ from yuxi.knowledge.schemas import (
     SearchOutputSchema,
     SearchResultSchema,
 )
-from yuxi.knowledge.utils import resolve_processing_params, sanitize_processing_params
+from yuxi.knowledge.utils import resolve_processing_params, sanitize_processing_error, sanitize_processing_params
 from yuxi.services.file_preview import (
     MAX_BINARY_PREVIEW_SIZE_BYTES,
     OfficePreviewConversionError,
@@ -37,9 +37,10 @@ class FileStatus:
     INDEXING = "indexing"
     INDEXED = "indexed"
     ERROR_INDEXING = "error_indexing"
+    ERROR_REPLACEMENT_CLEANUP = "error_replacement_cleanup"
 
 
-INDEXED_STATS_STATUSES = {FileStatus.INDEXED, "done"}
+INDEXED_STATS_STATUSES = {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP, "done"}
 
 
 def _should_repair_file_stats(file_meta: dict) -> bool:
@@ -168,8 +169,19 @@ class KnowledgeBase(ABC):
                     file_processing_params=record.processing_params,
                 )
             ),
+            "processing_stage": getattr(record, "processing_stage", None),
+            "processing_progress": max(0, min(int(getattr(record, "processing_progress", 0) or 0), 100)),
+            "processing_task_id": getattr(record, "processing_task_id", None),
+            "processing_task_attempt": getattr(record, "processing_task_attempt", 0),
+            "processing_task_updated_at": getattr(record, "processing_task_updated_at", None),
+            "processing_task_lease_expires_at": getattr(record, "processing_task_lease_expires_at", None),
+            "replacement_target_file_id": getattr(record, "replacement_target_file_id", None),
+            "previous_version_id": getattr(record, "previous_version_id", None),
+            "is_active": bool(getattr(record, "is_active", True)),
+            "superseded_at": utc_isoformat(record.superseded_at) if getattr(record, "superseded_at", None) else None,
             "is_folder": record.is_folder,
             "error": record.error_message,
+            "error_message": record.error_message,
             "created_by": record.created_by,
             "updated_by": record.updated_by,
             "created_at": utc_isoformat(record.created_at) if record.created_at else None,
@@ -196,6 +208,16 @@ class KnowledgeBase(ABC):
             "token_count": int(meta.get("token_count") or 0),
             "content_type": meta.get("content_type"),
             "processing_params": sanitize_processing_params(meta.get("processing_params")),
+            "processing_stage": meta.get("processing_stage"),
+            "processing_progress": max(0, min(int(meta.get("processing_progress") or 0), 100)),
+            "processing_task_id": meta.get("processing_task_id"),
+            "processing_task_attempt": meta.get("processing_task_attempt", 0),
+            "processing_task_updated_at": meta.get("processing_task_updated_at"),
+            "processing_task_lease_expires_at": meta.get("processing_task_lease_expires_at"),
+            "replacement_target_file_id": meta.get("replacement_target_file_id"),
+            "previous_version_id": meta.get("previous_version_id"),
+            "is_active": meta.get("is_active", True),
+            "superseded_at": meta.get("superseded_at"),
             "is_folder": meta.get("is_folder", False),
             "error_message": meta.get("error"),
             "created_by": str(meta.get("created_by")) if meta.get("created_by") else None,
@@ -321,6 +343,9 @@ class KnowledgeBase(ABC):
 
         # Initial status
         metadata["status"] = FileStatus.UPLOADED
+        metadata["processing_stage"] = None
+        metadata["processing_progress"] = 0
+        metadata["is_active"] = True
         metadata["created_at"] = utc_isoformat()
         if operator_id:
             metadata["created_by"] = operator_id
@@ -352,7 +377,12 @@ class KnowledgeBase(ABC):
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
         file_repo = KnowledgeFileRepository()
-        claim_data = {"status": FileStatus.PARSING, "error_message": None}
+        claim_data = {
+            "status": FileStatus.PARSING,
+            "processing_stage": "parsing",
+            "processing_progress": 20,
+            "error_message": None,
+        }
         if operator_id:
             claim_data["updated_by"] = operator_id
         claimed_record = await file_repo.update_fields_if_status(
@@ -373,7 +403,11 @@ class KnowledgeBase(ABC):
         file_path = file_meta.get("path")
         if not file_path:
             message = f"File {file_id} has no valid path in metadata"
-            update_data = {"status": FileStatus.ERROR_PARSING, "error_message": message}
+            update_data = {
+                "status": FileStatus.ERROR_PARSING,
+                "processing_stage": "parsing",
+                "error_message": sanitize_processing_error(message),
+            }
             if operator_id:
                 update_data["updated_by"] = operator_id
             await file_repo.update_fields(file_id=file_id, kb_id=kb_id, data=update_data)
@@ -402,9 +436,15 @@ class KnowledgeBase(ABC):
             file_meta["updated_at"] = utc_isoformat()
             if operator_id:
                 file_meta["updated_by"] = operator_id
+            is_replacement = bool(file_meta.get("replacement_target_file_id"))
+            file_meta["processing_stage"] = "replacement_preparing" if is_replacement else None
+            file_meta["processing_progress"] = 55 if is_replacement else 100
+            file_meta["error_message"] = None
             update_data = {
                 "status": FileStatus.PARSED,
                 "markdown_file": markdown_file_path,
+                "processing_stage": "replacement_preparing" if is_replacement else None,
+                "processing_progress": 55 if is_replacement else 100,
                 "error_message": None,
             }
             if operator_id:
@@ -414,15 +454,21 @@ class KnowledgeBase(ABC):
             return file_meta
 
         except Exception as e:
-            error_msg = str(e)
+            error_msg = sanitize_processing_error(e)
             logger.error(f"Failed to parse file {file_id}: {error_msg}")
 
             file_meta["status"] = FileStatus.ERROR_PARSING
             file_meta["error"] = error_msg
+            file_meta["error_message"] = error_msg
+            file_meta["processing_stage"] = "parsing"
             file_meta["updated_at"] = utc_isoformat()
             if operator_id:
                 file_meta["updated_by"] = operator_id
-            update_data = {"status": FileStatus.ERROR_PARSING, "error_message": error_msg}
+            update_data = {
+                "status": FileStatus.ERROR_PARSING,
+                "processing_stage": "parsing",
+                "error_message": error_msg,
+            }
             if operator_id:
                 update_data["updated_by"] = operator_id
             await file_repo.update_fields(file_id=file_id, kb_id=kb_id, data=update_data)
@@ -466,7 +512,13 @@ class KnowledgeBase(ABC):
     async def _mark_file_unparsed(self, kb_id: str, file_id: str, operator_id: str | None = None) -> None:
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        update_data = {"status": FileStatus.UPLOADED, "markdown_file": None, "error_message": None}
+        update_data = {
+            "status": FileStatus.UPLOADED,
+            "markdown_file": None,
+            "processing_stage": None,
+            "processing_progress": 0,
+            "error_message": None,
+        }
         if operator_id:
             update_data["updated_by"] = operator_id
         record = await KnowledgeFileRepository().update_fields(file_id=file_id, kb_id=kb_id, data=update_data)
@@ -1350,7 +1402,11 @@ class KnowledgeBase(ABC):
         """
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        children = await KnowledgeFileRepository().list_children(kb_id=kb_id, parent_id=folder_id)
+        children = await KnowledgeFileRepository().list_children(
+            kb_id=kb_id,
+            parent_id=folder_id,
+            include_version_history=True,
+        )
         for child in children:
             child_id = child.file_id
             if child.is_folder:

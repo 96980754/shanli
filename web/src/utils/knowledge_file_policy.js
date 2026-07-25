@@ -1,6 +1,7 @@
 export const FILE_ACTIONS = {
   PARSE: 'parse',
-  INDEX: 'index'
+  INDEX: 'index',
+  REPLACEMENT_CLEANUP: 'replacement_cleanup'
 }
 
 const STATUS_VIEW = {
@@ -11,6 +12,7 @@ const STATUS_VIEW = {
   indexing: { label: '入库中', tone: 'status-info', icon: 'progress' },
   indexed: { label: '已入库', tone: 'status-success', icon: 'success' },
   error_indexing: { label: '重试入库', tone: 'status-error', icon: 'error' },
+  error_replacement_cleanup: { label: '重试版本清理', tone: 'status-error', icon: 'error' },
   done: { label: '已入库', tone: 'status-success', icon: 'success' },
   failed: { label: '入库失败', tone: 'status-error', icon: 'error' },
   processing: { label: '处理中', tone: 'status-info', icon: 'progress' },
@@ -21,18 +23,46 @@ const STATUS_ACTION = {
   uploaded: { type: FILE_ACTIONS.PARSE, label: '解析文件' },
   error_parsing: { type: FILE_ACTIONS.PARSE, label: '重试解析' },
   parsed: { type: FILE_ACTIONS.INDEX, label: '入库' },
-  error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' }
+  error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' },
+  error_replacement_cleanup: {
+    type: FILE_ACTIONS.REPLACEMENT_CLEANUP,
+    label: '重试版本清理'
+  }
 }
 
-const PARSED_PREVIEW_STATUSES = new Set(['done', 'parsed', 'indexed', 'error_indexing'])
+const PROCESSING_STAGE_LABELS = {
+  duplicate_check: '重复检查',
+  uploading: '上传中',
+  parsing: '解析中',
+  replacement_preparing: '准备新版本',
+  indexing: '入库中',
+  verifying: '验证新向量',
+  switching_version: '切换版本',
+  replacement_cleanup: '清理旧版本'
+}
+
+const PARSED_PREVIEW_STATUSES = new Set([
+  'done',
+  'parsed',
+  'indexed',
+  'error_indexing',
+  'error_replacement_cleanup'
+])
 const SOURCE_ONLY_PREVIEW_STATUSES = new Set(['uploaded', 'error_parsing'])
 const TABLE_SELECTION_BLOCKED_STATUSES = new Set(['processing', 'waiting'])
 const DELETE_BLOCKED_STATUSES = new Set(['processing', 'parsing', 'indexing'])
+const VERSION_MAINTENANCE_STAGES = new Set(['switching_version', 'replacement_cleanup'])
 const PROCESSING_STATUSES = new Set(['processing', 'waiting', 'parsing', 'indexing'])
 const INDEXABLE_STATUSES = new Set(['parsed', 'error_indexing', 'done', 'indexed'])
 const PARSEABLE_STATUSES = new Set(['uploaded', 'error_parsing'])
-const DOWNLOADABLE_STATUSES = new Set(['done', 'indexed', 'parsed', 'error_indexing'])
-const CHUNK_PREVIEW_STATUSES = new Set(['done', 'indexed'])
+const DOWNLOADABLE_STATUSES = new Set([
+  'done',
+  'indexed',
+  'parsed',
+  'error_indexing',
+  'error_replacement_cleanup'
+])
+const CHUNK_PREVIEW_STATUSES = new Set(['done', 'indexed', 'error_replacement_cleanup'])
 const STATUS_SORT_ORDER = {
   done: 1,
   indexed: 1,
@@ -44,6 +74,7 @@ const STATUS_SORT_ORDER = {
   parsed: 3,
   failed: 4,
   error_indexing: 4,
+  error_replacement_cleanup: 4,
   error_parsing: 4
 }
 
@@ -54,11 +85,14 @@ export const FILE_STATUS_FILTER_OPTIONS = [
   { label: '重试解析', value: 'error_parsing' },
   { label: '入库中', value: 'indexing' },
   { label: '已入库', value: 'indexed' },
-  { label: '重试入库', value: 'error_indexing' }
+  { label: '重试入库', value: 'error_indexing' },
+  { label: '重试版本清理', value: 'error_replacement_cleanup' }
 ]
 
 export const getFileStatusView = (status) =>
   STATUS_VIEW[status] || { label: status || '', tone: '', icon: null }
+
+export const getProcessingStageLabel = (stage) => PROCESSING_STAGE_LABELS[stage] || stage || ''
 
 export const getFilePrimaryAction = (record) => {
   if (!record || record.is_folder) return null
@@ -84,11 +118,21 @@ export const canDownloadFile = (record) =>
 
 export const canSelectFile = (record, locked = false) =>
   Boolean(
-    record && !record.is_folder && !locked && !TABLE_SELECTION_BLOCKED_STATUSES.has(record.status)
+    record &&
+    !record.is_folder &&
+    !locked &&
+    !TABLE_SELECTION_BLOCKED_STATUSES.has(record.status) &&
+    !VERSION_MAINTENANCE_STAGES.has(record.processing_stage)
   )
 
 export const canDeleteFile = (record, locked = false) =>
-  Boolean(record && !record.is_folder && !locked && !DELETE_BLOCKED_STATUSES.has(record.status))
+  Boolean(
+    record &&
+    !record.is_folder &&
+    !locked &&
+    !DELETE_BLOCKED_STATUSES.has(record.status) &&
+    !VERSION_MAINTENANCE_STAGES.has(record.processing_stage)
+  )
 
 export const isProcessingFile = (record) =>
   Boolean(record && PROCESSING_STATUSES.has(record.status))

@@ -234,13 +234,17 @@
               <span v-if="getStatusIcon(text)" :class="['file-status-icon', getStatusTone(text)]">
                 <component :is="getStatusIcon(text)" />
               </span>
-              <span>{{ getStatusText(text) }}</span>
+              <span>{{ getStatusText(text, row) }}</span>
             </button>
-            <span v-else class="file-status-pill file-status-static">
+            <span
+              v-else
+              class="file-status-pill file-status-static"
+              :title="getStatusDetailTitle(row)"
+            >
               <span v-if="getStatusIcon(text)" :class="['file-status-icon', getStatusTone(text)]">
                 <component :is="getStatusIcon(text)" />
               </span>
-              <span>{{ getStatusText(text) }}</span>
+              <span>{{ getStatusText(text, row) }}</span>
             </span>
           </template>
         </div>
@@ -359,7 +363,8 @@ import {
   canSelectFile,
   getFilePrimaryAction,
   getFileStatusSortWeight,
-  getFileStatusView
+  getFileStatusView,
+  getProcessingStageLabel
 } from '@/utils/knowledge_file_policy'
 import {
   CheckCircleFilled,
@@ -414,7 +419,14 @@ const statusIconMap = {
   file: FileTextFilled
 }
 
-const getStatusText = (status) => getFileStatusView(status).label
+const getStatusText = (status, record = null) => {
+  if (record?.processing_stage && !String(status || '').startsWith('error_')) {
+    const stage = getProcessingStageLabel(record.processing_stage)
+    const progress = Math.max(0, Math.min(Number(record.processing_progress) || 0, 100))
+    return `${stage} ${progress}%`
+  }
+  return getFileStatusView(status).label
+}
 
 const getStatusTone = (status) => getFileStatusView(status).tone
 
@@ -429,8 +441,19 @@ const hasStatusAction = (record) => {
 
 const getStatusActionTitle = (record) => {
   const action = getFilePrimaryAction(record)
-  if (action) return action.label
-  return getStatusText(record.status)
+  const detail = getStatusDetailTitle(record)
+  if (action) return detail ? `${action.label}\n${detail}` : action.label
+  return detail || getStatusText(record.status, record)
+}
+
+const getStatusDetailTitle = (record) => {
+  const details = []
+  if (record?.processing_stage) {
+    const progress = Math.max(0, Math.min(Number(record.processing_progress) || 0, 100))
+    details.push(`${getProcessingStageLabel(record.processing_stage)}：${progress}%`)
+  }
+  if (record?.error_message) details.push(`失败原因：${record.error_message}`)
+  return details.join('\n')
 }
 
 const files = computed(() => store.documentFiles || [])
@@ -878,6 +901,17 @@ const handleStatusAction = async (record) => {
 
   if (action?.type === FILE_ACTIONS.INDEX) {
     await handleIndexFile(record)
+    return
+  }
+
+  if (action?.type === FILE_ACTIONS.REPLACEMENT_CLEANUP) {
+    try {
+      await documentApi.retryReplacementCleanup(store.kbId, record.file_id)
+      message.success('替换清理任务已重新提交')
+      handleRefresh()
+    } catch (error) {
+      message.error(error.message || '替换清理任务提交失败')
+    }
   }
 }
 

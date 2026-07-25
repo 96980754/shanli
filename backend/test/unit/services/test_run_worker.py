@@ -432,6 +432,9 @@ async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.Mo
     async def fake_ensure_business_schema():
         calls.append("ensure_business_schema")
 
+    async def fake_ensure_knowledge_schema():
+        calls.append("ensure_knowledge_schema")
+
     async def fake_ensure_builtin_mcp_servers_in_db():
         calls.append("ensure_builtin_mcp_servers_in_db")
 
@@ -446,21 +449,53 @@ async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.Mo
     def fake_start_runtime_sync():
         calls.append("start_runtime_sync")
 
+    async def fake_recover(self, *, queue=None):
+        assert queue == "worker-redis"
+        calls.append("recover_replacement_cleanups")
+        return 0
+
     monkeypatch.setattr(run_worker.pg_manager, "initialize", fake_initialize)
     monkeypatch.setattr(run_worker.pg_manager, "create_business_tables", fake_create_business_tables)
     monkeypatch.setattr(run_worker.pg_manager, "ensure_business_schema", fake_ensure_business_schema)
+    monkeypatch.setattr(run_worker.pg_manager, "ensure_knowledge_schema", fake_ensure_knowledge_schema)
     monkeypatch.setattr(run_worker.pg_manager, "get_async_session_context", fake_session_ctx)
     monkeypatch.setattr(run_worker, "ensure_builtin_mcp_servers_in_db", fake_ensure_builtin_mcp_servers_in_db)
     monkeypatch.setattr(run_worker, "init_builtin_skills", fake_init_builtin_skills)
+    monkeypatch.setattr(
+        run_worker.DocumentIngestionService,
+        "recover_pending_replacement_cleanups",
+        fake_recover,
+    )
     monkeypatch.setattr(run_worker.sys_config, "start_runtime_sync", fake_start_runtime_sync)
 
-    await run_worker._worker_startup({})
+    await run_worker._worker_startup({"redis": "worker-redis"})
 
     assert calls == [
         "initialize",
         "create_business_tables",
         "ensure_business_schema",
+        "ensure_knowledge_schema",
         "ensure_builtin_mcp_servers_in_db",
         "init_builtin_skills",
+        "recover_replacement_cleanups",
         "start_runtime_sync",
     ]
+
+
+def test_worker_registers_replacement_cleanup_with_three_retries():
+    cleanup_functions = [
+        function
+        for function in run_worker.WorkerSettings.functions
+        if getattr(function, "coroutine", None) is run_worker.process_document_replacement_cleanup
+    ]
+
+    assert len(cleanup_functions) == 1
+    assert cleanup_functions[0].max_tries == run_worker.REPLACEMENT_CLEANUP_MAX_TRIES == 4
+    assert run_worker.REPLACEMENT_CLEANUP_MAX_TRIES - 1 == 3
+
+
+def test_worker_registers_periodic_replacement_cleanup_recovery():
+    cron_jobs = getattr(run_worker.WorkerSettings, "cron_jobs", [])
+
+    assert cron_jobs
+    assert any(getattr(job, "coroutine", None) is run_worker.recover_document_replacement_cleanups for job in cron_jobs)

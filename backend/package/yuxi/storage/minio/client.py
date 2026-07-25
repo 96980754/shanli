@@ -90,8 +90,13 @@ class MinIOClient:
         try:
             created = False
             if not self.client.bucket_exists(bucket_name=bucket_name):
-                self.client.make_bucket(bucket_name=bucket_name)
-                created = True
+                try:
+                    self.client.make_bucket(bucket_name=bucket_name)
+                except S3Error as error:
+                    if error.code != "BucketAlreadyOwnedByYou":
+                        raise
+                else:
+                    created = True
                 logger.info(f"存储桶 '{bucket_name}' 已创建")
 
             self._ensure_public_read_access(bucket_name)
@@ -101,8 +106,8 @@ class MinIOClient:
 
             return True
         except S3Error as e:
-            logger.error(f"存储桶 '{bucket_name}' 错误: {e}")
-            raise StorageError(f"Error with bucket '{bucket_name}': {e}")
+            logger.error("Storage bucket operation failed: {}", e.code or "unknown")
+            raise StorageError("Storage bucket operation failed") from None
         except StorageError:
             raise
 
@@ -128,8 +133,8 @@ class MinIOClient:
 
             return UploadResult(url, bucket_name, object_name)
 
-        except S3Error as e:
-            error_msg = f"上传文件 '{object_name}' 失败: {e}"
+        except S3Error:
+            error_msg = "上传文件到存储桶失败"
             logger.error(error_msg)
             raise StorageError(error_msg)
 
@@ -185,12 +190,12 @@ class MinIOClient:
             response = self.client.get_object(bucket_name=bucket_name, object_name=object_name)
             data = response.read()
             response.close()
-            logger.info(f"成功下载 '{object_name}' 从存储桶 '{bucket_name}'")
+            logger.info("成功从存储桶下载文件")
             return data
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                raise StorageError(f"对象 '{object_name}' 在存储桶 '{bucket_name}' 中不存在")
+                raise StorageError("存储对象不存在")
             raise StorageError(f"下载文件失败: {e}")
 
     async def adownload_response(self, bucket_name: str, object_name: str) -> BaseHTTPResponse:
@@ -205,7 +210,7 @@ class MinIOClient:
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                raise StorageError(f"对象 '{object_name}' 在存储桶 '{bucket_name}' 中不存在")
+                raise StorageError("存储对象不存在")
             raise StorageError(f"下载文件失败: {e}")
 
     async def adownload_file(self, bucket_name: str, object_name: str) -> bytes:
@@ -214,12 +219,12 @@ class MinIOClient:
             response = await asyncio.to_thread(self.client.get_object, bucket_name=bucket_name, object_name=object_name)
             data = await asyncio.to_thread(response.read)
             response.close()
-            logger.info(f"成功下载 '{object_name}' 从存储桶 '{bucket_name}'")
+            logger.info("成功从存储桶下载文件")
             return data
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                raise StorageError(f"对象 '{object_name}' 在存储桶 '{bucket_name}' 中不存在")
+                raise StorageError("存储对象不存在")
             raise StorageError(f"下载文件失败: {e}")
 
     def get_presigned_url(self, bucket_name: str, object_name: str, days=7) -> str:
@@ -233,12 +238,12 @@ class MinIOClient:
         """删除文件"""
         try:
             self.client.remove_object(bucket_name=bucket_name, object_name=object_name)
-            logger.info(f"成功删除 '{object_name}' 从存储桶 '{bucket_name}'")
+            logger.info("成功删除存储对象")
             return True
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                logger.warning(f"要删除的对象 '{object_name}' 不存在")
+                logger.warning("要删除的存储对象不存在")
                 return False
             raise StorageError(f"删除文件失败: {e}")
 
@@ -272,10 +277,10 @@ class MinIOClient:
                     try:
                         self.client.remove_object(bucket_name, obj.object_name)
                         deleted_count += 1
-                    except S3Error as e:
-                        logger.warning(f"Failed to delete {bucket_name}/{obj.object_name}: {e}")
-            except S3Error as e:
-                logger.warning(f"Failed to list objects in {bucket_name}/{prefix}: {e}")
+                    except S3Error:
+                        logger.warning("Failed to delete a storage object")
+            except S3Error:
+                logger.warning("Failed to list storage objects")
 
         await asyncio.to_thread(_delete_objects)
         return deleted_count
@@ -413,7 +418,7 @@ class MinIOClient:
 
         # 下载文件
         file_data = await self.adownload_file(bucket_name, object_name)
-        logger.info(f"成功从 MinIO 下载文件: {object_name} ({len(file_data)} bytes)")
+        logger.info("成功从 MinIO 下载文件（{} bytes）", len(file_data))
 
         # 创建临时文件
         if allowed_extensions:

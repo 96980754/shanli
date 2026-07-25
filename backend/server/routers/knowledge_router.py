@@ -17,7 +17,7 @@ from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
 from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
 from yuxi.knowledge.runtime import knowledge_base
-from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
+from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url, sanitize_processing_error
 from yuxi.knowledge.utils.mindmap_utils import (
     batch_remove_files_from_mindmap,
     generate_database_mindmap,
@@ -33,6 +33,12 @@ from yuxi.knowledge.utils.sample_question_utils import (
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
+from yuxi.services.document_ingestion_service import (
+    DocumentIngestionService,
+    DuplicateConflictError,
+    DuplicateStrategyError,
+    ReplacementInProgressError,
+)
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
@@ -194,26 +200,40 @@ def _validate_uploaded_document_items(items: list[str], params: dict) -> None:
     if preprocessed_map is not None and not isinstance(preprocessed_map, dict):
         raise HTTPException(status_code=400, detail="params._preprocessed_map must be an object")
 
+    for map_key in ("duplicate_strategies", "replace_file_ids", "source_paths"):
+        value = params.get(map_key)
+        if value is not None and not isinstance(value, dict):
+            raise HTTPException(status_code=400, detail=f"params.{map_key} must be an object")
+
     for item in items:
         if not isinstance(item, str) or not item.strip():
             raise HTTPException(status_code=400, detail="items must only contain non-empty strings")
         if not is_minio_url(item):
             raise HTTPException(status_code=400, detail="File source must be a MinIO URL")
 
-        has_content_hash = isinstance(content_hashes, dict) and bool(content_hashes.get(item))
-        preprocessed = preprocessed_map.get(item) if isinstance(preprocessed_map, dict) else None
-        has_preprocessed_hash = isinstance(preprocessed, dict) and bool(preprocessed.get("content_hash"))
-        if not has_content_hash and not has_preprocessed_hash:
-            raise HTTPException(status_code=400, detail=f"Missing content_hash for file: {item}")
-
 
 def _params_for_uploaded_document_item(item: str, params: dict) -> dict:
-    source_paths = params.get("source_paths")
     item_params = dict(params)
-    item_params.pop("source_paths", None)
-    if isinstance(source_paths, dict) and source_paths.get(item):
-        item_params["source_path"] = source_paths[item]
+    item_value_maps = {
+        "source_paths": "source_path",
+        "duplicate_strategies": "duplicate_strategy",
+        "replace_file_ids": "replace_file_id",
+    }
+    for map_key, item_key in item_value_maps.items():
+        values = item_params.pop(map_key, None)
+        if isinstance(values, dict) and values.get(item) is not None:
+            item_params[item_key] = values[item]
     return item_params
+
+
+def _request_uses_replace(params: dict) -> bool:
+    strategy = params.get("duplicate_strategy")
+    if isinstance(strategy, str) and strategy.strip().lower() == "replace":
+        return True
+    strategies = params.get("duplicate_strategies")
+    return isinstance(strategies, dict) and any(
+        isinstance(value, str) and value.strip().lower() == "replace" for value in strategies.values()
+    )
 
 
 async def _has_running_graph_build_task(kb_id: str) -> bool:
@@ -256,7 +276,6 @@ async def _require_kb_permission(current_user: User, kb_id: str, action: str) ->
 
 async def _require_kb_grant_permission(current_user: User, kb_id: str) -> None:
     await _require_kb_permission(current_user, kb_id, "can_grant")
-
 
 
 @knowledge.get("/databases")
@@ -748,9 +767,10 @@ async def list_documents(
 async def document_file_exists(
     kb_id: str,
     filename: str = Query(..., min_length=1, description="知识库文件展示名或相对路径"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """检查知识库中是否已存在指定文件名或相对路径的文件。"""
+    await _require_kb_permission(current_user, kb_id, "can_upload")
     await _ensure_database_supports_documents(kb_id, "文档存在性检查")
     normalized_filename = filename.strip()
     if not normalized_filename:
@@ -764,10 +784,13 @@ async def document_file_exists(
 
 @knowledge.post("/databases/{kb_id}/documents")
 async def add_documents(
-    kb_id: str, items: list[str] = Body(...), params: dict = Body(...), current_user: User = Depends(get_admin_user)
+    kb_id: str, items: list[str] = Body(...), params: dict = Body(...), current_user: User = Depends(get_required_user)
 ):
     """添加文档到知识库（上传 -> 解析 -> 可选入库）"""
-    logger.debug(f"Add documents for kb_id {kb_id}: {items} {params=}")
+    logger.debug("Add documents for kb_id {}: item_count={}", kb_id, len(items))
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    if _request_uses_replace(params):
+        await _require_kb_permission(current_user, kb_id, "can_manage")
     await _ensure_database_supports_documents(kb_id, "文档添加/解析/入库")
 
     params = _ensure_document_params(params)
@@ -807,30 +830,67 @@ async def add_documents(
                 await context.set_progress(progress, f"[1/3] 添加记录 {idx}/{total}")
 
                 try:
-                    file_meta = await knowledge_base.add_file_record(
-                        kb_id, item, params=params, operator_id=current_user.uid
+                    item_params = _params_for_uploaded_document_item(item, params)
+                    creation = await DocumentIngestionService().create_uploaded_document(
+                        kb_id=kb_id,
+                        item=item,
+                        params=item_params,
+                        operator_id=current_user.uid,
                     )
+                    if creation.action == "skipped":
+                        processed_items[idx - 1] = {
+                            "status": "skipped",
+                            "action": "skipped",
+                            "existing_file_id": creation.existing_file_id,
+                            "cleanup_pending": bool(getattr(creation, "cleanup_pending", False)),
+                        }
+                        continue
+                    file_meta = creation.file_meta or {}
+                    if creation.action == "existing":
+                        processed_items[idx - 1] = {**file_meta, "action": "existing"}
+                        continue
                     added_files.append(
                         {
                             "index": idx - 1,
                             "item": item,
                             "file_id": file_meta["file_id"],
                             "file_meta": file_meta,
+                            "requires_index": bool(file_meta.get("replacement_target_file_id")),
                         }
                     )
+                except DuplicateConflictError as add_error:
+                    processed_items[idx - 1] = {
+                        "status": "failed",
+                        "error": add_error.detail["message"],
+                        "error_type": "duplicate_conflict",
+                        "conflict": add_error.detail,
+                    }
+                except ReplacementInProgressError as add_error:
+                    processed_items[idx - 1] = {
+                        "status": "failed",
+                        "error": add_error.detail["message"],
+                        "error_type": "replacement_in_progress",
+                        "conflict": add_error.detail,
+                    }
+                except DuplicateStrategyError as add_error:
+                    processed_items[idx - 1] = {
+                        "status": "failed",
+                        "error": str(add_error),
+                        "error_type": "invalid_duplicate_strategy",
+                    }
                 except Exception as add_error:
-                    logger.error(f"添加文件记录失败 {item}: {add_error}")
+                    logger.error("添加文件记录失败: {}", sanitize_processing_error(add_error))
                     error_type = "timeout" if isinstance(add_error, TimeoutError) else "add_failed"
                     error_msg = "添加超时" if isinstance(add_error, TimeoutError) else "添加记录失败"
                     processed_items[idx - 1] = {
-                        "item": item,
                         "status": "failed",
-                        "error": f"{error_msg}: {str(add_error)}",
+                        "error": f"{error_msg}: {sanitize_processing_error(add_error)}",
                         "error_type": error_type,
                     }
 
             await context.set_message("第二阶段：解析文件")
-            parse_end = 60.0 if auto_index else 95.0
+            should_index = auto_index or any(record["requires_index"] for record in added_files)
+            parse_end = 60.0 if should_index else 95.0
             parse_total = len(added_files)
             for idx, record in enumerate(added_files, 1):
                 await context.raise_if_cancelled()
@@ -843,22 +903,25 @@ async def add_documents(
                 try:
                     file_meta = await knowledge_base.parse_file(kb_id, file_id, operator_id=current_user.uid)
                     record["file_meta"] = file_meta
-                    if not auto_index or file_meta.get("status") != "parsed":
+                    if not (auto_index or record["requires_index"]) or file_meta.get("status") != "parsed":
                         processed_items[record["index"]] = file_meta
                 except Exception as parse_error:
-                    logger.error(f"解析文件失败 {item} (file_id={file_id}): {parse_error}")
+                    logger.error("解析文件失败 {}: {}", file_id, sanitize_processing_error(parse_error))
                     error_type = "timeout" if isinstance(parse_error, TimeoutError) else "parse_failed"
                     error_msg = "解析超时" if isinstance(parse_error, TimeoutError) else "解析失败"
                     processed_items[record["index"]] = {
-                        "item": item,
                         "status": "failed",
-                        "error": f"{error_msg}: {str(parse_error)}",
+                        "error": f"{error_msg}: {sanitize_processing_error(parse_error)}",
                         "error_type": error_type,
                     }
 
-            if auto_index:
+            if should_index:
                 await context.set_message("第三阶段：自动入库")
-                parsed_files = [record for record in added_files if record["file_meta"].get("status") == "parsed"]
+                parsed_files = [
+                    record
+                    for record in added_files
+                    if record["file_meta"].get("status") == "parsed" and (auto_index or record["requires_index"])
+                ]
                 total_parsed = len(parsed_files)
 
                 for idx, record in enumerate(parsed_files, 1):
@@ -878,11 +941,10 @@ async def add_documents(
                         )
                         processed_items[record["index"]] = result
                     except Exception as index_error:
-                        logger.error(f"自动入库失败 {item} (file_id={file_id}): {index_error}")
+                        logger.error("自动入库失败 {}: {}", file_id, sanitize_processing_error(index_error))
                         processed_items[record["index"]] = {
-                            "item": item,
                             "status": "failed",
-                            "error": f"入库失败: {str(index_error)}",
+                            "error": f"入库失败: {sanitize_processing_error(index_error)}",
                             "error_type": "index_failed",
                         }
 
@@ -890,20 +952,19 @@ async def add_documents(
             await context.set_progress(100.0, "任务已取消")
             raise
         except Exception as task_error:
-            logger.exception(f"Task processing failed: {task_error}")
-            await context.set_progress(100.0, f"任务处理失败: {str(task_error)}")
+            logger.error("Task processing failed: {}", sanitize_processing_error(task_error))
+            await context.set_progress(100.0, f"任务处理失败: {sanitize_processing_error(task_error)}")
             raise
 
         final_items = [
             item
             if item is not None
             else {
-                "item": items[index],
                 "status": "failed",
                 "error": "文件未处理",
                 "error_type": "not_processed",
             }
-            for index, item in enumerate(processed_items)
+            for item in processed_items
         ]
         failed_count = len([item for item in final_items if _is_failed_item(item)])
 
@@ -941,22 +1002,24 @@ async def add_documents(
             "task_id": task.id,
         }
     except Exception as e:  # noqa: BLE001
-        logger.error(f"Failed to enqueue {content_type}s: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to enqueue task: {e}")
+        logger.error("Failed to enqueue {}s: {}", content_type, sanitize_processing_error(e))
+        raise HTTPException(status_code=500, detail="Failed to enqueue document processing task")
 
 
 @knowledge.post("/databases/{kb_id}/documents/add")
 async def add_uploaded_documents(
     kb_id: str,
     payload: AddUploadedDocumentsRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """将已上传的 MinIO 文件同步添加为知识库文档记录，不解析、不入库。"""
-    logger.debug(f"Add uploaded documents for kb_id {kb_id}: {payload.items} params={payload.params}")
+    logger.debug("Add uploaded documents for kb_id {}: item_count={}", kb_id, len(payload.items))
     await _require_kb_permission(current_user, kb_id, "can_upload")
     await _ensure_database_supports_documents(kb_id, "文档添加")
 
     params = _ensure_document_params(payload.params)
+    if _request_uses_replace(params):
+        await _require_kb_permission(current_user, kb_id, "can_manage")
     content_type = params.get("content_type", "file")
     if content_type == "url":
         raise HTTPException(status_code=400, detail="URL 处理方式已变更，请使用 fetch-url 接口先获取内容")
@@ -969,12 +1032,28 @@ async def add_uploaded_documents(
     failed_items: list[dict] = []
     for index, item in enumerate(payload.items):
         try:
-            file_meta = await knowledge_base.add_file_record(
-                kb_id,
-                item,
-                params=_params_for_uploaded_document_item(item, params),
+            item_params = _params_for_uploaded_document_item(item, params)
+            creation = await DocumentIngestionService().create_uploaded_document(
+                kb_id=kb_id,
+                item=item,
+                params=item_params,
                 operator_id=current_user.uid,
             )
+            action = creation.action
+            existing_file_id = creation.existing_file_id
+            file_meta = creation.file_meta or {}
+            if action == "skipped":
+                added_items.append(
+                    {
+                        "index": index,
+                        "item": item,
+                        "status": "skipped",
+                        "action": "skipped",
+                        "existing_file_id": existing_file_id,
+                        "cleanup_pending": bool(getattr(creation, "cleanup_pending", False)),
+                    }
+                )
+                continue
             added_items.append(
                 {
                     "index": index,
@@ -982,16 +1061,51 @@ async def add_uploaded_documents(
                     "file_id": file_meta["file_id"],
                     "status": file_meta.get("status"),
                     "file_meta": file_meta,
+                    "action": action,
                 }
             )
-        except Exception as add_error:  # noqa: BLE001
-            logger.error(f"添加文件记录失败 {item}: {add_error}")
+        except DuplicateConflictError as add_error:
+            if len(payload.items) == 1:
+                raise HTTPException(status_code=409, detail=add_error.detail)
             failed_items.append(
                 {
                     "index": index,
-                    "item": item,
                     "status": "failed",
-                    "error": f"添加记录失败: {str(add_error)}",
+                    "error": add_error.detail["message"],
+                    "error_type": "duplicate_conflict",
+                    "conflict": add_error.detail,
+                }
+            )
+        except ReplacementInProgressError as add_error:
+            if len(payload.items) == 1:
+                raise HTTPException(status_code=409, detail=add_error.detail)
+            failed_items.append(
+                {
+                    "index": index,
+                    "status": "failed",
+                    "error": add_error.detail["message"],
+                    "error_type": "replacement_in_progress",
+                    "conflict": add_error.detail,
+                }
+            )
+        except DuplicateStrategyError as add_error:
+            if len(payload.items) == 1:
+                raise HTTPException(status_code=400, detail=str(add_error))
+            failed_items.append(
+                {
+                    "index": index,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "invalid_duplicate_strategy",
+                }
+            )
+        except Exception as add_error:  # noqa: BLE001
+            logger.error("添加文件记录失败: {}", sanitize_processing_error(add_error))
+            failed_items.append(
+                {
+                    "index": index,
+                    "status": "failed",
+                    "error": f"添加记录失败: {sanitize_processing_error(add_error)}",
                     "error_type": "add_failed",
                 }
             )
@@ -1016,6 +1130,37 @@ async def add_uploaded_documents(
         "added": added_count,
         "failed": failed_count,
     }
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")
+async def retry_replacement_cleanup(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """重新提交已完成版本切换但清理失败的替换任务。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "替换清理重试")
+
+    service = DocumentIngestionService()
+    record = await service.file_repository.get_by_file_id(file_id)
+    if record is None or record.kb_id != kb_id:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if (
+        not record.is_active
+        or not record.previous_version_id
+        or record.replacement_target_file_id != record.previous_version_id
+        or (record.status != "error_replacement_cleanup" and record.processing_stage != "replacement_cleanup")
+    ):
+        raise HTTPException(status_code=409, detail="文档当前没有可重试的替换清理任务")
+
+    task_id = await service.enqueue_replacement_cleanup(
+        kb_id=kb_id,
+        new_file_id=file_id,
+        old_file_id=record.previous_version_id,
+        force_reclaim=record.status == "error_replacement_cleanup",
+    )
+    return {"message": "替换清理任务已重新提交", "status": "queued", "task_id": task_id}
 
 
 def _validate_direct_document_action_file_ids(file_ids: list[str]) -> list[str]:
@@ -1566,7 +1711,7 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
         # URL 类型文件没有原始文件可下载
         if file_type == "url":
             raise HTTPException(status_code=400, detail="URL 类型文件不支持下载原始文件")
-        logger.debug(f"File path from database: {file_path}")
+        logger.debug("Resolved stored document path")
         logger.debug(f"Original filename from database: {filename}")
 
         # 解码URL编码的文件名（如果有的话）
@@ -1583,11 +1728,11 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
         if not is_minio_url(file_path):
             raise HTTPException(status_code=400, detail="文件路径必须是 MinIO URL")
 
-        logger.debug(f"Downloading from MinIO: {file_path}")
+        logger.debug("Downloading stored document from MinIO")
 
         try:
             bucket_name, object_name = parse_minio_url(file_path)
-            logger.debug(f"Parsed bucket_name: {bucket_name}, object_name: {object_name}")
+            logger.debug("Parsed stored document location")
 
             minio_client = get_minio_client()
 
@@ -1596,11 +1741,11 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
                 bucket_name=bucket_name,
                 object_name=object_name,
             )
-            logger.debug(f"Successfully downloaded object: {object_name}")
+            logger.debug("Successfully downloaded stored document")
 
         except Exception as e:
-            logger.error(f"Failed to download MinIO file: {e}")
-            raise StorageError(f"下载文件失败: {e}")
+            logger.error("Failed to download MinIO file: {}", sanitize_processing_error(e))
+            raise StorageError("下载文件失败")
 
         # 创建流式生成器
         async def minio_stream():
@@ -1957,15 +2102,20 @@ async def import_workspace_files(
 @knowledge.post("/files/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    kb_id: str | None = Query(None),
-    current_user: User = Depends(get_admin_user),
+    kb_id: str = Query(..., min_length=1),
+    duplicate_strategy: str = Query("prompt"),
+    replace_file_id: str | None = Query(None),
+    current_user: User = Depends(get_required_user),
 ):
     """上传文件"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No selected file")
 
-    if kb_id:
-        await _ensure_database_supports_documents(kb_id, "文档上传")
+    normalized_strategy = duplicate_strategy.strip().lower()
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    if normalized_strategy == "replace":
+        await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "文档上传")
 
     logger.debug(f"Received upload file with filename: {file.filename}")
 
@@ -1975,8 +2125,7 @@ async def upload_file(
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
     basename, ext = os.path.splitext(file.filename)
-    # 直接使用原始文件名（小写）
-    filename = f"{basename}{ext}".lower()
+    filename = f"{basename}{ext}"
 
     try:
         file_bytes = await read_upload_with_limit(
@@ -1989,35 +2138,59 @@ async def upload_file(
 
     content_hash = await calculate_content_hash(file_bytes)
 
-    file_exists = await knowledge_base.file_existed_in_db(kb_id, content_hash)
-    if file_exists:
-        raise HTTPException(
-            status_code=409,
-            detail="数据库中已经存在了相同内容文件，File with the same content already exists in this database",
+    ingestion_service = DocumentIngestionService()
+    try:
+        decision = await ingestion_service.check_upload_conflict(
+            kb_id=kb_id,
+            filename=filename,
+            content_hash=content_hash,
+            file_size=len(file_bytes),
+            duplicate_strategy=normalized_strategy,
+            replace_file_id=replace_file_id,
         )
+    except DuplicateConflictError as conflict:
+        raise HTTPException(status_code=409, detail=conflict.detail)
+    except ReplacementInProgressError as conflict:
+        raise HTTPException(status_code=409, detail=conflict.detail)
+    except DuplicateStrategyError as strategy_error:
+        raise HTTPException(status_code=400, detail=str(strategy_error))
+
+    if decision.action == "skipped":
+        return {
+            "message": "Upload skipped because a conflicting document already exists",
+            "uploaded": False,
+            "action": "skipped",
+            "existing_file_id": decision.existing_file_id,
+            "kb_id": kb_id,
+        }
 
     # 直接上传到MinIO，添加时间戳区分版本
-    timestamp = int(time.time() * 1000)
+    timestamp = time.time_ns()
     minio_filename = f"{basename}_{timestamp}{ext}"
 
     bucket_name = MinIOClient.KB_BUCKETS["documents"]
-    folder = kb_id if kb_id else "unknown"
-    object_name = f"{folder}/upload/{minio_filename}"
+    object_name = f"{kb_id}/upload/{minio_filename}"
 
     # 上传到MinIO
-    minio_url = await aupload_file_to_minio(bucket_name, object_name, file_bytes)
+    try:
+        minio_url = await aupload_file_to_minio(bucket_name, object_name, file_bytes)
+    except StorageError as storage_error:
+        logger.error("Failed to stage knowledge upload: {}", sanitize_processing_error(storage_error))
+        raise HTTPException(status_code=502, detail="文件暂存失败，请稍后重试") from storage_error
 
     # 检测同名文件（基于原始文件名）
-    same_name_files = await knowledge_base.get_same_name_files(kb_id, filename)
-    has_same_name = len(same_name_files) > 0
+    same_name_files = DocumentIngestionService._serialize_conflicts(list(decision.conflicts))
+    has_same_name = bool(same_name_files)
 
     return {
         "message": "File successfully uploaded",
+        "uploaded": True,
+        "action": "uploaded",
         "file_path": minio_url,  # MinIO路径作为主要路径
         "minio_path": minio_url,  # MinIO路径
         "kb_id": kb_id,
         "content_hash": content_hash,
-        "filename": filename,  # 原始文件名（小写）
+        "filename": filename,
         "original_filename": basename,  # 原始文件名（去掉后缀）
         "size": len(file_bytes),
         "minio_filename": minio_filename,  # MinIO中的文件名（带时间戳）
@@ -2025,11 +2198,13 @@ async def upload_file(
         "bucket_name": bucket_name,  # MinIO存储桶名称
         "same_name_files": same_name_files,  # 同名文件列表
         "has_same_name": has_same_name,  # 是否包含同名文件标志
+        "duplicate_strategy": normalized_strategy,
+        "replace_file_id": replace_file_id,
     }
 
 
 @knowledge.get("/files/supported-types")
-async def get_supported_file_types(current_user: User = Depends(get_admin_user)):
+async def get_supported_file_types(current_user: User = Depends(get_required_user)):
     """获取当前支持的文件类型"""
     return {"message": "success", "file_types": sorted(SUPPORTED_FILE_EXTENSIONS)}
 

@@ -25,7 +25,7 @@ from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
 from yuxi.knowledge.parser.unified import Parser
-from yuxi.knowledge.utils.kb_utils import resolve_processing_params
+from yuxi.knowledge.utils.kb_utils import resolve_processing_params, sanitize_processing_error
 from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
@@ -638,11 +638,33 @@ class MilvusKB(KnowledgeBase):
         )
         if not matched_file_ids:
             return 'file_id == "__no_matching_file__"'
-        escaped_ids = [file_id.replace('"', '\\"') for file_id in matched_file_ids]
+        escaped_ids = [self._escape_milvus_string_literal(file_id) for file_id in matched_file_ids]
         if len(escaped_ids) == 1:
             return f'file_id == "{escaped_ids[0]}"'
         joined_ids = '", "'.join(escaped_ids)
         return f'file_id in ["{joined_ids}"]'
+
+    @staticmethod
+    def _escape_milvus_string_literal(value: str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+    async def _build_active_file_expr(self, kb_id: str) -> tuple[str | None, set[str]]:
+        inactive_file_ids = await KnowledgeFileRepository().list_inactive_file_ids(kb_id=kb_id)
+        inactive_file_ids = sorted({str(file_id) for file_id in inactive_file_ids if str(file_id)})
+        if not inactive_file_ids:
+            return None, set()
+        escaped_ids = [self._escape_milvus_string_literal(file_id) for file_id in inactive_file_ids]
+        joined_ids = '", "'.join(escaped_ids)
+        return f'file_id not in ["{joined_ids}"]', set(inactive_file_ids)
+
+    @staticmethod
+    def _combine_milvus_expr(*expressions: str | None) -> str | None:
+        normalized = [expression for expression in expressions if expression]
+        if not normalized:
+            return None
+        if len(normalized) == 1:
+            return normalized[0]
+        return " and ".join(f"({expression})" for expression in normalized)
 
     async def index_file(
         self, kb_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None
@@ -685,6 +707,8 @@ class MilvusKB(KnowledgeBase):
 
         claim_data = {
             "status": FileStatus.INDEXING,
+            "processing_stage": "indexing",
+            "processing_progress": 70,
             "processing_params": params,
             "error_message": None,
         }
@@ -712,6 +736,8 @@ class MilvusKB(KnowledgeBase):
 
         logger.debug(f"[index_file] file_id={file_id}, processing_params={params}")
 
+        failure_stage = "indexing"
+        replacement_target_file_id = file_meta.get("replacement_target_file_id")
         try:
             # Read markdown
             markdown_content = await self._read_markdown_from_minio(file_meta["markdown_file"])
@@ -728,15 +754,34 @@ class MilvusKB(KnowledgeBase):
             chunk_stats = self._calculate_chunk_stats(chunks)
 
             # Clean up existing chunks if any (for re-indexing)
-            await self.delete_file_chunks_only(kb_id, file_id)
+            if replacement_target_file_id:
+                await self.delete_file_vectors_and_chunks_strict(kb_id, file_id)
+            else:
+                await self.delete_file_chunks_only(kb_id, file_id)
 
             if chunks:
                 await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
 
             logger.info(f"Indexed file {file_id} into Milvus")
 
+            if replacement_target_file_id:
+                failure_stage = "verifying"
+                await KnowledgeFileRepository().update_fields(
+                    file_id=file_id,
+                    kb_id=kb_id,
+                    data={"processing_stage": "verifying", "processing_progress": 90},
+                )
+                if not await self.verify_file_vectors(kb_id, file_id):
+                    raise ValueError("New document vectors are not queryable after indexing")
+
             # Update status
-            update_data = {"status": FileStatus.INDEXED, "error_message": None, **chunk_stats}
+            update_data = {
+                "status": FileStatus.INDEXED,
+                "processing_stage": "switching_version" if replacement_target_file_id else None,
+                "processing_progress": 92 if replacement_target_file_id else 100,
+                "error_message": None,
+                **chunk_stats,
+            }
             if operator_id:
                 update_data["updated_by"] = operator_id
             updated_record = await KnowledgeFileRepository().update_fields(
@@ -755,16 +800,86 @@ class MilvusKB(KnowledgeBase):
                 }
             )
 
-            await self.refresh_database_stats(kb_id)
+            if replacement_target_file_id:
+                failure_stage = "switching_version"
+                from yuxi.services.document_ingestion_service import DocumentIngestionService
+
+                # Refresh while the old version is still active. Any failure here keeps the old
+                # version searchable and lets the normal compensation remove the new vectors.
+                await self.refresh_database_stats(kb_id)
+                await DocumentIngestionService().activate_replacement(
+                    kb_id=kb_id,
+                    new_file_id=file_id,
+                    old_file_id=replacement_target_file_id,
+                )
+                try:
+                    await self.refresh_database_stats(kb_id)
+                    refreshed_record = await KnowledgeFileRepository().get_by_file_id(file_id)
+                    if refreshed_record is not None:
+                        result = self._file_record_to_meta(refreshed_record)
+                except Exception as refresh_error:
+                    logger.warning(
+                        "Replacement {} is active but post-switch metadata/statistics refresh failed: {}",
+                        file_id,
+                        sanitize_processing_error(refresh_error),
+                    )
+            else:
+                await self.refresh_database_stats(kb_id)
             return result
 
         except Exception as e:
-            logger.error(f"Indexing failed for {file_id}: {e}")
-            update_data = {"status": FileStatus.ERROR_INDEXING, "error_message": str(e)}
+            logger.error("Indexing failed for {}: {}", file_id, sanitize_processing_error(e))
+            if replacement_target_file_id:
+                current_record = await KnowledgeFileRepository().get_by_file_id(file_id)
+                if current_record is not None and not current_record.is_active:
+                    try:
+                        await self.delete_file_vectors_and_chunks_strict(kb_id, file_id)
+                    except Exception as cleanup_error:
+                        logger.error(
+                            "Failed to clean unusable replacement vectors for {}: {}",
+                            file_id,
+                            sanitize_processing_error(cleanup_error),
+                        )
+            update_data = {
+                "status": FileStatus.ERROR_INDEXING,
+                "processing_stage": failure_stage,
+                "error_message": sanitize_processing_error(e),
+            }
             if operator_id:
                 update_data["updated_by"] = operator_id
             await KnowledgeFileRepository().update_fields(file_id=file_id, kb_id=kb_id, data=update_data)
             raise
+
+    async def verify_file_vectors(self, kb_id: str, file_id: str) -> bool:
+        """Verify that both PostgreSQL chunk metadata and Milvus vectors exist for a file."""
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            return False
+        chunk_counts = await KnowledgeChunkRepository().count_by_file_ids([file_id])
+        if int(chunk_counts.get(file_id, 0) or 0) <= 0:
+            return False
+        await asyncio.to_thread(collection.flush)
+        rows = await _run_milvus_query_io(
+            collection.query,
+            expr=f'file_id == "{file_id}"',
+            output_fields=["file_id", "embedding"],
+            limit=1,
+        )
+        if not rows:
+            return False
+        embedding = rows[0].get("embedding")
+        if embedding is None or len(embedding) == 0:
+            return False
+        results = await _run_milvus_query_io(
+            collection.search,
+            data=[embedding],
+            anns_field="embedding",
+            param={"metric_type": VECTOR_METRIC_TYPE, "params": {"nprobe": 10}},
+            limit=1,
+            expr=f'file_id == "{file_id}"',
+            output_fields=["file_id"],
+        )
+        return bool(results and results[0])
 
     async def update_content(self, kb_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
         """更新内容 - 根据file_ids重新解析文件并更新向量库"""
@@ -917,7 +1032,9 @@ class MilvusKB(KnowledgeBase):
             else:
                 recall_top_k = final_top_k
 
-            file_expr = await self._build_file_name_expr(kb_id, merged_kwargs.get("file_name"))
+            active_expr, inactive_file_ids = await self._build_active_file_expr(kb_id)
+            file_name_expr = await self._build_file_name_expr(kb_id, merged_kwargs.get("file_name"))
+            file_expr = self._combine_milvus_expr(active_expr, file_name_expr)
             if file_expr:
                 logger.debug(f"Using filter expression: {file_expr}")
 
@@ -1028,6 +1145,14 @@ class MilvusKB(KnowledgeBase):
                 if graph_chunks:
                     graph_weight = float(merged_kwargs.get("graph_weight", 1.0))
                     retrieved_chunks = self._fuse_chunk_rankings(retrieved_chunks, graph_chunks, graph_weight)
+
+            if inactive_file_ids:
+                retrieved_chunks = [
+                    chunk
+                    for chunk in retrieved_chunks
+                    if str(chunk.get("metadata", {}).get("file_id") or chunk.get("file_id") or "")
+                    not in inactive_file_ids
+                ]
 
             if not retrieved_chunks:
                 return []
@@ -1240,6 +1365,56 @@ class MilvusKB(KnowledgeBase):
             kb_id=kb_id,
             data={"chunk_count": 0, "token_count": 0},
         )
+        await self.refresh_database_stats(kb_id)
+
+    async def delete_file_vectors_and_chunks_strict(self, kb_id: str, file_id: str) -> None:
+        """Delete both online vectors and PostgreSQL chunks, propagating storage failures."""
+        chunk_repo = KnowledgeChunkRepository()
+        if await chunk_repo.count_graph_indexed_by_file_id(file_id):
+            from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+
+            try:
+                await MilvusGraphService().delete_file_graph(kb_id, file_id)
+            except Exception as error:
+                logger.error(
+                    "Failed to delete graph data for file {}: {}",
+                    file_id,
+                    sanitize_processing_error(error),
+                )
+
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        await self._delete_file_chunks_from_milvus(collection, file_id)
+        await asyncio.to_thread(collection.flush)
+        await chunk_repo.delete_by_file_id(file_id)
+        await KnowledgeFileRepository().update_fields(
+            file_id=file_id,
+            kb_id=kb_id,
+            data={"chunk_count": 0, "token_count": 0},
+        )
+        await self.refresh_database_stats(kb_id)
+
+    async def delete_file_vectors_strict(self, kb_id: str, file_id: str) -> None:
+        """Delete online projections while preserving historical PostgreSQL chunks and file artifacts."""
+        chunk_repo = KnowledgeChunkRepository()
+        if await chunk_repo.count_graph_indexed_by_file_id(file_id):
+            from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+
+            try:
+                await MilvusGraphService().delete_file_graph(kb_id, file_id)
+            except Exception as error:
+                logger.error(
+                    "Failed to delete graph data for file {}: {}",
+                    file_id,
+                    sanitize_processing_error(error),
+                )
+
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        await self._delete_file_chunks_from_milvus(collection, file_id)
+        await asyncio.to_thread(collection.flush)
         await self.refresh_database_stats(kb_id)
 
     async def delete_file(self, kb_id: str, file_id: str) -> None:

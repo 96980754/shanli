@@ -46,6 +46,8 @@ def ensure_live_api_schema():
         await pg_manager.create_tables()
         await pg_manager.ensure_business_schema()
         await pg_manager.ensure_knowledge_schema()
+        if pg_manager.async_engine is not None:
+            await pg_manager.async_engine.dispose()
 
     anyio.run(run_schema_setup)
 
@@ -54,6 +56,17 @@ def _require_admin_credentials() -> tuple[str, str]:
     if not ADMIN_LOGIN or not ADMIN_PASSWORD:
         pytest.skip("Integration credentials are not configured via TEST_USERNAME / TEST_PASSWORD.")
     return ADMIN_LOGIN, ADMIN_PASSWORD
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def isolate_async_database_pool():
+    from yuxi.storage.postgres.manager import pg_manager
+
+    if pg_manager.async_engine is not None:
+        await pg_manager.async_engine.dispose()
+    yield
+    if pg_manager.async_engine is not None:
+        await pg_manager.async_engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
