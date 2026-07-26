@@ -149,38 +149,98 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
     runtime = SimpleNamespace(context=SimpleNamespace())
     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
 
-    assert result == {
+    # assert result == {
+    #     "kb_id": "db-1",
+    #     "results": [
+    #         {
+    #             "id": "dify-segment-1",
+    #             "kb_id": "db-1",
+    #             "file_id": "dify-doc-1",
+    #             "content": "auth guide",
+    #             "metadata": {
+    #                 "file_id": "dify-doc-1",
+    #                 "chunk_id": "dify-segment-1",
+    #                 "source": "Dify Doc",
+    #                 "score": 0.98,
+    #             },
+    #         }
+    #     ],
+    # }
+    assert result["kb_id"] == "db-1"
+    assert result["status"] == "sufficient"
+    assert result["reason"] is None
+    assert result["message"] is None
+    assert result["top_score"] == pytest.approx(0.98)
+    assert result["score_type"] == "score"
+
+    assert len(result["results"]) == 1
+    chunk = result["results"][0]
+
+    assert chunk == {
+        "id": "dify-segment-1",
         "kb_id": "db-1",
-        "results": [
-            {
-                "id": "dify-segment-1",
-                "kb_id": "db-1",
-                "file_id": "dify-doc-1",
-                "content": "auth guide",
-                "metadata": {
-                    "file_id": "dify-doc-1",
-                    "chunk_id": "dify-segment-1",
-                    "source": "Dify Doc",
-                    "score": 0.98,
-                },
-            }
-        ],
+        "file_id": "dify-doc-1",
+        "content": "auth guide",
+        "metadata": {
+            "file_id": "dify-doc-1",
+            "chunk_id": "dify-segment-1",
+            "source": "Dify Doc",
+            "score": 0.98,
+        },
     }
 
+    assert len(result["citations"]) == 1
+    citation = result["citations"][0]
 
+    assert citation["citation_id"] == "c1"
+    assert citation["kb_id"] == "db-1"
+    assert citation["file_id"] == "dify-doc-1"
+    assert citation["chunk_id"] == "dify-segment-1"
+    assert citation["file_name"] == "Dify Doc"
+    assert citation["quote"] == "auth guide"
+    assert citation["score"] == pytest.approx(0.98)
+
+# @pytest.mark.asyncio
+# async def test_query_kb_returns_plain_result_without_path_injection(monkeypatch) -> None:
+#     async def _fake_retriever(query_text: str, **kwargs):
+#         assert query_text == "auth"
+#         return "Milvus context"
+
+#     _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+#     monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+#     runtime = SimpleNamespace(context=SimpleNamespace())
+#     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
+
+#     assert result == "Milvus context"
 @pytest.mark.asyncio
-async def test_query_kb_returns_plain_result_without_path_injection(monkeypatch) -> None:
+async def test_query_kb_rejects_plain_result_as_invalid_retrieval_result(
+    monkeypatch,
+) -> None:
     async def _fake_retriever(query_text: str, **kwargs):
         assert query_text == "auth"
         return "Milvus context"
 
     _patch_retrievers(monkeypatch, retriever=_fake_retriever)
-    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+    monkeypatch.setattr(
+        tools,
+        "_resolve_visible_knowledge_bases_for_query",
+        _fake_visible_kbs,
+    )
 
     runtime = SimpleNamespace(context=SimpleNamespace())
-    result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
+    result = await _run_query_kb(
+        kb_id="db-1",
+        query_text="auth",
+        runtime=runtime,
+    )
 
-    assert result == "Milvus context"
+    assert result["kb_id"] == "db-1"
+    assert result["status"] == "error"
+    assert result["reason"] == "invalid_retrieval_result"
+    assert result["message"] == "知识库检索器返回了无法识别的数据格式。"
+    assert result["results"] == []
+    assert result["citations"] == []
 
 
 @pytest.mark.asyncio

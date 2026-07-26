@@ -71,6 +71,12 @@ const router = createRouter({
           name: 'DashboardComp',
           component: () => import('../views/DashboardView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
+        },
+        {
+          path: 'uncovered-questions',
+          name: 'UncoveredQuestionsComp',
+          component: () => import('../views/UncoveredQuestionsView.vue'),
+          meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
         }
       ]
     },

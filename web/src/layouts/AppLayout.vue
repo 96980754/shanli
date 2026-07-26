@@ -10,7 +10,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search
+  Search,
+  CircleHelp
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -140,7 +141,16 @@ const mainList = computed(() => {
       name: '数据总览',
       path: '/dashboard',
       icon: BarChart3,
-      activeIcon: BarChart3
+      activeIcon: BarChart3,
+      exactActive: true
+    })
+
+    items.push({
+      name: '未覆盖问题',
+      path: '/dashboard/uncovered-questions',
+      icon: CircleHelp,
+      activeIcon: CircleHelp,
+      exactActive: true
     })
   }
 

@@ -476,6 +476,50 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS content_hash VARCHAR(128)",
             "ALTER TABLE IF EXISTS conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
+            """
+            CREATE TABLE IF NOT EXISTS uncovered_questions (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                normalized_question TEXT NOT NULL,
+                question_hash VARCHAR(64) NOT NULL,
+                kb_scope_hash VARCHAR(64) NOT NULL,
+                uid VARCHAR(64) NOT NULL,
+                thread_id VARCHAR(64) NOT NULL,
+                assistant_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+                agent_id VARCHAR(64) NOT NULL,
+                kb_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                reason VARCHAR(64) NOT NULL,
+                top_score DOUBLE PRECISION,
+                score_type VARCHAR(32),
+                status VARCHAR(20) NOT NULL DEFAULT 'new',
+                occurrence_count INTEGER NOT NULL DEFAULT 1,
+                first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                resolved_at TIMESTAMPTZ,
+                resolution_note TEXT,
+                CONSTRAINT uq_uncovered_questions_scope
+                    UNIQUE (question_hash, agent_id, kb_scope_hash)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_question_hash ON uncovered_questions(question_hash)",
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_uid ON uncovered_questions(uid)",
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_thread_id ON uncovered_questions(thread_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_assistant_message_id "
+                "ON uncovered_questions(assistant_message_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_agent_id ON uncovered_questions(agent_id)",
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_reason ON uncovered_questions(reason)",
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_status ON uncovered_questions(status)",
+            "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_last_seen_at ON uncovered_questions(last_seen_at)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_status_last_seen "
+                "ON uncovered_questions(status, last_seen_at)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_uncovered_questions_agent_last_seen "
+                "ON uncovered_questions(agent_id, last_seen_at)"
+            ),
             "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS env JSONB",
             """
             CREATE TABLE IF NOT EXISTS agent_envs (

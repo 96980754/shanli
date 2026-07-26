@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from yuxi.agents.toolkits.registry import tool
 from yuxi.knowledge.base import KnowledgeBase
+from yuxi.knowledge.evidence import evaluate_search_output
 from yuxi.knowledge.schemas import (
     FindInputSchema,
     FindOutputSchema,
@@ -198,10 +199,46 @@ def _find_query_target(
     return target_info, normalized_kb_id, None
 
 
-async def _build_query_output(target_kb_id: str, result: Any) -> Any:
-    if isinstance(result, dict) and result.get("kb_id") == target_kb_id and isinstance(result.get("results"), list):
-        return SearchOutputSchema(**result).model_dump()
-    return KnowledgeBase.build_search_output(target_kb_id, result)
+# async def _build_query_output(target_kb_id: str, result: Any) -> Any:
+#     if isinstance(result, dict) and result.get("kb_id") == target_kb_id and isinstance(result.get("results"), list):
+#         return SearchOutputSchema(**result).model_dump()
+#     return KnowledgeBase.build_search_output(target_kb_id, result)
+def _query_error_output(
+    kb_id: str,
+    *,
+    reason: str,
+    message: str,
+) -> dict[str, Any]:
+    return SearchOutputSchema(
+        kb_id=str(kb_id or ""),
+        status="error",
+        reason=reason,
+        message=message,
+        results=[],
+        citations=[],
+    ).model_dump()
+
+
+async def _build_query_output(target_kb_id: str, result: Any, query_text: str) -> dict[str, Any]:
+    if (
+        isinstance(result, dict)
+        and result.get("kb_id") == target_kb_id
+        and isinstance(result.get("results"), list)
+    ):
+        normalized = SearchOutputSchema(**result)
+    else:
+        built_result = KnowledgeBase.build_search_output(target_kb_id, result)
+
+        if not isinstance(built_result, dict):
+            return _query_error_output(
+                target_kb_id,
+                reason="invalid_retrieval_result",
+                message="知识库检索器返回了无法识别的数据格式。",
+            )
+
+        normalized = SearchOutputSchema(**built_result)
+
+    return evaluate_search_output(normalized, query_text=query_text).model_dump()
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=QueryKBInput)
@@ -212,9 +249,18 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
     file_id 可继续用于 find_kb_document 或 open_kb_document。
     """
     if not kb_id:
-        return "请提供 kb_id"
+        return _query_error_output(
+            "",
+            reason="invalid_request",
+            message="请提供 kb_id。",
+        )
+
     if not query_text:
-        return "请提供查询内容"
+        return _query_error_output(
+            kb_id,
+            reason="invalid_request",
+            message="请提供查询内容。",
+        )
 
     knowledge_base = _get_knowledge_base()
     retrievers = knowledge_base.get_retrievers()
@@ -225,7 +271,11 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         visible_kbs=visible_kbs,
     )
     if target_error:
-        return target_error
+        return _query_error_output(
+            target_kb_id or kb_id,
+            reason="permission_denied",
+            message="目标知识库不存在、不可访问或当前会话未启用。",
+        )
 
     try:
         retriever = target_info["retriever"]
@@ -238,11 +288,15 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         else:
             result = retriever(query_text, **kwargs)
 
-        return await _build_query_output(target_kb_id, result)
+        return await _build_query_output(target_kb_id, result, query_text)
 
     except Exception as e:
-        logger.error(f"检索失败: {e}")
-        return f"检索失败: {str(e)}"
+        logger.exception(f"检索失败: {e}")
+        return _query_error_output(
+            target_kb_id,
+            reason="retrieval_error",
+            message="知识库检索服务暂时不可用。",
+        )
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=OpenKBDocumentInput)

@@ -203,6 +203,7 @@ class SkillsMiddleware(AgentMiddleware):
         skills_context_name: str = "skills",
         enable_skills_prompt: bool = True,
         skills_sources_for_prompt: list[str] | None = None,
+        always_activate_skills: list[str] | None = None,
     ):
         """初始化中间件
 
@@ -215,6 +216,7 @@ class SkillsMiddleware(AgentMiddleware):
         self.skills_context_name = skills_context_name
         self.enable_skills_prompt = enable_skills_prompt
         self.skills_sources_for_prompt = skills_sources_for_prompt or ["/home/gem/skills/"]
+        self.always_activate_skills = normalize_string_list(always_activate_skills)
 
     async def awrap_model_call(
         self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]
@@ -239,6 +241,11 @@ class SkillsMiddleware(AgentMiddleware):
 
         readable_skills = self._get_readable_skills(runtime_context)
         activated = [slug for slug in normalize_string_list(activated) if slug in readable_skills]
+
+        always_activated = [
+            slug for slug in self.always_activate_skills if slug in readable_skills
+        ]
+        activated = _activated_skills_reducer(always_activated, activated)
 
         deps_bundle = self._build_dependency_bundle(activated, runtime_context)
         activated_tool_names = set(deps_bundle["tools"])

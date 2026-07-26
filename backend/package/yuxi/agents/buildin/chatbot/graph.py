@@ -58,7 +58,7 @@ async def _build_middlewares(context):
             context=context,
         ),
         save_attachments_to_fs,
-        SkillsMiddleware(),
+        SkillsMiddleware(always_activate_skills=["knowledge-base"]),
     ]
     subagent_middleware = await create_subagent_task_middleware(context)
     if subagent_middleware:

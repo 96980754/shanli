@@ -772,11 +772,17 @@ class KnowledgeBase(ABC):
                 chunk_index = chunk.get("chunk_index")
             if chunk_index is not None:
                 metadata.setdefault("chunk_index", chunk_index)
-            if chunk.get("score") is not None:
-                metadata.setdefault("score", chunk.get("score"))
-            if chunk.get("distance") is not None:
-                metadata.setdefault("distance", chunk.get("distance"))
-
+            for score_field in (
+                "score",
+                "distance",
+                "rerank_score",
+                "bm25_score",
+                "hybrid_score",
+                "fusion_score",
+                "graph_score",
+            ):
+                if chunk.get(score_field) is not None:
+                    metadata.setdefault(score_field, chunk.get(score_field))
             results.append(
                 SearchResultSchema(
                     id=str(chunk_id or f"{file_id}:{index + 1}"),

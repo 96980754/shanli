@@ -1071,8 +1071,17 @@ class MilvusKB(KnowledgeBase):
             # 统一返回结果
             return retrieved_chunks[:final_top_k]
 
+        # except Exception as e:
+        #     logger.error(f"Milvus query error: {e}, {traceback.format_exc()}")
+        #     return []
         except Exception as e:
             logger.error(f"Milvus query error: {e}, {traceback.format_exc()}")
+
+            # 智能体调用必须区分“没有知识”和“检索服务故障”。
+            if agent_call:
+                raise
+
+            # 管理页面的普通检索仍保持原有兼容行为。
             return []
 
     async def _retrieve_graph_chunks(

@@ -276,6 +276,27 @@ async def test_awrap_model_call_hides_gated_tools_until_activated():
 
 
 @pytest.mark.asyncio
+async def test_awrap_model_call_exposes_always_active_skill_tools():
+    request = _make_gated_request(activated=[])
+    captured = {}
+
+    async def handler(req):
+        captured["tools"] = {tool.name for tool in req.tools}
+        return "ok"
+
+    result = await SkillsMiddleware(
+        always_activate_skills=["knowledge-base"]
+    ).awrap_model_call(request, handler)
+
+    assert result == "ok"
+    assert captured["tools"] == {
+        "read_file",
+        "list_kbs",
+        "query_kb",
+    }
+
+
+@pytest.mark.asyncio
 async def test_awrap_model_call_keeps_gated_tools_when_activated():
     request = _make_gated_request(activated=["knowledge-base"])
     captured = {}

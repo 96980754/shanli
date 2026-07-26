@@ -37,7 +37,15 @@ from yuxi.services.langfuse_service import (
     flush_langfuse,
     get_trace_info,
 )
+from yuxi.services.knowledge_answer_metadata import (
+    apply_knowledge_evidence,
+    extract_query_kb_evidence,
+    is_final_assistant_message,
+    merge_knowledge_evidence,
+    message_text,
+)
 from yuxi.services.subagent_run_service import serialize_subagent_run_state
+from yuxi.services.uncovered_question_service import record_uncovered_question
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Agent, User
 from yuxi.utils.guard import content_guard
@@ -518,9 +526,14 @@ async def save_messages_from_langgraph_state(
     if messages is None:
         return
 
-    existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
+    # existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
 
+    # last_ai_message = None
+    existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
     last_ai_message = None
+    latest_user_question = ""
+    pending_knowledge_evidence: dict[str, Any] | None = None
+
     for msg in messages:
         if hasattr(msg, "model_dump"):
             msg_dict = msg.model_dump()
@@ -539,20 +552,76 @@ async def save_messages_from_langgraph_state(
             elif role == "tool":
                 msg_type = "tool"
 
+        # msg_id = getattr(msg, "id", None) or msg_dict.get("id")
+        # if msg_type == "human" or msg_id in existing_ids:
+        #     continue
         msg_id = getattr(msg, "id", None) or msg_dict.get("id")
-        if msg_type == "human" or msg_id in existing_ids:
+
+        if msg_type == "human":
+            question = message_text(msg_dict.get("content")).strip()
+            if question:
+                latest_user_question = question
             continue
 
+        if msg_id in existing_ids:
+            continue
+
+        # if msg_type == "ai":
+        #     last_ai_message = await _save_ai_message(
+        #         conv_repo,
+        #         thread_id,
+        #         msg_dict,
+        #         trace_info=trace_info,
+        #         run_id=run_id,
+        #         request_id=request_id,
+        #     )
+        # elif msg_type == "tool":
+        #     await _save_tool_message(conv_repo, msg_dict)
         if msg_type == "ai":
+            ai_message = msg_dict
+
+            if (
+                pending_knowledge_evidence is not None
+                and is_final_assistant_message(msg_dict)
+            ):
+                ai_message = apply_knowledge_evidence(
+                    msg_dict,
+                    pending_knowledge_evidence,
+                    question=latest_user_question,
+                )
+                pending_knowledge_evidence = None
+
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,
-                msg_dict,
+                ai_message,
                 trace_info=trace_info,
                 run_id=run_id,
                 request_id=request_id,
             )
+
+            if last_ai_message and ai_message.get("answer_status") == "refused":
+                try:
+                    conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
+                    if conversation is not None:
+                        await record_uncovered_question(
+                            db=conv_repo.db,
+                            conversation=conversation,
+                            assistant_message=last_ai_message,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    await conv_repo.db.rollback()
+                    logger.exception(f"记录未覆盖问题失败，不影响回答保存: {exc}")
+
         elif msg_type == "tool":
+            extracted_evidence = extract_query_kb_evidence(msg_dict)
+
+            if extracted_evidence is not None:
+                pending_knowledge_evidence = merge_knowledge_evidence(
+                    pending_knowledge_evidence,
+                    extracted_evidence,
+                )
+
             await _save_tool_message(conv_repo, msg_dict)
 
     if run_id and last_ai_message:

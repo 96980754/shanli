@@ -1,4 +1,4 @@
-import { apiAdminGet } from './base'
+import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch } from './base'
 
 /**
  * Dashboard API模块
@@ -118,6 +118,50 @@ export const dashboardApi = {
       console.error('批量获取统计数据失败:', error)
       throw error
     }
+  },
+
+  /**
+   * 分页获取未覆盖问题
+   * @param {Object} params - 查询参数
+   * @param {string} params.status - new/processing/resolved/ignored
+   * @param {string} params.agent_id - 智能体 ID
+   * @param {string} params.reason - 拒答原因
+   * @param {string} params.q - 关键词
+   * @param {number} params.limit - 每页数量
+   * @param {number} params.offset - 偏移量
+   * @returns {Promise<Object>} - 分页结果
+   */
+  getUncoveredQuestions: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.status) queryParams.append('status', params.status)
+    if (params.agent_id) queryParams.append('agent_id', params.agent_id)
+    if (params.reason) queryParams.append('reason', params.reason)
+    if (params.q) queryParams.append('q', params.q)
+    if (params.limit) queryParams.append('limit', params.limit)
+    if (Number.isInteger(params.offset) && params.offset >= 0) {
+      queryParams.append('offset', params.offset)
+    }
+
+    return apiSuperAdminGet(`/api/dashboard/uncovered-questions?${queryParams.toString()}`)
+  },
+
+  /**
+   * 获取未覆盖问题详情
+   * @param {number} questionId - 记录 ID
+   * @returns {Promise<Object>} - 问题详情
+   */
+  getUncoveredQuestion: (questionId) => {
+    return apiSuperAdminGet(`/api/dashboard/uncovered-questions/${questionId}`)
+  },
+
+  /**
+   * 更新未覆盖问题状态及处理备注
+   * @param {number} questionId - 记录 ID
+   * @param {Object} payload - 状态与备注
+   * @returns {Promise<Object>} - 更新后的记录
+   */
+  updateUncoveredQuestion: (questionId, payload) => {
+    return apiSuperAdminPatch(`/api/dashboard/uncovered-questions/${questionId}`, payload)
   },
 
   /**

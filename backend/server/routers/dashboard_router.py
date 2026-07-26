@@ -8,9 +8,9 @@ Provides centralized dashboard APIs for monitoring system-wide statistics.
 
 import traceback
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import Integer, String, cast, distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
+from yuxi.services.uncovered_question_service import (
+    get_uncovered_question_view,
+    list_uncovered_questions_view,
+    update_uncovered_question_status_view,
+)
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
 from yuxi.utils.logging_config import logger
@@ -711,6 +716,116 @@ async def get_all_feedbacks(
         logger.error(f"Error getting feedbacks: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to get feedbacks: {str(e)}")
+
+
+# =============================================================================
+# 未覆盖问题管理（超级管理员权限）
+# =============================================================================
+
+
+class UncoveredQuestionItem(BaseModel):
+    id: int
+    question: str
+    normalized_question: str
+    question_hash: str
+    uid: str
+    thread_id: str
+    assistant_message_id: int | None
+    agent_id: str
+    kb_ids: list[str]
+    reason: str
+    top_score: float | None
+    score_type: str | None
+    status: Literal["new", "processing", "resolved", "ignored"]
+    occurrence_count: int
+    first_seen_at: str
+    last_seen_at: str
+    resolved_at: str | None
+    resolution_note: str | None
+
+
+class UncoveredQuestionListResponse(BaseModel):
+    items: list[UncoveredQuestionItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class UncoveredQuestionStatusUpdate(BaseModel):
+    status: Literal["new", "processing", "resolved", "ignored"]
+    resolution_note: str | None = None
+
+
+@dashboard.get("/uncovered-questions", response_model=UncoveredQuestionListResponse)
+async def list_uncovered_questions(
+    status: str | None = Query(None),
+    agent_id: str | None = Query(None, max_length=64),
+    reason: str | None = Query(None, max_length=64),
+    q: str | None = Query(None, max_length=200),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """分页查询未覆盖问题，支持状态、智能体、原因和关键词筛选。"""
+
+    try:
+        return await list_uncovered_questions_view(
+            db=db,
+            status=status,
+            agent_id=agent_id,
+            reason=reason,
+            query_text=q,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(f"Error listing uncovered questions: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to list uncovered questions") from exc
+
+
+@dashboard.get("/uncovered-questions/{question_id}", response_model=UncoveredQuestionItem)
+async def get_uncovered_question(
+    question_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """读取一条未覆盖问题详情。"""
+
+    try:
+        return await get_uncovered_question_view(db=db, question_id=question_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Uncovered question not found") from exc
+    except Exception as exc:
+        logger.exception(f"Error getting uncovered question {question_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to get uncovered question") from exc
+
+
+@dashboard.patch("/uncovered-questions/{question_id}", response_model=UncoveredQuestionItem)
+async def update_uncovered_question_status(
+    question_id: int,
+    payload: UncoveredQuestionStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """更新未覆盖问题状态及处理备注。"""
+
+    try:
+        return await update_uncovered_question_status_view(
+            db=db,
+            question_id=question_id,
+            status=payload.status,
+            resolution_note=payload.resolution_note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Uncovered question not found") from exc
+    except Exception as exc:
+        logger.exception(f"Error updating uncovered question {question_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to update uncovered question") from exc
 
 
 # =============================================================================

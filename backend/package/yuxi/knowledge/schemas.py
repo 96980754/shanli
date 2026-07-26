@@ -3,6 +3,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+SearchStatus = Literal["sufficient", "insufficient", "error"]
+
+SearchReason = Literal[
+    "no_result",
+    "empty_content",
+    "low_relevance",
+    "invalid_request",
+    "permission_denied",
+    "retrieval_error",
+    "invalid_retrieval_result",
+]
+
+
 class SearchInputSchema(BaseModel):
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
     query_text: str = Field(description="检索关键词，应提炼为有助于召回答案的关键词或短语")
@@ -14,12 +27,37 @@ class SearchResultSchema(BaseModel):
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
     file_id: str = Field(default="", description="结果所属文件 ID，可用于 Find/Open")
     content: str = Field(description="chunk 内容")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="来源、分数、chunk_index 等附加信息")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="来源、分数、chunk_index 等附加信息",
+    )
+
+
+class EvidenceCitationSchema(BaseModel):
+    citation_id: str = Field(description="本次检索中的引用 ID")
+    kb_id: str = Field(description="知识库资源 ID")
+    file_id: str = Field(default="", description="来源文件 ID")
+    chunk_id: str = Field(description="来源片段 ID")
+    file_name: str | None = Field(default=None, description="来源文件名")
+    quote: str = Field(description="能够支持回答的原始片段")
+    chunk_index: int | None = Field(default=None, description="片段在文件中的索引")
+    updated_at: str | None = Field(default=None, description="来源更新时间")
+    score: float | None = Field(default=None, description="基础检索分数")
+    rerank_score: float | None = Field(default=None, description="重排序分数")
 
 
 class SearchOutputSchema(BaseModel):
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
+    status: SearchStatus = Field(
+        default="sufficient",
+        description="证据状态：充分、不充分或系统错误",
+    )
+    reason: SearchReason | None = Field(default=None, description="状态原因")
+    message: str | None = Field(default=None, description="供智能体理解的安全提示")
+    top_score: float | None = Field(default=None, description="本次检索最高相关度")
+    score_type: str | None = Field(default=None, description="最高分采用的分数类型")
     results: list[SearchResultSchema] = Field(default_factory=list, description="检索结果列表")
+    citations: list[EvidenceCitationSchema] = Field(default_factory=list, description="标准化引用列表")
 
 
 class FindInputSchema(BaseModel):

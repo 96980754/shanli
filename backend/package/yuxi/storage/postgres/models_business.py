@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -513,6 +514,77 @@ class MessageFeedback(Base):
             "rating": self.rating,
             "reason": self.reason,
             "created_at": format_utc_datetime(self.created_at),
+        }
+
+
+class UncoveredQuestion(Base):
+    """Knowledge gap aggregate - 未覆盖问题聚合记录。"""
+
+    __tablename__ = "uncovered_questions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="Primary key")
+    question = Column(Text, nullable=False, comment="Latest original user question")
+    normalized_question = Column(Text, nullable=False, comment="Normalized question used for deduplication")
+    question_hash = Column(String(64), nullable=False, index=True, comment="SHA-256 of normalized question")
+    kb_scope_hash = Column(String(64), nullable=False, comment="SHA-256 of sorted knowledge-base IDs")
+    uid = Column(String(64), nullable=False, index=True, comment="UID of latest occurrence")
+    thread_id = Column(String(64), nullable=False, index=True, comment="Thread ID of latest occurrence")
+    assistant_message_id = Column(
+        Integer,
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Assistant message that most recently recorded this gap",
+    )
+    agent_id = Column(String(64), nullable=False, index=True, comment="Agent slug")
+    kb_ids = Column(JSON, nullable=False, default=list, comment="Sorted knowledge-base IDs searched")
+    reason = Column(String(64), nullable=False, index=True, comment="Knowledge-insufficiency reason")
+    top_score = Column(Float, nullable=True, comment="Highest retrieval score observed")
+    score_type = Column(String(32), nullable=True, comment="Score field used for top_score")
+    status = Column(
+        String(20),
+        nullable=False,
+        default="new",
+        index=True,
+        comment="new/processing/resolved/ignored",
+    )
+    occurrence_count = Column(Integer, nullable=False, default=1, comment="Number of matching refusals")
+    first_seen_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    last_seen_at = Column(DateTime, default=utc_now_naive, nullable=False, index=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_note = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "question_hash",
+            "agent_id",
+            "kb_scope_hash",
+            name="uq_uncovered_questions_scope",
+        ),
+        Index("ix_uncovered_questions_status_last_seen", "status", "last_seen_at"),
+        Index("ix_uncovered_questions_agent_last_seen", "agent_id", "last_seen_at"),
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "question": self.question,
+            "normalized_question": self.normalized_question,
+            "question_hash": self.question_hash,
+            "uid": self.uid,
+            "thread_id": self.thread_id,
+            "assistant_message_id": self.assistant_message_id,
+            "agent_id": self.agent_id,
+            "kb_ids": self.kb_ids or [],
+            "reason": self.reason,
+            "top_score": self.top_score,
+            "score_type": self.score_type,
+            "status": self.status,
+            "occurrence_count": self.occurrence_count,
+            "first_seen_at": format_utc_datetime(self.first_seen_at),
+            "last_seen_at": format_utc_datetime(self.last_seen_at),
+            "resolved_at": format_utc_datetime(self.resolved_at),
+            "resolution_note": self.resolution_note,
         }
 
 
