@@ -174,6 +174,15 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS content_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_params JSONB",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parse_metadata JSONB",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS original_markdown_file VARCHAR(1024)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS cleaning_draft_file VARCHAR(1024)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS cleaning_metadata JSONB",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "cleaning_version INTEGER NOT NULL DEFAULT 0"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS confirmed_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)",
             (
                 "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "

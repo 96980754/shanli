@@ -59,6 +59,12 @@ class KnowledgeFileRepository:
         "content_type",
         "processing_params",
         "parse_metadata",
+        "original_markdown_file",
+        "cleaning_draft_file",
+        "cleaning_metadata",
+        "cleaning_version",
+        "confirmed_at",
+        "confirmed_by",
         "processing_stage",
         "processing_progress",
         "processing_task_id",
@@ -85,6 +91,8 @@ class KnowledgeFileRepository:
         sanitized = {key: value for key, value in data.items() if key in cls._writable_fields}
         if "processing_progress" in sanitized:
             sanitized["processing_progress"] = max(0, min(int(sanitized["processing_progress"] or 0), 100))
+        if "cleaning_version" in sanitized:
+            sanitized["cleaning_version"] = max(0, int(sanitized["cleaning_version"] or 0))
         if sanitized:
             sanitized["updated_at"] = utc_now_naive()
         return sanitized
@@ -758,6 +766,10 @@ class KnowledgeFileRepository:
             KnowledgeFile.path.label("path"),
             KnowledgeFile.minio_url.label("minio_url"),
             KnowledgeFile.markdown_file.label("markdown_file"),
+            KnowledgeFile.cleaning_draft_file.label("cleaning_draft_file"),
+            KnowledgeFile.cleaning_version.label("cleaning_version"),
+            KnowledgeFile.confirmed_at.label("confirmed_at"),
+            KnowledgeFile.confirmed_by.label("confirmed_by"),
             KnowledgeFile.processing_stage.label("processing_stage"),
             KnowledgeFile.processing_progress.label("processing_progress"),
             KnowledgeFile.processing_task_id.label("processing_task_id"),
@@ -785,6 +797,10 @@ class KnowledgeFileRepository:
                 cast(literal(None), String).label("path"),
                 cast(literal(None), String).label("minio_url"),
                 cast(literal(None), String).label("markdown_file"),
+                cast(literal(None), String).label("cleaning_draft_file"),
+                literal(0).label("cleaning_version"),
+                cast(literal(None), DateTime).label("confirmed_at"),
+                cast(literal(None), String).label("confirmed_by"),
                 cast(literal(None), String).label("processing_stage"),
                 literal(0).label("processing_progress"),
                 cast(literal(None), String).label("processing_task_id"),
@@ -918,7 +934,10 @@ class KnowledgeFileRepository:
                     func.sum(
                         case(
                             (
-                                non_folder & KnowledgeFile.status.in_(["processing", "waiting", "parsing", "indexing"]),
+                                non_folder
+                                & KnowledgeFile.status.in_(
+                                    ["processing", "waiting", "parsing", "cleaning", "indexing"]
+                                ),
                                 1,
                             ),
                             else_=0,
@@ -1001,6 +1020,129 @@ class KnowledgeFileRepository:
                 .returning(KnowledgeFile)
             )
             return result.scalar_one_or_none()
+
+    async def update_cleaning_fields_with_version(
+        self,
+        *,
+        kb_id: str,
+        file_id: str,
+        expected_version: int,
+        data: dict[str, Any],
+        increment_version: bool,
+        allowed_statuses: set[str] | None = None,
+    ) -> KnowledgeFile | None:
+        """Conditionally update a cleaning draft to prevent lost concurrent edits."""
+        sanitized_data = self._sanitize_data(data)
+        if increment_version:
+            sanitized_data.pop("cleaning_version", None)
+            sanitized_data["cleaning_version"] = KnowledgeFile.cleaning_version + 1
+        filters = [
+            KnowledgeFile.kb_id == kb_id,
+            KnowledgeFile.file_id == file_id,
+            KnowledgeFile.cleaning_version == max(0, int(expected_version)),
+        ]
+        if allowed_statuses:
+            filters.append(KnowledgeFile.status.in_(sorted(allowed_statuses)))
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                update(KnowledgeFile).where(*filters).values(**sanitized_data).returning(KnowledgeFile)
+            )
+            return result.scalar_one_or_none()
+
+    async def find_successor_version(self, *, kb_id: str, previous_version_id: str) -> KnowledgeFile | None:
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile)
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.previous_version_id == previous_version_id,
+                )
+                .order_by(KnowledgeFile.created_at.desc(), KnowledgeFile.file_id.asc())
+                .limit(1)
+            )
+            return result.scalar_one_or_none()
+
+    async def create_cleaning_replacement_candidate(
+        self,
+        *,
+        file_id: str,
+        kb_id: str,
+        target_file_id: str,
+        data: dict[str, Any],
+        target_restore_data: dict[str, Any] | None = None,
+    ) -> tuple[KnowledgeFile, bool]:
+        """Create one inactive cleaning candidate under the replacement-target lock."""
+        sanitized_data = self._sanitize_data(data)
+        async with pg_manager.get_async_session_context() as session:
+            lock_key = stable_advisory_lock_key(
+                "knowledge-file-replacement-target",
+                f"{kb_id}\0{target_file_id}",
+            )
+            await session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+            target = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id == target_file_id,
+                        KnowledgeFile.is_folder.is_(False),
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                raise ValueError("Document version not found")
+            if not target.is_active:
+                successor = (
+                    await session.execute(
+                        select(KnowledgeFile)
+                        .where(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.previous_version_id == target_file_id,
+                        )
+                        .order_by(KnowledgeFile.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if successor is not None:
+                    return successor, False
+                raise ValueError("Document version is no longer active")
+
+            existing = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.replacement_target_file_id == target_file_id,
+                        KnowledgeFile.is_active.is_(False),
+                        or_(
+                            KnowledgeFile.status.is_(None),
+                            KnowledgeFile.status.notin_(FAILED_REPLACEMENT_CANDIDATE_STATUSES),
+                        ),
+                    )
+                    .order_by(KnowledgeFile.created_at.asc(), KnowledgeFile.file_id.asc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                return existing, False
+
+            sanitized_data.update(
+                {
+                    "kb_id": kb_id,
+                    "replacement_target_file_id": target_file_id,
+                    "previous_version_id": None,
+                    "is_active": False,
+                    "superseded_at": None,
+                }
+            )
+            record = KnowledgeFile(file_id=file_id, **sanitized_data)
+            session.add(record)
+            if target_restore_data:
+                for key, value in self._sanitize_data(target_restore_data).items():
+                    setattr(target, key, value)
+            await session.flush()
+            return record, True
 
     async def delete(self, file_id: str) -> None:
         async with pg_manager.get_async_session_context() as session:

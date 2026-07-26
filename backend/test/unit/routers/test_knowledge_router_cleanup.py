@@ -562,6 +562,16 @@ async def test_add_documents_defaults_to_auto_index_and_returns_one_final_result
     async def fake_index_file(kb_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None):
         return {"file_id": file_id, "status": "indexed"}
 
+    async def fake_generate_draft(self, **kwargs):
+        return {
+            "file_id": kwargs["file_id"],
+            "status": "waiting_confirmation",
+            "cleaning_version": 1,
+        }
+
+    async def fake_confirm(self, **kwargs):
+        return {"file_id": kwargs["file_id"], "status": "indexed"}
+
     async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
         await coroutine(context)
         return SimpleNamespace(id="task_1")
@@ -580,6 +590,9 @@ async def test_add_documents_defaults_to_auto_index_and_returns_one_final_result
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "generate_draft", fake_generate_draft)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "confirm", fake_confirm)
+    monkeypatch.setattr(knowledge_router.config, "document_cleaning_auto_confirm", True)
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
 
     result = await knowledge_router.add_documents(
@@ -595,7 +608,7 @@ async def test_add_documents_defaults_to_auto_index_and_returns_one_final_result
     assert context.result["items"] == [{"file_id": "file_1", "status": "indexed"}]
 
 
-async def test_add_documents_explicit_auto_index_false_stops_after_parse(monkeypatch):
+async def test_add_documents_explicit_auto_index_false_waits_for_cleaning_confirmation(monkeypatch):
     context = FakeTaskContext()
     item = "minio://knowledgebases/kb_1/upload/demo.txt"
     index_calls = []
@@ -620,6 +633,16 @@ async def test_add_documents_explicit_auto_index_false_stops_after_parse(monkeyp
         index_calls.append((args, kwargs))
         raise AssertionError("explicit auto_index=false must not index")
 
+    async def fake_generate_draft(self, **kwargs):
+        return {
+            "file_id": kwargs["file_id"],
+            "status": "waiting_confirmation",
+            "cleaning_version": 1,
+        }
+
+    async def fail_confirm(*_args, **_kwargs):
+        raise AssertionError("explicit auto_index=false must not confirm or index")
+
     async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
         await coroutine(context)
         return SimpleNamespace(id="task_1")
@@ -633,6 +656,8 @@ async def test_add_documents_explicit_auto_index_false_stops_after_parse(monkeyp
     )
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fail_index)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "generate_draft", fake_generate_draft)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "confirm", fail_confirm)
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
 
     result = await knowledge_router.add_documents(
@@ -647,7 +672,13 @@ async def test_add_documents_explicit_auto_index_false_stops_after_parse(monkeyp
     )
 
     assert result["status"] == "queued"
-    assert context.result["items"] == [{"file_id": "file_1", "status": "parsed"}]
+    assert context.result["items"] == [
+        {
+            "file_id": "file_1",
+            "status": "waiting_confirmation",
+            "cleaning_version": 1,
+        }
+    ]
     assert index_calls == []
 
 
@@ -685,6 +716,16 @@ async def test_add_documents_keeps_processing_siblings_when_one_parse_fails(monk
     async def fake_index_file(kb_id: str, file_id: str, operator_id: str | None = None, params=None):
         return {"file_id": file_id, "status": "indexed"}
 
+    async def fake_generate_draft(self, **kwargs):
+        return {
+            "file_id": kwargs["file_id"],
+            "status": "waiting_confirmation",
+            "cleaning_version": 1,
+        }
+
+    async def fake_confirm(self, **kwargs):
+        return {"file_id": kwargs["file_id"], "status": "indexed"}
+
     async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
         await coroutine(context)
         return SimpleNamespace(id="task_1")
@@ -699,6 +740,8 @@ async def test_add_documents_keeps_processing_siblings_when_one_parse_fails(monk
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "generate_draft", fake_generate_draft)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "confirm", fake_confirm)
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -743,6 +786,16 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
     async def fake_index_file(kb_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None):
         return {"file_id": file_id, "status": "indexed", "error": None}
 
+    async def fake_generate_draft(self, **kwargs):
+        return {
+            "file_id": kwargs["file_id"],
+            "status": "waiting_confirmation",
+            "cleaning_version": 1,
+        }
+
+    async def fake_confirm(self, **kwargs):
+        return {"file_id": kwargs["file_id"], "status": "indexed", "error": None}
+
     async def fake_enqueue(name: str, task_type: str, payload: dict, coroutine):
         await coroutine(context)
         return SimpleNamespace(id="task_1")
@@ -761,6 +814,8 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "generate_draft", fake_generate_draft)
+    monkeypatch.setattr(knowledge_router.DocumentCleaningService, "confirm", fake_confirm)
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fake_enqueue)
 
     result = await knowledge_router.add_documents(

@@ -7,11 +7,12 @@ from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from yuxi.permissions.knowledge import KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
+from yuxi.knowledge.base import FileStatus
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
@@ -43,6 +44,12 @@ from yuxi.services.document_ingestion_service import (
     DuplicateConflictError,
     DuplicateStrategyError,
     ReplacementInProgressError,
+)
+from yuxi.services.document_cleaning_service import (
+    CleaningVersionConflict,
+    DocumentCleaningError,
+    DocumentCleaningNotFound,
+    DocumentCleaningService,
 )
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
@@ -114,6 +121,20 @@ class PendingIndexDocumentsRequest(BaseModel):
     params: dict | None = None
 
 
+class CleaningDraftUpdateRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=2_000_000)
+    version: int = Field(ge=0)
+
+
+class CleaningVersionRequest(BaseModel):
+    version: int = Field(ge=0)
+
+
+class CleaningRegenerateRequest(BaseModel):
+    version: int = Field(ge=0)
+    use_ai: bool | None = None
+
+
 media_types = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -169,6 +190,14 @@ async def _delete_document_storage_objects(kb_id: str, doc_id: str, file_path: s
         await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], f"{kb_id}/preview/{doc_id}.pdf")
     except Exception as minio_error:
         logger.warning(f"从MinIO删除预览 PDF 失败: {minio_error}")
+
+    try:
+        await minio_client.adelete_objects_by_prefix(
+            minio_client.KB_BUCKETS["parsed"],
+            f"{kb_id}/cleaning/{doc_id}/",
+        )
+    except Exception as minio_error:
+        logger.warning("Failed to delete document cleaning drafts: {}", sanitize_processing_error(minio_error))
 
 
 async def _ensure_database_supports_documents(kb_id: str, operation: str) -> None:
@@ -277,6 +306,10 @@ async def _require_kb_permission(current_user: User, kb_id: str, action: str) ->
     allowed = await KnowledgePermissionService().has_permission(_user_permission_context(current_user), kb_id, action)
     if not allowed:
         raise HTTPException(status_code=403, detail="知识库权限不足")
+
+
+async def _has_kb_permission(current_user: User, kb_id: str, action: str) -> bool:
+    return await KnowledgePermissionService().has_permission(_user_permission_context(current_user), kb_id, action)
 
 
 async def _require_kb_grant_permission(current_user: User, kb_id: str) -> None:
@@ -800,8 +833,8 @@ async def add_documents(
 
     params = _ensure_document_params(params)
     content_type = params.get("content_type", "file")
-    # 自动入库参数
-    auto_index = params.get("auto_index", True)
+    # 清洗确认策略由请求中的明确值或后端运行配置统一决定。
+    auto_confirm = DocumentCleaningService.resolve_auto_confirm(params)
     indexing_params = {}
     chunk_preset_id = params.get("chunk_preset_id")
     if chunk_preset_id:
@@ -893,8 +926,8 @@ async def add_documents(
                         "error_type": error_type,
                     }
 
-            await context.set_message("第二阶段：解析文件")
-            should_index = auto_index or any(record["requires_index"] for record in added_files)
+            await context.set_message("第二阶段：解析并清洗文件")
+            should_index = auto_confirm
             parse_end = 60.0 if should_index else 95.0
             parse_total = len(added_files)
             for idx, record in enumerate(added_files, 1):
@@ -903,13 +936,9 @@ async def add_documents(
                 progress = 30.0 + (idx / parse_total) * (parse_end - 30.0)
                 await context.set_progress(progress, f"[2/3] 解析文件 {idx}/{parse_total}")
 
-                item = record["item"]
                 file_id = record["file_id"]
                 try:
                     file_meta = await knowledge_base.parse_file(kb_id, file_id, operator_id=current_user.uid)
-                    record["file_meta"] = file_meta
-                    if not (auto_index or record["requires_index"]) or file_meta.get("status") != "parsed":
-                        processed_items[record["index"]] = file_meta
                 except Exception as parse_error:
                     logger.error("解析文件失败 {}: {}", file_id, sanitize_processing_error(parse_error))
                     error_type = "timeout" if isinstance(parse_error, TimeoutError) else "parse_failed"
@@ -919,13 +948,42 @@ async def add_documents(
                         "error": f"{error_msg}: {sanitize_processing_error(parse_error)}",
                         "error_type": error_type,
                     }
+                    continue
+
+                if file_meta.get("status") != "parsed":
+                    processed_items[record["index"]] = file_meta
+                    continue
+                try:
+                    cleaning_payload = await DocumentCleaningService().generate_draft(
+                        kb_id=kb_id,
+                        file_id=file_id,
+                        operator_id=current_user.uid,
+                        auto_confirm=False,
+                        use_ai=params.get("use_ai_cleaning"),
+                    )
+                    record["file_meta"] = {
+                        "file_id": file_id,
+                        "status": cleaning_payload.get("status", FileStatus.WAITING_CONFIRMATION),
+                        "cleaning_version": int(cleaning_payload.get("cleaning_version", 0) or 0),
+                    }
+                    if not auto_confirm:
+                        processed_items[record["index"]] = record["file_meta"]
+                except Exception as cleaning_error:
+                    logger.error("清洗文件失败 {}: {}", file_id, sanitize_processing_error(cleaning_error))
+                    error_type = "timeout" if isinstance(cleaning_error, TimeoutError) else "cleaning_failed"
+                    error_msg = "清洗超时" if isinstance(cleaning_error, TimeoutError) else "清洗失败"
+                    processed_items[record["index"]] = {
+                        "status": "failed",
+                        "error": f"{error_msg}: {sanitize_processing_error(cleaning_error)}",
+                        "error_type": error_type,
+                    }
 
             if should_index:
                 await context.set_message("第三阶段：自动入库")
                 parsed_files = [
                     record
                     for record in added_files
-                    if record["file_meta"].get("status") == "parsed" and (auto_index or record["requires_index"])
+                    if record["file_meta"].get("status") == FileStatus.WAITING_CONFIRMATION
                 ]
                 total_parsed = len(parsed_files)
 
@@ -935,14 +993,16 @@ async def add_documents(
                     progress = 60.0 + (idx / total_parsed) * 35.0
                     await context.set_progress(progress, f"[3/3] 入库文件 {idx}/{total_parsed}")
 
-                    item = record["item"]
                     file_id = record["file_id"]
                     try:
                         await knowledge_base.update_file_params(
                             kb_id, file_id, indexing_params, operator_id=current_user.uid
                         )
-                        result = await knowledge_base.index_file(
-                            kb_id, file_id, operator_id=current_user.uid, params=indexing_params
+                        result = await DocumentCleaningService().confirm(
+                            kb_id=kb_id,
+                            file_id=file_id,
+                            operator_id=current_user.uid,
+                            expected_version=record["file_meta"]["cleaning_version"],
                         )
                         processed_items[record["index"]] = result
                     except Exception as index_error:
@@ -1135,6 +1195,127 @@ async def add_uploaded_documents(
         "added": added_count,
         "failed": failed_count,
     }
+
+
+def _raise_cleaning_http_error(error: Exception) -> None:
+    if isinstance(error, DocumentCleaningNotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, CleaningVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentCleaningError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    logger.error("Document cleaning operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="文档清洗操作失败") from error
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/cleaning")
+async def get_document_cleaning_preview(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文档清洗预览")
+    try:
+        payload = await DocumentCleaningService().get_preview(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/cleaning/draft")
+async def update_document_cleaning_draft(
+    kb_id: str,
+    file_id: str,
+    request: CleaningDraftUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "保存文档清洗草稿")
+    try:
+        payload = await DocumentCleaningService().save_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            content=request.content,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/regenerate")
+async def regenerate_document_cleaning_draft(
+    kb_id: str,
+    file_id: str,
+    request: CleaningRegenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "重新生成文档清洗草稿")
+    service = DocumentCleaningService()
+    try:
+        record = await service.file_repository.get_by_file_id(file_id)
+        if record is None or record.kb_id != kb_id:
+            raise DocumentCleaningError("文档不存在")
+        if int(record.cleaning_version or 0) != max(0, request.version):
+            raise CleaningVersionConflict("清洗草稿版本已变化，请刷新后重试")
+        payload = await service.generate_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            auto_confirm=False,
+            use_ai=request.use_ai,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/confirm")
+async def confirm_document_cleaning(
+    kb_id: str,
+    file_id: str,
+    request: CleaningVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "确认文档清洗结果")
+    try:
+        return await DocumentCleaningService().confirm(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/cancel")
+async def cancel_document_cleaning(
+    kb_id: str,
+    file_id: str,
+    request: CleaningVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "取消文档清洗草稿")
+    try:
+        payload = await DocumentCleaningService().cancel_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
 
 
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")

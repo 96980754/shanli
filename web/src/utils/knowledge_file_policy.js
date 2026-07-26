@@ -1,14 +1,19 @@
 export const FILE_ACTIONS = {
   PARSE: 'parse',
   INDEX: 'index',
-  REPLACEMENT_CLEANUP: 'replacement_cleanup'
+  REPLACEMENT_CLEANUP: 'replacement_cleanup',
+  CLEANING: 'cleaning'
 }
 
 const STATUS_VIEW = {
   uploaded: { label: '待解析', tone: 'status-warning', icon: 'clock' },
   parsing: { label: '解析中', tone: 'status-info', icon: 'progress' },
   parsed: { label: '待入库', tone: 'status-primary', icon: 'file' },
+  cleaning: { label: '清洗中', tone: 'status-info', icon: 'progress' },
+  waiting_confirmation: { label: '待确认清洗', tone: 'status-warning', icon: 'clock' },
+  confirmed: { label: '已确认', tone: 'status-primary', icon: 'file' },
   error_parsing: { label: '重试解析', tone: 'status-error', icon: 'error' },
+  error_cleaning: { label: '清洗失败', tone: 'status-error', icon: 'error' },
   indexing: { label: '入库中', tone: 'status-info', icon: 'progress' },
   indexed: { label: '已入库', tone: 'status-success', icon: 'success' },
   error_indexing: { label: '重试入库', tone: 'status-error', icon: 'error' },
@@ -22,7 +27,9 @@ const STATUS_VIEW = {
 const STATUS_ACTION = {
   uploaded: { type: FILE_ACTIONS.PARSE, label: '解析文件' },
   error_parsing: { type: FILE_ACTIONS.PARSE, label: '重试解析' },
-  parsed: { type: FILE_ACTIONS.INDEX, label: '入库' },
+  parsed: { type: FILE_ACTIONS.CLEANING, label: '生成清洗草稿' },
+  waiting_confirmation: { type: FILE_ACTIONS.CLEANING, label: '确认清洗' },
+  error_cleaning: { type: FILE_ACTIONS.CLEANING, label: '重试清洗' },
   error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' },
   error_replacement_cleanup: {
     type: FILE_ACTIONS.REPLACEMENT_CLEANUP,
@@ -34,6 +41,7 @@ const PROCESSING_STAGE_LABELS = {
   duplicate_check: '重复检查',
   uploading: '上传中',
   parsing: '解析中',
+  cleaning: '清洗中',
   replacement_preparing: '准备新版本',
   indexing: '入库中',
   verifying: '验证新向量',
@@ -44,25 +52,43 @@ const PROCESSING_STAGE_LABELS = {
 const PARSED_PREVIEW_STATUSES = new Set([
   'done',
   'parsed',
+  'cleaning',
+  'waiting_confirmation',
+  'confirmed',
   'indexed',
+  'error_cleaning',
   'error_indexing',
   'error_replacement_cleanup'
 ])
 const SOURCE_ONLY_PREVIEW_STATUSES = new Set(['uploaded', 'error_parsing'])
-const TABLE_SELECTION_BLOCKED_STATUSES = new Set(['processing', 'waiting'])
-const DELETE_BLOCKED_STATUSES = new Set(['processing', 'parsing', 'indexing'])
+const TABLE_SELECTION_BLOCKED_STATUSES = new Set(['processing', 'waiting', 'cleaning'])
+const DELETE_BLOCKED_STATUSES = new Set(['processing', 'parsing', 'cleaning', 'indexing'])
 const VERSION_MAINTENANCE_STAGES = new Set(['switching_version', 'replacement_cleanup'])
-const PROCESSING_STATUSES = new Set(['processing', 'waiting', 'parsing', 'indexing'])
+const PROCESSING_STATUSES = new Set(['processing', 'waiting', 'parsing', 'cleaning', 'indexing'])
 const INDEXABLE_STATUSES = new Set(['parsed', 'error_indexing', 'done', 'indexed'])
 const PARSEABLE_STATUSES = new Set(['uploaded', 'error_parsing'])
 const DOWNLOADABLE_STATUSES = new Set([
   'done',
   'indexed',
   'parsed',
+  'waiting_confirmation',
+  'confirmed',
+  'error_cleaning',
   'error_indexing',
   'error_replacement_cleanup'
 ])
 const CHUNK_PREVIEW_STATUSES = new Set(['done', 'indexed', 'error_replacement_cleanup'])
+const CLEANING_PREVIEW_STATUSES = new Set([
+  'done',
+  'parsed',
+  'cleaning',
+  'waiting_confirmation',
+  'confirmed',
+  'indexed',
+  'error_cleaning',
+  'error_indexing',
+  'error_replacement_cleanup'
+])
 const STATUS_SORT_ORDER = {
   done: 1,
   indexed: 1,
@@ -72,7 +98,10 @@ const STATUS_SORT_ORDER = {
   waiting: 3,
   uploaded: 3,
   parsed: 3,
+  waiting_confirmation: 3,
+  confirmed: 3,
   failed: 4,
+  error_cleaning: 4,
   error_indexing: 4,
   error_replacement_cleanup: 4,
   error_parsing: 4
@@ -82,6 +111,8 @@ export const FILE_STATUS_FILTER_OPTIONS = [
   { label: '待解析', value: 'uploaded' },
   { label: '解析中', value: 'parsing' },
   { label: '待入库', value: 'parsed' },
+  { label: '待确认清洗', value: 'waiting_confirmation' },
+  { label: '清洗失败', value: 'error_cleaning' },
   { label: '重试解析', value: 'error_parsing' },
   { label: '入库中', value: 'indexing' },
   { label: '已入库', value: 'indexed' },
@@ -107,6 +138,9 @@ export const canIndexFile = (record) =>
 
 export const canReindexFile = (record) =>
   Boolean(record && !record.is_folder && (record.status === 'done' || record.status === 'indexed'))
+
+export const canOpenCleaning = (record) =>
+  Boolean(record && !record.is_folder && CLEANING_PREVIEW_STATUSES.has(record.status))
 
 export const canDownloadFile = (record) =>
   Boolean(

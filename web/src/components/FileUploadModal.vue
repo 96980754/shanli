@@ -31,7 +31,13 @@
           />
         </div>
         <div class="auto-index-toggle">
-          <a-checkbox v-model:checked="autoIndex">上传后自动入库</a-checkbox>
+          <a-checkbox
+            v-model:checked="autoIndex"
+            :disabled="!autoConfirmResolved"
+            @change="autoConfirmTouched = true"
+          >
+            {{ autoConfirmResolved ? '自动确认清洗并入库' : '正在读取清洗确认策略...' }}
+          </a-checkbox>
         </div>
       </div>
 
@@ -501,10 +507,12 @@ const folderTreeData = computed(() => {
 
 watch(
   () => props.visible,
-  (newVal) => {
+  async (newVal) => {
     if (newVal) {
       ocrEngineTouched.value = false
       applyDefaultOcrEngine()
+      autoConfirmTouched.value = false
+      await applyDefaultAutoConfirm()
       selectedFolderId.value = props.currentFolderId
       isFolderUpload.value = props.isFolderMode
       uploadMode.value = props.mode || (props.isFolderMode ? 'folder' : 'file')
@@ -929,7 +937,39 @@ const processingParams = ref({
 })
 
 // 自动入库相关
-const autoIndex = ref(true)
+const autoIndex = ref(false)
+const autoConfirmResolved = ref(false)
+const autoConfirmTouched = ref(false)
+
+const applyDefaultAutoConfirm = async () => {
+  let configured = configStore.config?.document_cleaning_auto_confirm
+  if (typeof configured !== 'boolean') {
+    try {
+      await configStore.refreshConfig()
+      configured = configStore.config?.document_cleaning_auto_confirm
+    } catch {
+      autoConfirmResolved.value = false
+      return
+    }
+  }
+  if (typeof configured === 'boolean') {
+    if (!autoConfirmTouched.value) {
+      autoIndex.value = configured
+    }
+    autoConfirmResolved.value = true
+  }
+}
+
+watch(
+  () => configStore.config?.document_cleaning_auto_confirm,
+  (configured) => {
+    if (typeof configured === 'boolean' && !autoConfirmTouched.value) {
+      autoIndex.value = configured
+      autoConfirmResolved.value = true
+    }
+  }
+)
+
 const indexParams = ref({
   chunk_preset_id: '',
   chunk_parser_config: {}
@@ -1495,7 +1535,10 @@ const chunkData = async () => {
       }
 
       const params = { ...processingParams.value, content_hashes, file_sizes }
-      params.auto_index = autoIndex.value
+      if (autoConfirmResolved.value) {
+        params.auto_index = autoIndex.value
+        params.auto_confirm = autoIndex.value
+      }
       if (autoIndex.value) {
         Object.assign(params, buildAutoIndexParams())
       }
@@ -1554,7 +1597,10 @@ const chunkData = async () => {
     try {
       store.state.chunkLoading = true
       const params = { ...processingParams.value }
-      params.auto_index = autoIndex.value
+      if (autoConfirmResolved.value) {
+        params.auto_index = autoIndex.value
+        params.auto_confirm = autoIndex.value
+      }
       if (autoIndex.value) {
         Object.assign(params, buildAutoIndexParams())
       }
@@ -1638,7 +1684,10 @@ const chunkData = async () => {
       replace_file_ids,
       source_paths
     }
-    params.auto_index = autoIndex.value
+    if (autoConfirmResolved.value) {
+      params.auto_index = autoIndex.value
+      params.auto_confirm = autoIndex.value
+    }
     if (autoIndex.value) {
       Object.assign(params, buildAutoIndexParams())
     }

@@ -468,6 +468,10 @@ class KnowledgeBaseManager:
             "status": getattr(record, "status", None) or "uploaded",
             "processing_stage": getattr(record, "processing_stage", None),
             "processing_progress": max(0, min(int(getattr(record, "processing_progress", 0) or 0), 100)),
+            "cleaning_version": int(getattr(record, "cleaning_version", 0) or 0),
+            "confirmed_at": (utc_isoformat(record.confirmed_at) if getattr(record, "confirmed_at", None) else None),
+            "confirmed_by": getattr(record, "confirmed_by", None),
+            "has_cleaning_draft": bool(getattr(record, "cleaning_draft_file", None)),
             "processing_task_id": getattr(record, "processing_task_id", None),
             "processing_task_attempt": getattr(record, "processing_task_attempt", 0),
             "processing_task_updated_at": getattr(record, "processing_task_updated_at", None),
@@ -543,6 +547,12 @@ class KnowledgeBaseManager:
                         0,
                         min(int(getattr(record, "processing_progress", 0) or 0), 100),
                     ),
+                    "cleaning_version": int(getattr(record, "cleaning_version", 0) or 0),
+                    "confirmed_at": (
+                        utc_isoformat(record.confirmed_at) if getattr(record, "confirmed_at", None) else None
+                    ),
+                    "confirmed_by": getattr(record, "confirmed_by", None),
+                    "has_cleaning_draft": bool(getattr(record, "cleaning_draft_file", None)),
                     "error_message": getattr(record, "error_message", None),
                     "is_active": bool(getattr(record, "is_active", True)),
                     "created_at": utc_isoformat(record.created_at) if getattr(record, "created_at", None) else None,

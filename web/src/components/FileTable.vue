@@ -45,6 +45,14 @@
       />
     </a-modal>
 
+    <DocumentCleaningModal
+      v-model:open="cleaningModalVisible"
+      :kb-id="store.kbId"
+      :file-id="cleaningFileId"
+      @changed="handleRefresh"
+      @confirmed="handleCleaningConfirmed"
+    />
+
     <FileBrowserTable
       class="knowledge-file-browser"
       :rows="files"
@@ -325,6 +333,17 @@
                   </a-button>
 
                   <a-button
+                    v-if="canOpenCleaning(row)"
+                    type="text"
+                    block
+                    @click="openCleaningPreview(row)"
+                    :disabled="lock"
+                  >
+                    <template #icon><component :is="h(Sparkles)" size="14" /></template>
+                    清洗预览
+                  </a-button>
+
+                  <a-button
                     type="text"
                     block
                     danger
@@ -357,6 +376,7 @@ import {
   canDeleteFile,
   canDownloadFile,
   canIndexFile,
+  canOpenCleaning,
   canOpenFileDetail,
   canParseFile,
   canReindexFile,
@@ -383,7 +403,8 @@ import {
   FileText,
   Database,
   Filter,
-  MoreHorizontal
+  MoreHorizontal,
+  Sparkles
 } from 'lucide-vue-next'
 
 const store = useDatabaseStore()
@@ -510,10 +531,22 @@ const onSelectAllChange = (e) => {
 }
 
 const popoverVisibleMap = ref({})
+const cleaningModalVisible = ref(false)
+const cleaningFileId = ref('')
 const closePopover = (fileId) => {
   if (fileId) {
     popoverVisibleMap.value[fileId] = false
   }
+}
+
+const openCleaningPreview = (record) => {
+  closePopover(record.file_id)
+  cleaningFileId.value = record.file_id
+  cleaningModalVisible.value = true
+}
+
+const handleCleaningConfirmed = async () => {
+  await handleRefresh()
 }
 
 // 新建文件夹相关
@@ -904,6 +937,11 @@ const handleStatusAction = async (record) => {
     return
   }
 
+  if (action?.type === FILE_ACTIONS.CLEANING) {
+    openCleaningPreview(record)
+    return
+  }
+
   if (action?.type === FILE_ACTIONS.REPLACEMENT_CLEANUP) {
     try {
       await documentApi.retryReplacementCleanup(store.kbId, record.file_id)
@@ -1032,6 +1070,7 @@ const formatFileTableTime = (value) => {
 import { parseToShanghai } from '@/utils/time'
 import { buildChunkParamsPayload, isPlainObject } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
+import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>

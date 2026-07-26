@@ -211,6 +211,42 @@ export const documentApi = {
     )
   },
 
+  getCleaningPreview: async (kbId, fileId) => {
+    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning`)
+  },
+
+  saveCleaningDraft: async (kbId, fileId, content, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/draft`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, version })
+      },
+      true,
+      'json'
+    )
+  },
+
+  regenerateCleaningDraft: async (kbId, fileId, version, useAi = null) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/regenerate`, {
+      version,
+      use_ai: useAi
+    })
+  },
+
+  confirmCleaningDraft: async (kbId, fileId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/confirm`, {
+      version
+    })
+  },
+
+  cancelCleaningDraft: async (kbId, fileId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/cancel`, {
+      version
+    })
+  },
+
   /**
    * 获取文档信息
    * @param {string} kbId - 知识库ID

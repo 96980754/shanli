@@ -175,4 +175,10 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "processing_task_updated_at TIMESTAMPTZ" in statements
     assert "processing_task_attempt INTEGER NOT NULL DEFAULT 0" in statements
     assert "parse_metadata JSONB" in statements
+    assert "original_markdown_file VARCHAR(1024)" in statements
+    assert "cleaning_draft_file VARCHAR(1024)" in statements
+    assert "cleaning_metadata JSONB" in statements
+    assert "cleaning_version INTEGER NOT NULL DEFAULT 0" in statements
+    assert "confirmed_at TIMESTAMPTZ" in statements
+    assert "confirmed_by VARCHAR(64)" in statements
     assert "source_metadata JSONB" in statements

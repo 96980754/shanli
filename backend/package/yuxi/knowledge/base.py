@@ -33,7 +33,11 @@ class FileStatus:
     UPLOADED = "uploaded"
     PARSING = "parsing"
     PARSED = "parsed"
+    CLEANING = "cleaning"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    CONFIRMED = "confirmed"
     ERROR_PARSING = "error_parsing"
+    ERROR_CLEANING = "error_cleaning"
     INDEXING = "indexing"
     INDEXED = "indexed"
     ERROR_INDEXING = "error_indexing"
@@ -170,6 +174,12 @@ class KnowledgeBase(ABC):
                 )
             ),
             "parse_metadata": getattr(record, "parse_metadata", None),
+            "original_markdown_file": getattr(record, "original_markdown_file", None),
+            "cleaning_draft_file": getattr(record, "cleaning_draft_file", None),
+            "cleaning_metadata": getattr(record, "cleaning_metadata", None),
+            "cleaning_version": int(getattr(record, "cleaning_version", 0) or 0),
+            "confirmed_at": (utc_isoformat(record.confirmed_at) if getattr(record, "confirmed_at", None) else None),
+            "confirmed_by": getattr(record, "confirmed_by", None),
             "processing_stage": getattr(record, "processing_stage", None),
             "processing_progress": max(0, min(int(getattr(record, "processing_progress", 0) or 0), 100)),
             "processing_task_id": getattr(record, "processing_task_id", None),
@@ -210,6 +220,12 @@ class KnowledgeBase(ABC):
             "content_type": meta.get("content_type"),
             "processing_params": sanitize_processing_params(meta.get("processing_params")),
             "parse_metadata": meta.get("parse_metadata"),
+            "original_markdown_file": meta.get("original_markdown_file"),
+            "cleaning_draft_file": meta.get("cleaning_draft_file"),
+            "cleaning_metadata": meta.get("cleaning_metadata"),
+            "cleaning_version": max(0, int(meta.get("cleaning_version") or 0)),
+            "confirmed_at": meta.get("confirmed_at"),
+            "confirmed_by": meta.get("confirmed_by"),
             "processing_stage": meta.get("processing_stage"),
             "processing_progress": max(0, min(int(meta.get("processing_progress") or 0), 100)),
             "processing_task_id": meta.get("processing_task_id"),
@@ -451,6 +467,12 @@ class KnowledgeBase(ABC):
             # Update metadata
             file_meta["status"] = FileStatus.PARSED
             file_meta["markdown_file"] = markdown_file_path
+            file_meta["original_markdown_file"] = markdown_file_path
+            file_meta["cleaning_draft_file"] = None
+            file_meta["cleaning_metadata"] = None
+            file_meta["cleaning_version"] = int(file_meta.get("cleaning_version") or 0) + 1
+            file_meta["confirmed_at"] = None
+            file_meta["confirmed_by"] = None
             file_meta["parse_metadata"] = parse_metadata
             file_meta["error"] = None
             file_meta["updated_at"] = utc_isoformat()
@@ -463,6 +485,12 @@ class KnowledgeBase(ABC):
             update_data = {
                 "status": FileStatus.PARSED,
                 "markdown_file": markdown_file_path,
+                "original_markdown_file": markdown_file_path,
+                "cleaning_draft_file": None,
+                "cleaning_metadata": None,
+                "cleaning_version": int(file_meta.get("cleaning_version") or 0) + 1,
+                "confirmed_at": None,
+                "confirmed_by": None,
                 "parse_metadata": parse_metadata,
                 "processing_stage": "replacement_preparing" if is_replacement else None,
                 "processing_progress": 55 if is_replacement else 100,
@@ -543,6 +571,9 @@ class KnowledgeBase(ABC):
         update_data = {
             "status": FileStatus.UPLOADED,
             "markdown_file": None,
+            "original_markdown_file": None,
+            "cleaning_draft_file": None,
+            "cleaning_metadata": None,
             "parse_metadata": None,
             "processing_stage": None,
             "processing_progress": 0,

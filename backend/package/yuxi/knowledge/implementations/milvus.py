@@ -778,6 +778,7 @@ class MilvusKB(KnowledgeBase):
         file_meta = await self._load_file_meta(kb_id, file_id)
         allowed_statuses = {
             FileStatus.PARSED,
+            FileStatus.CONFIRMED,
             FileStatus.ERROR_INDEXING,
             FileStatus.INDEXED,
             "done",

@@ -9,6 +9,7 @@ from yuxi.utils.datetime_utils import utc_isoformat
 
 _DROPPED_PROCESSING_PARAM_KEYS = {
     "_preprocessed_map",
+    "auto_confirm",
     "auto_index",
     "content_hash",
     "content_hashes",
@@ -21,6 +22,7 @@ _DROPPED_PROCESSING_PARAM_KEYS = {
     "replace_file_ids",
     "source_path",
     "source_paths",
+    "use_ai_cleaning",
 }
 
 

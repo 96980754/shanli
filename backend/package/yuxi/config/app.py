@@ -61,6 +61,16 @@ class Config(BaseModel):
         description="内容审查LLM模型",
     )
     default_ocr_engine: str = Field(default=DEFAULT_OCR_ENGINE, description="默认 OCR 解析引擎")
+    document_cleaning_auto_confirm: bool = Field(
+        default=True,
+        description="文档规则清洗后是否默认自动确认并入库",
+    )
+    document_ai_cleaning_enabled: bool = Field(default=False, description="是否启用可选 AI 文档清洗")
+    document_ai_cleaning_model: str | None = Field(default=None, description="AI 文档清洗模型 spec")
+    document_ai_cleaning_temperature: float = Field(default=0.0, description="AI 文档清洗温度")
+    document_ai_cleaning_timeout_seconds: int = Field(default=60, description="AI 文档清洗单块超时秒数")
+    document_ai_cleaning_chunk_chars: int = Field(default=12000, description="AI 文档清洗单块最大字符数")
+    document_cleaning_max_chars: int = Field(default=2_000_000, description="文档清洗草稿最大字符数")
 
     sandbox_provider: str = Field(default="provisioner", description="沙箱提供者")
     sandbox_provisioner_url: str = Field(default="http://sandbox-provisioner:8002", description="沙箱服务地址")
