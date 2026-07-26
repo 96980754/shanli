@@ -305,6 +305,82 @@ export const documentApi = {
     )
   },
 
+  getDocumentQAs: async (kbId, fileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa`)
+  },
+
+  getDocumentQA: async (kbId, fileId, qaId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}`)
+  },
+
+  generateDocumentQAs: async (kbId, fileId, sourceChunkIds = [], replaceGenerated = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/generate`, {
+      source_chunk_ids: sourceChunkIds,
+      replace_generated: replaceGenerated
+    })
+  },
+
+  getDocumentQAGenerationTask: async (kbId, fileId, taskId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/tasks/${taskId}`)
+  },
+
+  batchGenerateDocumentQAs: async (
+    kbId,
+    fileIds,
+    sourceChunkIds = [],
+    replaceGenerated = false
+  ) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/qa/generate`, {
+      file_ids: fileIds,
+      source_chunk_ids: sourceChunkIds,
+      replace_generated: replaceGenerated
+    })
+  },
+
+  createDocumentQA: async (kbId, fileId, payload) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa`, payload)
+  },
+
+  updateDocumentQA: async (kbId, fileId, qaId, payload) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      },
+      true,
+      'json'
+    )
+  },
+
+  confirmDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}/confirm`, {
+      version
+    })
+  },
+
+  batchConfirmDocumentQAs: async (kbId, fileId, items) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/confirm`, {
+      items
+    })
+  },
+
+  rejectDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}/reject`, {
+      version
+    })
+  },
+
+  deleteDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}?version=${encodeURIComponent(version)}`,
+      { method: 'DELETE' },
+      true,
+      'json'
+    )
+  },
+
   /**
    * 获取文档信息
    * @param {string} kbId - 知识库ID

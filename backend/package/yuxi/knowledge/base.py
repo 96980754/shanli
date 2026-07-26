@@ -1046,6 +1046,22 @@ class KnowledgeBase(ABC):
         """
         pass
 
+    async def upsert_confirmed_qa(
+        self,
+        *,
+        kb_id: str,
+        qa_id: str,
+        file_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        """Project a confirmed QA pair into the knowledge base retrieval backend."""
+        raise NotImplementedError("This knowledge base does not support document QA indexing")
+
+    async def delete_confirmed_qa(self, kb_id: str, qa_id: str) -> None:
+        """Remove a confirmed QA projection without changing document chunks."""
+        raise NotImplementedError("This knowledge base does not support document QA indexing")
+
     async def create_database(
         self,
         database_name: str,

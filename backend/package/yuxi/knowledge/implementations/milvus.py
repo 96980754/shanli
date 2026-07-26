@@ -28,6 +28,7 @@ from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
 from yuxi.knowledge.parser.unified import Parser
 from yuxi.knowledge.utils.kb_utils import resolve_processing_params, sanitize_processing_error
 from yuxi.models.providers.cache import model_cache
+from yuxi.repositories.document_qa_repository import DocumentQARepository
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from yuxi.utils import hashstr, logger
@@ -630,6 +631,20 @@ class MilvusKB(KnowledgeBase):
             for record in await KnowledgeChunkRepository().list_by_chunk_ids(chunk_ids)
             if isinstance(record.source_metadata, dict)
         }
+        qa_ids = [chunk_id.removeprefix("qa:") for chunk_id in chunk_ids if chunk_id.startswith("qa:")]
+        qa_by_vector_id = {
+            f"qa:{record.qa_id}": record
+            for record in await DocumentQARepository().list_by_qa_ids(qa_ids)
+            if record.kb_id == kb_id and record.status == "confirmed" and record.sync_status == "synced"
+        }
+        chunks[:] = [
+            chunk
+            for chunk in chunks
+            if not (
+                str((chunk.get("metadata") or {}).get("chunk_id") or "").startswith("qa:")
+                and str((chunk.get("metadata") or {}).get("chunk_id") or "") not in qa_by_vector_id
+            )
+        ]
         for chunk in chunks:
             metadata = chunk.get("metadata")
             if not isinstance(metadata, dict):
@@ -637,6 +652,16 @@ class MilvusKB(KnowledgeBase):
             source_metadata = source_metadata_by_chunk_id.get(str(metadata.get("chunk_id") or ""))
             if source_metadata:
                 metadata["source_metadata"] = source_metadata
+            qa_record = qa_by_vector_id.get(str(metadata.get("chunk_id") or ""))
+            if qa_record is not None:
+                metadata["source_metadata"] = {
+                    "source_type": "document_qa",
+                    "qa_id": qa_record.qa_id,
+                    "source_chunk_ids": list(qa_record.source_chunk_ids or []),
+                    "evidence": list(qa_record.evidence or []),
+                    "answer_source": qa_record.source,
+                    "confirmed_by": qa_record.confirmed_by,
+                }
             metadata["source"] = filenames.get(str(metadata.get("file_id") or ""), "") or "未知来源"
 
     @staticmethod
@@ -967,6 +992,48 @@ class MilvusKB(KnowledgeBase):
             output_fields=["file_id"],
         )
         return bool(results and results[0])
+
+    async def upsert_confirmed_qa(
+        self,
+        *,
+        kb_id: str,
+        qa_id: str,
+        file_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        """Upsert one confirmed QA projection into the existing document collection."""
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        vector_id = f"qa:{qa_id}"
+        escaped_id = self._escape_milvus_string_literal(vector_id)
+        await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
+        content = f"问题：{question}\n答案：{answer}"
+        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_function = self._get_embedding_function(embedding_model_spec)
+        embeddings = await embedding_function([content])
+        collection.insert(
+            [
+                [vector_id],
+                [content],
+                [vector_id],
+                [file_id],
+                [-1],
+                embeddings,
+            ]
+        )
+        await asyncio.to_thread(collection.flush)
+
+    async def delete_confirmed_qa(self, kb_id: str, qa_id: str) -> None:
+        """Delete one QA projection without touching document chunks."""
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        vector_id = f"qa:{qa_id}"
+        escaped_id = self._escape_milvus_string_literal(vector_id)
+        await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
+        await asyncio.to_thread(collection.flush)
 
     async def update_content(self, kb_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
         """更新内容 - 根据file_ids重新解析文件并更新向量库"""

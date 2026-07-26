@@ -355,6 +355,42 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_chunks ADD COLUMN IF NOT EXISTS extraction_result JSONB",
             "ALTER TABLE IF EXISTS knowledge_chunks ADD COLUMN IF NOT EXISTS source_metadata JSONB",
             """
+            CREATE TABLE IF NOT EXISTS document_qa_pairs (
+                id SERIAL PRIMARY KEY,
+                qa_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                file_id VARCHAR(64) NOT NULL REFERENCES knowledge_files(file_id) ON DELETE CASCADE,
+                question TEXT NOT NULL,
+                question_hash VARCHAR(64) NOT NULL,
+                answer TEXT NOT NULL,
+                source_chunk_ids JSONB NOT NULL,
+                evidence JSONB NOT NULL,
+                source VARCHAR(32) NOT NULL DEFAULT 'generated',
+                status VARCHAR(32) NOT NULL DEFAULT 'draft',
+                sync_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                sync_error TEXT,
+                version INTEGER NOT NULL DEFAULT 1,
+                cleaning_version INTEGER NOT NULL,
+                content_hash VARCHAR(64) NOT NULL,
+                model_name VARCHAR(512),
+                model_version VARCHAR(64),
+                generated_at TIMESTAMPTZ,
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_by VARCHAR(64),
+                confirmed_at TIMESTAMPTZ,
+                confirmed_by VARCHAR(64),
+                possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE,
+                deleted_by_user BOOLEAN NOT NULL DEFAULT FALSE,
+                error TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_document_qa_pairs_file_content_question
+                    UNIQUE (file_id, content_hash, question_hash)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_document_qa_pairs_kb_id ON document_qa_pairs(kb_id)",
+            "CREATE INDEX IF NOT EXISTS ix_document_qa_pairs_file_id ON document_qa_pairs(file_id)",
+            "CREATE INDEX IF NOT EXISTS ix_document_qa_pairs_status ON document_qa_pairs(status)",
+            """
             CREATE TABLE IF NOT EXISTS knowledge_graph_entities (
                 id SERIAL PRIMARY KEY,
                 entity_id VARCHAR(64) NOT NULL UNIQUE,

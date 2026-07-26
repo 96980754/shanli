@@ -249,6 +249,52 @@ class KnowledgeGraphTripleMention(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
 
 
+class DocumentQAPair(Base):
+    """Document-bound QA draft and confirmed answer."""
+
+    __tablename__ = "document_qa_pairs"
+    __table_args__ = (
+        UniqueConstraint("qa_id", name="uq_document_qa_pairs_qa_id"),
+        UniqueConstraint(
+            "file_id",
+            "content_hash",
+            "question_hash",
+            name="uq_document_qa_pairs_file_content_question",
+        ),
+        Index("ix_document_qa_pairs_kb_id", "kb_id"),
+        Index("ix_document_qa_pairs_file_id", "file_id"),
+        Index("ix_document_qa_pairs_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    qa_id = Column(String(64), nullable=False)
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"), nullable=False)
+    question = Column(Text, nullable=False)
+    question_hash = Column(String(64), nullable=False)
+    answer = Column(Text, nullable=False)
+    source_chunk_ids = Column(JSON_VALUE, nullable=False)
+    evidence = Column(JSON_VALUE, nullable=False)
+    source = Column(String(32), nullable=False, default="generated")
+    status = Column(String(32), nullable=False, default="draft")
+    sync_status = Column(String(32), nullable=False, default="pending")
+    sync_error = Column(Text)
+    version = Column(Integer, nullable=False, default=1)
+    cleaning_version = Column(Integer, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    model_name = Column(String(512))
+    model_version = Column(String(64))
+    generated_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    updated_by = Column(String(64))
+    confirmed_at = Column(DateTime(timezone=True))
+    confirmed_by = Column(String(64))
+    possibly_outdated = Column(Boolean, nullable=False, default=False)
+    deleted_by_user = Column(Boolean, nullable=False, default=False)
+    error = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+
+
 class EvaluationDataset(Base):
     """评估数据集模型"""
 

@@ -364,6 +364,7 @@ class DocumentCleaningService:
 
         target_record = record
         created_candidate = False
+        body_changed = False
         if record.is_active and int(record.chunk_count or 0) > 0:
             candidate_id = f"file_{secrets.token_hex(6)}"
             working_draft_path = record.cleaning_draft_file
@@ -511,6 +512,15 @@ class DocumentCleaningService:
         from yuxi.services.document_enrichment_service import enqueue_auto_document_enrichment
 
         await enqueue_auto_document_enrichment(
+            kb_id=kb_id,
+            file_id=target_record.file_id,
+            operator_id=operator_id,
+        )
+        from yuxi.services.document_qa_service import DocumentQAService, enqueue_auto_document_qa
+
+        if body_changed:
+            await DocumentQAService().mark_file_qas_outdated(kb_id=kb_id, file_id=record.file_id)
+        await enqueue_auto_document_qa(
             kb_id=kb_id,
             file_id=target_record.file_id,
             operator_id=operator_id,

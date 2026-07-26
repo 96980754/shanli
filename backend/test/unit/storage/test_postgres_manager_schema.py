@@ -190,3 +190,18 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "enrichment_possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE" in statements
     assert "ix_knowledge_files_enrichment_status" in statements
     assert "source_metadata JSONB" in statements
+    assert "CREATE TABLE IF NOT EXISTS document_qa_pairs" in statements
+    assert "source_chunk_ids JSONB NOT NULL" in statements
+    assert "evidence JSONB NOT NULL" in statements
+    assert "sync_status VARCHAR(32) NOT NULL DEFAULT 'pending'" in statements
+    assert "possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE" in statements
+    assert "uq_document_qa_pairs_file_content_question" in statements
+    assert "ix_document_qa_pairs_file_id" in statements
+
+
+def test_document_qa_model_has_unique_index_names():
+    from yuxi.storage.postgres.models_knowledge import DocumentQAPair
+
+    index_names = [index.name for index in DocumentQAPair.__table__.indexes]
+
+    assert len(index_names) == len(set(index_names))

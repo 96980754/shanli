@@ -60,6 +60,13 @@
       @changed="handleRefresh"
     />
 
+    <DocumentQAModal
+      v-model:open="qaModalVisible"
+      :kb-id="store.kbId"
+      :file-id="qaFileId"
+      @changed="handleRefresh"
+    />
+
     <FileBrowserTable
       class="knowledge-file-browser"
       :rows="files"
@@ -362,6 +369,17 @@
                   </a-button>
 
                   <a-button
+                    v-if="canOpenDocumentQA(row)"
+                    type="text"
+                    block
+                    @click="openDocumentQA(row)"
+                    :disabled="lock"
+                  >
+                    <template #icon><component :is="h(MessagesSquare)" size="14" /></template>
+                    QA 知识对
+                  </a-button>
+
+                  <a-button
                     type="text"
                     block
                     danger
@@ -395,6 +413,7 @@ import {
   canDownloadFile,
   canIndexFile,
   canOpenCleaning,
+  canOpenDocumentQA,
   canOpenEnrichment,
   canOpenFileDetail,
   canParseFile,
@@ -423,6 +442,7 @@ import {
   Database,
   Filter,
   MoreHorizontal,
+  MessagesSquare,
   Sparkles
 } from 'lucide-vue-next'
 
@@ -554,6 +574,8 @@ const cleaningModalVisible = ref(false)
 const cleaningFileId = ref('')
 const enrichmentModalVisible = ref(false)
 const enrichmentFileId = ref('')
+const qaModalVisible = ref(false)
+const qaFileId = ref('')
 const closePopover = (fileId) => {
   if (fileId) {
     popoverVisibleMap.value[fileId] = false
@@ -574,6 +596,12 @@ const openEnrichment = (record) => {
   closePopover(record.file_id)
   enrichmentFileId.value = record.file_id
   enrichmentModalVisible.value = true
+}
+
+const openDocumentQA = (record) => {
+  closePopover(record.file_id)
+  qaFileId.value = record.file_id
+  qaModalVisible.value = true
 }
 
 // 新建文件夹相关
@@ -1099,6 +1127,7 @@ import { buildChunkParamsPayload, isPlainObject } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
 import DocumentEnrichmentModal from '@/components/DocumentEnrichmentModal.vue'
+import DocumentQAModal from '@/components/DocumentQAModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>

@@ -149,6 +149,14 @@ export const canOpenEnrichment = (record) =>
     ['done', 'indexed', 'error_replacement_cleanup'].includes(record.status)
   )
 
+export const canOpenDocumentQA = (record) =>
+  Boolean(
+    record &&
+    !record.is_folder &&
+    record.is_active !== false &&
+    ['done', 'indexed', 'error_replacement_cleanup'].includes(record.status)
+  )
+
 export const canDownloadFile = (record) =>
   Boolean(
     record &&

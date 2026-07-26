@@ -58,6 +58,13 @@ from yuxi.services.document_enrichment_service import (
     EnrichmentVersionConflict,
     enqueue_document_enrichment,
 )
+from yuxi.services.document_qa_service import (
+    DocumentQAError,
+    DocumentQAService,
+    QANotFound,
+    QAVersionConflict,
+    enqueue_document_qa_generation,
+)
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
@@ -159,6 +166,41 @@ class EnrichmentListUpdateRequest(BaseModel):
 
 class EnrichmentBatchGenerateRequest(EnrichmentGenerateRequest):
     file_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class QAGenerateRequest(BaseModel):
+    source_chunk_ids: list[str] = Field(default_factory=list, max_length=500)
+    replace_generated: bool = False
+
+
+class QABatchGenerateRequest(QAGenerateRequest):
+    file_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class QAEvidenceItem(BaseModel):
+    chunk_id: str = Field(min_length=1, max_length=128)
+    text: str = Field(min_length=1, max_length=5000)
+
+
+class QAWriteRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+    answer: str = Field(min_length=1, max_length=2000)
+    source_chunk_ids: list[str] = Field(min_length=1, max_length=100)
+    evidence: list[QAEvidenceItem] = Field(min_length=1, max_length=100)
+    version: int | None = Field(default=None, ge=1)
+
+
+class QAVersionRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class QABatchConfirmItem(BaseModel):
+    qa_id: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+
+
+class QABatchConfirmRequest(BaseModel):
+    items: list[QABatchConfirmItem] = Field(min_length=1, max_length=500)
 
 
 media_types = {
@@ -1245,6 +1287,17 @@ def _raise_enrichment_http_error(error: Exception) -> None:
     raise HTTPException(status_code=500, detail="文档信息增强操作失败") from error
 
 
+def _raise_qa_http_error(error: Exception) -> None:
+    if isinstance(error, QANotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, QAVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentQAError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    logger.error("Document QA operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="文档 QA 操作失败") from error
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/cleaning")
 async def get_document_cleaning_preview(
     kb_id: str,
@@ -1483,6 +1536,257 @@ async def batch_generate_document_enrichment(
         except Exception as error:  # noqa: BLE001
             failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
     return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa")
+async def list_document_qa(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA")
+    try:
+        payload = await DocumentQAService().list(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def get_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA")
+    try:
+        payload = await DocumentQAService().get(kb_id=kb_id, file_id=file_id, qa_id=qa_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/generate")
+async def generate_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QAGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "生成文档 QA")
+    try:
+        task_id, created = await enqueue_document_qa_generation(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            selected_chunk_ids=request.source_chunk_ids or None,
+            replace_generated=request.replace_generated,
+        )
+        return {"status": "queued", "task_id": task_id, "created": created}
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/tasks/{task_id}")
+async def get_document_qa_generation_task(
+    kb_id: str,
+    file_id: str,
+    task_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA 生成状态")
+    task = await tasker.get_task(task_id)
+    if (
+        task is None
+        or task.get("type") != "document_qa_generation"
+        or task.get("payload", {}).get("kb_id") != kb_id
+        or task.get("payload", {}).get("file_id") != file_id
+    ):
+        raise HTTPException(status_code=404, detail="QA 生成任务不存在")
+    return {
+        "task_id": task_id,
+        "status": task.get("status"),
+        "progress": task.get("progress"),
+        "message": task.get("message"),
+        "error": sanitize_processing_error(task["error"]) if task.get("error") else None,
+    }
+
+
+@knowledge.post("/databases/{kb_id}/documents/qa/generate")
+async def batch_generate_document_qa(
+    kb_id: str,
+    request: QABatchGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量生成文档 QA")
+    queued: list[dict] = []
+    failed: list[dict] = []
+    for file_id in dict.fromkeys(request.file_ids):
+        try:
+            task_id, created = await enqueue_document_qa_generation(
+                kb_id=kb_id,
+                file_id=file_id,
+                operator_id=current_user.uid,
+                selected_chunk_ids=request.source_chunk_ids or None,
+                replace_generated=request.replace_generated,
+            )
+            queued.append({"file_id": file_id, "task_id": task_id, "created": created})
+        except Exception as error:  # noqa: BLE001
+            failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
+    return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa")
+async def create_manual_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QAWriteRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "新建文档 QA")
+    try:
+        return await DocumentQAService().create_manual(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            question=request.question,
+            answer=request.answer,
+            source_chunk_ids=request.source_chunk_ids,
+            evidence=[item.model_dump() for item in request.evidence],
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def update_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAWriteRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档 QA")
+    if request.version is None:
+        raise HTTPException(status_code=422, detail="更新 QA 必须提供 version")
+    try:
+        return await DocumentQAService().update(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            question=request.question,
+            answer=request.answer,
+            source_chunk_ids=request.source_chunk_ids,
+            evidence=[item.model_dump() for item in request.evidence],
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/confirm")
+async def confirm_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "确认文档 QA")
+    try:
+        return await DocumentQAService().confirm(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/confirm")
+async def batch_confirm_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QABatchConfirmRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量确认文档 QA")
+    service = DocumentQAService()
+    confirmed: list[dict] = []
+    failed: list[dict] = []
+    for item in request.items:
+        try:
+            confirmed.append(
+                await service.confirm(
+                    kb_id=kb_id,
+                    file_id=file_id,
+                    qa_id=item.qa_id,
+                    operator_id=current_user.uid,
+                    expected_version=item.version,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            failed.append({"qa_id": item.qa_id, "error": sanitize_processing_error(error)})
+    return {"confirmed": confirmed, "failed": failed}
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/reject")
+async def reject_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "拒绝文档 QA")
+    try:
+        return await DocumentQAService().reject_or_delete(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+
+
+@knowledge.delete("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def delete_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    version: int = Query(..., ge=1),
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "删除文档 QA 草稿")
+    try:
+        return await DocumentQAService().delete_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
 
 
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")
