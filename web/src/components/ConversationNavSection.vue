@@ -1,9 +1,15 @@
 <template>
   <section class="conversation-nav-section" :class="{ collapsed }">
     <div v-if="showHistory && !collapsed" class="history-panel">
-      <div class="history-label" @click="listCollapsed = !listCollapsed">
-        <span>最近</span>
-        <ChevronDown :size="14" class="collapse-icon" :class="{ collapsed: listCollapsed }" />
+      <div class="history-header">
+        <button type="button" class="history-search" @click="$emit('search')">
+          <Search :size="14" />
+          <span>搜索</span>
+        </button>
+        <div class="history-label" @click="listCollapsed = !listCollapsed">
+          <span>最近</span>
+          <ChevronDown :size="14" class="collapse-icon" :class="{ collapsed: listCollapsed }" />
+        </div>
       </div>
       <div v-show="!listCollapsed" class="conversation-list">
         <template v-if="sortedChats.length > 0">
@@ -74,7 +80,7 @@
 <script setup>
 import { computed, h, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { ChevronDown, MoreVertical, Pin, PinOff, SquarePen, Trash2 } from 'lucide-vue-next'
+import { ChevronDown, MoreVertical, Pin, PinOff, Search, SquarePen, Trash2 } from 'lucide-vue-next'
 import { parseToShanghai } from '@/utils/time'
 
 const props = defineProps({
@@ -109,7 +115,8 @@ const emit = defineEmits([
   'delete-chat',
   'rename-chat',
   'toggle-pin',
-  'load-more-chats'
+  'load-more-chats',
+  'search'
 ])
 
 const listCollapsed = ref(false)
@@ -185,18 +192,34 @@ const renameChat = async (chatId) => {
   flex-direction: column;
 }
 
-.history-label {
+.history-header {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  gap: 10px;
   padding: 4px 8px;
+}
+
+.history-search,
+.history-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
   color: var(--gray-800);
   cursor: pointer;
   font-size: 14px;
+  line-height: 20px;
+}
+
+.history-search {
+  padding: 0;
+  font-weight: 500;
+}
+
+.history-label {
+  padding: 0;
   font-weight: 600;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
-  gap: 4px;
 
   span {
     font-weight: 500;

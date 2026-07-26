@@ -129,6 +129,7 @@ class KnowledgeFile(Base):
     file_size = Column(BigInteger)
     chunk_count = Column(Integer, default=0)
     token_count = Column(BigInteger, default=0)
+    view_count = Column(BigInteger, default=0, nullable=False)
     content_type = Column(String(64))
     processing_params = Column(JSON_VALUE)
     is_folder = Column(Boolean, default=False)
