@@ -10,6 +10,7 @@ from typing import Any
 from yuxi import config
 from yuxi.knowledge.base import FileStatus
 from yuxi.knowledge.cleaning import OptionalAIDocumentCleaner, sanitize_markdown_html
+from yuxi.knowledge.enrichment import formal_content_hash, mark_enrichment_data_outdated
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.utils import is_minio_url, parse_minio_url, sanitize_processing_error
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
@@ -367,6 +368,12 @@ class DocumentCleaningService:
             candidate_id = f"file_{secrets.token_hex(6)}"
             working_draft_path = record.cleaning_draft_file
             candidate_content = await self._read_markdown(working_draft_path)
+            body_changed = True
+            try:
+                current_content = await self._read_markdown(record.markdown_file)
+                body_changed = formal_content_hash(current_content) != formal_content_hash(candidate_content)
+            except DocumentCleaningError:
+                pass
             candidate_draft_path = await self._save_draft(
                 kb_id,
                 candidate_id,
@@ -387,6 +394,21 @@ class DocumentCleaningService:
                 "cleaning_version": int(record.cleaning_version or 0),
                 "confirmed_at": now,
                 "confirmed_by": operator_id,
+                "enrichment_data": (
+                    mark_enrichment_data_outdated(getattr(record, "enrichment_data", None))
+                    if body_changed and getattr(record, "enrichment_data", None)
+                    else deepcopy(getattr(record, "enrichment_data", None) or {})
+                ),
+                "enrichment_status": (
+                    "possibly_outdated"
+                    if body_changed and getattr(record, "enrichment_data", None)
+                    else getattr(record, "enrichment_status", None)
+                ),
+                "enrichment_version": int(getattr(record, "enrichment_version", 0) or 0),
+                "enrichment_content_hash": getattr(record, "enrichment_content_hash", None),
+                "enrichment_generated_at": getattr(record, "enrichment_generated_at", None),
+                "enrichment_error": None,
+                "enrichment_possibly_outdated": bool(body_changed and getattr(record, "enrichment_data", None)),
                 "status": FileStatus.CONFIRMED,
                 "content_hash": record.content_hash,
                 "file_size": record.file_size,
@@ -485,6 +507,13 @@ class DocumentCleaningService:
             target_record.file_id,
             operator_id=operator_id,
             params=record.processing_params or {},
+        )
+        from yuxi.services.document_enrichment_service import enqueue_auto_document_enrichment
+
+        await enqueue_auto_document_enrichment(
+            kb_id=kb_id,
+            file_id=target_record.file_id,
+            operator_id=operator_id,
         )
         return {
             "file_id": target_record.file_id,

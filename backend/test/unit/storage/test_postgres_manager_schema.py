@@ -181,4 +181,12 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "cleaning_version INTEGER NOT NULL DEFAULT 0" in statements
     assert "confirmed_at TIMESTAMPTZ" in statements
     assert "confirmed_by VARCHAR(64)" in statements
+    assert "enrichment_data JSONB" in statements
+    assert "enrichment_status VARCHAR(32)" in statements
+    assert "enrichment_version INTEGER NOT NULL DEFAULT 0" in statements
+    assert "enrichment_content_hash VARCHAR(64)" in statements
+    assert "enrichment_generated_at TIMESTAMPTZ" in statements
+    assert "enrichment_error TEXT" in statements
+    assert "enrichment_possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE" in statements
+    assert "ix_knowledge_files_enrichment_status" in statements
     assert "source_metadata JSONB" in statements

@@ -180,6 +180,17 @@ class KnowledgeBase(ABC):
             "cleaning_version": int(getattr(record, "cleaning_version", 0) or 0),
             "confirmed_at": (utc_isoformat(record.confirmed_at) if getattr(record, "confirmed_at", None) else None),
             "confirmed_by": getattr(record, "confirmed_by", None),
+            "enrichment_data": getattr(record, "enrichment_data", None),
+            "enrichment_status": getattr(record, "enrichment_status", None),
+            "enrichment_version": int(getattr(record, "enrichment_version", 0) or 0),
+            "enrichment_content_hash": getattr(record, "enrichment_content_hash", None),
+            "enrichment_generated_at": (
+                utc_isoformat(record.enrichment_generated_at)
+                if getattr(record, "enrichment_generated_at", None)
+                else None
+            ),
+            "enrichment_error": getattr(record, "enrichment_error", None),
+            "enrichment_possibly_outdated": bool(getattr(record, "enrichment_possibly_outdated", False)),
             "processing_stage": getattr(record, "processing_stage", None),
             "processing_progress": max(0, min(int(getattr(record, "processing_progress", 0) or 0), 100)),
             "processing_task_id": getattr(record, "processing_task_id", None),
@@ -226,6 +237,13 @@ class KnowledgeBase(ABC):
             "cleaning_version": max(0, int(meta.get("cleaning_version") or 0)),
             "confirmed_at": meta.get("confirmed_at"),
             "confirmed_by": meta.get("confirmed_by"),
+            "enrichment_data": meta.get("enrichment_data"),
+            "enrichment_status": meta.get("enrichment_status"),
+            "enrichment_version": max(0, int(meta.get("enrichment_version") or 0)),
+            "enrichment_content_hash": meta.get("enrichment_content_hash"),
+            "enrichment_generated_at": meta.get("enrichment_generated_at"),
+            "enrichment_error": meta.get("enrichment_error"),
+            "enrichment_possibly_outdated": bool(meta.get("enrichment_possibly_outdated", False)),
             "processing_stage": meta.get("processing_stage"),
             "processing_progress": max(0, min(int(meta.get("processing_progress") or 0), 100)),
             "processing_task_id": meta.get("processing_task_id"),

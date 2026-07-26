@@ -53,6 +53,13 @@
       @confirmed="handleCleaningConfirmed"
     />
 
+    <DocumentEnrichmentModal
+      v-model:open="enrichmentModalVisible"
+      :kb-id="store.kbId"
+      :file-id="enrichmentFileId"
+      @changed="handleRefresh"
+    />
+
     <FileBrowserTable
       class="knowledge-file-browser"
       :rows="files"
@@ -344,6 +351,17 @@
                   </a-button>
 
                   <a-button
+                    v-if="canOpenEnrichment(row)"
+                    type="text"
+                    block
+                    @click="openEnrichment(row)"
+                    :disabled="lock"
+                  >
+                    <template #icon><component :is="h(Sparkles)" size="14" /></template>
+                    信息增强
+                  </a-button>
+
+                  <a-button
                     type="text"
                     block
                     danger
@@ -377,6 +395,7 @@ import {
   canDownloadFile,
   canIndexFile,
   canOpenCleaning,
+  canOpenEnrichment,
   canOpenFileDetail,
   canParseFile,
   canReindexFile,
@@ -533,6 +552,8 @@ const onSelectAllChange = (e) => {
 const popoverVisibleMap = ref({})
 const cleaningModalVisible = ref(false)
 const cleaningFileId = ref('')
+const enrichmentModalVisible = ref(false)
+const enrichmentFileId = ref('')
 const closePopover = (fileId) => {
   if (fileId) {
     popoverVisibleMap.value[fileId] = false
@@ -547,6 +568,12 @@ const openCleaningPreview = (record) => {
 
 const handleCleaningConfirmed = async () => {
   await handleRefresh()
+}
+
+const openEnrichment = (record) => {
+  closePopover(record.file_id)
+  enrichmentFileId.value = record.file_id
+  enrichmentModalVisible.value = true
 }
 
 // 新建文件夹相关
@@ -1071,6 +1098,7 @@ import { parseToShanghai } from '@/utils/time'
 import { buildChunkParamsPayload, isPlainObject } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
+import DocumentEnrichmentModal from '@/components/DocumentEnrichmentModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>

@@ -183,6 +183,20 @@ class PostgresManager(metaclass=SingletonMeta):
             ),
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS confirmed_by VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_data JSONB",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_status VARCHAR(32)",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "enrichment_version INTEGER NOT NULL DEFAULT 0"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_content_hash VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_generated_at TIMESTAMPTZ",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_error TEXT",
+            (
+                "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "
+                "enrichment_possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE"
+            ),
+            ("CREATE INDEX IF NOT EXISTS ix_knowledge_files_enrichment_status ON knowledge_files(enrichment_status)"),
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_stage VARCHAR(64)",
             (
                 "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS "

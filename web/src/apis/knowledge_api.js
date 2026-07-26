@@ -247,6 +247,64 @@ export const documentApi = {
     })
   },
 
+  getEnrichment: async (kbId, fileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment`)
+  },
+
+  generateEnrichment: async (kbId, fileId, components, overwriteManual = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/generate`, {
+      components,
+      overwrite_manual: overwriteManual
+    })
+  },
+
+  batchGenerateEnrichment: async (kbId, fileIds, components, overwriteManual = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/enrichment/generate`, {
+      file_ids: fileIds,
+      components,
+      overwrite_manual: overwriteManual
+    })
+  },
+
+  updateSummary: async (kbId, fileId, text, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/summary`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, version })
+      },
+      true,
+      'json'
+    )
+  },
+
+  updateKeywords: async (kbId, fileId, values, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/keywords`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values, version })
+      },
+      true,
+      'json'
+    )
+  },
+
+  updateTags: async (kbId, fileId, values, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/tags`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values, version })
+      },
+      true,
+      'json'
+    )
+  },
+
   /**
    * 获取文档信息
    * @param {string} kbId - 知识库ID

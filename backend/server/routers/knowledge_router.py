@@ -51,6 +51,13 @@ from yuxi.services.document_cleaning_service import (
     DocumentCleaningNotFound,
     DocumentCleaningService,
 )
+from yuxi.services.document_enrichment_service import (
+    DocumentEnrichmentError,
+    DocumentEnrichmentService,
+    EnrichmentNotFound,
+    EnrichmentVersionConflict,
+    enqueue_document_enrichment,
+)
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
@@ -133,6 +140,25 @@ class CleaningVersionRequest(BaseModel):
 class CleaningRegenerateRequest(BaseModel):
     version: int = Field(ge=0)
     use_ai: bool | None = None
+
+
+class EnrichmentGenerateRequest(BaseModel):
+    components: list[str] = Field(default_factory=lambda: ["summary", "keywords", "tags"])
+    overwrite_manual: bool = False
+
+
+class EnrichmentSummaryUpdateRequest(BaseModel):
+    version: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class EnrichmentListUpdateRequest(BaseModel):
+    version: int = Field(ge=0)
+    values: list[str] = Field(max_length=50)
+
+
+class EnrichmentBatchGenerateRequest(EnrichmentGenerateRequest):
+    file_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 media_types = {
@@ -1208,6 +1234,17 @@ def _raise_cleaning_http_error(error: Exception) -> None:
     raise HTTPException(status_code=500, detail="文档清洗操作失败") from error
 
 
+def _raise_enrichment_http_error(error: Exception) -> None:
+    if isinstance(error, EnrichmentNotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, EnrichmentVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentEnrichmentError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    logger.error("Document enrichment operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="文档信息增强操作失败") from error
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/cleaning")
 async def get_document_cleaning_preview(
     kb_id: str,
@@ -1316,6 +1353,136 @@ async def cancel_document_cleaning(
         return payload
     except Exception as error:  # noqa: BLE001
         _raise_cleaning_http_error(error)
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/enrichment")
+async def get_document_enrichment(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档信息增强")
+    try:
+        payload = await DocumentEnrichmentService().get(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/enrichment/generate")
+async def generate_document_enrichment(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "生成文档信息增强")
+    try:
+        task_id, created = await enqueue_document_enrichment(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            components=set(request.components),
+            overwrite_manual=request.overwrite_manual,
+        )
+        return {
+            "status": "queued",
+            "task_id": task_id,
+            "created": created,
+        }
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/summary")
+async def update_document_summary(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentSummaryUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档摘要")
+    try:
+        return await DocumentEnrichmentService().update_summary(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            text=request.text,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/keywords")
+async def update_document_keywords(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentListUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档关键词")
+    try:
+        return await DocumentEnrichmentService().update_keywords(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            values=request.values,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/tags")
+async def update_document_tags(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentListUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档标签")
+    try:
+        return await DocumentEnrichmentService().update_tags(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            values=request.values,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/enrichment/generate")
+async def batch_generate_document_enrichment(
+    kb_id: str,
+    request: EnrichmentBatchGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量生成文档信息增强")
+    queued: list[dict] = []
+    failed: list[dict] = []
+    for file_id in dict.fromkeys(request.file_ids):
+        try:
+            task_id, created = await enqueue_document_enrichment(
+                kb_id=kb_id,
+                file_id=file_id,
+                operator_id=current_user.uid,
+                components=set(request.components),
+                overwrite_manual=request.overwrite_manual,
+            )
+            queued.append({"file_id": file_id, "task_id": task_id, "created": created})
+        except Exception as error:  # noqa: BLE001
+            failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
+    return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
 
 
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")

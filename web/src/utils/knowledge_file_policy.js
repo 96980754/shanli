@@ -142,6 +142,13 @@ export const canReindexFile = (record) =>
 export const canOpenCleaning = (record) =>
   Boolean(record && !record.is_folder && CLEANING_PREVIEW_STATUSES.has(record.status))
 
+export const canOpenEnrichment = (record) =>
+  Boolean(
+    record &&
+    !record.is_folder &&
+    ['done', 'indexed', 'error_replacement_cleanup'].includes(record.status)
+  )
+
 export const canDownloadFile = (record) =>
   Boolean(
     record &&

@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text, union_all, update
 
+from yuxi.knowledge.enrichment import mark_enrichment_data_outdated
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_knowledge import KnowledgeFile
 from yuxi.utils.datetime_utils import utc_now_naive
@@ -65,6 +66,13 @@ class KnowledgeFileRepository:
         "cleaning_version",
         "confirmed_at",
         "confirmed_by",
+        "enrichment_data",
+        "enrichment_status",
+        "enrichment_version",
+        "enrichment_content_hash",
+        "enrichment_generated_at",
+        "enrichment_error",
+        "enrichment_possibly_outdated",
         "processing_stage",
         "processing_progress",
         "processing_task_id",
@@ -93,6 +101,8 @@ class KnowledgeFileRepository:
             sanitized["processing_progress"] = max(0, min(int(sanitized["processing_progress"] or 0), 100))
         if "cleaning_version" in sanitized:
             sanitized["cleaning_version"] = max(0, int(sanitized["cleaning_version"] or 0))
+        if "enrichment_version" in sanitized:
+            sanitized["enrichment_version"] = max(0, int(sanitized["enrichment_version"] or 0))
         if sanitized:
             sanitized["updated_at"] = utc_now_naive()
         return sanitized
@@ -445,6 +455,18 @@ class KnowledgeFileRepository:
                 sanitized_data["replacement_target_file_id"] = replacement_target.file_id
                 sanitized_data["is_active"] = False
                 sanitized_data["processing_stage"] = "replacement_preparing"
+                if replacement_target.enrichment_data:
+                    sanitized_data.update(
+                        {
+                            "enrichment_data": mark_enrichment_data_outdated(replacement_target.enrichment_data),
+                            "enrichment_status": "possibly_outdated",
+                            "enrichment_version": int(replacement_target.enrichment_version or 0),
+                            "enrichment_content_hash": replacement_target.enrichment_content_hash,
+                            "enrichment_generated_at": replacement_target.enrichment_generated_at,
+                            "enrichment_error": None,
+                            "enrichment_possibly_outdated": True,
+                        }
+                    )
             elif duplicate_strategy == "keep_both" and same_name_records:
                 all_names = set(
                     (
@@ -1043,6 +1065,36 @@ class KnowledgeFileRepository:
         ]
         if allowed_statuses:
             filters.append(KnowledgeFile.status.in_(sorted(allowed_statuses)))
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                update(KnowledgeFile).where(*filters).values(**sanitized_data).returning(KnowledgeFile)
+            )
+            return result.scalar_one_or_none()
+
+    async def update_enrichment_fields_with_version(
+        self,
+        *,
+        kb_id: str,
+        file_id: str,
+        expected_version: int,
+        expected_cleaning_version: int,
+        data: dict[str, Any],
+        increment_version: bool,
+        require_active: bool = True,
+    ) -> KnowledgeFile | None:
+        """Conditionally update enrichment without overwriting a newer body or edit."""
+        sanitized_data = self._sanitize_data(data)
+        if increment_version:
+            sanitized_data.pop("enrichment_version", None)
+            sanitized_data["enrichment_version"] = KnowledgeFile.enrichment_version + 1
+        filters = [
+            KnowledgeFile.kb_id == kb_id,
+            KnowledgeFile.file_id == file_id,
+            KnowledgeFile.enrichment_version == max(0, int(expected_version)),
+            KnowledgeFile.cleaning_version == max(0, int(expected_cleaning_version)),
+        ]
+        if require_active:
+            filters.append(KnowledgeFile.is_active.is_(True))
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 update(KnowledgeFile).where(*filters).values(**sanitized_data).returning(KnowledgeFile)
