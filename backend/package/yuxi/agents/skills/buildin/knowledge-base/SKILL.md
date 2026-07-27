@@ -1,7 +1,7 @@
 ---
 name: knowledge-base
 slug: knowledge-base
-description: "使用 Yuxi 知识库检索企业资料并生成有真实依据、可追溯的业务回答；无有效依据时执行统一拒答。"
+description: "使用 AI 知识库检索企业资料并生成有真实依据、可追溯的业务回答；无有效依据时执行统一拒答。"
 ---
 
 # 企业知识库问答技能
