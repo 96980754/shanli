@@ -669,7 +669,9 @@ class MilvusKB(KnowledgeBase):
         if not isinstance(parse_metadata, dict):
             return
         parser_metadata = {
-            key: parse_metadata.get(key) for key in ("parser_name", "parser_version") if parse_metadata.get(key)
+            key: parse_metadata.get(key)
+            for key in ("parser_name", "parser_version", "original_format", "normalized_format")
+            if parse_metadata.get(key)
         }
         blocks = parse_metadata.get("blocks")
         blocks = blocks if isinstance(blocks, list) else []

@@ -61,6 +61,11 @@ class Config(BaseModel):
         description="内容审查LLM模型",
     )
     default_ocr_engine: str = Field(default=DEFAULT_OCR_ENGINE, description="默认 OCR 解析引擎")
+    legacy_office_enabled: bool = Field(default=True, description="是否启用 LibreOffice 旧格式转换")
+    libreoffice_binary: str = Field(default="soffice", description="LibreOffice 命令名称或路径")
+    legacy_office_timeout_seconds: int = Field(default=90, description="旧 Office 单文件转换超时秒数")
+    legacy_office_max_input_bytes: int = Field(default=100 * 1024 * 1024, description="旧 Office 最大输入字节数")
+    legacy_office_max_output_bytes: int = Field(default=150 * 1024 * 1024, description="旧 Office 最大转换输出字节数")
     document_cleaning_auto_confirm: bool = Field(
         default=True,
         description="文档规则清洗后是否默认自动确认并入库",

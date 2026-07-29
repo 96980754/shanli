@@ -39,8 +39,12 @@ const STATUS_ACTION = {
 
 const PROCESSING_STAGE_LABELS = {
   duplicate_check: '重复检查',
+  validating: '文件校验',
   uploading: '上传中',
+  converting: '格式转换',
+  extracting_text: '提取文本',
   parsing: '解析中',
+  ocr_processing: 'OCR 识别',
   cleaning: '清洗中',
   replacement_preparing: '准备新版本',
   indexing: '入库中',

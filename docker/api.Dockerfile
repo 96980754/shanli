@@ -37,8 +37,12 @@ RUN set -ex \
         libpq5 \
         libsm6 \
         libxext6 \
+        libreoffice-calc-nogui \
         libreoffice-impress-nogui \
         libreoffice-writer-nogui \
+    && command -v soffice \
+    && dpkg-query -W libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+    && soffice --headless --version \
     # (D) 清理垃圾，减小体积
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

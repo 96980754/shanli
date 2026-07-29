@@ -17,9 +17,10 @@ from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_option
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
 from yuxi.knowledge.parser.unified import (
-    SUPPORTED_FILE_EXTENSIONS,
     Parser,
-    is_supported_file_extension,
+    ensure_supported_file_extension,
+    get_enabled_file_extensions,
+    get_file_format_capabilities,
     validate_document_bytes,
 )
 from yuxi.knowledge.runtime import knowledge_base
@@ -75,6 +76,31 @@ from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limi
 from server.utils.auth_middleware import get_admin_user, get_required_user
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
+
+_DOCUMENT_FORMAT_ERROR_CODES = {
+    "unsupported_format",
+    "converter_unavailable",
+    "conversion_timeout",
+    "conversion_failed",
+    "encrypted_document",
+    "invalid_file_signature",
+    "invalid_converted_output",
+    "file_too_large",
+    "image_too_large",
+    "image_decode_failed",
+    "empty_parsing_result",
+}
+
+
+def _document_format_error_detail(error: Exception) -> dict[str, str] | str:
+    code = str(getattr(error, "code", "") or "")
+    if code not in _DOCUMENT_FORMAT_ERROR_CODES:
+        return str(error)
+    return {
+        "code": code,
+        "message": sanitize_processing_error(error),
+    }
+
 
 ACTIVE_GRAPH_BUILD_STATUSES = {"pending", "running"}
 ACTIVE_DOCUMENT_ACTION_TASK_STATUSES = {"pending", "running"}
@@ -1234,12 +1260,13 @@ async def add_uploaded_documents(
             )
         except Exception as add_error:  # noqa: BLE001
             logger.error("添加文件记录失败: {}", sanitize_processing_error(add_error))
+            error_code = str(getattr(add_error, "code", "") or "add_failed")
             failed_items.append(
                 {
                     "index": index,
                     "status": "failed",
-                    "error": f"添加记录失败: {sanitize_processing_error(add_error)}",
-                    "error_type": "add_failed",
+                    "error": sanitize_processing_error(add_error),
+                    "error_type": error_code,
                 }
             )
 
@@ -2712,8 +2739,10 @@ async def import_workspace_files(
 
         filename = target.name
         ext = os.path.splitext(filename)[1].lower()
-        if not is_supported_file_extension(filename):
-            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+        try:
+            ensure_supported_file_extension(filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=_document_format_error_detail(exc)) from exc
 
         size = target.stat().st_size
         if size > MAX_WORKSPACE_UPLOAD_SIZE_BYTES:
@@ -2723,7 +2752,7 @@ async def import_workspace_files(
         try:
             validate_document_bytes(filename, file_bytes)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(status_code=400, detail=_document_format_error_detail(exc)) from exc
         content_hash = await calculate_content_hash(file_bytes)
 
         file_exists = await knowledge_base.file_existed_in_db(kb_id, content_hash)
@@ -2782,8 +2811,10 @@ async def upload_file(
 
     ext = os.path.splitext(file.filename)[1].lower()
 
-    if not is_supported_file_extension(file.filename):
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+    try:
+        ensure_supported_file_extension(file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_document_format_error_detail(exc)) from exc
 
     basename, ext = os.path.splitext(file.filename)
     filename = f"{basename}{ext}"
@@ -2800,7 +2831,7 @@ async def upload_file(
     try:
         validate_document_bytes(filename, file_bytes)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=_document_format_error_detail(exc)) from exc
 
     content_hash = await calculate_content_hash(file_bytes)
 
@@ -2872,7 +2903,11 @@ async def upload_file(
 @knowledge.get("/files/supported-types")
 async def get_supported_file_types(current_user: User = Depends(get_required_user)):
     """获取当前支持的文件类型"""
-    return {"message": "success", "file_types": sorted(SUPPORTED_FILE_EXTENSIONS)}
+    return {
+        "message": "success",
+        "file_types": sorted(get_enabled_file_extensions()),
+        "capabilities": get_file_format_capabilities(),
+    }
 
 
 @knowledge.post("/files/markdown")

@@ -63,6 +63,11 @@ class OCRRoutingPolicy:
     max_repeated_character_ratio: float = 0.45
     max_garbled_character_ratio: float = 0.20
     max_image_pixels: int = 40_000_000
+    max_image_dimension: int = 20_000
+    max_image_frames: int = 500
+    max_image_decode_seconds: float = 30.0
+    max_legacy_image_bytes: int = 50 * 1024 * 1024
+    max_normalized_image_bytes: int = 50 * 1024 * 1024
     max_pdf_pages: int = 200
     max_pdf_page_pixels: int = 25_000_000
     pdf_render_scale: float = 2.0
@@ -125,6 +130,41 @@ class OCRRoutingPolicy:
             max_image_pixels=max(
                 1,
                 _int_setting(values, "ocr_max_image_pixels", "OCR_MAX_IMAGE_PIXELS", 40_000_000),
+            ),
+            max_image_dimension=max(
+                1,
+                _int_setting(values, "ocr_max_image_dimension", "OCR_MAX_IMAGE_DIMENSION", 20_000),
+            ),
+            max_image_frames=max(
+                1,
+                _int_setting(values, "ocr_max_image_frames", "OCR_MAX_IMAGE_FRAMES", 500),
+            ),
+            max_image_decode_seconds=max(
+                1.0,
+                _float_setting(
+                    values,
+                    "ocr_max_image_decode_seconds",
+                    "OCR_MAX_IMAGE_DECODE_SECONDS",
+                    30.0,
+                ),
+            ),
+            max_legacy_image_bytes=max(
+                1,
+                _int_setting(
+                    values,
+                    "ocr_max_legacy_image_bytes",
+                    "OCR_MAX_LEGACY_IMAGE_BYTES",
+                    50 * 1024 * 1024,
+                ),
+            ),
+            max_normalized_image_bytes=max(
+                1,
+                _int_setting(
+                    values,
+                    "ocr_max_normalized_image_bytes",
+                    "OCR_MAX_NORMALIZED_IMAGE_BYTES",
+                    50 * 1024 * 1024,
+                ),
             ),
             max_pdf_pages=max(
                 1,

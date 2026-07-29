@@ -193,7 +193,7 @@ def test_pptx_preserves_slide_numbers_text_and_tables(tmp_path: Path) -> None:
         ("fake.docx", b"not a zip", "DOCX"),
         ("fake.xlsx", b"not a zip", "XLSX"),
         ("fake.pptx", b"not a zip", "PPTX"),
-        ("legacy.doc", b"legacy", "不支持"),
+        ("legacy.doc", b"legacy", "OLE"),
     ],
 )
 def test_document_signature_validation_rejects_mismatch_or_unsupported(

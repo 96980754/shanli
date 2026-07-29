@@ -40,5 +40,29 @@ export const getDuplicateConflictMessage = (detail) => {
 
 export const getSafeUploadErrorMessage = (response) => {
   const conflict = getDuplicateConflictDetail(response)
-  return conflict ? getDuplicateConflictMessage(conflict) : '文件上传失败，请稍后重试'
+  if (conflict) return getDuplicateConflictMessage(conflict)
+  const detail = response?.detail
+  const formatErrorCodes = new Set([
+    'unsupported_format',
+    'converter_unavailable',
+    'conversion_timeout',
+    'conversion_failed',
+    'encrypted_document',
+    'invalid_file_signature',
+    'invalid_converted_output',
+    'file_too_large',
+    'image_too_large',
+    'image_decode_failed',
+    'empty_parsing_result'
+  ])
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    formatErrorCodes.has(detail.code) &&
+    typeof detail.message === 'string' &&
+    detail.message.trim()
+  ) {
+    return detail.message
+  }
+  return '文件上传失败，请稍后重试'
 }

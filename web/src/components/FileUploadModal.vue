@@ -205,6 +205,9 @@
         >
           <p class="ant-upload-text">点击或将文件拖拽到此处</p>
           <p class="ant-upload-hint">支持类型: {{ uploadHint }}</p>
+          <p v-if="unavailableFormatMessage" class="ant-upload-hint">
+            暂不可用: {{ unavailableFormatMessage }}
+          </p>
           <div class="zip-tip" v-if="hasZipFiles">📦 ZIP包将自动解压提取 Markdown 与图片</div>
         </a-upload-dragger>
 
@@ -453,6 +456,10 @@ import {
   getDuplicateConflictMessage,
   getSafeUploadErrorMessage
 } from '@/utils/document_duplicate_policy'
+import {
+  getUnavailableFormatMessage,
+  normalizeDocumentFormatCapabilities
+} from '@/utils/document_format_capabilities'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
@@ -532,7 +539,9 @@ const DEFAULT_SUPPORTED_TYPES = [
   '.pptx',
   '.png',
   '.jpg',
-  '.jpeg'
+  '.jpeg',
+  '.gif',
+  '.webp'
 ]
 
 const normalizeExtensions = (extensions) => {
@@ -548,8 +557,13 @@ const normalizeExtensions = (extensions) => {
 }
 
 const supportedFileTypes = ref(normalizeExtensions(DEFAULT_SUPPORTED_TYPES))
+const supportedFormatCapabilities = ref([])
+const unavailableFormatMessage = computed(() =>
+  getUnavailableFormatMessage(supportedFormatCapabilities.value)
+)
 
-const applySupportedFileTypes = (extensions) => {
+const applySupportedFileTypes = (extensions, capabilities = []) => {
+  supportedFormatCapabilities.value = normalizeDocumentFormatCapabilities(capabilities)
   const normalized = normalizeExtensions(extensions)
   if (normalized.length > 0) {
     supportedFileTypes.value = normalized
@@ -596,11 +610,11 @@ const isSupportedExtension = (fileName) => {
 const loadSupportedFileTypes = async () => {
   try {
     const data = await fileApi.getSupportedFileTypes()
-    applySupportedFileTypes(data?.file_types)
+    applySupportedFileTypes(data?.file_types, data?.capabilities)
   } catch (error) {
     console.error('获取支持的文件类型失败:', error)
     message.warning('获取支持的文件类型失败，已使用默认配置')
-    applySupportedFileTypes(DEFAULT_SUPPORTED_TYPES)
+    applySupportedFileTypes(DEFAULT_SUPPORTED_TYPES, [])
   }
 }
 

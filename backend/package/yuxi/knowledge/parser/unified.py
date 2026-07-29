@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import os
 import re
 import tempfile
 import threading
 import time
-import warnings
-import zipfile
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -23,7 +20,6 @@ from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter
 from langchain_community.document_loaders import PyPDFLoader
 from markdownify import markdownify as md_convert
-from PIL import Image, UnidentifiedImageError
 
 from yuxi.knowledge.parser.ocr_routing import (
     OCRRouteResult,
@@ -33,6 +29,20 @@ from yuxi.knowledge.parser.ocr_routing import (
     looks_like_structured_layout,
     notify_processing_stage,
     run_ocr_fallback,
+)
+from yuxi.knowledge.parser.image_normalization import (
+    ImageNormalizationError,
+    get_image_format_capability,
+    normalize_image_for_ocr,
+    validate_image_bytes,
+)
+from yuxi.knowledge.parser.legacy_office import (
+    LEGACY_OFFICE_FORMATS,
+    LegacyOfficeConversionError,
+    LegacyOfficeConverter,
+    get_legacy_office_capability,
+    validate_legacy_office_bytes,
+    validate_ooxml_bytes,
 )
 from yuxi.knowledge.parser.zip_utils import process_zip_file as _process_zip_file
 from yuxi.storage.minio import get_minio_client
@@ -45,15 +55,75 @@ SUPPORTED_FILE_EXTENSIONS: tuple[str, ...] = (
     ".docx",
     ".xlsx",
     ".pptx",
+    ".doc",
+    ".xls",
+    ".ppt",
     ".png",
     ".jpg",
     ".jpeg",
+    ".gif",
+    ".webp",
 )
 
 
 def is_supported_file_extension(file_name: str | os.PathLike[str]) -> bool:
-    """Return whether a file belongs to the stable PR 2 ingestion set."""
-    return Path(file_name).suffix.lower() in SUPPORTED_FILE_EXTENSIONS
+    """Return whether the runtime can currently ingest the file extension."""
+    suffix = Path(file_name).suffix.lower()
+    capability = get_file_format_capability(suffix)
+    return bool(capability and capability["enabled"])
+
+
+def get_file_format_capability(
+    suffix: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    normalized_suffix = suffix.lower()
+    if normalized_suffix not in SUPPORTED_FILE_EXTENSIONS:
+        return None
+    if normalized_suffix in LEGACY_OFFICE_FORMATS:
+        return get_legacy_office_capability(normalized_suffix, params=params)
+    if normalized_suffix in {".gif", ".webp"}:
+        return get_image_format_capability(normalized_suffix)
+    return {
+        "extension": normalized_suffix,
+        "enabled": True,
+        "requires_converter": False,
+        "availability": "available",
+        "reason": None,
+    }
+
+
+def get_file_format_capabilities(params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    return [
+        capability
+        for suffix in SUPPORTED_FILE_EXTENSIONS
+        if (capability := get_file_format_capability(suffix, params=params)) is not None
+    ]
+
+
+def get_enabled_file_extensions(params: dict[str, Any] | None = None) -> tuple[str, ...]:
+    return tuple(
+        capability["extension"] for capability in get_file_format_capabilities(params=params) if capability["enabled"]
+    )
+
+
+def ensure_supported_file_extension(file_name: str | os.PathLike[str], params: dict[str, Any] | None = None) -> None:
+    suffix = Path(file_name).suffix.lower()
+    capability = get_file_format_capability(suffix, params=params)
+    if capability is None:
+        raise ValueError(f"Unsupported file type: {suffix or 'no extension'}")
+    if not capability["enabled"]:
+        message = str(capability["reason"] or f"当前无法处理 {suffix} 文件")
+        if suffix in LEGACY_OFFICE_FORMATS:
+            code = (
+                "converter_unavailable"
+                if capability["availability"] == "converter_unavailable"
+                else "unsupported_format"
+            )
+            raise LegacyOfficeConversionError(code, message)
+        if suffix in {".gif", ".webp"}:
+            raise ImageNormalizationError("unsupported_format", message)
+        raise ValueError(message)
 
 
 @dataclass(slots=True)
@@ -117,10 +187,11 @@ class MarkdownParseResult:
     classification: dict[str, Any] = field(default_factory=dict)
     attempts: list[dict[str, Any]] = field(default_factory=list)
     quality: dict[str, Any] = field(default_factory=dict)
+    format_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_metadata(self) -> dict[str, Any]:
         """Serialize metadata used later to map chunks back to source blocks."""
-        return {
+        metadata = {
             "document_title": self.document_title,
             "parser_name": self.parser_name,
             "parser_version": self.parser_version,
@@ -131,6 +202,8 @@ class MarkdownParseResult:
             "attempts": list(self.attempts),
             "quality": dict(self.quality),
         }
+        metadata.update(self.format_metadata)
+        return metadata
 
 
 ParseResult = MarkdownParseResult
@@ -257,40 +330,19 @@ def _validate_pdf_bytes(content: bytes, policy: OCRRoutingPolicy) -> None:
 
 
 def _validate_image_bytes(suffix: str, content: bytes, policy: OCRRoutingPolicy) -> None:
-    expected_format = "PNG" if suffix == ".png" else "JPEG"
-    if expected_format == "PNG" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ValueError("PNG 文件签名不匹配")
-    if expected_format == "JPEG" and not (
-        content.startswith(b"\xff\xd8\xff") and content.rstrip().endswith(b"\xff\xd9")
-    ):
-        raise ValueError("JPEG 文件签名不匹配")
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(content)) as image:
-                if image.format != expected_format:
-                    raise ValueError(f"图片内容不是有效的 {expected_format} 格式")
-                width, height = image.size
-                if width <= 0 or height <= 0:
-                    raise ValueError("图片尺寸无效")
-                if width * height > policy.max_image_pixels:
-                    raise ValueError(f"图片像素数量超过安全限制（最多 {policy.max_image_pixels}）")
-                image.verify()
-    except ValueError:
-        raise
-    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-        raise ValueError("图片像素数量超过安全限制") from exc
-    except (OSError, UnidentifiedImageError) as exc:
-        raise ValueError(f"{expected_format} 图片损坏或无法读取") from exc
+    validate_image_bytes(suffix, content, policy)
 
 
 def validate_document_bytes(filename: str, content: bytes, params: dict | None = None) -> None:
-    """Validate the stable file list and basic file/container signatures."""
+    """Validate runtime support and basic file/container signatures."""
     policy = OCRRoutingPolicy.from_params(params)
     suffix = Path(filename).suffix.lower()
     if suffix not in SUPPORTED_FILE_EXTENSIONS:
         raise ValueError(f"不支持的文件格式: {suffix or '无扩展名'}")
+    if suffix in LEGACY_OFFICE_FORMATS:
+        validate_legacy_office_bytes(suffix, content, params=params)
+        return
+    ensure_supported_file_extension(filename, params=params)
     if suffix in {".txt", ".md"}:
         if b"\x00" in content:
             raise ValueError("文本文件包含二进制内容")
@@ -302,23 +354,10 @@ def validate_document_bytes(filename: str, content: bytes, params: dict | None =
     if suffix == ".pdf":
         _validate_pdf_bytes(content, policy)
         return
-    if suffix in {".png", ".jpg", ".jpeg"}:
+    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         _validate_image_bytes(suffix, content, policy)
         return
-
-    required_members = {
-        ".docx": ("word/document.xml", "DOCX"),
-        ".xlsx": ("xl/workbook.xml", "XLSX"),
-        ".pptx": ("ppt/presentation.xml", "PPTX"),
-    }
-    member, label = required_members[suffix]
-    try:
-        with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            names = set(archive.namelist())
-    except (OSError, zipfile.BadZipFile) as exc:
-        raise ValueError(f"{label} 文件不是有效的 Office Open XML 容器") from exc
-    if "[Content_Types].xml" not in names or member not in names:
-        raise ValueError(f"{label} 文件容器类型与扩展名不匹配")
+    validate_ooxml_bytes(suffix, content)
 
 
 def _get_docling_converter() -> DocumentConverter:
@@ -824,35 +863,78 @@ async def _parse_image_auto(file_path: Path, params: dict | None = None) -> Mark
     options = dict(params or {})
     policy = OCRRoutingPolicy.from_params(options)
     await notify_processing_stage(options, "detecting", 15)
-    options["_complex_layout"] = looks_like_structured_layout(file_path)
+    normalized_image = None
+    ocr_path = file_path
+    format_metadata: dict[str, Any] = {}
     try:
-        route = await run_ocr_fallback(file_path, params=options, page_number=1)
-    except OCRRoutingError as exc:
-        exc.parse_metadata["classification"] = {
-            "type": "image",
-            "reason": "ocr_quality_not_accepted",
-            "thresholds": policy.public_metadata(),
-        }
-        raise
-    block = _ocr_route_block(route, order=0, page_number=1)
-    markdown = _compose_blocks([block])
-    return MarkdownParseResult(
-        markdown=markdown,
-        document_title=file_path.stem,
-        parser_name=route.parser_name,
-        parser_version=route.parser_version,
-        warnings=route.warnings,
-        blocks=[block],
-        file_ext=file_path.suffix.lower(),
-        classification={
-            "type": "image",
-            "reason": "automatic_ocr_route",
-            "structured_layout_detected": bool(options["_complex_layout"]),
-            "thresholds": policy.public_metadata(),
-        },
-        attempts=route.attempts,
-        quality=route.quality,
-    )
+        if file_path.suffix.lower() in {".gif", ".webp"}:
+            normalized_image = await asyncio.to_thread(normalize_image_for_ocr, file_path, options)
+            ocr_path = normalized_image.path
+            format_metadata = dict(normalized_image.metadata)
+        options["_complex_layout"] = looks_like_structured_layout(ocr_path)
+        try:
+            route = await run_ocr_fallback(ocr_path, params=options, page_number=1)
+        except OCRRoutingError as exc:
+            exc.parse_metadata["classification"] = {
+                "type": "image",
+                "reason": "ocr_quality_not_accepted",
+                "thresholds": policy.public_metadata(),
+            }
+            exc.parse_metadata.update(format_metadata)
+            raise
+        block = _ocr_route_block(route, order=0, page_number=1)
+        markdown = _compose_blocks([block])
+        return MarkdownParseResult(
+            markdown=markdown,
+            document_title=file_path.stem,
+            parser_name=route.parser_name,
+            parser_version=route.parser_version,
+            warnings=route.warnings,
+            blocks=[block],
+            file_ext=file_path.suffix.lower(),
+            classification={
+                "type": "image",
+                "reason": "automatic_ocr_route",
+                "structured_layout_detected": bool(options["_complex_layout"]),
+                "thresholds": policy.public_metadata(),
+            },
+            attempts=route.attempts,
+            quality=route.quality,
+            format_metadata=format_metadata,
+        )
+    finally:
+        if normalized_image is not None:
+            await asyncio.to_thread(normalized_image.cleanup)
+
+
+async def _parse_legacy_office(
+    file_path: Path,
+    params: dict | None = None,
+) -> MarkdownParseResult:
+    options = dict(params or {})
+    await notify_processing_stage(options, "converting", 25)
+    conversion = await asyncio.to_thread(LegacyOfficeConverter(options).convert, file_path)
+    normalized_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=conversion.normalized_suffix) as temp_file:
+            normalized_path = Path(temp_file.name)
+            temp_file.write(conversion.content)
+        await notify_processing_stage(options, "extracting_text", 35)
+        if conversion.normalized_suffix == ".docx":
+            result = await asyncio.to_thread(_parse_docx, normalized_path, options)
+        elif conversion.normalized_suffix == ".xlsx":
+            result = await asyncio.to_thread(_parse_xlsx, normalized_path)
+        else:
+            result = await asyncio.to_thread(_parse_pptx, normalized_path)
+        if result.document_title == normalized_path.stem:
+            result.document_title = file_path.stem
+        result.file_ext = file_path.suffix.lower()
+        result.warnings = [*conversion.metadata.get("conversion_warnings", []), *result.warnings]
+        result.format_metadata.update(conversion.metadata)
+        return result
+    finally:
+        if normalized_path is not None:
+            normalized_path.unlink(missing_ok=True)
 
 
 def _parse_text_file(file_path: Path, *, markdown_source: bool) -> MarkdownParseResult:
@@ -986,6 +1068,7 @@ async def _process_file_to_result_core(
     actual_path, temporary = await _download_source_if_needed(file_path)
     try:
         suffix = actual_path.suffix.lower()
+        ensure_supported_file_extension(actual_path, params=params)
         if suffix == ".txt":
             await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_text_file, actual_path, markdown_source=False)
@@ -1003,7 +1086,9 @@ async def _process_file_to_result_core(
         elif suffix == ".pptx":
             await notify_processing_stage(params or {}, "extracting_text", 30)
             result = await asyncio.to_thread(_parse_pptx, actual_path)
-        elif suffix in {".jpg", ".jpeg", ".png"}:
+        elif suffix in LEGACY_OFFICE_FORMATS:
+            result = await _parse_legacy_office(actual_path, params)
+        elif suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
             result = await _parse_image_auto(actual_path, params)
         elif suffix in {".html", ".htm"}:
             async with aiofiles.open(actual_path, encoding="utf-8") as stream:

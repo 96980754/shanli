@@ -55,6 +55,33 @@ assert.equal(
   getSafeUploadErrorMessage({ detail: 'postgresql://user:password@database/internal' }),
   '文件上传失败，请稍后重试'
 )
+assert.equal(
+  getSafeUploadErrorMessage({
+    detail: {
+      code: 'converter_unavailable',
+      message: 'LibreOffice 旧 Office 转换服务未安装或不可用'
+    }
+  }),
+  'LibreOffice 旧 Office 转换服务未安装或不可用'
+)
+assert.equal(
+  getSafeUploadErrorMessage({
+    detail: {
+      code: 'file_too_large',
+      message: 'DOC 文件超过转换大小限制'
+    }
+  }),
+  'DOC 文件超过转换大小限制'
+)
+assert.equal(
+  getSafeUploadErrorMessage({
+    detail: {
+      code: 'internal_storage_error',
+      message: 'minio://private/internal/object'
+    }
+  }),
+  '文件上传失败，请稍后重试'
+)
 
 assert.equal(getDuplicateConflictDetail({ detail: 'plain error' }), null)
 assert.equal(getDuplicateConflictDetail({ detail: { code: 'duplicate_conflict' } }), null)
