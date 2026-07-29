@@ -107,11 +107,22 @@ class Tasker:
         self._lock = asyncio.Lock()
         self._workers: list[asyncio.Task[Any]] = []
         self._started = False
+        self._event_loop: asyncio.AbstractEventLoop | None = None
         self._repo = TaskRepository()
         # 记录每个任务上次落库时的进度，用于进度节流
         self._last_persisted_progress: dict[str, float] = {}
 
     async def start(self) -> None:
+        current_loop = asyncio.get_running_loop()
+        if self._event_loop is not None and self._event_loop is not current_loop:
+            if self._started:
+                raise RuntimeError("Tasker cannot move to another event loop while running")
+            if not self._queue.empty():
+                raise RuntimeError("Tasker cannot move queued work to another event loop")
+            self._queue = asyncio.Queue()
+            self._lock = asyncio.Lock()
+        self._event_loop = current_loop
+
         async with self._lock:
             if self._started:
                 return

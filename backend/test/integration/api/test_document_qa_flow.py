@@ -2,51 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from server.routers import knowledge_router
 from yuxi.knowledge.document_qa import DocumentQAGenerator
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.repositories.document_qa_repository import DocumentQARepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
-from yuxi.services.run_queue_service import close_queue_clients
-from yuxi.services.task_service import tasker
 from yuxi.storage.postgres.manager import pg_manager
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
-
-
-@pytest_asyncio.fixture
-async def qa_knowledge_database():
-    pg_manager.initialize()
-    await pg_manager.ensure_knowledge_schema()
-    database = await knowledge_base.create_database(
-        f"pytest_document_qa_{uuid.uuid4().hex}",
-        "Pytest document QA database",
-        kb_type="milvus",
-        embedding_model_spec="siliconflow-cn:Pro/BAAI/bge-m3",
-        created_by="pytest-qa-admin",
-    )
-    try:
-        yield database
-    finally:
-        await knowledge_base.delete_database(database["kb_id"])
-
-
-@pytest_asyncio.fixture
-async def qa_task_runtime():
-    await tasker.start()
-    try:
-        yield
-    finally:
-        await tasker._queue.join()
-        await tasker.shutdown()
-        await close_queue_clients()
 
 
 async def _wait_for_qa_draft(client, kb_id: str, file_id: str, timeout: float = 30):
@@ -63,11 +29,19 @@ async def _wait_for_qa_draft(client, kb_id: str, file_id: str, timeout: float = 
 
 
 async def test_document_qa_generate_edit_confirm_search_and_body_version(
-    qa_knowledge_database,
-    qa_task_runtime,
+    knowledge_database,
+    knowledge_router_app,
+    admin_headers,
+    admin_user,
+    view_only_user,
+    task_runtime,
+    tasker_idle_waiter,
+    kb_background_waiter,
     monkeypatch,
 ) -> None:
-    kb_id = qa_knowledge_database["kb_id"]
+    pg_manager.initialize()
+    await pg_manager.ensure_knowledge_schema()
+    kb_id = knowledge_database["kb_id"]
     unique = uuid.uuid4().hex
     body_marker = f"qaevidence{unique}"
     qa_marker = f"qaretrieval{unique}"
@@ -121,17 +95,14 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
     )
     monkeypatch.setattr(DocumentQAGenerator, "generate", mock_generate)
 
-    app = FastAPI()
-    app.include_router(knowledge_router.knowledge, prefix="/api")
-
-    async def local_superadmin():
-        return SimpleNamespace(uid="pytest-qa-admin", role="superadmin", department_id=None)
-
-    app.dependency_overrides[knowledge_router.get_required_user] = local_superadmin
     file_repository = KnowledgeFileRepository()
     qa_repository = DocumentQARepository()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=knowledge_router_app),
+        base_url="http://test",
+        headers=admin_headers,
+    ) as client:
         upload = await client.post(
             "/api/knowledge/files/upload",
             params={"kb_id": kb_id},
@@ -160,7 +131,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
         assert create.status_code == 200, create.text
         file_id = create.json()["items"][0]["file_id"]
 
-        parsed = await kb.parse_file(kb_id, file_id, operator_id="pytest-qa-admin")
+        parsed = await kb.parse_file(kb_id, file_id, operator_id=admin_user["uid"])
         assert parsed["status"] == "parsed"
         record = await file_repository.get_by_file_id(file_id)
         regenerate = await client.post(
@@ -187,6 +158,21 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
         assert draft["status"] == "draft"
         assert draft["source"] == "generated"
         assert draft["source_chunk_ids"]
+        async with AsyncClient(
+            transport=ASGITransport(app=knowledge_router_app),
+            base_url="http://test",
+            headers=view_only_user["headers"],
+        ) as readonly_client:
+            readonly_qa = await readonly_client.get(f"/api/knowledge/databases/{kb_id}/documents/{file_id}/qa")
+            assert readonly_qa.status_code == 200, readonly_qa.text
+            forbidden_generate = await readonly_client.post(
+                f"/api/knowledge/databases/{kb_id}/documents/{file_id}/qa/generate",
+                json={"source_chunk_ids": [], "replace_generated": False},
+            )
+            assert forbidden_generate.status_code == 403, forbidden_generate.text
+
+        cross_kb = await client.get(f"/api/knowledge/databases/kb_{uuid.uuid4().hex}/documents/{file_id}/qa")
+        assert cross_kb.status_code == 404, cross_kb.text
 
         before_confirm = await kb.aquery(
             qa_marker,
@@ -266,7 +252,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
         assert revised_confirm.status_code == 200, revised_confirm.text
         revised_file_id = revised_confirm.json()["file_id"]
         assert revised_file_id != file_id
-        await tasker._queue.join()
+        await tasker_idle_waiter()
 
         old_qas = await qa_repository.list_by_file_id(
             kb_id=kb_id,
@@ -291,3 +277,4 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
             similarity_threshold=0.5,
         )
         assert all(item["metadata"]["chunk_id"] != f"qa:{draft['qa_id']}" for item in stale_search)
+        await kb_background_waiter(kb_id)

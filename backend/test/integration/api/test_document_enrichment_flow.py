@@ -2,48 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from server.routers import knowledge_router
 from yuxi.config.app import config
 from yuxi.knowledge.enrichment import DocumentEnrichmentGenerator
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
-from yuxi.services.run_queue_service import close_queue_clients
-from yuxi.services.task_service import tasker
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
-
-
-@pytest_asyncio.fixture
-async def enrichment_knowledge_database():
-    database = await knowledge_base.create_database(
-        f"pytest_enrichment_{uuid.uuid4().hex}",
-        "Pytest document enrichment database",
-        kb_type="milvus",
-        embedding_model_spec="siliconflow-cn:Pro/BAAI/bge-m3",
-        created_by="pytest-enrichment-admin",
-    )
-    try:
-        yield database
-    finally:
-        await knowledge_base.delete_database(database["kb_id"])
-
-
-@pytest_asyncio.fixture
-async def enrichment_task_runtime():
-    await tasker.start()
-    try:
-        yield
-    finally:
-        await tasker._queue.join()
-        await tasker.shutdown()
-        await close_queue_clients()
 
 
 async def _wait_for_enrichment(client, kb_id: str, file_id: str, *, min_version: int, timeout: float = 30):
@@ -60,11 +28,17 @@ async def _wait_for_enrichment(client, kb_id: str, file_id: str, *, min_version:
 
 
 async def test_document_enrichment_generation_manual_protection_and_body_version(
-    enrichment_knowledge_database,
-    enrichment_task_runtime,
+    knowledge_database,
+    knowledge_router_app,
+    admin_headers,
+    admin_user,
+    view_only_user,
+    task_runtime,
+    tasker_idle_waiter,
+    kb_background_waiter,
     monkeypatch,
 ) -> None:
-    kb_id = enrichment_knowledge_database["kb_id"]
+    kb_id = knowledge_database["kb_id"]
     unique = uuid.uuid4().hex
     original_marker = f"enrichoriginal{unique}"
     revised_marker = f"enrichrevised{unique}"
@@ -120,16 +94,13 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
     monkeypatch.setattr(config, "document_enrichment_auto_generate", True)
     monkeypatch.setattr(config, "document_enrichment_model", "pytest:document-enrichment")
 
-    app = FastAPI()
-    app.include_router(knowledge_router.knowledge, prefix="/api")
-
-    async def local_superadmin():
-        return SimpleNamespace(uid="pytest-enrichment-admin", role="superadmin", department_id=None)
-
-    app.dependency_overrides[knowledge_router.get_required_user] = local_superadmin
     repository = KnowledgeFileRepository()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=knowledge_router_app),
+        base_url="http://test",
+        headers=admin_headers,
+    ) as client:
         upload = await client.post(
             "/api/knowledge/files/upload",
             params={"kb_id": kb_id},
@@ -158,7 +129,7 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
         assert create.status_code == 200, create.text
         file_id = create.json()["items"][0]["file_id"]
 
-        parsed = await kb.parse_file(kb_id, file_id, operator_id="pytest-enrichment-admin")
+        parsed = await kb.parse_file(kb_id, file_id, operator_id=admin_user["uid"])
         assert parsed["status"] == "parsed"
         record = await repository.get_by_file_id(file_id)
         assert record is not None
@@ -185,6 +156,23 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
             "知识库",
         ]
         assert [item["normalized_name"] for item in generated["tags"]] == ["rag"]
+        async with AsyncClient(
+            transport=ASGITransport(app=knowledge_router_app),
+            base_url="http://test",
+            headers=view_only_user["headers"],
+        ) as readonly_client:
+            readonly_enrichment = await readonly_client.get(
+                f"/api/knowledge/databases/{kb_id}/documents/{file_id}/enrichment"
+            )
+            assert readonly_enrichment.status_code == 200, readonly_enrichment.text
+            forbidden_generate = await readonly_client.post(
+                f"/api/knowledge/databases/{kb_id}/documents/{file_id}/enrichment/generate",
+                json={"components": ["summary"], "overwrite_manual": False},
+            )
+            assert forbidden_generate.status_code == 403, forbidden_generate.text
+
+        cross_kb = await client.get(f"/api/knowledge/databases/kb_{uuid.uuid4().hex}/documents/{file_id}/enrichment")
+        assert cross_kb.status_code == 404, cross_kb.text
 
         manual_summary = f"{original_marker} 人工摘要 2.1。"
         summary_response = await client.put(
@@ -217,7 +205,7 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
             json={"components": ["summary", "keywords", "tags"], "overwrite_manual": False},
         )
         assert regenerate.status_code == 200, regenerate.text
-        await tasker._queue.join()
+        await tasker_idle_waiter()
         protected_response = await client.get(f"/api/knowledge/databases/{kb_id}/documents/{file_id}/enrichment")
         assert protected_response.status_code == 200, protected_response.text
         protected = protected_response.json()
@@ -242,7 +230,7 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
         revised_file_id = revised_confirm.json()["file_id"]
         assert revised_file_id != file_id
 
-        await tasker._queue.join()
+        await tasker_idle_waiter()
         revised_response = await client.get(f"/api/knowledge/databases/{kb_id}/documents/{revised_file_id}/enrichment")
         assert revised_response.status_code == 200, revised_response.text
         revised = revised_response.json()
@@ -258,4 +246,4 @@ async def test_document_enrichment_generation_manual_protection_and_body_version
         assert new_record is not None and new_record.is_active is True
         assert new_record.previous_version_id == file_id
 
-    await tasker._queue.join()
+        await kb_background_waiter(kb_id)

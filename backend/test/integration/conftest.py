@@ -4,6 +4,7 @@ Shared pytest fixtures for integration tests that exercise the live API service.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -17,6 +18,8 @@ import httpx
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
+from fastapi import FastAPI
+from httpx import ASGITransport
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -31,6 +34,7 @@ ADMIN_PASSWORD = os.getenv("TEST_PASSWORD")
 
 _ADMIN_TOKEN_CACHE: str | None = None
 HTTP_TIMEOUT = httpx.Timeout(60.0, connect=5.0)
+BACKGROUND_TASK_TIMEOUT_SECONDS = 90.0
 SANDBOX_CONTAINER_PREFIX = os.getenv("YUXI_SANDBOX_CONTAINER_PREFIX", "yuxi-sandbox")
 
 
@@ -60,11 +64,14 @@ def _require_admin_credentials() -> tuple[str, str]:
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def isolate_async_database_pool():
+    from yuxi.services.run_queue_service import close_queue_clients
     from yuxi.storage.postgres.manager import pg_manager
 
+    await close_queue_clients()
     if pg_manager.async_engine is not None:
         await pg_manager.async_engine.dispose()
     yield
+    await close_queue_clients()
     if pg_manager.async_engine is not None:
         await pg_manager.async_engine.dispose()
 
@@ -118,6 +125,143 @@ def admin_headers(admin_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {admin_token}"}
 
 
+@pytest_asyncio.fixture(scope="function")
+async def admin_user(test_client: httpx.AsyncClient, admin_headers: dict[str, str]) -> dict:
+    response = await test_client.get("/api/auth/me", headers=admin_headers)
+    if response.status_code != 200:
+        pytest.fail(f"Failed to load authenticated admin profile (status={response.status_code})")
+    return response.json()
+
+
+@pytest.fixture(scope="function")
+def knowledge_router_app() -> FastAPI:
+    from server.routers import knowledge_router
+
+    app = FastAPI()
+    app.include_router(knowledge_router.knowledge, prefix="/api")
+    return app
+
+
+@pytest_asyncio.fixture(scope="function")
+async def knowledge_router_client(
+    knowledge_router_app: FastAPI,
+    admin_headers: dict[str, str],
+) -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=knowledge_router_app),
+        base_url="http://test",
+        headers=admin_headers,
+        timeout=HTTP_TIMEOUT,
+    ) as client:
+        yield client
+
+
+async def wait_for_tasker_idle(*, timeout: float = BACKGROUND_TASK_TIMEOUT_SECONDS) -> None:
+    from yuxi.services.task_service import tasker
+
+    try:
+        await asyncio.wait_for(tasker._queue.join(), timeout=timeout)
+    except TimeoutError as exc:
+        snapshot = await tasker.list_tasks(limit=20)
+        active = [
+            {"id": item["id"], "type": item["type"], "status": item["status"]}
+            for item in snapshot["tasks"]
+            if item["status"] not in {"success", "failed", "cancelled"}
+        ]
+        raise AssertionError(f"Tasker did not become idle within {timeout}s; active={active}") from exc
+
+
+@pytest.fixture(scope="function")
+def tasker_idle_waiter():
+    return wait_for_tasker_idle
+
+
+async def wait_for_kb_background_tasks(
+    kb_id: str,
+    *,
+    timeout: float = BACKGROUND_TASK_TIMEOUT_SECONDS,
+) -> None:
+    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+    repository = KnowledgeFileRepository()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        records = await repository.list_by_kb_id(kb_id)
+        pending = [
+            record
+            for record in records
+            if record.processing_task_id is not None or record.processing_stage == "replacement_cleanup"
+        ]
+        if not pending:
+            return
+        failed = [record for record in pending if record.status == "error_replacement_cleanup"]
+        if failed:
+            states = [
+                {
+                    "file_id": record.file_id,
+                    "status": record.status,
+                    "processing_stage": record.processing_stage,
+                    "processing_task_id": record.processing_task_id,
+                }
+                for record in failed
+            ]
+            raise AssertionError(f"Knowledge base background task failed; states={states}")
+        await asyncio.sleep(0.25)
+
+    states = [
+        {
+            "file_id": record.file_id,
+            "status": record.status,
+            "processing_stage": record.processing_stage,
+            "processing_task_id": record.processing_task_id,
+        }
+        for record in await repository.list_by_kb_id(kb_id)
+        if record.processing_task_id is not None or record.processing_stage == "replacement_cleanup"
+    ]
+    raise AssertionError(f"Knowledge base background tasks did not settle within {timeout}s; states={states}")
+
+
+async def wait_for_arq_idle(*, timeout: float = BACKGROUND_TASK_TIMEOUT_SECONDS) -> None:
+    from arq.constants import default_queue_name
+
+    from yuxi.services.run_queue_service import get_redis_client
+
+    redis = await get_redis_client()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        queued = int(await redis.zcard(default_queue_name))
+        in_progress = [key async for key in redis.scan_iter(match="arq:in-progress:*")]
+        if queued == 0 and not in_progress:
+            return
+        await asyncio.sleep(0.25)
+    raise AssertionError(f"ARQ did not become idle within {timeout}s; queued={queued}, in_progress={len(in_progress)}")
+
+
+@pytest.fixture(scope="function")
+def kb_background_waiter():
+    async def wait(kb_id: str) -> None:
+        await wait_for_kb_background_tasks(kb_id)
+        await wait_for_arq_idle()
+
+    return wait
+
+
+@pytest_asyncio.fixture(scope="function")
+async def task_runtime():
+    from yuxi.services.run_queue_service import close_queue_clients
+    from yuxi.services.task_service import tasker
+
+    await tasker.start()
+    try:
+        yield
+    finally:
+        await wait_for_tasker_idle()
+        await tasker.shutdown()
+        await close_queue_clients()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_knowledge_databases():
     async def run_cleanup() -> None:
@@ -159,7 +303,7 @@ def cleanup_test_knowledge_databases():
             prefixes = ("pytest_", "py_test")
             for entry in databases:
                 name = entry.get("name") or ""
-                slug = entry.get("slug")
+                slug = entry.get("slug") or entry.get("kb_id")
                 if not slug or not isinstance(name, str) or not name.startswith(prefixes):
                     continue
                 try:
@@ -285,6 +429,38 @@ async def standard_user(test_client: httpx.AsyncClient, admin_headers: dict[str,
 
 
 @pytest_asyncio.fixture(scope="function")
+async def view_only_user(
+    test_client: httpx.AsyncClient,
+    admin_headers: dict[str, str],
+    standard_user: dict,
+    knowledge_database: dict,
+) -> AsyncGenerator[dict, None]:
+    kb_id = knowledge_database["kb_id"]
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/permissions",
+        json={
+            "subject_type": "user",
+            "subject_id": standard_user["user"]["uid"],
+            "can_view": True,
+        },
+        headers=admin_headers,
+    )
+    if response.status_code != 200:
+        pytest.fail(f"Failed to grant read-only knowledge permission (status={response.status_code})")
+
+    permission_id = response.json()["permission"]["id"]
+    try:
+        yield standard_user
+    finally:
+        delete_response = await test_client.delete(
+            f"/api/knowledge/databases/{kb_id}/permissions/{permission_id}",
+            headers=admin_headers,
+        )
+        if delete_response.status_code not in (200, 404):
+            pytest.fail(f"Failed to remove read-only knowledge permission (status={delete_response.status_code})")
+
+
+@pytest_asyncio.fixture(scope="function")
 async def knowledge_database(
     test_client: httpx.AsyncClient,
     admin_headers: dict[str, str],
@@ -324,9 +500,17 @@ async def knowledge_database(
 
     finally:
         if kb_id:
+            cleanup_errors: list[str] = []
+            try:
+                await wait_for_kb_background_tasks(kb_id)
+                await wait_for_arq_idle()
+            except Exception as exc:
+                cleanup_errors.append(str(exc))
             try:
                 delete_response = await test_client.delete(f"/api/knowledge/databases/{kb_id}", headers=admin_headers)
-                if delete_response.status_code != 200:
-                    print(f"Warning: Failed to cleanup knowledge database {kb_id}: {delete_response.text}")
+                if delete_response.status_code not in (200, 404):
+                    cleanup_errors.append(f"delete returned status={delete_response.status_code}")
             except Exception as exc:
-                print(f"Warning: Exception during cleanup of {kb_id}: {exc}")
+                cleanup_errors.append(f"delete raised {exc}")
+            if cleanup_errors:
+                pytest.fail(f"Knowledge database {kb_id} teardown was not clean: {'; '.join(cleanup_errors)}")

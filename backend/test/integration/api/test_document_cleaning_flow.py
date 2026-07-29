@@ -2,34 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from types import SimpleNamespace
 
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from server.routers import knowledge_router
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
-
-
-@pytest_asyncio.fixture
-async def cleaning_knowledge_database():
-    database = await knowledge_base.create_database(
-        f"pytest_cleaning_{uuid.uuid4().hex}",
-        "Pytest document cleaning database",
-        kb_type="milvus",
-        embedding_model_spec="siliconflow-cn:Pro/BAAI/bge-m3",
-        created_by="pytest-cleaning-admin",
-    )
-    try:
-        yield database
-    finally:
-        await knowledge_base.delete_database(database["kb_id"])
 
 
 def _result_file_ids(results: list[dict]) -> set[str]:
@@ -71,10 +52,14 @@ async def _wait_for_old_vectors_cleanup(
 
 
 async def test_cleaning_preview_edit_confirm_and_safe_reindex(
-    cleaning_knowledge_database,
+    knowledge_database,
+    knowledge_router_app,
+    admin_headers,
+    admin_user,
+    view_only_user,
     monkeypatch,
 ) -> None:
-    kb_id = cleaning_knowledge_database["kb_id"]
+    kb_id = knowledge_database["kb_id"]
     unique_id = uuid.uuid4().hex
     original_marker = f"rawclean{unique_id}"
     first_marker = f"confirmedclean{unique_id}"
@@ -118,18 +103,14 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
         lambda _model_spec, *, sync=False: deterministic_vectors if sync else async_embed,
     )
 
-    app = FastAPI()
-    app.include_router(knowledge_router.knowledge, prefix="/api")
-
-    async def local_superadmin():
-        return SimpleNamespace(uid="pytest-cleaning-admin", role="superadmin", department_id=None)
-
-    app.dependency_overrides[knowledge_router.get_required_user] = local_superadmin
-
     repository = KnowledgeFileRepository()
     chunk_repository = KnowledgeChunkRepository()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=knowledge_router_app),
+        base_url="http://test",
+        headers=admin_headers,
+    ) as client:
         upload = await client.post(
             "/api/knowledge/files/upload",
             params={"kb_id": kb_id},
@@ -160,7 +141,7 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
         assert create.status_code == 200, create.text
         original_file_id = create.json()["items"][0]["file_id"]
 
-        parsed = await kb.parse_file(kb_id, original_file_id, operator_id="pytest-cleaning-admin")
+        parsed = await kb.parse_file(kb_id, original_file_id, operator_id=admin_user["uid"])
         assert parsed["status"] == "parsed"
         parsed_record = await repository.get_by_file_id(original_file_id)
         assert parsed_record is not None
@@ -236,6 +217,28 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
         preview = await client.get(f"/api/knowledge/databases/{kb_id}/documents/{original_file_id}/cleaning")
         assert preview.status_code == 200, preview.text
         assert original_marker in preview.json()["original_markdown"]
+        async with AsyncClient(
+            transport=ASGITransport(app=knowledge_router_app),
+            base_url="http://test",
+            headers=view_only_user["headers"],
+        ) as readonly_client:
+            readonly_preview = await readonly_client.get(
+                f"/api/knowledge/databases/{kb_id}/documents/{original_file_id}/cleaning"
+            )
+            assert readonly_preview.status_code == 200, readonly_preview.text
+            forbidden_save = await readonly_client.put(
+                f"/api/knowledge/databases/{kb_id}/documents/{original_file_id}/cleaning/draft",
+                json={
+                    "content": first_content,
+                    "version": preview.json()["cleaning_version"],
+                },
+            )
+            assert forbidden_save.status_code == 403, forbidden_save.text
+
+        cross_kb = await client.get(
+            f"/api/knowledge/databases/kb_{uuid.uuid4().hex}/documents/{original_file_id}/cleaning"
+        )
+        assert cross_kb.status_code == 404, cross_kb.text
 
         revised_content = f"# Revised\n\n{revised_marker} second confirmed content.\n"
         revised_save = await client.put(

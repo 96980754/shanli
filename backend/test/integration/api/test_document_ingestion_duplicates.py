@@ -238,6 +238,14 @@ async def test_repeated_replace_second_stage_reuses_same_document_version(
     assert old_record.superseded_at is not None
     assert new_record.is_active is True
     assert new_record.previous_version_id == old_file_id
+    # This test exercises the repository switch directly and intentionally bypasses
+    # the service that enqueues replacement cleanup. Do not leave an artificial
+    # pending-cleanup state for the shared integration teardown.
+    await repository.update_fields(
+        file_id=new_file_id,
+        kb_id=kb_id,
+        data={"processing_stage": None, "processing_progress": 100},
+    )
 
 
 async def test_concurrent_replace_same_target_creates_one_candidate(
@@ -293,6 +301,14 @@ async def test_concurrent_replace_same_target_creates_one_candidate(
     )
     assert (await repository.get_by_file_id(old_file_id)).is_active is False
     assert (await repository.get_by_file_id(candidate_file_id)).is_active is True
+    # This test exercises the repository switch directly and intentionally bypasses
+    # the service that enqueues replacement cleanup. Do not leave an artificial
+    # pending-cleanup state for the shared integration teardown.
+    await repository.update_fields(
+        file_id=candidate_file_id,
+        kb_id=kb_id,
+        data={"processing_stage": None, "processing_progress": 100},
+    )
 
 
 async def test_failed_replacement_candidate_releases_target(

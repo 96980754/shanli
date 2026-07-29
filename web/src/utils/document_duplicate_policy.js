@@ -5,7 +5,11 @@ export const DUPLICATE_STRATEGIES = {
   KEEP_BOTH: 'keep_both'
 }
 
-export const buildKnowledgeUploadUrl = (kbId, strategy = DUPLICATE_STRATEGIES.PROMPT, replaceFileId = null) => {
+export const buildKnowledgeUploadUrl = (
+  kbId,
+  strategy = DUPLICATE_STRATEGIES.PROMPT,
+  replaceFileId = null
+) => {
   const query = new URLSearchParams({
     kb_id: kbId,
     duplicate_strategy: strategy

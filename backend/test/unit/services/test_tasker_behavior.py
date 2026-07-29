@@ -5,8 +5,6 @@
 
 import asyncio
 
-import pytest
-
 from yuxi.services import task_service
 from yuxi.services.task_service import Tasker
 
@@ -132,14 +130,18 @@ async def test_load_state_marks_interrupted_and_prunes(monkeypatch):
     monkeypatch.setattr(task_service, "MAX_TERMINAL_TASKS", 2)
     repo = FakeRepo(
         preset=[
-            FakeRecord({"id": "a", "name": "a", "type": "demo", "status": "running",
-                        "created_at": "2026-01-01T00:00:05"}),
-            FakeRecord({"id": "b", "name": "b", "type": "demo", "status": "success",
-                        "created_at": "2026-01-01T00:00:04"}),
-            FakeRecord({"id": "c", "name": "c", "type": "demo", "status": "success",
-                        "created_at": "2026-01-01T00:00:03"}),
-            FakeRecord({"id": "d", "name": "d", "type": "demo", "status": "success",
-                        "created_at": "2026-01-01T00:00:02"}),
+            FakeRecord(
+                {"id": "a", "name": "a", "type": "demo", "status": "running", "created_at": "2026-01-01T00:00:05"}
+            ),
+            FakeRecord(
+                {"id": "b", "name": "b", "type": "demo", "status": "success", "created_at": "2026-01-01T00:00:04"}
+            ),
+            FakeRecord(
+                {"id": "c", "name": "c", "type": "demo", "status": "success", "created_at": "2026-01-01T00:00:03"}
+            ),
+            FakeRecord(
+                {"id": "d", "name": "d", "type": "demo", "status": "success", "created_at": "2026-01-01T00:00:02"}
+            ),
         ]
     )
     tasker = await _make_tasker(repo)
@@ -152,3 +154,29 @@ async def test_load_state_marks_interrupted_and_prunes(monkeypatch):
     assert listing["summary"]["total"] == 2
     assert "c" in repo.deleted and "d" in repo.deleted
     await tasker.shutdown()
+
+
+def test_tasker_recreates_runtime_queue_when_restarted_on_another_event_loop():
+    repo = FakeRepo()
+    tasker = Tasker(worker_count=1)
+    tasker._repo = repo
+
+    async def run_once() -> asyncio.AbstractEventLoop:
+        await tasker.start()
+        await asyncio.sleep(0)
+        loop = asyncio.get_running_loop()
+        await tasker.shutdown()
+        return loop
+
+    first_loop = asyncio.run(run_once())
+
+    async def restart() -> None:
+        await tasker.start()
+        try:
+            await asyncio.sleep(0)
+            assert tasker._queue._loop is asyncio.get_running_loop()
+            assert tasker._queue._loop is not first_loop
+        finally:
+            await tasker.shutdown()
+
+    asyncio.run(restart())
