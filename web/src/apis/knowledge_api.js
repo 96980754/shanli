@@ -167,6 +167,11 @@ export const documentApi = {
     return apiGet(`/api/knowledge/databases/${kbId}/documents${query ? `?${query}` : ''}`)
   },
 
+  searchDocuments: async (params = {}) => {
+    const query = buildQuery(params)
+    return apiGet(`/api/knowledge/documents/search${query ? `?${query}` : ''}`)
+  },
+
   /**
    * 检查知识库中是否存在指定文件名或相对路径
    * @param {string} kbId - 知识库ID
@@ -218,6 +223,30 @@ export const documentApi = {
       items,
       params
     })
+  },
+
+  createDocumentVersion: async (kbId, currentFileId, data) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${currentFileId}/versions`, data)
+  },
+
+  getDocumentVersions: async (kbId, fileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/versions`)
+  },
+
+  getDocumentValidationReport: async (kbId, candidateFileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${candidateFileId}/validation-report`)
+  },
+
+  rejectDocumentValidationReport: async (kbId, reportId, data = {}) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/validation-reports/${reportId}/reject`, data)
+  },
+
+  getDocumentConflicts: async (kbId, candidateFileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${candidateFileId}/conflicts`)
+  },
+
+  activateDocumentVersion: async (kbId, candidateFileId, data) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${candidateFileId}/activate`, data)
   },
 
   /**

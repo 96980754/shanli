@@ -158,6 +158,68 @@ async def test_ensure_business_schema_removes_unbound_api_keys_before_requiring_
 
 
 @pytest.mark.asyncio
+async def test_ensure_knowledge_schema_backfills_document_versions_before_unique_indexes():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)" in statements
+    assert "ADD COLUMN IF NOT EXISTS document_version INTEGER" in statements
+    assert "ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE" in statements
+    assert "SET logical_document_id = file_id" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_conflicts" in statements
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version" in statements
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version" in statements
+    assert statements.index("SET logical_document_id = file_id") < statements.index(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version"
+    )
+    assert statements.index("SET logical_document_id = file_id") < statements.index(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_knowledge_schema_creates_validation_report_tables():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "CREATE TABLE IF NOT EXISTS knowledge_validation_reports" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_validation_items" in statements
+    assert "uq_knowledge_validation_reports_candidate UNIQUE (candidate_file_id)" in statements
+    assert "REFERENCES knowledge_validation_reports(report_id) ON DELETE CASCADE" in statements
+    assert "old_file_id VARCHAR(64) NOT NULL" in statements
+    assert "candidate_file_id VARCHAR(64) NOT NULL" in statements
+    assert "ix_knowledge_validation_reports_status" in statements
+    assert "ix_knowledge_validation_items_change_type" in statements
+    assert statements.index("CREATE TABLE IF NOT EXISTS knowledge_validation_reports") < statements.index(
+        "CREATE TABLE IF NOT EXISTS knowledge_validation_items"
+    )
+
+
+@pytest.mark.asyncio
 async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     manager = PostgresManager()
     original_initialized = manager._initialized

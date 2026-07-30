@@ -19,8 +19,11 @@ import yaml
 
 from yuxi import config
 
-DEFAULT_ONTOLOGY_REGISTRY_ID = "V4.1"
-_BUILTIN_REGISTRY_IDS = (DEFAULT_ONTOLOGY_REGISTRY_ID, "Shanli")
+DEFAULT_ONTOLOGY_REGISTRY_ID = "tongyong"
+_BUILTIN_REGISTRY_IDS = ("Generic", "ShanliV4.2")
+_BUILTIN_DISPLAY_NAMES = {
+    ("shanli-preset", "4.2"): "善理预设新版",
+}
 _ONTOLOGY_ROOT = Path(__file__).parent
 _BUNDLE_FILENAMES = ("schema.json", "entity.yaml", "relation.yaml", "property.yaml")
 _CURRENT_FILENAME = "current.json"
@@ -680,7 +683,9 @@ def _entry_from_root(root: Path, source: Literal["builtin", "uploaded"]) -> Onto
         registry_id=spec.registry_id,
         version=spec.version,
         digest=_compute_digest(files),
-        name=spec.name,
+        name=_BUILTIN_DISPLAY_NAMES.get((spec.registry_id, spec.version), spec.name)
+        if source == "builtin"
+        else spec.name,
         status=spec.status,
         source=source,
         root=root,

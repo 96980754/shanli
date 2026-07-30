@@ -152,6 +152,11 @@ class KnowledgeBase(ABC):
             "file_id": record.file_id,
             "kb_id": record.kb_id,
             "parent_id": record.parent_id,
+            "logical_document_id": record.logical_document_id,
+            "document_version": record.document_version,
+            "is_current": record.is_current,
+            "supersedes_file_id": record.supersedes_file_id,
+            "activated_at": utc_isoformat(record.activated_at) if record.activated_at else None,
             "filename": record.filename,
             "file_type": record.file_type,
             "path": record.path,
@@ -183,6 +188,11 @@ class KnowledgeBase(ABC):
         return {
             "kb_id": meta.get("kb_id"),
             "parent_id": meta.get("parent_id"),
+            "logical_document_id": meta.get("logical_document_id"),
+            "document_version": meta.get("document_version"),
+            "is_current": meta.get("is_current", True),
+            "supersedes_file_id": meta.get("supersedes_file_id"),
+            "activated_at": meta.get("activated_at"),
             "filename": meta.get("filename") or "",
             "original_filename": meta.get("original_filename"),
             "file_type": meta.get("file_type"),
@@ -322,6 +332,10 @@ class KnowledgeBase(ABC):
         # Initial status
         metadata["status"] = FileStatus.UPLOADED
         metadata["created_at"] = utc_isoformat()
+        if not metadata.get("is_folder"):
+            metadata["logical_document_id"] = file_id
+            metadata["document_version"] = 1
+            metadata["is_current"] = True
         if operator_id:
             metadata["created_by"] = operator_id
 
@@ -956,7 +970,7 @@ class KnowledgeBase(ABC):
             "llm_model_spec": llm_model_spec,
             "metadata": kwargs,
             "created_at": utc_isoformat(),
-            "query_params": self._get_default_query_params(kb_id),
+            "query_params": self._get_initial_query_params(kb_id),
         }
         await self._persist_kb(kb_id, record_fields=record_fields)
 
@@ -1135,6 +1149,10 @@ class KnowledgeBase(ABC):
             query_params_meta = self.databases_meta[kb_id].get("query_params") or {}
             return query_params_meta.get("options", {})
         return {}
+
+    def _get_initial_query_params(self, kb_id: str) -> dict[str, Any]:
+        """获取新建知识库首次持久化的查询参数。"""
+        return self._get_default_query_params(kb_id)
 
     def _get_default_query_params(self, kb_id: str) -> dict[str, Any]:
         """从 get_query_params_config 中提取所有参数的默认值，返回 {"options": {...}}"""
@@ -1639,6 +1657,9 @@ class KnowledgeBase(ABC):
         if existing is None:
             await kb_repo.create(payload)
         else:
+            current_additional_params = dict(existing.additional_params or {})
+            current_additional_params.update(payload["additional_params"])
+            meta["metadata"] = current_additional_params
             update_data = {
                 "name": payload["name"],
                 "description": payload["description"],
@@ -1646,7 +1667,7 @@ class KnowledgeBase(ABC):
                 "embedding_model_spec": payload["embedding_model_spec"],
                 "llm_model_spec": payload["llm_model_spec"],
                 "query_params": payload["query_params"],
-                "additional_params": payload["additional_params"],
+                "additional_params": current_additional_params,
             }
             if record_fields:
                 update_data.update({key: payload[key] for key in allowed_fields if key in payload})

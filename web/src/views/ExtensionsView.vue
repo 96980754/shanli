@@ -14,14 +14,8 @@
       <div v-if="activeTab === 'knowledge'" class="tab-panel">
         <DataBaseView ref="knowledgeRef" embedded />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'tools'" class="tab-panel">
-        <ToolsCardList ref="toolsRef" />
-      </div>
       <div v-if="activeTab === 'skills'" class="tab-panel">
         <SkillCardList ref="skillsRef" />
-      </div>
-      <div v-if="userStore.isAdmin && activeTab === 'mcp'" class="tab-panel">
-        <McpCardList ref="mcpRef" />
       </div>
     </div>
 
@@ -32,8 +26,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ToolsCardList from '@/components/extensions/ToolsCardList.vue'
-import McpCardList from '@/components/extensions/McpCardList.vue'
 import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
@@ -45,13 +37,9 @@ const userStore = useUserStore()
 const activeTab = ref(null)
 const knowledgeRef = ref(null)
 const skillsRef = ref(null)
-const mcpRef = ref(null)
-const toolsRef = ref(null)
 
 const adminExtensionTabs = [
   { key: 'knowledge', label: '知识库' },
-  { key: 'tools', label: '工具' },
-  { key: 'mcp', label: 'MCP' },
   { key: 'skills', label: 'Skills' }
 ]
 const userExtensionTabs = [{ key: 'knowledge', label: '知识库' }]
@@ -77,7 +65,6 @@ const replaceTabQuery = (tab) => {
 const isDetailPage = computed(() => {
   return (
     route.path.startsWith('/extensions/knowledgebase/') ||
-    route.path.startsWith('/extensions/mcp/') ||
     route.path.startsWith('/extensions/skill/')
   )
 })
@@ -85,9 +72,7 @@ const isDetailPage = computed(() => {
 const activeChildLoading = computed(() => {
   const refMap = {
     knowledge: knowledgeRef,
-    tools: toolsRef,
-    skills: skillsRef,
-    mcp: mcpRef
+    skills: skillsRef
   }
   const child = refMap[activeTab.value]
   return child?.value?.loading || false

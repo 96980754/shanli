@@ -1,11 +1,15 @@
 import re
+from io import BytesIO
+from urllib.parse import quote
+
 from yuxi.utils import logger
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
@@ -21,6 +25,15 @@ from server.utils.auth_middleware import (
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.user_identity_service import generate_unique_uid, validate_username, is_valid_phone_number
 from yuxi.services.operation_log_service import log_operation
+from yuxi.services.user_import_service import (
+    MAX_USER_IMPORT_BYTES,
+    UserImportFileError,
+    build_user_import_template,
+    import_users_atomically,
+    safe_upload_filename,
+    validate_user_import,
+)
+from yuxi.utils.upload_utils import read_upload_with_limit
 from yuxi.services.auth_service import (
     CLI_AUTH_POLL_INTERVAL_SECONDS,
     CLI_AUTH_SESSION_TTL_SECONDS,
@@ -509,6 +522,99 @@ async def update_profile(
 # =============================================================================
 # === 用户管理分组 ===
 # =============================================================================
+
+
+@auth.get("/users/import-template")
+async def download_user_import_template(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    department_names: list[str] = []
+    if current_user.role == "superadmin":
+        result = await db.execute(select(Department.name).order_by(Department.name.asc()))
+        department_names = [str(name) for name in result.scalars().all()]
+    elif current_user.department_id is not None:
+        result = await db.execute(select(Department.name).where(Department.id == current_user.department_id))
+        department_name = result.scalar_one_or_none()
+        if department_name:
+            department_names = [str(department_name)]
+
+    content = build_user_import_template(
+        departments=department_names,
+        is_superadmin=current_user.role == "superadmin",
+    )
+    filename = quote("用户导入模板.xlsx")
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+async def _read_and_validate_user_import(
+    file: UploadFile,
+    *,
+    current_user: User,
+    db: AsyncSession,
+) -> dict:
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 用户导入文件")
+    try:
+        content = await read_upload_with_limit(
+            file,
+            max_size_bytes=MAX_USER_IMPORT_BYTES,
+            too_large_message="用户导入文件不能超过 2 MiB",
+        )
+        return await validate_user_import(content, current_user=current_user, session=db)
+    except UserImportFileError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@auth.post("/users/import-preview")
+async def preview_user_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    validation = await _read_and_validate_user_import(file, current_user=current_user, db=db)
+    return {key: value for key, value in validation.items() if not key.startswith("_")}
+
+
+@auth.post("/users/import", status_code=status.HTTP_201_CREATED)
+async def import_users(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    validation = await _read_and_validate_user_import(file, current_user=current_user, db=db)
+    if not validation["valid"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "用户导入校验未通过，未导入任何用户",
+                "row_count": validation["row_count"],
+                "errors": validation["errors"],
+                "errors_truncated": validation["errors_truncated"],
+            },
+        )
+    try:
+        result = await import_users_atomically(validation, session=db)
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="用户数据已发生变化，请重新校验后导入") from exc
+
+    details = (
+        f"批量导入 {result['imported_count']} 个用户，"
+        f"角色统计: {result['role_counts']}，部门: {', '.join(result['departments'])}，"
+        f"文件: {safe_upload_filename(file.filename)}"
+    )
+    await log_operation(db, current_user.id, "批量导入用户", details, request)
+    return {"success": True, "imported_count": result["imported_count"]}
 
 
 @auth.post("/users", response_model=UserResponse)

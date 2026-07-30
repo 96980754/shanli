@@ -18,6 +18,7 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userRole.value === 'admin' || userRole.value === 'superadmin')
   const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+  const isRegularUser = computed(() => userRole.value === 'user')
 
   // 动作
   async function login(credentials) {
@@ -387,6 +388,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     isAdmin,
     isSuperAdmin,
+    isRegularUser,
 
     // 方法
     login,

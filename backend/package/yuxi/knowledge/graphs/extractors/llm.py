@@ -29,10 +29,18 @@ JSON 格式：
       "source": {"text": "实体文本", "label": "实体类型", "attributes": [{"text": "属性值", "label": "属性名称"}]},
       "target": {"text": "实体文本", "label": "实体类型", "attributes": [{"text": "属性值", "label": "属性名称"}]},
       "text": "关系显示文本",
-      "label": "关系类型"
+      "label": "关系类型",
+      "polarity": "positive 或 negative",
+      "assertion_kind": "fact 或 retraction",
+      "evidence": {"quote": "支持该断言的原文短句"}
     }
   ]
 }
+要求：
+- 明确区分肯定事实（positive）和否定事实（negative）。
+- 只有原文明确出现“取消、不再、废止、撤回”等语义时，assertion_kind 才使用 retraction。
+- 不得因为文本没有提到某项能力而推断 negative 或 retraction。
+- evidence.quote 必须逐字引用当前文本中的最短完整证据句。
 """
 
 SCHEMA_INSTRUCTION = """抽取 Schema 约束：
@@ -78,7 +86,8 @@ class LLMGraphExtractor(GraphExtractor):
             model_params=self.options.get("model_params") or {},
         )
         response = await model.call(self._build_messages(text), stream=False)
-        return json_repair.loads(response.content if response else "")
+        result = json_repair.loads(response.content if response else "")
+        return self._enrich_evidence(result, text)
 
     def normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:
         normalized = normalize_extraction_result(result, self.extractor_type)
@@ -109,6 +118,30 @@ class LLMGraphExtractor(GraphExtractor):
             }
         )
         return normalized
+
+    def _enrich_evidence(self, result: Any, source_text: str) -> Any:
+        if not isinstance(result, dict):
+            return result
+
+        metadata = result.setdefault("metadata", {})
+        if isinstance(metadata, dict):
+            metadata["schema_version"] = 2
+
+        relations = result.get("relations")
+        if not isinstance(relations, list):
+            return result
+
+        for relation in relations:
+            if not isinstance(relation, dict):
+                continue
+            evidence = relation.get("evidence")
+            if not isinstance(evidence, dict):
+                continue
+            quote = str(evidence.get("quote") or "").strip()
+            start_char = source_text.find(quote) if quote else -1
+            evidence["start_char"] = start_char if start_char >= 0 else None
+            evidence["end_char"] = start_char + len(quote) if start_char >= 0 else None
+        return result
 
     def ontology_summary(self) -> dict[str, Any] | None:
         if self.ontology_entry is None:

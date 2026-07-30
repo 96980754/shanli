@@ -1248,6 +1248,7 @@ def list_builtin_skill_specs() -> list[dict[str, Any]]:
         configured_tools = normalize_string_list(getattr(raw_spec, "tool_dependencies", None))
         configured_mcps = normalize_string_list(getattr(raw_spec, "mcp_dependencies", None))
         configured_skills = normalize_string_list(getattr(raw_spec, "skill_dependencies", None))
+        enabled = bool(getattr(raw_spec, "enabled", False))
 
         if not is_valid_skill_slug(slug):
             raise ValueError(f"内置 skill slug 非法: {slug}")
@@ -1275,6 +1276,7 @@ def list_builtin_skill_specs() -> list[dict[str, Any]]:
                 "skill_dependencies": configured_skills or normalize_string_list(meta.get("skill_dependencies")),
                 "content_hash": _compute_dir_hash(source_dir),
                 "source_dir": source_dir,
+                "enabled": enabled,
             }
         )
 
@@ -1319,6 +1321,7 @@ async def init_builtin_skills(db: AsyncSession, *, created_by: str = "system") -
                     existing,
                     version=spec["version"],
                     content_hash=spec["content_hash"],
+                    enabled=spec["enabled"],
                     updated_by=created_by,
                 )
             )
@@ -1335,7 +1338,7 @@ async def init_builtin_skills(db: AsyncSession, *, created_by: str = "system") -
                 skill_dependencies=spec["skill_dependencies"],
                 dir_path=_build_builtin_skill_dir_path(slug),
                 share_config=BUILTIN_SKILL_SHARE_CONFIG.copy(),
-                enabled=True,
+                enabled=spec["enabled"],
                 version=spec["version"],
                 content_hash=spec["content_hash"],
                 created_by=created_by or BUILTIN_SKILL_OPERATOR,

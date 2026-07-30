@@ -58,6 +58,7 @@ def make_kb(collection: FakeCollection) -> MilvusKB:
             chunk["metadata"]["source"] = "demo.md"
 
     kb._get_milvus_collection = get_collection
+    kb._file_repository = FakeKnowledgeFileRepository({"file-1": make_file_record(status=FileStatus.INDEXED)})
     kb._hydrate_chunk_sources = hydrate_chunk_sources
     return kb
 
@@ -67,6 +68,11 @@ def make_file_record(**overrides):
         "file_id": "file-1",
         "kb_id": "db",
         "parent_id": None,
+        "logical_document_id": "file-1",
+        "document_version": 1,
+        "is_current": True,
+        "supersedes_file_id": None,
+        "activated_at": None,
         "filename": "demo.md",
         "file_type": "md",
         "path": "/tmp/demo.md",
@@ -118,6 +124,13 @@ class FakeKnowledgeFileRepository:
             setattr(record, key, value)
         self.update_calls.append((file_id, kb_id, dict(data)))
         return record
+
+    async def list_current_file_ids(self, file_ids: list[str]):
+        return {
+            file_id
+            for file_id in file_ids
+            if (record := self.records.get(file_id)) is not None and getattr(record, "is_current", True)
+        }
 
     async def get_filenames_by_file_ids(self, *, kb_id: str, file_ids: list[str]):
         return {
@@ -320,6 +333,34 @@ async def test_index_file_persists_chunk_stats(monkeypatch):
     assert file_repo.conditional_update_calls[0][3]["status"] == FileStatus.INDEXING
     assert file_repo.update_calls[-1][2]["status"] == FileStatus.INDEXED
     assert refreshed_kbs == ["db"]
+
+
+async def test_archive_file_indexes_preserves_postgres_chunks(monkeypatch):
+    kb = MilvusKB.__new__(MilvusKB)
+    collection = FakeCollection()
+    vector_deletes = []
+    graph_deletes = []
+
+    async def get_collection(kb_id):
+        assert kb_id == "db"
+        return collection
+
+    async def delete_vectors(collection_arg, file_id):
+        vector_deletes.append((collection_arg, file_id))
+
+    class FakeGraphService:
+        async def delete_file_graph(self, kb_id, file_id):
+            graph_deletes.append((kb_id, file_id))
+
+    kb._get_milvus_collection = get_collection
+    kb._delete_file_chunks_from_milvus = delete_vectors
+    monkeypatch.setattr("yuxi.knowledge.graphs.milvus_graph_service.MilvusGraphService", FakeGraphService)
+
+    warnings = await kb.archive_file_indexes("db", "file-1")
+
+    assert warnings == []
+    assert vector_deletes == [(collection, "file-1")]
+    assert graph_deletes == [("db", "file-1")]
 
 
 async def test_delete_file_chunks_only_resets_file_stats(monkeypatch):
@@ -541,7 +582,7 @@ async def test_hybrid_mode_uses_milvus_native_hybrid_search():
     assert chunks[0]["content"] == "Hybrid result"
     assert chunks[0]["hybrid_score"] == 0.8
     hybrid_call = collection.hybrid_calls[0]
-    assert hybrid_call["limit"] == 3
+    assert hybrid_call["limit"] == 9
     assert hybrid_call["rerank"]._weights == [0.6, 0.4]
 
     vector_request, bm25_request = hybrid_call["reqs"]

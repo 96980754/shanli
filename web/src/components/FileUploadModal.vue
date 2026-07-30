@@ -1,4 +1,10 @@
 <template>
+  <DocumentSearchModal
+    v-model:open="documentSearchVisible"
+    :kb-id="kbId"
+    :selected-file-id="activeVersionCandidate?.currentFileId"
+    @select="applyDocumentSelection"
+  />
   <a-modal v-model:open="visible" title="添加文件" width="800px" @cancel="handleCancel">
     <template #footer>
       <div class="footer-container">
@@ -376,8 +382,50 @@
         </div>
       </div>
 
-      <!-- 同名文件提示 -->
-      <div v-if="sameNameFiles.length > 0" class="conflict-files-panel">
+      <!-- 文件处理方式 -->
+      <div v-if="versionCandidates.length > 0 && props.canManage" class="conflict-files-panel">
+        <div class="panel-header">
+          <Info :size="14" class="icon-warning" />
+          <span>请选择上传文件的处理方式</span>
+        </div>
+        <div class="file-list-scroll">
+          <div v-for="item in versionCandidates" :key="item.uid" class="conflict-item version-candidate">
+            <div class="version-candidate-main">
+              <div class="file-meta">
+                <span class="fname" :title="item.filename">{{ item.filename }}</span>
+                <span class="ftime">作为新版本时，旧版将保留在版本历史中</span>
+              </div>
+              <a-radio-group v-model:value="item.action" size="small">
+                <a-radio value="add">作为独立文档</a-radio>
+                <a-radio value="version">作为新版本</a-radio>
+              </a-radio-group>
+            </div>
+            <div v-if="item.action === 'version'" class="version-target-row">
+              <a-select
+                v-model:value="item.currentFileId"
+                size="small"
+                class="version-target-select"
+                placeholder="选择同名文档，或搜索其他当前文档"
+                @change="syncSameNameSelection(item)"
+              >
+                <a-select-option v-for="file in item.sameNameFiles" :key="file.file_id" :value="file.file_id">
+                  {{ file.filename }} · {{ formatFileTime(file.created_at) }}
+                </a-select-option>
+                <a-select-option
+                  v-if="item.selectedFile && !item.sameNameFiles.some((file) => file.file_id === item.selectedFile.file_id)"
+                  :key="item.selectedFile.file_id"
+                  :value="item.selectedFile.file_id"
+                >
+                  {{ item.selectedFile.filename }} · {{ formatFileTime(item.selectedFile.updated_at || item.selectedFile.created_at) }}
+                </a-select-option>
+              </a-select>
+              <a-button size="small" @click="openDocumentSearch(item)">搜索文档</a-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="sameNameFiles.length > 0" class="conflict-files-panel">
         <div class="panel-header">
           <Info :size="14" class="icon-warning" />
           <span>已存在同名文件 ({{ sameNameFiles.length }})</span>
@@ -442,6 +490,13 @@ import {
 import { buildChunkParamsPayload } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
+import DocumentSearchModal from '@/components/DocumentSearchModal.vue'
+import {
+  buildVersionCandidate,
+  findDuplicateVersionTarget,
+  pruneVersionCandidates,
+  selectVersionTarget
+} from '@/components/fileUploadVersionHelpers'
 
 const props = defineProps({
   visible: {
@@ -467,6 +522,10 @@ const props = defineProps({
   canUpload: {
     type: Boolean,
     default: true
+  },
+  canManage: {
+    type: Boolean,
+    default: false
   },
   deferProcessing: {
     type: Boolean,
@@ -663,7 +722,11 @@ const canSubmit = computed(() => {
   if (uploadMode.value === 'workspace') {
     return selectedWorkspacePaths.value.length > 0 && !workspaceLoading.value
   }
-  return successUploadCount.value > 0 && !hasPendingUploads.value
+  return (
+    successUploadCount.value > 0 &&
+    !hasPendingUploads.value &&
+    versionCandidates.value.every((item) => item.action !== 'version' || item.currentFileId)
+  )
 })
 
 const uploadModeOptions = computed(() => [
@@ -702,6 +765,7 @@ watch(uploadMode, (val) => {
   // 切换模式时清空已选内容，避免混淆
   fileList.value = []
   sameNameFiles.value = []
+  versionCandidates.value = []
   urlList.value = []
   newUrl.value = ''
   selectedWorkspacePaths.value = []
@@ -737,6 +801,7 @@ watch(fileList, (newFileList) => {
 
   uploadTaskStatus.value = nextStatus
   uploadTaskProgress.value = nextProgress
+  versionCandidates.value = pruneVersionCandidates(versionCandidates.value, newFileList)
 })
 
 // URL 列表
@@ -746,8 +811,35 @@ const newUrl = ref('')
 const fetchingUrls = ref(false)
 const CONTENT_EXISTS_ERROR_TEXT = '内容已存在于知识库中'
 
-// 同名文件列表（用于显示提示）
+// 文件版本处理
 const sameNameFiles = ref([])
+const versionCandidates = ref([])
+const documentSearchVisible = ref(false)
+const activeVersionCandidateUid = ref(null)
+const activeVersionCandidate = computed(() => getVersionCandidate(activeVersionCandidateUid.value))
+
+const updateVersionCandidate = (file, response) => {
+  const candidate = buildVersionCandidate(file, response, props.canManage)
+  versionCandidates.value = versionCandidates.value.filter((item) => item.uid !== file.uid)
+  versionCandidates.value.push(candidate)
+}
+
+const getVersionCandidate = (uid) => versionCandidates.value.find((item) => item.uid === uid)
+
+const openDocumentSearch = (candidate) => {
+  activeVersionCandidateUid.value = candidate.uid
+  documentSearchVisible.value = true
+}
+
+const applyDocumentSelection = (file) => {
+  const index = versionCandidates.value.findIndex((item) => item.uid === activeVersionCandidateUid.value)
+  if (index < 0) return
+  versionCandidates.value[index] = selectVersionTarget(versionCandidates.value[index], file)
+}
+
+const syncSameNameSelection = (candidate) => {
+  candidate.selectedFile = candidate.sameNameFiles.find((file) => file.file_id === candidate.currentFileId) || null
+}
 
 // URL 相关功能
 const isValidUrl = (string) => {
@@ -1136,7 +1228,14 @@ const validateOcrService = () => {
   return true
 }
 
+const resetVersionSelection = () => {
+  versionCandidates.value = []
+  documentSearchVisible.value = false
+  activeVersionCandidateUid.value = null
+}
+
 const handleCancel = () => {
+  resetVersionSelection()
   emit('update:visible', false)
 }
 
@@ -1156,11 +1255,6 @@ const formatFileTime = (timestamp) => {
   } catch {
     return timestamp
   }
-}
-
-const showSameNameFilesInUploadArea = (files) => {
-  sameNameFiles.value = files
-  // 可以在这里添加其他逻辑，比如自动滚动到提示区域
 }
 
 const downloadSameNameFile = async (file) => {
@@ -1398,12 +1492,9 @@ const handleFileUpload = (info) => {
     }
   }
 
-  // 检查是否有同名文件提示
+  // 为每个成功上传的文件建立处理决策；同名文件继续自动推荐为新版本
   if (info?.file?.status === 'done' && info.file.response) {
-    const response = info.file.response
-    if (response.has_same_name && response.same_name_files && response.same_name_files.length > 0) {
-      showSameNameFilesInUploadArea(response.same_name_files)
-    }
+    updateVersionCandidate(info.file, info.file.response)
   }
 
   fileList.value = info?.fileList ?? []
@@ -1612,15 +1703,25 @@ const chunkData = async () => {
   const items = []
   const content_hashes = {}
   const file_sizes = {}
+  const versionUploads = []
+  if (findDuplicateVersionTarget(versionCandidates.value)) {
+    message.error('同一批次不能为同一文档提交多个新版本')
+    return
+  }
   for (const file of fileList.value) {
     if (file.status !== 'done') continue
     const file_path = file.response?.file_path
     const content_hash = file.response?.content_hash
     if (!file_path) continue
 
-    items.push(file_path)
-    if (content_hash) content_hashes[file_path] = content_hash
-    if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
+    const versionCandidate = getVersionCandidate(file.uid)
+    if (versionCandidate?.action === 'version') {
+      versionUploads.push({ file, candidate: versionCandidate })
+    } else {
+      items.push(file_path)
+      if (content_hash) content_hashes[file_path] = content_hash
+      if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
+    }
 
     // 检查是否需要OCR
     const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
@@ -1633,7 +1734,7 @@ const chunkData = async () => {
     }
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && versionUploads.length === 0) {
     message.error('请先上传文件')
     return
   }
@@ -1646,21 +1747,44 @@ const chunkData = async () => {
       Object.assign(params, buildAutoIndexParams())
     }
 
+    if (items.length > 0) {
       const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
-      await addFiles({
+      const added = await addFiles({
         items,
         contentType: 'file',
         params,
         parentId: selectedFolderId.value
       })
+      if (added === false) return
+    }
 
+    for (const { file, candidate } of versionUploads) {
+      const result = await documentApi.createDocumentVersion(kbId.value, candidate.currentFileId, {
+        file_path: file.response.file_path,
+        content_hash: file.response.content_hash,
+        filename: file.response.filename || file.name,
+        original_filename: file.response.original_filename || file.name,
+        file_size: file.response.size,
+        processing_params: params
+      })
+      if (result?.status !== 'queued') {
+        throw new Error(`版本更新任务提交失败：${file.name}`)
+      }
+    }
+
+    if (versionUploads.length > 0) {
+      message.success(`${versionUploads.length} 个文档版本更新任务已提交，请在任务中心查看处理进度`)
+    }
     emit('success')
     handleCancel()
     fileList.value = []
     sameNameFiles.value = []
   } catch (error) {
-    console.error('文件上传失败:', error)
-    message.error('文件上传失败: ' + (error.message || '未知错误'))
+    console.error('文件处理失败:', error)
+    const detail = error.response?.data?.detail
+    const errorText =
+      (typeof detail === 'string' ? detail : detail?.message) || error.message || '未知错误'
+    message.error(`文件或版本任务提交失败: ${errorText}`)
   } finally {
     store.state.chunkLoading = false
   }
@@ -1668,6 +1792,50 @@ const chunkData = async () => {
 </script>
 
 <style lang="less" scoped>
+.version-candidate {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.version-candidate-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  .file-meta {
+    min-width: 0;
+  }
+
+  :deep(.ant-radio-group) {
+    flex-shrink: 0;
+  }
+}
+
+.version-target-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+
+  > .ant-btn {
+    flex-shrink: 0;
+  }
+}
+
+.version-target-select {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .version-candidate-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .footer-container {
   display: flex;
   justify-content: space-between;
@@ -2500,7 +2668,7 @@ const chunkData = async () => {
 }
 
 .file-list-scroll {
-  max-height: 120px;
+  max-height: 280px;
   overflow-y: auto;
 }
 

@@ -281,6 +281,13 @@ def test_image_gen_builtin_skill_spec():
 def test_knowledge_base_builtin_skill_spec():
     specs = {spec["slug"]: spec for spec in svc.list_builtin_skill_specs()}
 
+    assert {slug: spec["enabled"] for slug, spec in specs.items()} == {
+        "image-gen": False,
+        "deep-research": False,
+        "knowledge-base": True,
+        "mysql-reporter": False,
+    }
+
     assert "knowledge-base" in specs
     knowledge_base = specs["knowledge-base"]
     assert knowledge_base["name"] == "knowledge-base"
@@ -873,6 +880,7 @@ async def test_init_builtin_skills_create_missing(tmp_path: Path, monkeypatch: p
                 tool_dependencies=("mysql_query",),
                 mcp_dependencies=("charts",),
                 skill_dependencies=("common-report",),
+                enabled=True,
             )
         ],
     )
@@ -909,7 +917,7 @@ async def test_init_builtin_skills_create_missing(tmp_path: Path, monkeypatch: p
 
 
 @pytest.mark.asyncio
-async def test_init_builtin_skills_updates_existing_record_and_preserves_disabled(
+async def test_init_builtin_skills_updates_existing_record_and_converges_enabled_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setattr(svc.sys_config, "save_dir", str(tmp_path))
@@ -938,6 +946,7 @@ async def test_init_builtin_skills_updates_existing_record_and_preserves_disable
                 tool_dependencies=("mysql_query",),
                 mcp_dependencies=("charts",),
                 skill_dependencies=(),
+                enabled=True,
             )
         ],
     )
@@ -1001,14 +1010,21 @@ async def test_init_builtin_skills_updates_existing_record_and_preserves_disable
             *,
             version: str,
             content_hash: str,
+            enabled: bool,
             updated_by: str | None,
         ) -> Skill:
             item.version = version
             item.content_hash = content_hash
+            item.enabled = enabled
             item.source_type = "builtin"
             item.share_config = svc.BUILTIN_SKILL_SHARE_CONFIG.copy()
             item.updated_by = updated_by
-            captured["install"] = {"version": version, "content_hash": content_hash, "updated_by": updated_by}
+            captured["install"] = {
+                "version": version,
+                "content_hash": content_hash,
+                "enabled": enabled,
+                "updated_by": updated_by,
+            }
             return item
 
     monkeypatch.setattr(svc, "SkillRepository", FakeRepo)
@@ -1016,7 +1032,7 @@ async def test_init_builtin_skills_updates_existing_record_and_preserves_disable
     items = await svc.init_builtin_skills(None, created_by="release-bot")
 
     assert len(items) == 1
-    assert items[0].enabled is False
+    assert items[0].enabled is True
     assert items[0].version == "1.0.1"
     assert (target_dir / "prompt.md").read_text(encoding="utf-8") == "new builtin content"
     assert captured["metadata"] == {
@@ -1030,6 +1046,7 @@ async def test_init_builtin_skills_updates_existing_record_and_preserves_disable
         "skill_dependencies": [],
         "updated_by": "release-bot",
     }
+    assert captured["install"]["enabled"] is True
     assert captured["install"]["updated_by"] == "release-bot"
 
 

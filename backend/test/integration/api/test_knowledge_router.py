@@ -266,22 +266,30 @@ async def test_admin_can_create_vector_db_with_reranker(test_client, admin_heade
 
     params_payload = params_response.json()
     options = params_payload.get("params", {}).get("options", [])
-    option_keys = {option.get("key") for option in options}
+    options_by_key = {option.get("key"): option for option in options}
 
-    # 验证新的参数名称
-    assert "final_top_k" in option_keys
-    assert "use_reranker" in option_keys
-    assert "recall_top_k" in option_keys
-    assert "reranker_model" in option_keys
+    expected_initial_params = {
+        "search_mode": "hybrid",
+        "final_top_k": 10,
+        "similarity_threshold": 0.2,
+        "bm25_top_k": 50,
+        "vector_weight": 0.7,
+        "bm25_weight": 0.3,
+        "bm25_drop_ratio_search": 0.1,
+        "use_graph_retrieval": True,
+        "graph_entity_top_k": 10,
+        "graph_triple_top_k": 20,
+        "graph_max_nodes": 5000,
+        "graph_top_k": 20,
+        "graph_weight": 0.5,
+        "ppr_damping": 0.85,
+        "use_reranker": True,
+        "recall_top_k": 50,
+    }
+    for key, expected in expected_initial_params.items():
+        assert options_by_key[key].get("default") == expected
 
-    # 验证参数配置
-    final_top_k_option = next((opt for opt in options if opt.get("key") == "final_top_k"), None)
-    assert final_top_k_option is not None
-    assert final_top_k_option.get("default") == 10
-
-    use_reranker_option = next((opt for opt in options if opt.get("key") == "use_reranker"), None)
-    assert use_reranker_option is not None
-    assert use_reranker_option.get("default") is False
+    assert options_by_key["reranker_model"].get("default") == ""
 
     # 保存查询参数（模拟前端配置）
     update_params = {

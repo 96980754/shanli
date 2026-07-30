@@ -19,6 +19,10 @@
             <RefreshCw :size="16" :class="{ spin: userManagement.refreshing }" />
           </template>
         </a-button>
+        <a-button @click="openImportModal" class="lucide-icon-btn">
+          <template #icon><FileUp :size="16" /></template>
+          导入用户
+        </a-button>
         <a-button type="primary" @click="showAddUserModal" class="add-btn lucide-icon-btn">
           <template #icon><Plus :size="16" /></template>
           添加用户
@@ -255,6 +259,73 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal
+      v-model:open="userImport.visible"
+      title="导入企业用户"
+      width="760px"
+      :confirm-loading="userImport.importing"
+      :ok-button-props="{ disabled: !userImport.preview?.valid || userImport.validating }"
+      ok-text="确认导入"
+      cancel-text="取消"
+      :mask-closable="false"
+      @ok="confirmUserImport"
+      @cancel="closeImportModal"
+    >
+      <a-alert
+        type="warning"
+        show-icon
+        message="Excel 包含明文初始密码，导入后请立即安全删除或妥善保管文件。"
+        class="import-alert"
+      />
+      <div class="import-toolbar">
+        <a-button @click="downloadImportTemplate">下载模板</a-button>
+        <a-upload
+          :file-list="userImport.file ? [userImport.file] : []"
+          :before-upload="selectImportFile"
+          :show-upload-list="false"
+          accept=".xlsx"
+          :disabled="userImport.validating || userImport.importing"
+        >
+          <a-button :loading="userImport.validating">选择 Excel</a-button>
+        </a-upload>
+        <span v-if="userImport.file" class="import-filename">{{ userImport.file.name }}</span>
+      </div>
+
+      <template v-if="userImport.preview">
+        <a-alert
+          v-if="!userImport.preview.valid"
+          type="error"
+          show-icon
+          :message="`共 ${userImport.preview.row_count} 行，发现 ${userImport.preview.errors.length} 个问题，未导入任何用户`"
+          class="import-alert"
+        />
+        <a-alert
+          v-else
+          type="success"
+          show-icon
+          :message="`校验通过，共 ${userImport.preview.row_count} 个用户，确认后将一次性导入`"
+          class="import-alert"
+        />
+
+        <a-table
+          v-if="userImport.preview.errors.length"
+          :data-source="userImport.preview.errors"
+          :columns="importErrorColumns"
+          :pagination="{ pageSize: 8 }"
+          row-key="excel_row"
+          size="small"
+        />
+        <a-table
+          v-else
+          :data-source="userImport.preview.rows"
+          :columns="importPreviewColumns"
+          :pagination="{ pageSize: 8 }"
+          row-key="excel_row"
+          size="small"
+        />
+      </template>
+    </a-modal>
   </div>
 </template>
 
@@ -262,7 +333,7 @@
 import { reactive, onMounted, watch, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
-import { departmentApi } from '@/apis'
+import { departmentApi, authApi } from '@/apis'
 import {
   Plus,
   SquarePen,
@@ -271,7 +342,8 @@ import {
   UserLock,
   UserStar,
   RefreshCw,
-  Search
+  Search,
+  FileUp
 } from 'lucide-vue-next'
 import { formatDateTime } from '@/utils/time'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
@@ -313,6 +385,29 @@ const userManagement = reactive({
 const departmentManagement = reactive({
   departments: []
 })
+
+const userImport = reactive({
+  visible: false,
+  file: null,
+  preview: null,
+  validating: false,
+  importing: false
+})
+
+const importErrorColumns = [
+  { title: 'Excel 行', dataIndex: 'excel_row', width: 90 },
+  { title: '字段', dataIndex: 'column', width: 150 },
+  { title: '问题', dataIndex: 'message' }
+]
+
+const importPreviewColumns = [
+  { title: '行', dataIndex: 'excel_row', width: 70 },
+  { title: '用户名', dataIndex: 'username' },
+  { title: 'UID', dataIndex: 'uid' },
+  { title: '手机号', dataIndex: 'phone_number' },
+  { title: '角色', dataIndex: 'role', width: 90 },
+  { title: '部门', dataIndex: 'department_name' }
+]
 
 const departmentFilterOptions = computed(() => {
   const options = new Map()
@@ -493,6 +588,72 @@ const handleRefresh = async () => {
     message.error('刷新失败')
   } finally {
     userManagement.refreshing = false
+  }
+}
+
+const openImportModal = () => {
+  userImport.visible = true
+  userImport.file = null
+  userImport.preview = null
+}
+
+const closeImportModal = () => {
+  if (userImport.validating || userImport.importing) return
+  userImport.visible = false
+  userImport.file = null
+  userImport.preview = null
+}
+
+const downloadImportTemplate = async () => {
+  try {
+    await authApi.downloadUserImportTemplate()
+  } catch (error) {
+    message.error(error.message || '下载模板失败')
+  }
+}
+
+const selectImportFile = async (file) => {
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    message.error('仅支持 .xlsx 文件')
+    return false
+  }
+  userImport.file = file
+  userImport.preview = null
+  userImport.validating = true
+  try {
+    userImport.preview = await authApi.previewUserImport(file)
+  } catch (error) {
+    message.error(error.message || '校验用户导入文件失败')
+  } finally {
+    userImport.validating = false
+  }
+  return false
+}
+
+const confirmUserImport = async () => {
+  if (!userImport.file || !userImport.preview?.valid) return
+  userImport.importing = true
+  try {
+    const result = await authApi.importUsers(userImport.file)
+    message.success(`成功导入 ${result.imported_count} 个用户`)
+    userImport.visible = false
+    userImport.file = null
+    userImport.preview = null
+    await fetchUsers()
+  } catch (error) {
+    const detail = error.response?.data?.detail
+    if (detail && typeof detail === 'object' && Array.isArray(detail.errors)) {
+      userImport.preview = {
+        valid: false,
+        row_count: detail.row_count || 0,
+        rows: [],
+        errors: detail.errors,
+        errors_truncated: detail.errors_truncated || false
+      }
+    }
+    message.error(error.message || '导入用户失败')
+  } finally {
+    userImport.importing = false
   }
 }
 
@@ -930,6 +1091,26 @@ onMounted(async () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.import-alert {
+  margin-bottom: 16px;
+}
+
+.import-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.import-filename {
+  min-width: 0;
+  color: var(--gray-600);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-modal {

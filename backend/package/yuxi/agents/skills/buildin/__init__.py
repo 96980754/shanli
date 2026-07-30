@@ -13,6 +13,7 @@ class BuiltinSkillSpec:
     tool_dependencies: tuple[str, ...] = ()
     mcp_dependencies: tuple[str, ...] = ()
     skill_dependencies: tuple[str, ...] = ()
+    enabled: bool = False
 
 
 _SKILLS_ROOT = Path(__file__).resolve().parent
@@ -45,6 +46,7 @@ BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
             "get_mindmap",
             "search_file",
         ),
+        enabled=True,
     ),
     BuiltinSkillSpec(
         slug="mysql-reporter",

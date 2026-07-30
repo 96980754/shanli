@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import delete, func, select, update
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_knowledge import KnowledgeChunk
+from yuxi.storage.postgres.models_knowledge import KnowledgeChunk, KnowledgeFile
 
 SQL_IN_BATCH_SIZE = 10_000
 
@@ -136,8 +136,11 @@ class KnowledgeChunkRepository:
     async def count_by_kb_id(self, kb_id: str) -> int:
         return await self._count_by_kb_id(kb_id)
 
+    async def count_current_by_kb_id(self, kb_id: str) -> int:
+        return await self._count_current_by_kb_id(kb_id)
+
     async def count_graph_indexed_by_kb_id(self, kb_id: str) -> int:
-        return await self._count_by_kb_id(kb_id, KnowledgeChunk.graph_indexed.is_(True))
+        return await self._count_current_by_kb_id(kb_id, KnowledgeChunk.graph_indexed.is_(True))
 
     async def count_graph_indexed_by_file_id(self, file_id: str) -> int:
         async with pg_manager.get_async_session_context() as session:
@@ -149,7 +152,7 @@ class KnowledgeChunkRepository:
             return int(result.scalar() or 0)
 
     async def count_graph_pending_by_kb_id(self, kb_id: str) -> int:
-        return await self._count_by_kb_id(kb_id, KnowledgeChunk.graph_indexed.is_not(True))
+        return await self._count_current_by_kb_id(kb_id, KnowledgeChunk.graph_indexed.is_not(True))
 
     async def count_with_extraction_result_by_kb_id(self, kb_id: str) -> int:
         return await self._count_by_kb_id(
@@ -191,6 +194,20 @@ class KnowledgeChunkRepository:
             )
             return {str(kb_id): int(count or 0) for kb_id, count in result.all()}
 
+    async def _count_current_by_kb_id(self, kb_id: str, *conditions: Any) -> int:
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(KnowledgeChunk)
+                .join(KnowledgeFile, KnowledgeFile.file_id == KnowledgeChunk.file_id)
+                .where(
+                    KnowledgeChunk.kb_id == kb_id,
+                    KnowledgeFile.is_current.is_(True),
+                    *conditions,
+                )
+            )
+            return int(result.scalar() or 0)
+
     async def _count_by_kb_id(self, kb_id: str, *conditions: Any) -> int:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
@@ -202,7 +219,12 @@ class KnowledgeChunkRepository:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeChunk)
-                .where(KnowledgeChunk.kb_id == kb_id, KnowledgeChunk.graph_indexed.is_not(True))
+                .join(KnowledgeFile, KnowledgeFile.file_id == KnowledgeChunk.file_id)
+                .where(
+                    KnowledgeChunk.kb_id == kb_id,
+                    KnowledgeFile.is_current.is_(True),
+                    KnowledgeChunk.graph_indexed.is_not(True),
+                )
                 .order_by(KnowledgeChunk.id.asc())
                 .limit(max(limit, 1))
             )
@@ -230,6 +252,15 @@ class KnowledgeChunkRepository:
 
         async with pg_manager.get_async_session_context() as session:
             await session.execute(update(KnowledgeChunk).where(KnowledgeChunk.chunk_id == chunk_id).values(**values))
+
+    async def reset_graph_state_by_file_id(self, file_id: str) -> int:
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                update(KnowledgeChunk)
+                .where(KnowledgeChunk.file_id == file_id)
+                .values(graph_indexed=False, ent_ids=None, tags=None)
+            )
+            return int(result.rowcount or 0)
 
     async def reset_graph_state_by_kb_id(self, kb_id: str, clear_extraction_result: bool) -> int:
         values: dict[str, Any] = {"graph_indexed": False}

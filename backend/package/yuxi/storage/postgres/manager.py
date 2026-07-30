@@ -223,6 +223,11 @@ class PostgresManager(metaclass=SingletonMeta):
             ),
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS document_version INTEGER",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS supersedes_file_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS original_filename VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS path VARCHAR(1024)",
@@ -242,6 +247,102 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS created_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS updated_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
+            """
+            UPDATE knowledge_files
+            SET logical_document_id = file_id,
+                document_version = 1,
+                is_current = TRUE,
+                activated_at = COALESCE(activated_at, created_at, NOW())
+            WHERE is_folder IS NOT TRUE
+              AND (logical_document_id IS NULL OR document_version IS NULL)
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'fk_knowledge_files_supersedes_file_id'
+                ) THEN
+                    ALTER TABLE knowledge_files
+                    ADD CONSTRAINT fk_knowledge_files_supersedes_file_id
+                    FOREIGN KEY (supersedes_file_id) REFERENCES knowledge_files(file_id) ON DELETE SET NULL;
+                END IF;
+            END $$
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_conflicts (
+                id SERIAL PRIMARY KEY,
+                conflict_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                logical_document_id VARCHAR(64) NOT NULL,
+                old_file_id VARCHAR(64) REFERENCES knowledge_files(file_id) ON DELETE SET NULL,
+                new_file_id VARCHAR(64) NOT NULL REFERENCES knowledge_files(file_id) ON DELETE CASCADE,
+                conflict_type VARCHAR(64) NOT NULL,
+                conflict_key VARCHAR(512) NOT NULL,
+                old_fact JSONB NOT NULL,
+                new_fact JSONB NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'open',
+                resolved_by VARCHAR(64),
+                resolved_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_conflicts_candidate UNIQUE (new_file_id, conflict_type, conflict_key)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_validation_reports (
+                id SERIAL PRIMARY KEY,
+                report_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                logical_document_id VARCHAR(64) NOT NULL,
+                old_file_id VARCHAR(64) NOT NULL,
+                old_filename VARCHAR(512),
+                old_document_version INTEGER,
+                candidate_file_id VARCHAR(64) NOT NULL,
+                candidate_filename VARCHAR(512),
+                candidate_document_version INTEGER,
+                ontology_registry_id VARCHAR(128),
+                ontology_version VARCHAR(64),
+                ontology_digest VARCHAR(128),
+                extraction_schema_version INTEGER,
+                status VARCHAR(32) NOT NULL DEFAULT 'processing',
+                decision VARCHAR(32) NOT NULL DEFAULT 'pending',
+                new_count INTEGER NOT NULL DEFAULT 0,
+                changed_count INTEGER NOT NULL DEFAULT 0,
+                removed_count INTEGER NOT NULL DEFAULT 0,
+                conflict_count INTEGER NOT NULL DEFAULT 0,
+                inconclusive BOOLEAN NOT NULL DEFAULT FALSE,
+                summary JSONB,
+                failure_message TEXT,
+                reviewed_by VARCHAR(64),
+                reviewed_at TIMESTAMPTZ,
+                completed_at TIMESTAMPTZ,
+                published_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_validation_reports_candidate UNIQUE (candidate_file_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_validation_items (
+                id SERIAL PRIMARY KEY,
+                item_id VARCHAR(64) NOT NULL UNIQUE,
+                report_id VARCHAR(64) NOT NULL
+                    REFERENCES knowledge_validation_reports(report_id) ON DELETE CASCADE,
+                item_index INTEGER NOT NULL,
+                change_type VARCHAR(32) NOT NULL,
+                severity VARCHAR(32) NOT NULL,
+                decision VARCHAR(32) NOT NULL DEFAULT 'pending',
+                fact_key VARCHAR(512) NOT NULL,
+                relation VARCHAR(256),
+                old_fact JSONB,
+                new_fact JSONB,
+                old_evidence JSONB,
+                new_evidence JSONB,
+                review_required BOOLEAN NOT NULL DEFAULT FALSE,
+                reason TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_validation_items_report_index UNIQUE (report_id, item_index)
+            )
+            """,
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS created_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS build_metadata JSONB",
@@ -405,6 +506,39 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_id ON knowledge_files(kb_id)",
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_filename ON knowledge_files(kb_id, filename)",
             "CREATE INDEX IF NOT EXISTS idx_kf_parent ON knowledge_files(parent_id)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_files_logical_document_id ON knowledge_files(logical_document_id)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_files_supersedes_file_id ON knowledge_files(supersedes_file_id)",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version "
+                "ON knowledge_files(kb_id, logical_document_id, document_version) "
+                "WHERE logical_document_id IS NOT NULL AND document_version IS NOT NULL"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version "
+                "ON knowledge_files(kb_id, logical_document_id) "
+                "WHERE is_current IS TRUE AND is_folder IS NOT TRUE"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_kb_id ON knowledge_conflicts(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_logical_document_id "
+                "ON knowledge_conflicts(logical_document_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_new_file_id ON knowledge_conflicts(new_file_id)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_status ON knowledge_conflicts(status)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_kb_id ON knowledge_validation_reports(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_logical_document_id "
+                "ON knowledge_validation_reports(logical_document_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_status ON knowledge_validation_reports(status)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_items_report_id "
+                "ON knowledge_validation_items(report_id)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_items_change_type "
+                "ON knowledge_validation_items(change_type)"
+            ),
             "CREATE INDEX IF NOT EXISTS idx_kf_status ON knowledge_files(status)",
             "CREATE INDEX IF NOT EXISTS idx_kf_hash ON knowledge_files(content_hash)",
             "CREATE INDEX IF NOT EXISTS ix_evaluation_datasets_kb_id ON evaluation_datasets(kb_id)",

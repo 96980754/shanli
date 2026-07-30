@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import DateTime, String, case, cast, func, literal, or_, select, union_all, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_knowledge import KnowledgeChunk, KnowledgeFile
@@ -20,6 +21,11 @@ class KnowledgeFileRepository:
     _writable_fields = {
         "kb_id",
         "parent_id",
+        "logical_document_id",
+        "document_version",
+        "is_current",
+        "supersedes_file_id",
+        "activated_at",
         "filename",
         "original_filename",
         "file_type",
@@ -74,9 +80,175 @@ class KnowledgeFileRepository:
                 records_by_id.update({record.file_id: record for record in result.scalars().all()})
         return [records_by_id[file_id] for file_id in normalized_ids if file_id in records_by_id]
 
+    async def list_current_file_ids(self, file_ids: list[str]) -> set[str]:
+        normalized_ids = [file_id for file_id in file_ids if file_id]
+        if not normalized_ids:
+            return set()
+
+        current_ids: set[str] = set()
+        async with pg_manager.get_async_session_context() as session:
+            for batch in self._iter_batches(normalized_ids):
+                result = await session.execute(
+                    select(KnowledgeFile.file_id).where(
+                        KnowledgeFile.file_id.in_(batch),
+                        KnowledgeFile.is_current.is_(True),
+                    )
+                )
+                current_ids.update(str(file_id) for file_id in result.scalars().all())
+        return current_ids
+
+    async def list_versions(self, *, kb_id: str, file_id: str) -> list[KnowledgeFile]:
+        async with pg_manager.get_async_session_context() as session:
+            logical_document_id = await session.scalar(
+                select(KnowledgeFile.logical_document_id).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.file_id == file_id,
+                )
+            )
+            if not logical_document_id:
+                return []
+            result = await session.execute(
+                select(KnowledgeFile)
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.logical_document_id == logical_document_id,
+                )
+                .order_by(KnowledgeFile.document_version.desc(), KnowledgeFile.created_at.desc())
+            )
+            return list(result.scalars().all())
+
+    async def create_candidate_version(
+        self,
+        *,
+        kb_id: str,
+        current_file_id: str,
+        data: dict[str, Any],
+        session: AsyncSession,
+    ) -> KnowledgeFile:
+        result = await session.execute(
+            select(KnowledgeFile)
+            .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == current_file_id)
+            .with_for_update()
+        )
+        current = result.scalar_one_or_none()
+        if current is None:
+            raise ValueError("当前文档不存在")
+        if current.is_folder:
+            raise ValueError("文件夹不能创建文档版本")
+        if not current.is_current:
+            raise ValueError("VERSION_CHANGED")
+
+        logical_document_id = current.logical_document_id or current.file_id
+        existing_candidate = await session.scalar(
+            select(KnowledgeFile.file_id)
+            .where(
+                KnowledgeFile.kb_id == kb_id,
+                KnowledgeFile.logical_document_id == logical_document_id,
+                KnowledgeFile.supersedes_file_id == current.file_id,
+                KnowledgeFile.is_current.is_(False),
+                KnowledgeFile.status.in_(
+                    [
+                        "uploaded",
+                        "parsing",
+                        "parsed",
+                        "indexing",
+                        "indexed",
+                        "done",
+                        "validation_processing",
+                        "validation_accepted",
+                        "validation_review",
+                        "conflict_detecting",
+                        "conflict_clear",
+                        "conflict_review",
+                        "conflict_inconclusive",
+                        "conflict_detection_failed",
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+        if existing_candidate:
+            raise ValueError("UPDATE_IN_PROGRESS")
+
+        latest_version = await session.scalar(
+            select(func.max(KnowledgeFile.document_version)).where(
+                KnowledgeFile.kb_id == kb_id,
+                KnowledgeFile.logical_document_id == logical_document_id,
+            )
+        )
+        raw_candidate_data = {
+            **data,
+            "kb_id": kb_id,
+            "logical_document_id": logical_document_id,
+            "document_version": int(latest_version or 1) + 1,
+            "is_current": False,
+            "supersedes_file_id": current.file_id,
+            "activated_at": None,
+        }
+        candidate_data = self._sanitize_data(raw_candidate_data)
+        candidate = KnowledgeFile(file_id=str(data["file_id"]), **candidate_data)
+        session.add(candidate)
+        await session.flush()
+        return candidate
+
+    async def activate_candidate(
+        self,
+        *,
+        kb_id: str,
+        candidate_file_id: str,
+        expected_current_file_id: str,
+        operator_id: str,
+        session: AsyncSession,
+    ) -> tuple[KnowledgeFile, KnowledgeFile]:
+        candidate_result = await session.execute(
+            select(KnowledgeFile)
+            .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == candidate_file_id)
+            .with_for_update()
+        )
+        candidate = candidate_result.scalar_one_or_none()
+        if candidate is None or not candidate.logical_document_id:
+            raise ValueError("候选版本不存在")
+        if candidate.is_current:
+            raise ValueError("候选版本已经生效")
+        if candidate.status not in {"conflict_clear", "conflict_review", "validation_accepted", "validation_review"}:
+            raise ValueError("候选版本尚未完成知识变更分析")
+
+        versions_result = await session.execute(
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.kb_id == kb_id,
+                KnowledgeFile.logical_document_id == candidate.logical_document_id,
+            )
+            .with_for_update()
+        )
+        versions = list(versions_result.scalars().all())
+        current = next((version for version in versions if version.is_current), None)
+        if current is None or current.file_id != expected_current_file_id:
+            raise ValueError("VERSION_CHANGED")
+        if candidate.supersedes_file_id != current.file_id:
+            raise ValueError("VERSION_CHANGED")
+
+        now = utc_now_naive()
+        current.is_current = False
+        current.updated_by = operator_id
+        current.updated_at = now
+        candidate.is_current = True
+        candidate.status = "done"
+        candidate.error_message = None
+        candidate.activated_at = now
+        candidate.updated_by = operator_id
+        candidate.updated_at = now
+        await session.flush()
+        return current, candidate
+
     async def list_by_kb_id(self, kb_id: str) -> list[KnowledgeFile]:
         async with pg_manager.get_async_session_context() as session:
-            result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id))
+            result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.is_current.is_(True),
+                )
+            )
             return list(result.scalars().all())
 
     async def search_documents(
@@ -92,7 +264,11 @@ class KnowledgeFileRepository:
     ) -> tuple[list[dict], int]:
         if not kb_ids:
             return [], 0
-        filters = [KnowledgeFile.kb_id.in_(kb_ids), KnowledgeFile.is_folder.is_(False)]
+        filters = [
+            KnowledgeFile.kb_id.in_(kb_ids),
+            KnowledgeFile.is_folder.is_(False),
+            KnowledgeFile.is_current.is_(True),
+        ]
         if keyword and keyword.strip():
             escaped = keyword.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped.lower()}%"
@@ -163,7 +339,11 @@ class KnowledgeFileRepository:
                     User.username.label("publisher_name"),
                 )
                 .outerjoin(User, User.uid == KnowledgeFile.created_by)
-                .where(KnowledgeFile.kb_id.in_(kb_ids), KnowledgeFile.is_folder.is_(False))
+                .where(
+                    KnowledgeFile.kb_id.in_(kb_ids),
+                    KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
+                )
                 .order_by(KnowledgeFile.view_count.desc(), KnowledgeFile.updated_at.desc(), KnowledgeFile.file_id.asc())
                 .limit(min(max(limit, 1), 30))
             )
@@ -186,7 +366,7 @@ class KnowledgeFileRepository:
         limit: int = 500,
         files_only: bool = False,
     ) -> list[KnowledgeFile]:
-        filters = [KnowledgeFile.kb_id == kb_id]
+        filters = [KnowledgeFile.kb_id == kb_id, KnowledgeFile.is_current.is_(True)]
         if after_file_id:
             filters.append(KnowledgeFile.file_id > after_file_id)
         if files_only:
@@ -219,7 +399,11 @@ class KnowledgeFileRepository:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeFile)
-                .where(KnowledgeFile.kb_id == kb_id, self._parent_condition(parent_id))
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.is_current.is_(True),
+                    self._parent_condition(parent_id),
+                )
                 .order_by(KnowledgeFile.is_folder.desc(), func.lower(KnowledgeFile.filename).asc())
             )
             return list(result.scalars().all())
@@ -235,6 +419,7 @@ class KnowledgeFileRepository:
                 .where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
                     func.lower(KnowledgeFile.filename) == normalized_filename.lower(),
                     or_(KnowledgeFile.status.is_(None), KnowledgeFile.status != "failed"),
                 )
@@ -261,6 +446,7 @@ class KnowledgeFileRepository:
                 .where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
                     func.lower(KnowledgeFile.filename).like(f"%{escaped_pattern}%", escape="\\"),
                 )
                 .order_by(KnowledgeFile.file_id.asc())
@@ -279,6 +465,7 @@ class KnowledgeFileRepository:
                 .where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
                     KnowledgeFile.content_hash == normalized_hash,
                     or_(KnowledgeFile.status.is_(None), KnowledgeFile.status != "failed"),
                 )
@@ -307,6 +494,7 @@ class KnowledgeFileRepository:
         filters = [
             KnowledgeFile.kb_id == kb_id,
             KnowledgeFile.is_folder.is_(False),
+            KnowledgeFile.is_current.is_(True),
             KnowledgeFile.status.in_(normalized_statuses),
         ]
         if after_file_id:
@@ -329,6 +517,7 @@ class KnowledgeFileRepository:
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.filename == filename,
                     KnowledgeFile.is_folder.is_not(True),
+                    KnowledgeFile.is_current.is_(True),
                     or_(KnowledgeFile.status.is_(None), KnowledgeFile.status != "failed"),
                 )
                 .limit(1)
@@ -382,7 +571,10 @@ class KnowledgeFileRepository:
         recursive: bool,
         files_only: bool,
     ) -> list:
-        filters = [KnowledgeFile.kb_id == kb_id]
+        filters = [
+            KnowledgeFile.kb_id == kb_id,
+            KnowledgeFile.is_current.is_(True),
+        ]
         if not recursive:
             filters.append(self._parent_condition(parent_id))
         if files_only:
@@ -407,7 +599,12 @@ class KnowledgeFileRepository:
     ) -> tuple[list[Any], int]:
         offset = (page - 1) * page_size
         parent_condition = self._parent_condition(parent_id)
-        base_filters = [KnowledgeFile.kb_id == kb_id, parent_condition, KnowledgeFile.filename.is_not(None)]
+        base_filters = [
+            KnowledgeFile.kb_id == kb_id,
+            KnowledgeFile.is_current.is_(True),
+            parent_condition,
+            KnowledgeFile.filename.is_not(None),
+        ]
         if path_prefix:
             base_filters.append(KnowledgeFile.filename.like(self._like_prefix(path_prefix), escape="\\"))
 
@@ -543,13 +740,18 @@ class KnowledgeFileRepository:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeFile.parent_id, func.count())
-                .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.parent_id.in_(parent_ids))
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.parent_id.in_(parent_ids),
+                    KnowledgeFile.is_current.is_(True),
+                )
                 .group_by(KnowledgeFile.parent_id)
             )
             return {str(parent_id): int(count or 0) for parent_id, count in result.all() if parent_id}
 
     async def get_kb_file_stats(self, kb_id: str) -> dict[str, int]:
         non_folder = KnowledgeFile.is_folder.is_(False)
+        current = KnowledgeFile.is_current.is_(True)
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(
@@ -580,7 +782,7 @@ class KnowledgeFileRepository:
                             else_=0,
                         )
                     ).label("processing_count"),
-                ).where(KnowledgeFile.kb_id == kb_id)
+                ).where(KnowledgeFile.kb_id == kb_id, current)
             )
             row = result.one()
 
