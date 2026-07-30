@@ -1,0 +1,7 @@
+relations:
+  has_effect:
+    aliases: []
+  has_feature:
+    aliases: []
+  has_tech:
+    aliases: []

@@ -60,26 +60,42 @@ def _product_ontology() -> OntologySpec:
     )
 
 
-def test_load_scaffold_registry():
-    ontology = load_ontology("V4.1")
-
-    assert ontology.registry_id == "V4.1"
-    assert ontology.version == "4.1.1"
-    assert ontology.status == "scaffold"
-    assert ontology.entities == {}
-    assert ontology.relations == {}
-
-
-def test_load_shanli_builtin_preset():
-    entry = resolve_ontology_registry("shanli-preset", "1.0.0")
+def test_load_generic_registry():
+    entry = resolve_ontology_registry("tongyong", "1.0.0")
     ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
 
-    assert entry.name == "善理预设"
+    assert entry.name == "通用"
+    assert ontology.registry_id == "tongyong"
+    assert ontology.version == "1.0.0"
+    assert ontology.status == "active"
+    assert set(ontology.entities) == {"effect", "feature", "product", "technology"}
+    assert set(ontology.relations) == {"has_effect", "has_feature", "has_tech"}
+
+
+def test_load_shanli_builtin_preset_v42():
+    entry = resolve_ontology_registry("shanli-preset", "4.2")
+    ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
+
+    assert entry.name == "善理预设新版"
     assert entry.source == "builtin"
-    assert "Product" in ontology.entities
-    assert "SUPPORTS" in ontology.relations
-    assert ontology.relation_aliases["SUPPORTS"]
-    assert ontology.properties["Hardware"]["screen_size"].unit == "inch"
+    assert ontology.status == "active"
+    assert "SellingPoint" in ontology.entities
+    assert "Capability" in ontology.entities
+    assert "HAS_SELLING_POINT" in ontology.relations
+    assert "COMPATIBLE_WITH" in ontology.relations
+    assert ontology.entity_aliases["SellingPoint"]["国产化"]
+    assert ontology.relation_aliases["HAS_SELLING_POINT"]
+    assert ontology.properties["Positioning"]["market_level"].value_type == "string"
+    assert ontology.properties["Roadmap"]["planned_date"].value_type == "string"
+    assert ontology.properties["Document"]["document_type"].value_type == "string"
+    assert ontology.properties["CompatibleTarget"]["target_type"].value_type == "string"
+
+
+def test_shanli_builtin_has_only_v42():
+    entries = [entry for entry in list_ontology_registries() if entry.registry_id == "shanli-preset"]
+
+    assert [entry.version for entry in entries] == ["4.2"]
+    assert resolve_ontology_registry("shanli-preset").version == "4.2"
 
 
 def test_domain_extension_must_be_structured_yaml():
@@ -459,7 +475,7 @@ def test_detail_and_overwrite_preserve_rules(tmp_path, monkeypatch):
 
 
 def test_builtin_ontology_cannot_be_overwritten():
-    entry = resolve_ontology_registry("shanli-preset", "1.0.0")
+    entry = resolve_ontology_registry("shanli-preset", "4.2")
     detail = get_ontology_registry_detail(entry.registry_id, entry.version, entry.digest)
 
     with pytest.raises(OntologyConflictError, match="内置 Ontology 只读"):

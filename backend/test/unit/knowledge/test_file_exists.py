@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.repositories import knowledge_file_repository as repository_module
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
-from yuxi.storage.postgres.models_knowledge import KnowledgeBase, KnowledgeFile
+from yuxi.storage.postgres.models_knowledge import KnowledgeBase, KnowledgeBaseCategory, KnowledgeFile
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 
@@ -30,6 +30,7 @@ class _AsyncSessionContext:
 async def knowledge_session(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
+        await conn.run_sync(KnowledgeBaseCategory.__table__.create)
         await conn.run_sync(KnowledgeBase.__table__.create)
         await conn.run_sync(KnowledgeFile.__table__.create)
 
@@ -51,8 +52,9 @@ async def test_exists_by_filename_matches_active_file_exactly(knowledge_session)
     )
     knowledge_session.add_all(
         [
-            KnowledgeBase(kb_id="kb_1", name="KB 1", description="", kb_type="milvus"),
-            KnowledgeBase(kb_id="kb_2", name="KB 2", description="", kb_type="milvus"),
+            KnowledgeBaseCategory(id=1, name="其他", is_default=True, is_protected=True),
+            KnowledgeBase(kb_id="kb_1", name="KB 1", description="", kb_type="milvus", category_id=1),
+            KnowledgeBase(kb_id="kb_2", name="KB 2", description="", kb_type="milvus", category_id=1),
             KnowledgeFile(
                 file_id="file_active",
                 kb_id="kb_1",

@@ -119,11 +119,11 @@ class MilvusGraphService:
         params = dict(kb.additional_params or {})
         config = params.get(GRAPH_CONFIG_KEY) or {}
         total_chunks, pending_chunks, indexed_chunks, extraction_result_count, graph_counts = await asyncio.gather(
-            self.chunk_repo.count_by_kb_id(kb_id),
+            self.chunk_repo.count_current_by_kb_id(kb_id),
             self.chunk_repo.count_graph_pending_by_kb_id(kb_id),
             self.chunk_repo.count_graph_indexed_by_kb_id(kb_id),
             self.chunk_repo.count_with_extraction_result_by_kb_id(kb_id),
-            self.graph_repo.count_by_kb_id(kb_id),
+            self.graph_repo.count_by_current_kb_id(kb_id),
         )
         entity_count, relationship_count = graph_counts
 
@@ -161,6 +161,7 @@ class MilvusGraphService:
             "extraction_result_count": extraction_result_count,
             "entity_count": entity_count,
             "relationship_count": relationship_count,
+            "published": entity_count > 0 or relationship_count > 0,
             "build_task_status": build_task_status,
             "build_task_progress": build_task_progress,
         }
@@ -210,7 +211,84 @@ class MilvusGraphService:
             config["updated_by"] = created_by
         additional_params[GRAPH_CONFIG_KEY] = config
         await self.kb_repo.update(kb_id, {"additional_params": additional_params})
+        await self._sync_kb_metadata_cache(kb_id, additional_params)
         return config
+
+    async def extract_file_chunks(self, kb_id: str, file_id: str, *, context=None) -> list[dict[str, Any]]:
+        """抽取指定文件的结构化事实，但不发布到 Neo4j 或图向量库。"""
+        kb = await self._get_milvus_kb(kb_id)
+        config = self._get_locked_config(kb.additional_params or {})
+        extractor = GraphExtractorFactory.create(
+            config["extractor_type"],
+            self._runtime_extractor_options(config),
+        )
+        chunks = await self.chunk_repo.list_by_file_id(file_id)
+        results: list[dict[str, Any]] = []
+        for index, chunk in enumerate(chunks, start=1):
+            if context is not None:
+                await context.raise_if_cancelled()
+            extraction_result = await self._get_chunk_extraction_result(kb_id, chunk, extractor)
+            results.append(
+                {
+                    "file_id": chunk.file_id,
+                    "chunk_id": chunk.chunk_id,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "extraction_result": extraction_result,
+                }
+            )
+            if context is not None:
+                await context.set_progress(index / max(len(chunks), 1) * 100.0)
+        return results
+
+    async def publish_file_graph(self, kb_id: str, file_id: str, *, context=None) -> dict[str, Any]:
+        """发布指定文件的图谱投影，支持尚未成为当前版本的候选文件。"""
+        kb = await self._get_milvus_kb(kb_id)
+        config = self._get_locked_config(kb.additional_params or {})
+        extractor = GraphExtractorFactory.create(
+            config["extractor_type"],
+            self._runtime_extractor_options(config),
+        )
+        chunks = await self.chunk_repo.list_by_file_id(file_id)
+        if not chunks:
+            raise ValueError("候选版本没有可发布的文档分块")
+
+        try:
+            for index, chunk in enumerate(chunks, start=1):
+                if context is not None:
+                    await context.raise_if_cancelled()
+                extraction_result = await self._get_chunk_extraction_result(kb_id, chunk, extractor)
+                entities, triples = await asyncio.to_thread(
+                    self.write_chunk_graph,
+                    kb_id,
+                    chunk,
+                    extraction_result,
+                )
+                await self.graph_repo.upsert_chunk_graph(
+                    kb_id=kb_id,
+                    file_id=chunk.file_id,
+                    chunk_id=chunk.chunk_id,
+                    entities=entities,
+                    triples=triples,
+                )
+                await self.graph_vector_store.insert_missing_graph_records(
+                    kb_id=kb_id,
+                    embedding_model_spec=kb.embedding_model_spec,
+                    entities=entities,
+                    triples=triples,
+                )
+                await self.chunk_repo.mark_graph_indexed(
+                    chunk.chunk_id,
+                    ent_ids=[entity["entity_id"] for entity in entities],
+                )
+                if context is not None:
+                    await context.set_progress(80 + index / len(chunks) * 10, f"发布新版图谱 {index}/{len(chunks)}")
+        except Exception:
+            await self.delete_file_graph(kb_id, file_id)
+            await self.chunk_repo.reset_graph_state_by_file_id(file_id)
+            raise
+
+        return {"file_id": file_id, "published_chunks": len(chunks)}
 
     async def build_pending_chunks(self, kb_id: str, *, batch_size: int, context=None) -> dict[str, Any]:
         kb = await self._get_milvus_kb(kb_id)
@@ -483,6 +561,7 @@ class MilvusGraphService:
             additional_params = dict(kb.additional_params or {})
             additional_params.pop(GRAPH_CONFIG_KEY, None)
             await self.kb_repo.update(kb_id, {"additional_params": additional_params})
+            await self._sync_kb_metadata_cache(kb_id, additional_params)
         return {
             "message": "图谱构建状态已重置",
             "status": "success",
@@ -781,6 +860,13 @@ class MilvusGraphService:
         if (kb.kb_type or "").lower() != "milvus":
             raise ValueError("仅 Milvus 知识库支持独立图谱构建")
         return kb
+
+    async def _sync_kb_metadata_cache(self, kb_id: str, additional_params: dict[str, Any]) -> None:
+        from yuxi.knowledge.runtime import knowledge_base
+
+        kb_instance = knowledge_base.kb_instances.get("milvus")
+        if kb_instance is not None and kb_id in kb_instance.databases_meta:
+            kb_instance.databases_meta[kb_id]["metadata"] = kb_instance.normalize_additional_params(additional_params)
 
     def _get_locked_config(self, additional_params: dict[str, Any]) -> dict[str, Any]:
         config = additional_params.get(GRAPH_CONFIG_KEY) or {}

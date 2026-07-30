@@ -287,6 +287,30 @@ class MilvusKB(KnowledgeBase):
     name = "Milvus"
     description = "基于 Milvus 的生产级向量知识库，适合高性能部署"
 
+    def _get_initial_query_params(self, kb_id: str) -> dict[str, Any]:
+        query_params = self._get_default_query_params(kb_id)
+        query_params["options"].update(
+            {
+                "search_mode": "hybrid",
+                "final_top_k": 10,
+                "similarity_threshold": 0.2,
+                "bm25_top_k": 50,
+                "vector_weight": 0.7,
+                "bm25_weight": 0.3,
+                "bm25_drop_ratio_search": 0.1,
+                "use_graph_retrieval": True,
+                "graph_entity_top_k": 10,
+                "graph_triple_top_k": 20,
+                "graph_max_nodes": 5000,
+                "graph_top_k": 20,
+                "graph_weight": 0.5,
+                "ppr_damping": 0.85,
+                "use_reranker": True,
+                "recall_top_k": 50,
+            }
+        )
+        return query_params
+
     def __init__(self, work_dir: str, **kwargs):
         """
         初始化 Milvus 知识库
@@ -760,6 +784,11 @@ class MilvusKB(KnowledgeBase):
 
         except Exception as e:
             logger.error(f"Indexing failed for {file_id}: {e}")
+            try:
+                await KnowledgeChunkRepository().delete_by_file_id(file_id)
+                await self._delete_file_chunks_from_milvus(collection, file_id)
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean partial chunks for {file_id}: {cleanup_error}")
             update_data = {"status": FileStatus.ERROR_INDEXING, "error_message": str(e)}
             if operator_id:
                 update_data["updated_by"] = operator_id
@@ -916,6 +945,9 @@ class MilvusKB(KnowledgeBase):
                 recall_top_k = max(recall_top_k, final_top_k)
             else:
                 recall_top_k = final_top_k
+            # 候选版和历史版在召回后按 PostgreSQL 当前版本过滤；扩大初始召回，
+            # 避免 Top-K 全被非当前版本占据而错误返回空结果。
+            recall_top_k = max(recall_top_k, final_top_k * 3)
 
             file_expr = await self._build_file_name_expr(kb_id, merged_kwargs.get("file_name"))
             if file_expr:
@@ -1029,6 +1061,23 @@ class MilvusKB(KnowledgeBase):
                     graph_weight = float(merged_kwargs.get("graph_weight", 1.0))
                     retrieved_chunks = self._fuse_chunk_rankings(retrieved_chunks, graph_chunks, graph_weight)
 
+            if not retrieved_chunks:
+                return []
+
+            file_repository = getattr(self, "_file_repository", None)
+            if file_repository is None:
+                from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+                file_repository = KnowledgeFileRepository()
+
+            current_file_ids = await file_repository.list_current_file_ids(
+                [str(chunk.get("metadata", {}).get("file_id") or "") for chunk in retrieved_chunks]
+            )
+            retrieved_chunks = [
+                chunk
+                for chunk in retrieved_chunks
+                if str(chunk.get("metadata", {}).get("file_id") or "") in current_file_ids
+            ]
             if not retrieved_chunks:
                 return []
 
@@ -1215,6 +1264,24 @@ class MilvusKB(KnowledgeBase):
             merge_chunk(chunk, rank, max(graph_weight, 0.0), "graph")
 
         return sorted(fused.values(), key=lambda item: item.get("fusion_score", 0.0), reverse=True)
+
+    async def archive_file_indexes(self, kb_id: str, file_id: str) -> list[str]:
+        """移除历史版本的活动索引，保留 PostgreSQL chunks 和抽取证据。"""
+        warnings: list[str] = []
+        collection = await self._get_milvus_collection(kb_id)
+        if collection:
+            try:
+                await self._delete_file_chunks_from_milvus(collection, file_id)
+            except Exception as exc:
+                warnings.append(f"Milvus 检索向量清理失败: {exc}")
+
+        from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+
+        try:
+            await MilvusGraphService().delete_file_graph(kb_id, file_id)
+        except Exception as exc:
+            warnings.append(f"图谱投影清理失败: {exc}")
+        return warnings
 
     async def delete_file_chunks_only(self, kb_id: str, file_id: str) -> None:
         """仅删除文件的chunks数据，保留元数据（用于更新操作）"""

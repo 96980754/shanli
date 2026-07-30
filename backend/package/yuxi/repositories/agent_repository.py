@@ -23,6 +23,11 @@ GENERAL_PURPOSE_AGENT_NAME = "通用任务"
 GENERAL_PURPOSE_AGENT_DESCRIPTION = (
     "面向没有专用角色约束的一般任务，使用默认运行配置独立完成分析、整理、写作或文件处理。"
 )
+DEFAULT_AGENT_CONTEXT = {
+    "tools": ["ask_user_question", "ocr_parse_file"],
+    "mcps": [],
+    "subagents": [GENERAL_PURPOSE_AGENT_SLUG],
+}
 
 WEB_SEARCH_AGENT_SLUG = "web-search"
 WEB_SEARCH_AGENT_NAME = "网页检索"
@@ -53,8 +58,8 @@ DEEP_RESEARCH_SYSTEM_PROMPT = """你是「深度研究」智能体，负责一�
 你的核心定位是编排者，而不是亲自完成所有检索：把繁重、可独立、可并行的调研与核验工作派发给子智能体，自己专注于规划、调度与最终综合。
 
 工作方式：
-1. 接到研究任务后，先读取 `deep-research` 技能（read_file 其 SKILL.md）获取完整方法论，并严格据此执行。
-2. 问题不明确时先澄清范围，再用待办拆解出可独立调研的子问题。
+1. 接到研究任务后，先澄清范围并制定研究计划，再拆解出可独立调研的子问题。
+2. 用待办持续跟踪研究进度和证据缺口。
 3. 优先用 `task` 工具把子问题并行派发给调研子智能体；仅在澄清范围或补少量零散事实时自己直接检索。
 4. 对关键结论与相互冲突的发现派发核查子智能体核验，未通过的结论不写入正文或明确降级标注。
 5. 证据充分后由你统一综合为结构化、带引用的报告，不要简单拼接子智能体返回的原文。
@@ -204,7 +209,13 @@ class AgentRepository:
             description=DEFAULT_AGENT_DESCRIPTION,
             icon=None,
             pics=[],
-            config_json={"context": {}},
+            config_json={
+                "context": {
+                    "tools": DEFAULT_AGENT_CONTEXT["tools"].copy(),
+                    "mcps": [],
+                    "subagents": DEFAULT_AGENT_CONTEXT["subagents"].copy(),
+                }
+            },
             share_config=DEFAULT_SHARE_CONFIG.copy(),
             is_default=True,
             is_subagent=False,
@@ -312,7 +323,7 @@ class AgentRepository:
             is_subagent=True,
             created_by=created_by,
         )
-        await self._ensure_builtin_agent(
+        deep_research_agent = await self._ensure_builtin_agent(
             slug=DEEP_RESEARCH_AGENT_SLUG,
             backend_id=DEFAULT_AGENT_BACKEND_ID,
             name=DEEP_RESEARCH_AGENT_NAME,
@@ -320,11 +331,38 @@ class AgentRepository:
             config_context={
                 "system_prompt": DEEP_RESEARCH_SYSTEM_PROMPT,
                 "subagents": [RESEARCH_EXPLORER_AGENT_SLUG, FACT_VERIFIER_AGENT_SLUG],
-                "skills": [DEEP_RESEARCH_AGENT_SLUG],
             },
             is_subagent=False,
             created_by=created_by,
         )
+        config_json = dict(deep_research_agent.config_json or {})
+        context = dict(config_json.get("context") or {})
+        changed = False
+        skills = context.get("skills")
+        if isinstance(skills, list) and DEEP_RESEARCH_AGENT_SLUG in skills:
+            remaining_skills = [slug for slug in skills if slug != DEEP_RESEARCH_AGENT_SLUG]
+            if remaining_skills:
+                context["skills"] = remaining_skills
+            else:
+                context.pop("skills", None)
+            changed = True
+        prompt = context.get("system_prompt")
+        legacy_instructions = {
+            "1. 接到研究任务后，先读取 `deep-research` 技能（read_file 其 SKILL.md）获取完整方法论，并严格据此执行。": (
+                "1. 接到研究任务后，先澄清范围并制定研究计划，再拆解出可独立调研的子问题。"
+            ),
+            "2. 问题不明确时先澄清范围，再用待办拆解出可独立调研的子问题。": ("2. 用待办持续跟踪研究进度和证据缺口。"),
+        }
+        if isinstance(prompt, str):
+            updated_prompt = prompt
+            for legacy_instruction, current_instruction in legacy_instructions.items():
+                updated_prompt = updated_prompt.replace(legacy_instruction, current_instruction)
+            if updated_prompt != prompt:
+                context["system_prompt"] = updated_prompt
+                changed = True
+        if changed:
+            config_json["context"] = context
+            await self.update(deep_research_agent, config_json=config_json, updated_by=created_by)
 
     async def list_visible(self, *, user: User, include_subagent_definitions: bool = False) -> list[Agent]:
         """列出用户可见的主智能体，只有显式请求时才包含子智能体定义。"""

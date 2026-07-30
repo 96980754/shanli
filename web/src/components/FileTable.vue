@@ -31,6 +31,15 @@
       </div>
     </a-modal>
 
+    <DocumentVersionHistoryModal
+      v-model:open="versionModalVisible"
+      :kb-id="store.kbId"
+      :file-id="versionFileId"
+      :can-manage="props.canManage"
+      @download="handleDownloadFile"
+      @changed="handleRefresh"
+    />
+
     <!-- 新建文件夹模态框 -->
     <a-modal
       v-model:open="createFolderModalVisible"
@@ -332,6 +341,11 @@
                     重新入库
                   </a-button>
 
+                  <a-button v-if="props.canManage" type="text" block @click="openVersionHistory(row)">
+                    <template #icon><component :is="h(History)" size="14" /></template>
+                    版本历史
+                  </a-button>
+
                   <a-button
                     v-if="props.canDelete"
                     type="text"
@@ -391,7 +405,8 @@ import {
   FileText,
   Database,
   Filter,
-  MoreHorizontal
+  MoreHorizontal,
+  History
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -402,6 +417,14 @@ const props = defineProps({
 })
 
 const store = useDatabaseStore()
+const versionModalVisible = ref(false)
+const versionFileId = ref('')
+
+const openVersionHistory = (record) => {
+  closePopover(record.file_id)
+  versionFileId.value = record.file_id
+  versionModalVisible.value = true
+}
 
 const applyFilters = async (overrides = {}) => {
   const nextStatus = overrides.status ?? statusFilter.value
@@ -1021,6 +1044,7 @@ const formatFileTableTime = (value) => {
 import { parseToShanghai } from '@/utils/time'
 import { buildChunkParamsPayload, isPlainObject } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
+import DocumentVersionHistoryModal from '@/components/DocumentVersionHistoryModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>

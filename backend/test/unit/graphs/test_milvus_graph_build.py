@@ -10,6 +10,7 @@ from yuxi.knowledge.graphs.extractors import (
     LLMGraphExtractor,
     normalize_extraction_result,
 )
+from yuxi.knowledge.graphs.graph_utils import build_graph_payload
 from yuxi.knowledge.graphs.milvus_graph_service import (
     MilvusGraphService,
     OntologySwitchRequiresResetError,
@@ -46,7 +47,94 @@ def test_normalize_extraction_result_defaults_and_validates_refs():
     assert result["entities"][0]["label"] == "Entity"
     assert result["relations"][0]["label"] == "RELATED_TO"
     assert result["relations"][0]["source"] == {"text": "张三", "label": "Entity", "attributes": []}
+    assert result["relations"][0]["polarity"] == "positive"
+    assert result["relations"][0]["assertion_kind"] == "fact"
+    assert result["relations"][0]["evidence"] == {"quote": "", "start_char": None, "end_char": None}
     assert result["metadata"] == {"extractor_type": "llm", "schema_version": 1}
+
+
+def test_normalize_extraction_result_preserves_v2_assertion_evidence():
+    result = normalize_extraction_result(
+        {
+            "entities": [{"text": "产品"}, {"text": "离线模式"}],
+            "relations": [
+                {
+                    "source": "产品",
+                    "target": "离线模式",
+                    "text": "不再支持离线模式",
+                    "polarity": "negative",
+                    "assertion_kind": "retraction",
+                    "evidence": {"quote": "产品不再支持离线模式。", "start_char": 2, "end_char": 13},
+                }
+            ],
+            "metadata": {"schema_version": 2, "provider": "test"},
+        },
+        "llm",
+    )
+
+    relation = result["relations"][0]
+    assert relation["polarity"] == "negative"
+    assert relation["assertion_kind"] == "retraction"
+    assert relation["evidence"] == {"quote": "产品不再支持离线模式。", "start_char": 2, "end_char": 13}
+    assert result["metadata"] == {"schema_version": 2, "provider": "test", "extractor_type": "llm"}
+
+
+def test_llm_graph_extractor_enriches_evidence_offsets_and_v2_metadata():
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+    source_text = "产品支持在线模式。产品不再支持离线模式。"
+
+    result = extractor._enrich_evidence(
+        {
+            "relations": [
+                {"evidence": {"quote": "产品不再支持离线模式。"}},
+                {"evidence": {"quote": "原文不存在"}},
+            ]
+        },
+        source_text,
+    )
+
+    start_char = source_text.index("产品不再支持离线模式。")
+    assert result["metadata"]["schema_version"] == 2
+    assert result["relations"][0]["evidence"] == {
+        "quote": "产品不再支持离线模式。",
+        "start_char": start_char,
+        "end_char": start_char + len("产品不再支持离线模式。"),
+    }
+    assert result["relations"][1]["evidence"] == {
+        "quote": "原文不存在",
+        "start_char": None,
+        "end_char": None,
+    }
+
+
+def test_build_graph_payload_only_publishes_positive_facts():
+    normalized = normalize_extraction_result(
+        {
+            "entities": [{"text": "产品"}, {"text": "在线模式"}, {"text": "离线模式"}],
+            "relations": [
+                {"source": "产品", "target": "在线模式", "text": "支持", "label": "SUPPORTS"},
+                {
+                    "source": "产品",
+                    "target": "离线模式",
+                    "text": "不支持",
+                    "label": "SUPPORTS",
+                    "polarity": "negative",
+                },
+                {
+                    "source": "产品",
+                    "target": "在线模式",
+                    "text": "撤回支持",
+                    "label": "SUPPORTS",
+                    "assertion_kind": "retraction",
+                },
+            ],
+        },
+        "llm",
+    )
+
+    payload = build_graph_payload(normalized)
+
+    assert payload["relations"] == [{"source": "e1", "target": "e2", "text": "支持", "label": "SUPPORTS"}]
 
 
 def test_normalize_extraction_result_accepts_llm_nested_relation_entities():
@@ -173,17 +261,19 @@ def test_llm_graph_extractor_uses_ontology_messages_and_metadata(monkeypatch):
     assert result["metadata"]["ontology_digest"] == "test-digest"
 
 
-def test_llm_graph_extractor_requires_domain_types_for_empty_scaffold():
+def test_llm_graph_extractor_accepts_generic_builtin():
     extractor = LLMGraphExtractor(
         {
             "model_spec": "test/model",
-            "ontology_registry_id": "V4.1",
-            "ontology_version": "4.1.1",
+            "ontology_registry_id": "tongyong",
+            "ontology_version": "1.0.0",
         }
     )
 
-    with pytest.raises(ValueError, match="没有可用实体类型"):
-        extractor.validate_options()
+    extractor.validate_options()
+
+    assert extractor.ontology.registry_id == "tongyong"
+    assert set(extractor.ontology.entities) == {"effect", "feature", "product", "technology"}
 
 
 def test_graph_extractor_factory_supports_only_llm():
@@ -239,12 +329,12 @@ async def test_milvus_graph_service_configure_persists_updated_concurrency():
             return kb
 
     chunk_repo = SimpleNamespace(
-        count_by_kb_id=AsyncMock(return_value=0),
+        count_current_by_kb_id=AsyncMock(return_value=0),
         count_graph_pending_by_kb_id=AsyncMock(return_value=0),
         count_graph_indexed_by_kb_id=AsyncMock(return_value=0),
         count_with_extraction_result_by_kb_id=AsyncMock(return_value=0),
     )
-    graph_repo = SimpleNamespace(count_by_kb_id=AsyncMock(return_value=(3, 2)))
+    graph_repo = SimpleNamespace(count_by_current_kb_id=AsyncMock(return_value=(3, 2)))
     service = MilvusGraphService(kb_repo=Repo(), chunk_repo=chunk_repo, graph_repo=graph_repo)
 
     await service.configure(

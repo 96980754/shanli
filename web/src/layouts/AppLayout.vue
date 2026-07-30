@@ -6,7 +6,6 @@ import {
   ClipboardList,
   LibraryBig,
   Box,
-  FolderKanban,
   PanelLeftClose,
   PanelLeftOpen,
   MessageCirclePlus
@@ -111,15 +110,6 @@ const mainList = computed(() => {
       exactActive: true
     }
   ]
-
-  if (userStore.isAdmin) {
-    items.push({
-      name: '工作区',
-      path: '/workspace',
-      icon: FolderKanban,
-      activeIcon: FolderKanban
-    })
-  }
 
   items.push({
     name: userStore.isAdmin ? '智能体扩展' : '知识库',

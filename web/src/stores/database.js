@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { parseToShanghai } from '@/utils/time'
 import { canSelectFile, isProcessingFile } from '@/utils/knowledge_file_policy'
+import { resolveDocumentParentId } from '@/utils/documentFileNavigation'
 
 export const useDatabaseStore = defineStore('database', () => {
   const router = useRouter()
@@ -346,7 +347,7 @@ export const useDatabaseStore = defineStore('database', () => {
 
     const nextStatus = options.status ?? fileBrowser.status
     const nextRecursive = options.recursive ?? nextStatus !== 'all'
-    const nextParentId = nextRecursive ? null : (options.parentId ?? fileBrowser.parentId)
+    const nextParentId = resolveDocumentParentId(options.parentId, fileBrowser.parentId, nextRecursive)
     const nextPathPrefix = nextRecursive ? '' : (options.pathPrefix ?? fileBrowser.pathPrefix)
     const nextPage = Number(options.page ?? fileBrowser.page) || 1
     const nextPageSize = Number(options.pageSize ?? fileBrowser.pageSize) || 100

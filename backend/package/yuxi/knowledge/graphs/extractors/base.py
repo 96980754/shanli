@@ -74,12 +74,29 @@ def normalize_extraction_result(result: dict[str, Any], extractor_type: str) -> 
         text = str(relation.get("text") or "").strip()
         if not text:
             raise ValueError("relations[].text 不能为空")
+        polarity = str(relation.get("polarity") or "positive").strip().lower()
+        if polarity not in {"positive", "negative"}:
+            raise ValueError("relations[].polarity 必须是 positive 或 negative")
+        assertion_kind = str(relation.get("assertion_kind") or "fact").strip().lower()
+        if assertion_kind not in {"fact", "retraction"}:
+            raise ValueError("relations[].assertion_kind 必须是 fact 或 retraction")
+        evidence = relation.get("evidence") or {}
+        if not isinstance(evidence, dict):
+            raise ValueError("relations[].evidence 必须是对象")
+        quote = str(evidence.get("quote") or "").strip()
         normalized_relations.append(
             {
                 "source": source,
                 "target": target,
                 "text": text,
                 "label": str(relation.get("label") or "RELATED_TO").strip() or "RELATED_TO",
+                "polarity": polarity,
+                "assertion_kind": assertion_kind,
+                "evidence": {
+                    "quote": quote,
+                    "start_char": _optional_int(evidence.get("start_char")),
+                    "end_char": _optional_int(evidence.get("end_char")),
+                },
             }
         )
 
@@ -91,6 +108,15 @@ def normalize_extraction_result(result: dict[str, Any], extractor_type: str) -> 
         "relations": normalized_relations,
         "metadata": metadata,
     }
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("evidence.start_char/end_char 必须是整数") from exc
 
 
 def _normalize_relation_endpoint(

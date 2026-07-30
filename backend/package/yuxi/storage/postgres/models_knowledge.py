@@ -112,12 +112,34 @@ class KnowledgeFile(Base):
     """知识文件模型"""
 
     __tablename__ = "knowledge_files"
-    __table_args__ = (UniqueConstraint("file_id", name="uq_knowledge_files_file_id"),)
+    __table_args__ = (
+        UniqueConstraint("file_id", name="uq_knowledge_files_file_id"),
+        UniqueConstraint(
+            "kb_id",
+            "logical_document_id",
+            "document_version",
+            name="uq_knowledge_files_document_version",
+        ),
+        Index("ix_knowledge_files_logical_document_id", "logical_document_id"),
+        Index(
+            "uq_knowledge_files_current_version",
+            "kb_id",
+            "logical_document_id",
+            unique=True,
+            postgresql_where=text("is_current IS TRUE AND is_folder IS NOT TRUE"),
+            sqlite_where=text("is_current IS TRUE AND is_folder IS NOT TRUE"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_id = Column(String(64), unique=True, nullable=False, index=True)
     kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False, index=True)
     parent_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"), index=True)
+    logical_document_id = Column(String(64))
+    document_version = Column(Integer)
+    is_current = Column(Boolean, nullable=False, default=True)
+    supersedes_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"), index=True)
+    activated_at = Column(DateTime(timezone=True))
     filename = Column(String(512), nullable=False)
     original_filename = Column(String(512))
     file_type = Column(String(64))
@@ -138,6 +160,106 @@ class KnowledgeFile(Base):
     updated_by = Column(String(64))
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+
+
+class KnowledgeConflict(Base):
+    """同一逻辑文档相邻版本之间的结构化知识冲突。"""
+
+    __tablename__ = "knowledge_conflicts"
+    __table_args__ = (
+        UniqueConstraint("new_file_id", "conflict_type", "conflict_key", name="uq_knowledge_conflicts_candidate"),
+        Index("ix_knowledge_conflicts_kb_id", "kb_id"),
+        Index("ix_knowledge_conflicts_logical_document_id", "logical_document_id"),
+        Index("ix_knowledge_conflicts_new_file_id", "new_file_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conflict_id = Column(String(64), unique=True, nullable=False, index=True)
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    logical_document_id = Column(String(64), nullable=False)
+    old_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"))
+    new_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"), nullable=False)
+    conflict_type = Column(String(64), nullable=False)
+    conflict_key = Column(String(512), nullable=False)
+    old_fact = Column(JSON_VALUE, nullable=False)
+    new_fact = Column(JSON_VALUE, nullable=False)
+    status = Column(String(32), nullable=False, default="open", index=True)
+    resolved_by = Column(String(64))
+    resolved_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+
+
+class KnowledgeValidationReport(Base):
+    """候选文档的持久化知识变更验证报告。"""
+
+    __tablename__ = "knowledge_validation_reports"
+    __table_args__ = (
+        UniqueConstraint("candidate_file_id", name="uq_knowledge_validation_reports_candidate"),
+        Index("ix_knowledge_validation_reports_kb_id", "kb_id"),
+        Index("ix_knowledge_validation_reports_logical_document_id", "logical_document_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    report_id = Column(String(64), unique=True, nullable=False, index=True)
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    logical_document_id = Column(String(64), nullable=False)
+    old_file_id = Column(String(64), nullable=False)
+    old_filename = Column(String(512))
+    old_document_version = Column(Integer)
+    candidate_file_id = Column(String(64), nullable=False)
+    candidate_filename = Column(String(512))
+    candidate_document_version = Column(Integer)
+    ontology_registry_id = Column(String(128))
+    ontology_version = Column(String(64))
+    ontology_digest = Column(String(128))
+    extraction_schema_version = Column(Integer)
+    status = Column(String(32), nullable=False, default="processing", index=True)
+    decision = Column(String(32), nullable=False, default="pending")
+    new_count = Column(Integer, nullable=False, default=0)
+    changed_count = Column(Integer, nullable=False, default=0)
+    removed_count = Column(Integer, nullable=False, default=0)
+    conflict_count = Column(Integer, nullable=False, default=0)
+    inconclusive = Column(Boolean, nullable=False, default=False)
+    summary = Column(JSON_VALUE)
+    failure_message = Column(Text)
+    reviewed_by = Column(String(64))
+    reviewed_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    published_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+
+
+class KnowledgeValidationItem(Base):
+    """验证报告中的单条知识变更及其新旧证据快照。"""
+
+    __tablename__ = "knowledge_validation_items"
+    __table_args__ = (
+        UniqueConstraint("report_id", "item_index", name="uq_knowledge_validation_items_report_index"),
+        Index("ix_knowledge_validation_items_report_id", "report_id"),
+        Index("ix_knowledge_validation_items_change_type", "change_type"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    item_id = Column(String(64), unique=True, nullable=False, index=True)
+    report_id = Column(
+        String(64),
+        ForeignKey("knowledge_validation_reports.report_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    item_index = Column(Integer, nullable=False)
+    change_type = Column(String(32), nullable=False)
+    severity = Column(String(32), nullable=False)
+    decision = Column(String(32), nullable=False, default="pending")
+    fact_key = Column(String(512), nullable=False)
+    relation = Column(String(256))
+    old_fact = Column(JSON_VALUE)
+    new_fact = Column(JSON_VALUE)
+    old_evidence = Column(JSON_VALUE)
+    new_evidence = Column(JSON_VALUE)
+    review_required = Column(Boolean, nullable=False, default=False)
+    reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
 
 
 class KnowledgeChunk(Base):

@@ -3,6 +3,7 @@ import os
 import textwrap
 import time
 import traceback
+import uuid
 from datetime import datetime
 from urllib.parse import quote
 
@@ -39,6 +40,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
+from yuxi.services.document_version_service import DocumentVersionService
 from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
@@ -120,6 +122,30 @@ class WorkspaceImportRequest(BaseModel):
 class AddUploadedDocumentsRequest(BaseModel):
     items: list[str]
     params: dict | None = None
+
+
+class DocumentVersionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    content_hash: str
+    filename: str
+    original_filename: str | None = None
+    file_size: int | None = None
+    processing_params: dict | None = None
+
+
+class DocumentVersionActivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_current_file_id: str
+    accept_conflicts: bool = False
+
+
+class DocumentVersionRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class PendingIndexDocumentsRequest(BaseModel):
@@ -308,9 +334,7 @@ def _raise_category_http_error(exc: KnowledgeCategoryError) -> None:
 @knowledge.get("/categories")
 async def list_knowledge_categories(current_user: User = Depends(get_required_user)):
     return {
-        "items": await KnowledgeCategoryService().list_categories(
-            include_usage_count=current_user.role == "superadmin"
-        )
+        "items": await KnowledgeCategoryService().list_categories(include_usage_count=current_user.role == "superadmin")
     }
 
 
@@ -606,6 +630,8 @@ async def get_database_access(kb_id: str, current_user: User = Depends(get_requi
     if not permissions.can_view:
         raise HTTPException(status_code=403, detail="知识库权限不足")
     return {action: bool(getattr(permissions, action)) for action in KNOWLEDGE_PERMISSION_ACTIONS}
+
+
 @knowledge.get("/databases/{kb_id}")
 async def get_database_info(
     kb_id: str,
@@ -857,6 +883,7 @@ async def export_database(
 
 @knowledge.get("/documents/search")
 async def search_documents_across_knowledge_bases(
+    kb_id: str | None = Query(None),
     keyword: str | None = Query(None, max_length=200),
     updated_from: datetime | None = Query(None),
     updated_to: datetime | None = Query(None),
@@ -865,8 +892,14 @@ async def search_documents_across_knowledge_bases(
     page_size: int = Query(30, ge=1, le=100),
     current_user: User = Depends(get_required_user),
 ):
-    """Search document metadata across every knowledge base the user can browse."""
-    kb_ids, kb_names = await _document_browse_kb_ids(current_user)
+    """Search current document metadata across browsable knowledge bases or one manageable knowledge base."""
+    if kb_id:
+        await _require_kb_permission(current_user, kb_id, "can_manage")
+        await _ensure_database_supports_documents(kb_id, "文档版本目标搜索")
+        kb_ids = [kb_id]
+        kb_names = {kb_id: kb_id}
+    else:
+        kb_ids, kb_names = await _document_browse_kb_ids(current_user)
     items, total = await KnowledgeFileRepository().search_documents(
         kb_ids=kb_ids,
         keyword=keyword,
@@ -939,6 +972,268 @@ async def document_file_exists(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"kb_id": kb_id, "filename": normalized_filename, "exists": exists}
+
+
+@knowledge.post("/databases/{kb_id}/documents/{current_file_id}/versions")
+async def create_document_version(
+    kb_id: str,
+    current_file_id: str,
+    request: DocumentVersionCreateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "文档版本更新")
+    if not is_minio_url(request.file_path):
+        raise HTTPException(status_code=400, detail="File source must be a MinIO URL")
+
+    file_id = f"file_{uuid.uuid4().hex[:12]}"
+    service = DocumentVersionService()
+    try:
+        candidate = await service.create_candidate(
+            kb_id=kb_id,
+            current_file_id=current_file_id,
+            uploaded={
+                "file_id": file_id,
+                "filename": request.filename,
+                "original_filename": request.original_filename,
+                "file_type": request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "",
+                "path": request.file_path,
+                "minio_url": request.file_path,
+                "content_hash": request.content_hash,
+                "file_size": request.file_size,
+                "processing_params": request.processing_params or {},
+            },
+            operator_id=current_user.uid,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"SAME_CONTENT", "UPDATE_IN_PROGRESS", "VERSION_CHANGED"}:
+            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        raise HTTPException(status_code=400, detail=code)
+
+    async def run_version_update(context: TaskContext):
+        result = await service.process_candidate(
+            kb_id=kb_id,
+            candidate_file_id=candidate.file_id,
+            operator_id=current_user.uid,
+            context=context,
+        )
+        await context.set_result(result)
+        status_messages = {
+            "review_required": "知识变更需要人工审核，旧版继续生效",
+            "auto_accepted": "知识变更分析通过，新版已生效",
+            "failed": "知识变更分析失败，旧版继续生效",
+        }
+        await context.set_progress(100, status_messages.get(result.get("status"), "版本更新未完成"))
+        return result
+
+    try:
+        database = await knowledge_base.get_database_info(kb_id)
+        task = await tasker.enqueue(
+            name=f"文档版本更新 ({database['name']})",
+            task_type="knowledge_document_version",
+            payload={
+                "kb_id": kb_id,
+                "candidate_file_id": candidate.file_id,
+                "logical_document_id": candidate.logical_document_id,
+            },
+            coroutine=run_version_update,
+        )
+    except Exception as exc:
+        await KnowledgeFileRepository().update_fields(
+            file_id=candidate.file_id,
+            kb_id=kb_id,
+            data={"status": "version_task_failed", "error_message": str(exc), "updated_by": current_user.uid},
+        )
+        raise HTTPException(status_code=500, detail="版本更新任务提交失败，请重新上传")
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "candidate_file_id": candidate.file_id,
+        "logical_document_id": candidate.logical_document_id,
+        "document_version": candidate.document_version,
+    }
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/versions")
+async def list_document_versions(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    versions = await KnowledgeFileRepository().list_versions(kb_id=kb_id, file_id=file_id)
+    if not versions:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    service = DocumentVersionService()
+    reports = await service.validation_repo.list_by_candidates(
+        kb_id=kb_id,
+        candidate_file_ids=[item.file_id for item in versions],
+    )
+    reports_by_candidate = {item.candidate_file_id: item for item in reports}
+    return {
+        "logical_document_id": versions[0].logical_document_id,
+        "versions": [
+            {
+                "file_id": item.file_id,
+                "document_version": item.document_version,
+                "is_current": item.is_current,
+                "status": item.status,
+                "filename": item.filename,
+                "content_hash": item.content_hash,
+                "supersedes_file_id": item.supersedes_file_id,
+                "created_at": item.created_at,
+                "activated_at": item.activated_at,
+                "error_message": item.error_message,
+                "validation_report": (
+                    {
+                        "report_id": reports_by_candidate[item.file_id].report_id,
+                        "status": reports_by_candidate[item.file_id].status,
+                        "decision": reports_by_candidate[item.file_id].decision,
+                        "new_count": reports_by_candidate[item.file_id].new_count,
+                        "changed_count": reports_by_candidate[item.file_id].changed_count,
+                        "removed_count": reports_by_candidate[item.file_id].removed_count,
+                        "conflict_count": reports_by_candidate[item.file_id].conflict_count,
+                        "inconclusive": reports_by_candidate[item.file_id].inconclusive,
+                    }
+                    if item.file_id in reports_by_candidate
+                    else None
+                ),
+            }
+            for item in versions
+        ],
+    }
+
+
+@knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/validation-report")
+async def get_document_validation_report(
+    kb_id: str,
+    candidate_file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    repository = DocumentVersionService().validation_repo
+    report = await repository.get_by_candidate(kb_id=kb_id, candidate_file_id=candidate_file_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="验证报告不存在")
+    items = await repository.list_items(report_id=report.report_id)
+    return {
+        "report": {
+            "report_id": report.report_id,
+            "kb_id": report.kb_id,
+            "logical_document_id": report.logical_document_id,
+            "old_file_id": report.old_file_id,
+            "old_filename": report.old_filename,
+            "old_document_version": report.old_document_version,
+            "candidate_file_id": report.candidate_file_id,
+            "candidate_filename": report.candidate_filename,
+            "candidate_document_version": report.candidate_document_version,
+            "ontology_registry_id": report.ontology_registry_id,
+            "ontology_version": report.ontology_version,
+            "ontology_digest": report.ontology_digest,
+            "extraction_schema_version": report.extraction_schema_version,
+            "status": report.status,
+            "decision": report.decision,
+            "new_count": report.new_count,
+            "changed_count": report.changed_count,
+            "removed_count": report.removed_count,
+            "conflict_count": report.conflict_count,
+            "inconclusive": report.inconclusive,
+            "summary": report.summary,
+            "failure_message": report.failure_message,
+            "reviewed_by": report.reviewed_by,
+            "reviewed_at": report.reviewed_at,
+            "completed_at": report.completed_at,
+            "published_at": report.published_at,
+            "created_at": report.created_at,
+            "updated_at": report.updated_at,
+        },
+        "items": [
+            {
+                "item_id": item.item_id,
+                "item_index": item.item_index,
+                "change_type": item.change_type,
+                "severity": item.severity,
+                "decision": item.decision,
+                "fact_key": item.fact_key,
+                "relation": item.relation,
+                "old_fact": item.old_fact,
+                "new_fact": item.new_fact,
+                "old_evidence": item.old_evidence,
+                "new_evidence": item.new_evidence,
+                "review_required": item.review_required,
+                "reason": item.reason,
+            }
+            for item in items
+        ],
+    }
+
+
+@knowledge.post("/databases/{kb_id}/validation-reports/{report_id}/reject")
+async def reject_document_validation_report(
+    kb_id: str,
+    report_id: str,
+    request: DocumentVersionRejectRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await DocumentVersionService().reject_candidate(
+            kb_id=kb_id,
+            report_id=report_id,
+            operator_id=current_user.uid,
+            reason=request.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/conflicts")
+async def list_document_conflicts(
+    kb_id: str,
+    candidate_file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    service = DocumentVersionService()
+    conflicts = await service.conflict_repo.list_by_candidate(kb_id=kb_id, new_file_id=candidate_file_id)
+    return {
+        "candidate_file_id": candidate_file_id,
+        "conflicts": [
+            {
+                "conflict_id": item.conflict_id,
+                "conflict_type": item.conflict_type,
+                "conflict_key": item.conflict_key,
+                "old_fact": item.old_fact,
+                "new_fact": item.new_fact,
+                "status": item.status,
+            }
+            for item in conflicts
+        ],
+    }
+
+
+@knowledge.post("/databases/{kb_id}/documents/{candidate_file_id}/activate")
+async def activate_document_version(
+    kb_id: str,
+    candidate_file_id: str,
+    request: DocumentVersionActivateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await DocumentVersionService().activate_candidate(
+            kb_id=kb_id,
+            candidate_file_id=candidate_file_id,
+            expected_current_file_id=request.expected_current_file_id,
+            operator_id=current_user.uid,
+            accept_conflicts=request.accept_conflicts,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"VERSION_CHANGED", "CONFLICT_REVIEW_REQUIRED"}:
+            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        raise HTTPException(status_code=400, detail=code)
 
 
 @knowledge.post("/databases/{kb_id}/documents")

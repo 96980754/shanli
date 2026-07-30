@@ -15,6 +15,7 @@
       :is-folder-mode="isFolderUploadMode"
       :mode="addFilesMode"
       :can-upload="kbPermissions.can_upload"
+      :can-manage="kbPermissions.can_manage"
       :defer-processing="!userStore.isAdmin"
       @success="onFileUploadSuccess"
     />

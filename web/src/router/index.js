@@ -57,7 +57,7 @@ const router = createRouter({
           path: '',
           name: 'WorkspaceComp',
           component: () => import('../views/WorkspaceView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { keepAlive: true, requiresAuth: true, requiresWorkspaceAccess: true }
         }
       ]
     },
@@ -111,16 +111,6 @@ const router = createRouter({
               }
             },
             {
-              path: 'mcp/:slug',
-              name: 'ExtensionMcpDetail',
-              component: () => import('../components/extensions/McpDetailView.vue'),
-              meta: {
-                keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
-              }
-            },
-            {
               path: 'skill/:slug',
               name: 'ExtensionSkillDetail',
               component: () => import('../components/extensions/SkillDetailView.vue'),
@@ -149,6 +139,7 @@ router.beforeEach(async (to) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
   const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
   const requiresSuperAdmin = to.matched.some((record) => record.meta.requiresSuperAdmin)
+  const requiresWorkspaceAccess = to.matched.some((record) => record.meta.requiresWorkspaceAccess)
 
   const userStore = useUserStore()
 
@@ -202,6 +193,11 @@ router.beforeEach(async (to) => {
       console.error('获取智能体信息失败:', error)
       return '/agent'
     }
+  }
+
+  // 工作区已从产品入口关闭
+  if (requiresWorkspaceAccess) {
+    return '/agent'
   }
 
   // 如果用户已登录但访问登录页，优先返回指定页面，否则进入对话页
