@@ -66,6 +66,12 @@ from yuxi.services.document_qa_service import (
     QAVersionConflict,
     enqueue_document_qa_generation,
 )
+from yuxi.services.knowledge_conflict_service import (
+    KnowledgeConflictError,
+    KnowledgeConflictNotFound,
+    KnowledgeConflictService,
+    KnowledgeConflictVersionError,
+)
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
@@ -227,6 +233,40 @@ class QABatchConfirmItem(BaseModel):
 
 class QABatchConfirmRequest(BaseModel):
     items: list[QABatchConfirmItem] = Field(min_length=1, max_length=500)
+
+
+class KnowledgeAssertionEvaluateRequest(BaseModel):
+    entity_type: str = Field(min_length=1, max_length=128)
+    entity_name: str = Field(min_length=1, max_length=512)
+    linked_entity_id: str | None = Field(default=None, max_length=64)
+    predicate: str = Field(min_length=1, max_length=128)
+    raw_value: str | int | float | list[str] | list[int] | list[float]
+    value_type: str = Field(min_length=1, max_length=32)
+    unit: str | None = Field(default=None, max_length=32)
+    valid_from: str | None = None
+    valid_to: str | None = None
+    product_version: str | None = Field(default=None, max_length=128)
+    file_id: str = Field(min_length=1, max_length=64)
+    chunk_id: str = Field(min_length=1, max_length=128)
+    evidence: str = Field(min_length=1, max_length=5000)
+    extraction_method: str = Field(default="manual", min_length=1, max_length=64)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    link_hints: dict = Field(default_factory=dict)
+
+
+class KnowledgeConflictResolveRequest(BaseModel):
+    resolution: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=2000)
+    target_entity_id: str | None = Field(default=None, max_length=64)
+
+
+class KnowledgeConflictBatchResolveItem(KnowledgeConflictResolveRequest):
+    conflict_id: str = Field(min_length=1, max_length=64)
+
+
+class KnowledgeConflictBatchResolveRequest(BaseModel):
+    items: list[KnowledgeConflictBatchResolveItem] = Field(min_length=1, max_length=200)
 
 
 media_types = {
@@ -725,6 +765,120 @@ async def delete_database(kb_id: str, current_user: User = Depends(get_admin_use
     except Exception as e:
         logger.error(f"删除数据库失败 {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=400, detail=f"删除数据库失败: {e}")
+
+
+def _raise_knowledge_conflict_http_error(error: KnowledgeConflictError) -> None:
+    if isinstance(error, KnowledgeConflictNotFound):
+        raise HTTPException(status_code=404, detail="知识冲突资源不存在") from error
+    if isinstance(error, KnowledgeConflictVersionError):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "knowledge_conflict_version",
+                "message": "该冲突已被其他审核人更新，请刷新后重试",
+            },
+        ) from error
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "code": "knowledge_conflict_invalid",
+            "message": sanitize_processing_error(error),
+        },
+    ) from error
+
+
+@knowledge.get("/databases/{kb_id}/conflicts")
+async def list_knowledge_conflicts(
+    kb_id: str,
+    status: str | None = Query(default=None),
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    payload = await KnowledgeConflictService().list_conflicts(kb_id=kb_id, status=status)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload
+
+
+@knowledge.get("/databases/{kb_id}/conflicts/{conflict_id}")
+async def get_knowledge_conflict(
+    kb_id: str,
+    conflict_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    try:
+        payload = await KnowledgeConflictService().get_conflict(kb_id=kb_id, conflict_id=conflict_id)
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload
+
+
+@knowledge.post("/databases/{kb_id}/assertions/evaluate")
+async def evaluate_knowledge_assertion(
+    kb_id: str,
+    request: KnowledgeAssertionEvaluateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().evaluate(
+            kb_id=kb_id,
+            payload=request.model_dump(),
+            operator_id=current_user.uid,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/resolve")
+async def resolve_knowledge_conflict(
+    kb_id: str,
+    conflict_id: str,
+    request: KnowledgeConflictResolveRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().resolve(
+            kb_id=kb_id,
+            conflict_id=conflict_id,
+            resolution=request.resolution,
+            expected_version=request.version,
+            reason=request.reason,
+            operator_id=current_user.uid,
+            target_entity_id=request.target_entity_id,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/conflicts/batch-resolve")
+async def batch_resolve_knowledge_conflicts(
+    kb_id: str,
+    request: KnowledgeConflictBatchResolveRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().batch_resolve(
+            kb_id=kb_id,
+            items=[item.model_dump() for item in request.items],
+            operator_id=current_user.uid,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+
+
+@knowledge.get("/databases/{kb_id}/entity-link-candidates")
+async def list_entity_link_candidates(
+    kb_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    payload = await KnowledgeConflictService().list_entity_link_candidates(kb_id=kb_id)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload
 
 
 @knowledge.get("/databases/{kb_id}/graph-build/status")

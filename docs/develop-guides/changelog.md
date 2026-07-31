@@ -15,6 +15,7 @@
 
 ### 开发记录
 
+- 新增知识级冲突发现与人工处理 MVP：正式文档中的 Product/Specification 知识先保存为带 chunk 证据和正文版本的候选 assertion，经保守实体链接、单位/枚举标准化后分类为重复、补全、更新、冲突、实体歧义或无效；新增 can_view/can_manage 审核接口和三栏对照弹窗，人工裁决使用乐观锁并保留图谱投影待发布状态，不会在审核前覆盖在线知识。Neo4j 与图 Milvus 发布适配器尚未接入。
 - 扩展知识库文档导入格式：新增 DOC/XLS/PPT 旧 Office 兼容，通过隔离 LibreOffice profile 转换为 DOCX/XLSX/PPTX 后复用现有结构化解析链；新增 GIF/WebP 首帧解析，经签名、像素和帧数校验后规范化为 PNG 并复用 OCR 路由。支持格式接口按运行时 LibreOffice/Pillow 能力返回可用状态，转换或解析失败不生成空内容、chunks 或向量。
 - 新增文档 QA 知识对闭环：仅基于当前 active、已确认且已入库文档的正式 chunks 生成带原文证据的草稿，支持人工编辑、拒绝、乐观锁确认及正文换版过期提示；确认后复用知识库现有 Milvus collection 建立可检索投影，草稿和同步失败记录不参与检索，Provider 未配置或生成失败不影响文档 indexed 状态。
 - 新增文档信息增强闭环：仅对当前 active、已确认且已入库的正式 Markdown 生成摘要、关键词和自由标签，结果绑定正文 SHA-256 与清洗版本；生成任务复用现有 Tasker，Provider、模型和超时由后端配置决定，未配置或失败不会改变文档 indexed 状态。新增 can_view/can_manage 权限接口和统一前端弹窗，支持人工编辑、乐观锁、按组件重新生成、显式覆盖人工内容，以及正文换版后保留人工结果并标记 possibly_outdated。

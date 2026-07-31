@@ -178,6 +178,12 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "original_markdown_file VARCHAR(1024)" in statements
     assert "cleaning_draft_file VARCHAR(1024)" in statements
     assert "cleaning_metadata JSONB" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_assertions" in statements
+    assert "CREATE TABLE IF NOT EXISTS entity_link_candidates" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_conflicts" in statements
+    assert "incoming_assertion_id VARCHAR(64) NOT NULL UNIQUE" in statements
+    assert "publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'" in statements
+    assert "ix_knowledge_conflicts_kb_status" in statements
     assert "cleaning_version INTEGER NOT NULL DEFAULT 0" in statements
     assert "confirmed_at TIMESTAMPTZ" in statements
     assert "confirmed_by VARCHAR(64)" in statements

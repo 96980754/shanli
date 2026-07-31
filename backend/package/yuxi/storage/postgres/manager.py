@@ -405,6 +405,91 @@ class PostgresManager(metaclass=SingletonMeta):
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS knowledge_assertions (
+                id SERIAL PRIMARY KEY,
+                assertion_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                entity_type VARCHAR(128) NOT NULL,
+                entity_name VARCHAR(512) NOT NULL,
+                linked_entity_id VARCHAR(64)
+                    REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL,
+                predicate VARCHAR(128) NOT NULL,
+                raw_value JSONB NOT NULL,
+                normalized_value JSONB,
+                value_type VARCHAR(32) NOT NULL,
+                unit VARCHAR(32),
+                valid_from TIMESTAMPTZ,
+                valid_to TIMESTAMPTZ,
+                product_version VARCHAR(128),
+                file_id VARCHAR(64) NOT NULL REFERENCES knowledge_files(file_id) ON DELETE CASCADE,
+                chunk_id VARCHAR(128) NOT NULL REFERENCES knowledge_chunks(chunk_id) ON DELETE CASCADE,
+                evidence TEXT NOT NULL,
+                cleaning_version INTEGER NOT NULL,
+                content_hash VARCHAR(128) NOT NULL,
+                extraction_method VARCHAR(64) NOT NULL,
+                confidence DOUBLE PRECISION,
+                status VARCHAR(32) NOT NULL DEFAULT 'candidate',
+                source VARCHAR(32) NOT NULL DEFAULT 'generated',
+                published_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS entity_link_candidates (
+                id SERIAL PRIMARY KEY,
+                link_id VARCHAR(64) NOT NULL UNIQUE,
+                assertion_id VARCHAR(64) NOT NULL
+                    REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                candidate_name VARCHAR(512) NOT NULL,
+                normalized_name VARCHAR(512) NOT NULL,
+                target_entity_id VARCHAR(64)
+                    REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL,
+                target_entity_name VARCHAR(512),
+                matching_rules JSONB NOT NULL,
+                similarity DOUBLE PRECISION,
+                aliases JSONB,
+                status VARCHAR(32) NOT NULL,
+                resolved_by VARCHAR(64),
+                resolved_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_conflicts (
+                id SERIAL PRIMARY KEY,
+                conflict_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                entity_id VARCHAR(64)
+                    REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL,
+                predicate VARCHAR(128) NOT NULL,
+                existing_assertion_ids JSONB NOT NULL,
+                incoming_assertion_id VARCHAR(64) NOT NULL UNIQUE
+                    REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE,
+                conflict_type VARCHAR(64) NOT NULL,
+                classification VARCHAR(32) NOT NULL,
+                existing_value JSONB,
+                incoming_value JSONB NOT NULL,
+                normalized_existing_value JSONB,
+                normalized_incoming_value JSONB,
+                detection_rules JSONB NOT NULL,
+                severity VARCHAR(16) NOT NULL,
+                requires_review BOOLEAN NOT NULL DEFAULT TRUE,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                resolution VARCHAR(64),
+                resolution_reason TEXT,
+                resolved_by VARCHAR(64),
+                resolved_at TIMESTAMPTZ,
+                publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested',
+                publish_error TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                version INTEGER NOT NULL DEFAULT 1
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS knowledge_graph_entity_mentions (
                 id SERIAL PRIMARY KEY,
                 entity_id VARCHAR(64) NOT NULL REFERENCES knowledge_graph_entities(entity_id) ON DELETE CASCADE,
@@ -472,6 +557,27 @@ class PostgresManager(metaclass=SingletonMeta):
                 "ON knowledge_graph_entities(entity_id)"
             ),
             "CREATE INDEX IF NOT EXISTS ix_knowledge_graph_entities_kb_id ON knowledge_graph_entities(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_assertions_kb_entity "
+                "ON knowledge_assertions(kb_id, linked_entity_id)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_assertions_file_chunk "
+                "ON knowledge_assertions(file_id, chunk_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_assertions_status ON knowledge_assertions(status)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_entity_link_candidates_assertion_id "
+                "ON entity_link_candidates(assertion_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_entity_link_candidates_kb_id ON entity_link_candidates(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_kb_status ON knowledge_conflicts(kb_id, status)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_entity_predicate "
+                "ON knowledge_conflicts(entity_id, predicate)"
+            ),
             (
                 "CREATE INDEX IF NOT EXISTS ix_knowledge_graph_entity_mentions_kb_id "
                 "ON knowledge_graph_entity_mentions(kb_id)"

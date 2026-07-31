@@ -502,6 +502,33 @@ export const documentApi = {
 // === 图谱构建分组 ===
 // =============================================================================
 
+export const knowledgeConflictApi = {
+  list: async (kbId, status = '') => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    return apiGet(`/api/knowledge/databases/${kbId}/conflicts${query}`)
+  },
+
+  get: async (kbId, conflictId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}`)
+  },
+
+  evaluate: async (kbId, assertion) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/assertions/evaluate`, assertion)
+  },
+
+  resolve: async (kbId, conflictId, resolution) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}/resolve`, resolution)
+  },
+
+  batchResolve: async (kbId, items) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/batch-resolve`, { items })
+  },
+
+  listEntityLinkCandidates: async (kbId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/entity-link-candidates`)
+  }
+}
+
 function graphBuildUrl(kbId, action) {
   return `/api/knowledge/databases/${kbId}/graph-build/${action}`
 }

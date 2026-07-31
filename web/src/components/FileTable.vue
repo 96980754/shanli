@@ -67,6 +67,12 @@
       @changed="handleRefresh"
     />
 
+    <KnowledgeConflictModal
+      v-model:open="conflictModalVisible"
+      :kb-id="store.kbId"
+      @changed="handleRefresh"
+    />
+
     <FileBrowserTable
       class="knowledge-file-browser"
       :rows="files"
@@ -91,6 +97,14 @@
       <template #toolbar-actions>
         <div class="panel-actions">
           <div class="panel-actions-default">
+            <a-button
+              type="text"
+              class="panel-action-btn"
+              title="知识冲突审核"
+              @click="conflictModalVisible = true"
+            >
+              <template #icon><ShieldAlert size="16" /></template>
+            </a-button>
             <a-dropdown trigger="click">
               <a-button
                 type="text"
@@ -443,6 +457,7 @@ import {
   Filter,
   MoreHorizontal,
   MessagesSquare,
+  ShieldAlert,
   Sparkles
 } from 'lucide-vue-next'
 
@@ -576,6 +591,7 @@ const enrichmentModalVisible = ref(false)
 const enrichmentFileId = ref('')
 const qaModalVisible = ref(false)
 const qaFileId = ref('')
+const conflictModalVisible = ref(false)
 const closePopover = (fileId) => {
   if (fileId) {
     popoverVisibleMap.value[fileId] = false
@@ -1128,6 +1144,7 @@ import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
 import DocumentEnrichmentModal from '@/components/DocumentEnrichmentModal.vue'
 import DocumentQAModal from '@/components/DocumentQAModal.vue'
+import KnowledgeConflictModal from '@/components/KnowledgeConflictModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>
