@@ -115,7 +115,7 @@ class DocumentIngestionService:
         replace_file_id: str | None = None,
     ) -> UploadDecision:
         strategy = self._validate_strategy(duplicate_strategy)
-        incoming = {"filename": filename, "size": file_size}
+        incoming = {"filename": filename, "size": file_size, "content_hash": content_hash}
 
         exact_records = await self.file_repository.list_by_content_hash(kb_id=kb_id, content_hash=content_hash)
         if exact_records:
@@ -315,7 +315,7 @@ class DocumentIngestionService:
             )
             raise DuplicateConflictError(
                 conflict_type=conflict_type,
-                incoming={"filename": filename, "size": file_size},
+                incoming={"filename": filename, "size": file_size, "content_hash": content_hash},
                 conflicts=self._serialize_conflicts(list(outcome.conflicts)),
                 allowed_strategies=allowed,
                 message=message,
@@ -652,6 +652,7 @@ class DocumentIngestionService:
                 "file_id": record.file_id,
                 "filename": record.filename,
                 "size": int(record.file_size or 0),
+                "content_hash": record.content_hash,
                 "status": record.status,
                 "is_active": bool(record.is_active),
                 "created_at": utc_isoformat(record.created_at) if record.created_at else None,

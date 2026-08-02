@@ -421,6 +421,69 @@
       </div>
     </div>
   </a-modal>
+
+  <a-modal
+    :open="duplicateConflictOpen"
+    title="处理同名文件"
+    width="680px"
+    :closable="!duplicateConflictPending"
+    :mask-closable="false"
+    @cancel="cancelDuplicateConflict"
+  >
+    <div v-if="duplicateConflict" class="duplicate-resolution">
+      <div class="duplicate-resolution-grid">
+        <section class="duplicate-resolution-card">
+          <h4>当前文件</h4>
+          <dl>
+            <dt>文件名</dt>
+            <dd>{{ duplicateConflictExisting?.filename || '-' }}</dd>
+            <dt>上传时间</dt>
+            <dd>{{ formatFileTime(duplicateConflictExisting?.created_at) || '-' }}</dd>
+            <dt>文件大小</dt>
+            <dd>{{ formatFileSize(duplicateConflictExisting?.size) }}</dd>
+            <dt>内容标识</dt>
+            <dd>{{ shortContentHash(duplicateConflictExisting?.content_hash) }}</dd>
+            <dt>当前状态</dt>
+            <dd>{{ duplicateConflictExisting?.status || '-' }}</dd>
+          </dl>
+        </section>
+        <section class="duplicate-resolution-card">
+          <h4>新文件</h4>
+          <dl>
+            <dt>文件名</dt>
+            <dd>{{ duplicateConflict.detail.incoming?.filename || '-' }}</dd>
+            <dt>文件大小</dt>
+            <dd>{{ formatFileSize(duplicateConflict.detail.incoming?.size) }}</dd>
+            <dt>内容标识</dt>
+            <dd>{{ shortContentHash(duplicateConflict.detail.incoming?.content_hash) }}</dd>
+          </dl>
+        </section>
+      </div>
+      <p class="duplicate-resolution-tip">
+        两个文件名称相同但内容不同。请选择保留两份，或明确确认替换当前文件。
+      </p>
+    </div>
+    <template #footer>
+      <a-button :disabled="duplicateConflictPending" @click="cancelDuplicateConflict"
+        >取消</a-button
+      >
+      <a-button
+        :loading="duplicateConflictPending"
+        :disabled="duplicateConflictPending"
+        @click="resolveDuplicateConflict(DUPLICATE_STRATEGIES.KEEP_BOTH)"
+      >
+        保留两份
+      </a-button>
+      <a-button
+        danger
+        type="primary"
+        :disabled="duplicateConflictPending"
+        @click="confirmReplacement"
+      >
+        替换现有文件
+      </a-button>
+    </template>
+  </a-modal>
 </template>
 
 <script setup>
@@ -452,8 +515,10 @@ import { buildChunkParamsPayload } from '@/utils/chunkUtils'
 import {
   DUPLICATE_STRATEGIES,
   buildKnowledgeUploadUrl,
+  buildDuplicateResolution,
   getDuplicateConflictDetail,
   getDuplicateConflictMessage,
+  getReplacementInProgressDetail,
   getSafeUploadErrorMessage
 } from '@/utils/document_duplicate_policy'
 import {
@@ -636,6 +701,13 @@ const MAX_UPLOAD_CONCURRENCY = 10
 
 // 文件列表
 const fileList = ref([])
+const duplicateConflictQueue = ref([])
+const duplicateConflictPending = ref(false)
+const duplicateConflict = computed(() => duplicateConflictQueue.value[0] || null)
+const duplicateConflictOpen = computed(() => Boolean(duplicateConflict.value))
+const duplicateConflictExisting = computed(
+  () => duplicateConflict.value?.detail?.conflicts?.[0] || null
+)
 
 const uploadQueue = ref([])
 const activeUploadCount = ref(0)
@@ -1214,6 +1286,65 @@ const formatFileTime = (timestamp) => {
   }
 }
 
+const shortContentHash = (value) => (typeof value === 'string' && value ? value.slice(0, 12) : '-')
+
+const removeUploadFile = (file) => {
+  if (!file?.uid) return
+  fileList.value = fileList.value.filter((item) => item.uid !== file.uid)
+  delete uploadTaskStatus.value[file.uid]
+  delete uploadTaskProgress.value[file.uid]
+}
+
+const cancelDuplicateConflict = () => {
+  if (duplicateConflictPending.value) return
+  removeUploadFile(duplicateConflict.value?.task?.options?.file)
+  duplicateConflictQueue.value.shift()
+}
+
+const enqueueDuplicateConflict = (detail, task) => {
+  const uid = task.options.file?.uid
+  if (duplicateConflictQueue.value.some((item) => item.task.options.file?.uid === uid)) return
+  duplicateConflictQueue.value.push({ detail, task })
+}
+
+const retryDuplicateUpload = (resolution) => {
+  const current = duplicateConflict.value
+  if (!current?.task || !resolution || duplicateConflictPending.value) return
+  duplicateConflictPending.value = true
+  const retryTask = {
+    ...current.task,
+    xhr: null,
+    canceled: false,
+    conflictRetry: true,
+    duplicateStrategy: resolution.duplicateStrategy,
+    replaceFileId: resolution.replaceFileId
+  }
+  const uid = retryTask.options.file?.uid
+  if (uid) {
+    uploadTaskStatus.value[uid] = 'queued'
+    uploadTaskProgress.value[uid] = 0
+  }
+  uploadQueue.value.push(retryTask)
+  processUploadQueue()
+}
+
+const resolveDuplicateConflict = (strategy) => {
+  if (duplicateConflictPending.value) return
+  retryDuplicateUpload(buildDuplicateResolution(duplicateConflict.value?.detail, strategy))
+}
+
+const confirmReplacement = () => {
+  if (duplicateConflictPending.value) return
+  Modal.confirm({
+    title: '确认替换现有文件',
+    content: '新版本完成解析和索引前，当前文件仍保持可用。确定继续替换吗？',
+    okText: '确认替换',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => resolveDuplicateConflict(DUPLICATE_STRATEGIES.REPLACE)
+  })
+}
+
 const showSameNameFilesInUploadArea = (files) => {
   sameNameFiles.value = files
   // 可以在这里添加其他逻辑，比如自动滚动到提示区域
@@ -1330,6 +1461,9 @@ const processUploadQueue = () => {
         // 错误已经在 runUploadTask 内处理，这里只保证队列继续消费
       })
       .finally(() => {
+        if (task.conflictRetry) {
+          duplicateConflictPending.value = false
+        }
         activeUploadCount.value -= 1
         processUploadQueue()
       })
@@ -1401,6 +1535,11 @@ const runUploadTask = (task) => {
             uploadTaskStatus.value[fileUid] = 'done'
             uploadTaskProgress.value[fileUid] = 100
           }
+          if (task.conflictRetry) {
+            duplicateConflictQueue.value = duplicateConflictQueue.value.filter(
+              (item) => item.task !== task && item.task.options.file?.uid !== task.options.file?.uid
+            )
+          }
           onSuccess(response, xhr)
           resolve()
         } catch (error) {
@@ -1420,6 +1559,10 @@ const runUploadTask = (task) => {
         errorResp = {}
       }
       file.response = errorResp
+      const duplicateDetail = getDuplicateConflictDetail(errorResp)
+      if (duplicateDetail?.conflict_type === 'same_name') {
+        enqueueDuplicateConflict(duplicateDetail, task)
+      }
       const error = new Error(getSafeUploadErrorMessage(errorResp))
       error.response = { status: xhr.status, data: errorResp }
       if (fileUid) {
@@ -1457,10 +1600,16 @@ const handleFileUpload = (info) => {
     const file = info.file
     const conflictDetail = getDuplicateConflictDetail(file?.response)
     if (conflictDetail) {
-      message.error(getDuplicateConflictMessage(conflictDetail))
-      fileList.value = fileList.value.filter((item) => item.uid !== file.uid)
-      delete uploadTaskStatus.value[file.uid]
-      delete uploadTaskProgress.value[file.uid]
+      if (conflictDetail.conflict_type === 'exact_content') {
+        message.error(getDuplicateConflictMessage(conflictDetail))
+        removeUploadFile(file)
+      }
+    } else if (getReplacementInProgressDetail(file?.response)) {
+      message.error(getSafeUploadErrorMessage(file?.response))
+      duplicateConflictQueue.value = duplicateConflictQueue.value.filter(
+        (item) => item.task.options.file?.uid !== file.uid
+      )
+      removeUploadFile(file)
     } else {
       message.error(getSafeUploadErrorMessage(file?.response))
     }
@@ -1744,6 +1893,51 @@ const chunkData = async () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.duplicate-resolution {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.duplicate-resolution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.duplicate-resolution-card {
+  padding: 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--gray-50);
+
+  h4 {
+    margin: 0 0 10px;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0;
+  }
+
+  dt {
+    color: var(--gray-500);
+  }
+
+  dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.duplicate-resolution-tip {
+  margin: 0;
+  color: var(--gray-600);
 }
 
 /* Top Bar */

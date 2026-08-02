@@ -96,7 +96,9 @@ async def test_exact_content_conflict_only_allows_skip_and_does_not_leak_other_k
     detail = exc_info.value.detail
     assert detail["conflict_type"] == "exact_content"
     assert detail["allowed_strategies"] == ["skip"]
+    assert detail["incoming"]["content_hash"] == "hash_1"
     assert [item["file_id"] for item in detail["conflicts"]] == ["file_same"]
+    assert detail["conflicts"][0]["content_hash"] == "hash_1"
     assert all("path" not in item and "minio_url" not in item for item in detail["conflicts"])
 
     skipped = await service.check_upload_conflict(
@@ -133,6 +135,8 @@ async def test_same_name_is_case_insensitive_and_supports_three_confirmed_strate
         )
     assert exc_info.value.detail["conflict_type"] == "same_name"
     assert exc_info.value.detail["allowed_strategies"] == ["skip", "replace", "keep_both"]
+    assert exc_info.value.detail["incoming"]["content_hash"] == "new"
+    assert exc_info.value.detail["conflicts"][0]["content_hash"] == "old"
 
     skipped = await service.check_upload_conflict(
         kb_id="kb_1",

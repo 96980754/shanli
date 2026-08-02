@@ -79,6 +79,11 @@ async def _milvus_file_rows(collection, file_id: str) -> list[dict]:
     )
 
 
+async def _staged_object_size(upload_payload: dict) -> int | None:
+    bucket_name, object_name = parse_minio_url(upload_payload["file_path"])
+    return await get_minio_client().astat_file(bucket_name, object_name)
+
+
 async def _wait_for_replacement_cleanup(
     repository: KnowledgeFileRepository,
     collection,
@@ -101,6 +106,116 @@ async def _wait_for_replacement_cleanup(
             return new_record
         await asyncio.sleep(0.25)
     raise AssertionError("replacement cleanup did not finish within the timeout")
+
+
+async def test_upload_conflict_protocol_distinguishes_content_and_name(
+    test_client,
+    admin_headers,
+    knowledge_database,
+):
+    kb_id = knowledge_database["kb_id"]
+    unique_id = uuid.uuid4().hex
+    filename = f"protocol-{unique_id}.txt"
+    content = f"protocol-content-{unique_id}".encode()
+
+    base_upload = await _upload(test_client, admin_headers, kb_id, filename, content)
+    assert base_upload.status_code == 200, base_upload.text
+    base_add = await _add_uploaded(test_client, admin_headers, kb_id, base_upload.json(), "prompt")
+    assert base_add.status_code == 200, base_add.text
+    existing_file_id = base_add.json()["items"][0]["file_id"]
+
+    same_name_exact = await _upload(test_client, admin_headers, kb_id, filename, content)
+    assert same_name_exact.status_code == 409
+    exact_detail = same_name_exact.json()["detail"]
+    assert exact_detail["code"] == "duplicate_conflict"
+    assert exact_detail["conflict_type"] == "exact_content"
+    assert exact_detail["allowed_strategies"] == ["skip"]
+    assert exact_detail["conflicts"][0]["file_id"] == existing_file_id
+    assert exact_detail["incoming"]["content_hash"] == exact_detail["conflicts"][0]["content_hash"]
+
+    different_name_exact = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        f"renamed-{unique_id}.txt",
+        content,
+    )
+    assert different_name_exact.status_code == 409
+    assert different_name_exact.json()["detail"]["conflict_type"] == "exact_content"
+
+    skipped = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        f"skipped-{unique_id}.txt",
+        content,
+        "skip",
+    )
+    assert skipped.status_code == 200
+    assert skipped.json() == {
+        "message": "Upload skipped because a conflicting document already exists",
+        "uploaded": False,
+        "action": "skipped",
+        "existing_file_id": existing_file_id,
+        "kb_id": kb_id,
+    }
+
+    same_name_new_content = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        f"new-content-{unique_id}".encode(),
+    )
+    assert same_name_new_content.status_code == 409
+    name_detail = same_name_new_content.json()["detail"]
+    assert name_detail["code"] == "duplicate_conflict"
+    assert name_detail["conflict_type"] == "same_name"
+    assert name_detail["allowed_strategies"] == ["skip", "replace", "keep_both"]
+    assert name_detail["incoming"]["content_hash"] != name_detail["conflicts"][0]["content_hash"]
+
+    for unsupported_strategy in ("keep_both", "replace"):
+        response = await _upload(
+            test_client,
+            admin_headers,
+            kb_id,
+            f"exact-{unsupported_strategy}-{unique_id}.txt",
+            content,
+            unsupported_strategy,
+            existing_file_id if unsupported_strategy == "replace" else None,
+        )
+        assert response.status_code == 400
+        assert "only supports the skip strategy" in response.json()["detail"]
+
+
+async def test_concurrent_same_name_prompt_creates_one_record_and_removes_losing_stage(
+    test_client,
+    admin_headers,
+    knowledge_database,
+):
+    kb_id = knowledge_database["kb_id"]
+    filename = f"same-name-race-{uuid.uuid4().hex}.txt"
+    uploads = await asyncio.gather(
+        _upload(test_client, admin_headers, kb_id, filename, b"first distinct content"),
+        _upload(test_client, admin_headers, kb_id, filename, b"second distinct content"),
+    )
+    assert [response.status_code for response in uploads] == [200, 200]
+
+    additions = await asyncio.gather(
+        *(_add_uploaded(test_client, admin_headers, kb_id, upload.json(), "prompt") for upload in uploads)
+    )
+    assert sorted(response.status_code for response in additions) == [200, 409]
+    conflict_response = next(response for response in additions if response.status_code == 409)
+    assert conflict_response.json()["detail"]["conflict_type"] == "same_name"
+
+    records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, filename=filename)
+    assert len(records) == 1
+    for upload, addition in zip(uploads, additions, strict=True):
+        object_size = await _staged_object_size(upload.json())
+        if addition.status_code == 200:
+            assert object_size is not None
+        else:
+            assert object_size is None
 
 
 async def test_concurrent_identical_second_stage_creates_only_one_document(
@@ -281,6 +396,12 @@ async def test_concurrent_replace_same_target_creates_one_candidate(
         "target_file_id": old_file_id,
         "candidate_file_id": candidate_file_id,
     }
+    for upload, addition in zip((first_upload, second_upload), (first_add, second_add), strict=True):
+        object_size = await _staged_object_size(upload.json())
+        if addition.status_code == 200:
+            assert object_size is not None
+        else:
+            assert object_size is None
 
     repository = KnowledgeFileRepository()
     candidates = await repository.list_pending_replacement_candidates(
@@ -412,6 +533,48 @@ async def test_concurrent_replace_different_targets_do_not_conflict(
     )
 
     assert [response.status_code for response in results] == [200, 200]
+
+
+async def test_keep_both_upload_and_replace_same_name_serialize_consistently(
+    test_client,
+    admin_headers,
+    knowledge_database,
+):
+    kb_id = knowledge_database["kb_id"]
+    filename = f"upload-replace-race-{uuid.uuid4().hex}.txt"
+    base_upload = await _upload(test_client, admin_headers, kb_id, filename, b"base content")
+    base_add = await _add_uploaded(test_client, admin_headers, kb_id, base_upload.json(), "prompt")
+    old_file_id = base_add.json()["items"][0]["file_id"]
+
+    keep_upload, replace_upload = await asyncio.gather(
+        _upload(test_client, admin_headers, kb_id, filename, b"independent copy", "keep_both"),
+        _upload(test_client, admin_headers, kb_id, filename, b"replacement content", "replace", old_file_id),
+    )
+    assert [keep_upload.status_code, replace_upload.status_code] == [200, 200]
+
+    keep_add, replace_add = await asyncio.gather(
+        _add_uploaded(test_client, admin_headers, kb_id, keep_upload.json(), "keep_both"),
+        _add_uploaded(test_client, admin_headers, kb_id, replace_upload.json(), "replace", old_file_id),
+    )
+    assert [keep_add.status_code, replace_add.status_code] == [200, 200]
+
+    repository = KnowledgeFileRepository()
+    old_record = await repository.get_by_file_id(old_file_id)
+    kept_record = await repository.get_by_file_id(keep_add.json()["items"][0]["file_id"])
+    candidate = await repository.get_by_file_id(replace_add.json()["items"][0]["file_id"])
+    assert old_record is not None and old_record.is_active is True
+    assert kept_record is not None and kept_record.is_active is True
+    assert kept_record.filename.casefold() != filename.casefold()
+    assert candidate is not None and candidate.is_active is False
+    assert candidate.replacement_target_file_id == old_file_id
+
+    # This lock-focused test does not run parsing/indexing. Mark the candidate terminal
+    # so it cannot block fixture teardown or a later replacement test.
+    await repository.update_fields(
+        file_id=candidate.file_id,
+        kb_id=kb_id,
+        data={"status": "error_indexing", "processing_stage": "error_indexing"},
+    )
 
 
 async def test_real_replacement_saga_preserves_history_and_switches_milvus_visibility(
