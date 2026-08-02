@@ -176,6 +176,7 @@
                 <span class="status-label">状态</span>
                 <a-tag v-if="isBuildActive" color="blue" size="small">构建中</a-tag>
                 <a-tag v-else-if="isBuildFailed" color="red" size="small">构建失败</a-tag>
+                <a-tag v-else-if="isBuildCancelled" size="small">已取消</a-tag>
                 <a-tag v-else-if="graphBuildStatus?.published" color="green" size="small">已创建</a-tag>
                 <a-tag v-else-if="graphBuildStatus?.configured && graphBuildStatus?.locked" color="orange" size="small">
                   已配置，未创建
@@ -190,6 +191,18 @@
                 size="small"
                 style="margin-bottom: 10px"
               />
+              <a-alert
+                v-if="buildTaskFailureMessage"
+                :type="isBuildFailed ? 'error' : 'warning'"
+                show-icon
+                class="build-task-alert"
+                :message="buildTaskFailureMessage"
+              />
+              <div v-if="buildTaskResult" class="build-result-summary">
+                <span>成功 {{ buildTaskResult.success ?? 0 }}</span>
+                <span>失败 {{ buildTaskResult.failed ?? 0 }}</span>
+                <span>剩余 {{ buildTaskResult.remaining ?? 0 }}</span>
+              </div>
               <div class="stats-grid">
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.total_chunks ?? '-' }}</span>
@@ -225,7 +238,7 @@
                   构建中 {{ graphBuildStatus?.build_task_progress ?? 0 }}%
                 </a-button>
                 <a-button
-                  v-else-if="isBuildFailed"
+                  v-else-if="canRetryBuild"
                   type="primary"
                   block
                   :disabled="!graphBuildStatus?.pending_chunks"
@@ -350,7 +363,7 @@
             <a-input-number
               v-model:value="graphConfigForm.concurrency_count"
               :min="1"
-              :max="1000"
+              :max="MAX_GRAPH_CONCURRENCY"
               :step="1"
               style="width: 100%"
             />
@@ -457,8 +470,27 @@ const isBuildFailed = computed(() => {
   return graphBuildStatus.value?.build_task_status === 'failed'
 })
 
+const isBuildCancelled = computed(() => {
+  return graphBuildStatus.value?.build_task_status === 'cancelled'
+})
+
+const buildTaskResult = computed(() => graphBuildStatus.value?.build_task_result || null)
+
+const buildTaskFailureMessage = computed(() => {
+  if (!isBuildFailed.value && !isBuildCancelled.value) return ''
+  return (
+    graphBuildStatus.value?.build_task_error ||
+    graphBuildStatus.value?.build_task_message ||
+    (isBuildCancelled.value ? '图谱构建任务已取消' : '图谱构建任务失败')
+  )
+})
+
 const pendingGraphChunks = computed(() => {
   return Number(graphBuildStatus.value?.pending_chunks ?? 0)
+})
+
+const canRetryBuild = computed(() => {
+  return (isBuildFailed.value || isBuildCancelled.value) && pendingGraphChunks.value > 0
 })
 
 const hasPendingGraphChunks = computed(() => pendingGraphChunks.value > 0)
@@ -534,6 +566,9 @@ watch(
   },
   { immediate: true }
 )
+const DEFAULT_GRAPH_CONCURRENCY = 5
+const MAX_GRAPH_CONCURRENCY = 20
+
 const graphConfigForm = reactive({
   extractor_type: 'llm',
   model_spec: '',
@@ -543,7 +578,7 @@ const graphConfigForm = reactive({
   ontology_digest: '',
   domain_schema: '',
   schema: '',
-  concurrency_count: 50,
+  concurrency_count: DEFAULT_GRAPH_CONCURRENCY,
   model_params_text: ''
 })
 
@@ -667,6 +702,7 @@ const fillGraphConfigForm = () => {
   graphConfigForm.extractor_type = 'llm'
   graphConfigForm.model_spec = options.model_spec || configStore.config?.default_model || ''
   const selectedOntology = findConfiguredOntology(options, ontology)
+    || ontologyRegistries.value.find((entry) => entry.is_default)
     || ontologyRegistries.value.find((entry) => entry.source === 'builtin')
     || ontologyRegistries.value[0]
   graphConfigForm.ontology_key = selectedOntology ? ontologyEntryKey(selectedOntology) : ''
@@ -675,7 +711,7 @@ const fillGraphConfigForm = () => {
   graphConfigForm.ontology_digest = selectedOntology?.digest || ''
   graphConfigForm.domain_schema = options.domain_schema || ''
   graphConfigForm.schema = options.schema || ''
-  graphConfigForm.concurrency_count = Number(options.concurrency_count || 50)
+  graphConfigForm.concurrency_count = Number(options.concurrency_count || DEFAULT_GRAPH_CONCURRENCY)
   graphConfigForm.model_params_text = options.model_params
     ? JSON.stringify(options.model_params)
     : ''
@@ -698,7 +734,7 @@ const selectExtractorType = (option) => {
 const buildExtractorOptions = () => {
   const options = {
     model_spec: graphConfigForm.model_spec,
-    concurrency_count: graphConfigForm.concurrency_count || 50,
+    concurrency_count: graphConfigForm.concurrency_count || DEFAULT_GRAPH_CONCURRENCY,
     model_params: parseModelParams()
   }
   if (isLegacyGraphConfig.value) {
@@ -1153,6 +1189,18 @@ onUnmounted(() => {
       color: var(--gray-600);
       font-size: 12px;
     }
+  }
+
+  .build-task-alert {
+    margin-bottom: 8px;
+  }
+
+  .build-result-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: var(--gray-600);
+    font-size: 12px;
   }
 
   .stats-grid {

@@ -162,14 +162,53 @@
         </div>
 
         <a-empty v-if="!form.properties.length" description="暂无属性" />
-        <div v-for="(property, index) in form.properties" :key="property.id" class="property-row">
-          <a-input v-model:value="property.category" :disabled="isReadOnly" placeholder="分类，例如 Hardware" />
-          <a-input v-model:value="property.name" :disabled="isReadOnly" placeholder="属性 key，例如 screen_size" />
-          <a-select v-model:value="property.type" :disabled="isReadOnly" :options="propertyTypeOptions" />
-          <a-input v-model:value="property.unit" :disabled="isReadOnly" placeholder="单位（可选）" />
-          <a-button v-if="!isReadOnly" type="text" danger @click="form.properties.splice(index, 1)">
+        <div v-for="(property, index) in form.properties" :key="property.id" class="editor-card">
+          <button
+            v-if="!isReadOnly"
+            type="button"
+            class="remove-button"
+            aria-label="删除属性"
+            @click="form.properties.splice(index, 1)"
+          >
             <Trash2 :size="15" />
-          </a-button>
+          </button>
+          <div class="form-grid property-grid">
+            <a-form-item label="分类" required>
+              <a-input v-model:value="property.category" :disabled="isReadOnly" placeholder="例如 Hardware" />
+            </a-form-item>
+            <a-form-item label="属性 key" required>
+              <a-input v-model:value="property.name" :disabled="isReadOnly" placeholder="例如 screen_size" />
+            </a-form-item>
+            <a-form-item label="类型" required>
+              <a-select v-model:value="property.type" :disabled="isReadOnly" :options="propertyTypeOptions" />
+            </a-form-item>
+            <a-form-item label="单位">
+              <a-input v-model:value="property.unit" :disabled="isReadOnly" placeholder="可选" />
+            </a-form-item>
+          </div>
+          <div class="form-grid two-columns">
+            <a-form-item label="所属实体">
+              <a-select
+                v-model:value="property.owners"
+                mode="multiple"
+                :options="propertyOwnerOptions"
+                :disabled="isReadOnly"
+                placeholder="留空表示兼容旧本体，不限制实体类型"
+              />
+            </a-form-item>
+            <a-form-item label="枚举值">
+              <a-select
+                v-model:value="property.enum"
+                mode="tags"
+                :disabled="isReadOnly || property.type !== 'string'"
+                :token-separators="[',']"
+                placeholder="仅文本属性可设置"
+              />
+            </a-form-item>
+          </div>
+          <a-form-item label="属性说明">
+            <a-input v-model:value="property.description" :disabled="isReadOnly" placeholder="说明属性的业务含义" />
+          </a-form-item>
         </div>
       </section>
       <section class="editor-section">
@@ -221,7 +260,10 @@ const newProperty = () => ({
   category: '',
   name: '',
   type: 'string',
-  unit: ''
+  unit: '',
+  owners: [],
+  enum: [],
+  description: ''
 })
 
 const form = reactive({
@@ -252,6 +294,12 @@ const propertyTypeOptions = [
   { label: '数字', value: 'float' },
   { label: '布尔值', value: 'bool' }
 ]
+const propertyOwnerOptions = computed(() =>
+  form.entities
+    .map((entity) => entity.name.trim())
+    .filter(Boolean)
+    .map((name) => ({ label: name, value: name }))
+)
 const endpointOptions = computed(() => [
   ...form.entities
     .map((entity) => entity.name.trim())
@@ -285,7 +333,10 @@ const fillDetail = (detail) => {
   form.properties = (definition.properties || []).map((property) => ({
     ...property,
     id: nextId(),
-    unit: property.unit || ''
+    unit: property.unit || '',
+    owners: property.owners || [],
+    enum: property.enum || [],
+    description: property.description || ''
   }))
   form.rules_text = JSON.stringify(definition.rules || {}, null, 2)
 }
@@ -349,10 +400,20 @@ const buildPayload = () => {
     category: property.category.trim(),
     name: property.name.trim(),
     type: property.type,
-    unit: property.unit.trim() || null
+    unit: property.unit.trim() || null,
+    owners: cleanTags(property.owners),
+    enum: cleanTags(property.enum),
+    description: property.description.trim()
   }))
   if (properties.some((property) => !property.category || !property.name)) {
     throw new Error('属性分类和属性 key 不能为空')
+  }
+  for (const property of properties) {
+    const invalidOwner = property.owners.find((owner) => !entityNames.has(owner))
+    if (invalidOwner) throw new Error(`属性 ${property.name} 引用了未声明实体：${invalidOwner}`)
+    if (property.enum.length && property.type !== 'string') {
+      throw new Error(`属性 ${property.name} 只有文本类型可以设置枚举值`)
+    }
   }
   ensureUnique(properties.map((property) => property.name), '属性 key')
   let rules
@@ -388,7 +449,7 @@ const submit = async () => {
     reset()
   } catch (error) {
     const detail = error?.response?.data?.detail || error?.message || '创建 Core Ontology 失败'
-    message.error(detail)
+    message.error(typeof detail === 'object' ? detail.message || 'Core Ontology 操作失败' : detail)
   } finally {
     submitting.value = false
   }
@@ -481,8 +542,7 @@ watch(
   font-size: 13px;
 }
 
-.nested-row,
-.property-row {
+.nested-row {
   display: grid;
   align-items: center;
   gap: 8px;
@@ -493,15 +553,15 @@ watch(
   grid-template-columns: 0.8fr 1.5fr 36px;
 }
 
-.property-row {
-  grid-template-columns: 0.9fr 1.2fr 0.7fr 0.7fr 36px;
+.property-grid {
+  grid-template-columns: 0.9fr 1.2fr 0.7fr 0.7fr;
 }
 
 @media (max-width: 760px) {
   .identity-grid,
   .two-columns,
   .nested-row,
-  .property-row {
+  .property-grid {
     grid-template-columns: 1fr;
   }
 }

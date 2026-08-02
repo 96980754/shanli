@@ -53,7 +53,12 @@ def _product_ontology() -> OntologySpec:
         },
         properties={
             "Hardware": {
-                "screen_size": {"type": "float", "unit": "inch"},
+                "screen_size": {
+                    "type": "float",
+                    "unit": "inch",
+                    "owners": ["Product"],
+                    "description": "屏幕尺寸",
+                },
             }
         },
         expected_registry_id="test",
@@ -72,30 +77,78 @@ def test_load_generic_registry():
     assert set(ontology.relations) == {"has_effect", "has_feature", "has_tech"}
 
 
-def test_load_shanli_builtin_preset_v42():
+def test_load_shanli_builtin_preset_v42_is_frozen():
     entry = resolve_ontology_registry("shanli-preset", "4.2")
     ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
 
-    assert entry.name == "善理预设新版"
+    assert entry.name == "善理预设 V4.2（历史）"
+    assert entry.digest == "df86d3187392d59cf4b9466b4c152575447f108c17f2283abd2332c522dcdb7b"
     assert entry.source == "builtin"
-    assert ontology.status == "active"
-    assert "SellingPoint" in ontology.entities
-    assert "Capability" in ontology.entities
-    assert "HAS_SELLING_POINT" in ontology.relations
-    assert "COMPATIBLE_WITH" in ontology.relations
-    assert ontology.entity_aliases["SellingPoint"]["国产化"]
-    assert ontology.relation_aliases["HAS_SELLING_POINT"]
-    assert ontology.properties["Positioning"]["market_level"].value_type == "string"
-    assert ontology.properties["Roadmap"]["planned_date"].value_type == "string"
-    assert ontology.properties["Document"]["document_type"].value_type == "string"
-    assert ontology.properties["CompatibleTarget"]["target_type"].value_type == "string"
+    assert entry.public_dict()["is_default"] is False
+    assert len(ontology.entities) == 20
+    assert len(ontology.relations) == 22
 
 
-def test_shanli_builtin_has_only_v42():
+def test_load_shanli_builtin_preset_v43_has_exact_contract():
+    expected_entities = {
+        "Company", "Brand", "ProductCategory", "ProductFamily", "Product", "Solution",
+        "Feature", "Technology", "Scenario", "Industry", "Specification", "Standard",
+        "Certification", "DeploymentMode", "Document", "Evidence", "SellingPoint",
+        "Positioning", "Roadmap", "Case", "CompatibleTarget", "Capability",
+    }
+    expected_relations = {
+        "HAS_FAMILY", "HAS_PRODUCT", "SUPPORTS", "USES", "USED_IN", "APPLICABLE_TO",
+        "COMPLIES_WITH", "HAS_CERTIFICATION", "HAS_DEPLOYMENT", "HAS_SPEC", "HAS_DOCUMENT",
+        "HAS_SELLING_POINT", "HAS_POSITIONING", "HAS_CAPABILITY", "HAS_ROADMAP", "PLANS",
+        "USES_PRODUCT", "COMPATIBLE_WITH", "SUPPORTED_BY", "EXTRACTED_FROM", "HAS_EVIDENCE",
+        "BELONGS_TO",
+    }
+    entry = resolve_ontology_registry("shanli-preset", "4.3")
+    ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
+
+    assert entry.name == "善理预设新版"
+    assert entry.public_dict()["is_default"] is True
+    assert set(ontology.entities) == expected_entities
+    assert set(ontology.relations) == expected_relations
+    assert all(relation.description for relation in ontology.relations.values())
+    assert ontology.relation_aliases["HAS_SPEC"] == ("规格", "参数", "配置", "尺寸", "容量", "指标")
+    assert ontology.relation_aliases["HAS_EVIDENCE"] == ()
+    assert ontology.rules["forbidden_relations"] == ["HAS_EVIDENCE"]
+    assert ontology.properties["Positioning"]["market_level"].owners == ("Positioning",)
+    assert ontology.properties["Positioning"]["market_level"].enum == ("高端", "中端", "入门")
+    assert "SLA" in ontology.properties["Document"]["document_type"].enum
+
+
+def test_v43_rejects_new_has_evidence_relations():
+    entry = resolve_ontology_registry("shanli-preset", "4.3")
+    ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
+
+    with pytest.raises(ValueError, match="禁止新抽取关系类型"):
+        validate_ontology_result(
+            {
+                "entities": [
+                    {"text": "F10", "label": "Product", "attributes": []},
+                    {"text": "原文证据", "label": "Evidence", "attributes": []},
+                ],
+                "relations": [
+                    {
+                        "source": {"text": "F10", "label": "Product", "attributes": []},
+                        "target": {"text": "原文证据", "label": "Evidence", "attributes": []},
+                        "text": "具有证据",
+                        "label": "HAS_EVIDENCE",
+                    }
+                ],
+            },
+            ontology,
+        )
+
+
+def test_shanli_builtin_versions_require_explicit_version():
     entries = [entry for entry in list_ontology_registries() if entry.registry_id == "shanli-preset"]
 
-    assert [entry.version for entry in entries] == ["4.2"]
-    assert resolve_ontology_registry("shanli-preset").version == "4.2"
+    assert [entry.version for entry in entries] == ["4.2", "4.3"]
+    with pytest.raises(ValueError, match="存在多个版本"):
+        resolve_ontology_registry("shanli-preset")
 
 
 def test_domain_extension_must_be_structured_yaml():
@@ -146,7 +199,9 @@ def test_compile_prompt_is_compact_and_strict():
     assert "允许实体类型" in prompt
     assert "SUPPORTS: Product -> Feature" in prompt
     assert "Product.MCSTARS: MCX系统, MCSTARS平台" in prompt
-    assert "Hardware.screen_size: type=float, unit=inch" in prompt
+    assert "screen_size: category=Hardware, type=float, unit=inch, owners=Product, description=屏幕尺寸" in prompt
+    assert "允许属性：\n- screen_size: category=Hardware" in prompt
+    assert "禁止输出 Hardware.screen_size" in prompt
     assert "禁止创建列表之外" in prompt
     assert json.dumps({"registry_id": "test"}) not in prompt
 
@@ -245,6 +300,92 @@ def test_property_type_and_value_are_validated():
             entity_aliases={},
             relation_aliases={},
             properties={"Hardware": {"screen_size": {"type": "interger"}}},
+            expected_registry_id="test",
+        )
+
+
+def test_property_owner_and_enum_are_validated():
+    ontology = _build_ontology(
+        {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "name": "Test",
+            "status": "active",
+            "entities": {"Product": {}, "Positioning": {}},
+            "relations": {},
+        },
+        entity_aliases={},
+        relation_aliases={},
+        properties={
+            "Positioning": {
+                "market_level": {
+                    "type": "string",
+                    "owners": ["Positioning"],
+                    "enum": ["高端", "中端", "入门"],
+                    "description": "市场层级",
+                }
+            }
+        },
+        expected_registry_id="test",
+    )
+
+    validate_ontology_result(
+        {
+            "entities": [
+                {
+                    "text": "旗舰定位",
+                    "label": "Positioning",
+                    "attributes": [{"text": "高端", "label": "market_level"}],
+                }
+            ],
+            "relations": [],
+        },
+        ontology,
+    )
+    with pytest.raises(ValueError, match="不允许用于实体类型"):
+        validate_ontology_result(
+            {
+                "entities": [
+                    {
+                        "text": "F10",
+                        "label": "Product",
+                        "attributes": [{"text": "高端", "label": "market_level"}],
+                    }
+                ],
+                "relations": [],
+            },
+            ontology,
+        )
+    with pytest.raises(ValueError, match="值必须是"):
+        validate_ontology_result(
+            {
+                "entities": [
+                    {
+                        "text": "旗舰定位",
+                        "label": "Positioning",
+                        "attributes": [{"text": "旗舰", "label": "market_level"}],
+                    }
+                ],
+                "relations": [],
+            },
+            ontology,
+        )
+
+
+def test_property_owner_must_reference_declared_entity():
+    with pytest.raises(ValueError, match="owners 引用未声明实体"):
+        _build_ontology(
+            {
+                "registry_id": "test",
+                "version": "1.0.0",
+                "name": "Test",
+                "status": "active",
+                "entities": {"Product": {}},
+                "relations": {},
+            },
+            entity_aliases={},
+            relation_aliases={},
+            properties={"General": {"name": {"type": "string", "owners": ["Unknown"]}}},
             expected_registry_id="test",
         )
 
@@ -472,6 +613,43 @@ def test_detail_and_overwrite_preserve_rules(tmp_path, monkeypatch):
     assert resolve_ontology_registry(updated.registry_id, updated.version).digest == updated.digest
     with pytest.raises(ValueError, match="未找到"):
         resolve_ontology_registry(entry.registry_id, entry.version, entry.digest)
+
+
+def test_detail_preserves_property_constraints(tmp_path, monkeypatch):
+    monkeypatch.setenv("ONTOLOGY_REGISTRY_DIR", str(tmp_path))
+    entry, _ = create_ontology_registry(
+        registry_id="property-roundtrip",
+        version="1.0.0",
+        name="Property Roundtrip",
+        entities={"Positioning": {"description": "定位", "examples": []}},
+        relations={},
+        entity_aliases={},
+        relation_aliases={},
+        properties={
+            "Positioning": {
+                "market_level": {
+                    "type": "string",
+                    "owners": ["Positioning"],
+                    "enum": ["高端", "中端", "入门"],
+                    "description": "市场层级",
+                }
+            }
+        },
+    )
+
+    detail = get_ontology_registry_detail(entry.registry_id, entry.version, entry.digest)
+
+    assert detail["definition"]["properties"] == [
+        {
+            "category": "Positioning",
+            "name": "market_level",
+            "type": "string",
+            "unit": None,
+            "owners": ["Positioning"],
+            "enum": ["高端", "中端", "入门"],
+            "description": "市场层级",
+        }
+    ]
 
 
 def test_builtin_ontology_cannot_be_overwritten():

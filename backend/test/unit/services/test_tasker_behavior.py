@@ -8,7 +8,7 @@ import asyncio
 import pytest
 
 from yuxi.services import task_service
-from yuxi.services.task_service import Tasker
+from yuxi.services.task_service import Task, Tasker
 
 
 class FakeRecord:
@@ -24,6 +24,7 @@ class FakeRepo:
 
     def __init__(self, preset: list[FakeRecord] | None = None):
         self.preset = preset or []
+        self.records = {record.to_dict()["id"]: record for record in self.preset}
         self.upsert_calls = 0
         self.progress_writes: list[float] = []
         self.deleted: list[str] = []
@@ -31,13 +32,28 @@ class FakeRepo:
     async def upsert(self, task_id: str, data: dict) -> None:
         self.upsert_calls += 1
         self.progress_writes.append(data.get("progress"))
+        existing = self.records.get(task_id)
+        record_data = existing.to_dict() if existing else {"id": task_id}
+        record_data.update(data)
+        self.records[task_id] = FakeRecord(record_data)
+
+    async def get_by_id(self, task_id: str):
+        return self.records.get(task_id)
+
+    async def request_cancel(self, task_id: str) -> bool:
+        record = self.records.get(task_id)
+        if record is None:
+            return False
+        record.to_dict()["cancel_requested"] = True
+        return True
 
     async def delete(self, task_id: str) -> bool:
         self.deleted.append(task_id)
+        self.records.pop(task_id, None)
         return True
 
     async def list_all(self) -> list[FakeRecord]:
-        return self.preset
+        return list(self.records.values())
 
 
 async def _make_tasker(repo: FakeRepo, worker_count: int = 1) -> Tasker:
@@ -128,6 +144,70 @@ async def test_completed_tasks_are_pruned_to_limit(monkeypatch):
     await tasker.shutdown()
 
 
+async def test_find_task_by_payload_returns_latest_match():
+    tasker = Tasker()
+    tasker._tasks = {
+        "new": Task(
+            id="new",
+            name="new",
+            type="graph",
+            payload={"kb_id": "kb1"},
+            created_at="2026-01-02T00:00:00",
+        ),
+        "old": Task(
+            id="old",
+            name="old",
+            type="graph",
+            payload={"kb_id": "kb1"},
+            created_at="2026-01-01T00:00:00",
+        ),
+    }
+
+    task = await tasker.find_task_by_payload(task_type="graph", payload_match={"kb_id": "kb1"})
+
+    assert task is not None
+    assert task.id == "new"
+
+
+async def test_shutdown_does_not_hold_lock_while_worker_finishes():
+    repo = FakeRepo()
+    tasker = await _make_tasker(repo)
+    started = asyncio.Event()
+
+    async def coro(ctx):
+        started.set()
+        await asyncio.Event().wait()
+
+    task = await tasker.enqueue(name="x", task_type="demo", coroutine=coro)
+    await started.wait()
+
+    await asyncio.wait_for(tasker.shutdown(), timeout=1.0)
+
+    final = await tasker.get_task(task.id)
+    assert final["status"] == "cancelled"
+
+
+async def test_load_state_does_not_fail_external_graph_task():
+    repo = FakeRepo(
+        preset=[
+            FakeRecord(
+                {
+                    "id": "graph",
+                    "name": "graph",
+                    "type": "knowledge_graph_index",
+                    "status": "running",
+                    "created_at": "2026-01-01T00:00:00",
+                }
+            )
+        ]
+    )
+    tasker = await _make_tasker(repo)
+
+    assert (await repo.get_by_id("graph")).to_dict()["status"] == "running"
+    assert await tasker.get_task("graph") == repo.records["graph"].to_dict()
+    await tasker.shutdown()
+
+
 async def test_load_state_marks_interrupted_and_prunes(monkeypatch):
     monkeypatch.setattr(task_service, "MAX_TERMINAL_TASKS", 2)
     repo = FakeRepo(
@@ -147,6 +227,8 @@ async def test_load_state_marks_interrupted_and_prunes(monkeypatch):
     # 中断的 running 任务被标记为 failed
     interrupted = await tasker.get_task("a")
     assert interrupted["status"] == "failed"
+    assert interrupted["error"] == "服务重启时任务中断"
+    assert interrupted["completed_at"] is not None
     # 仅保留最近 MAX_TERMINAL_TASKS 条终态任务，最旧的被清理
     listing = await tasker.list_tasks(limit=100)
     assert listing["summary"]["total"] == 2

@@ -62,6 +62,9 @@ class OntologyPropertyInput(StrictModel):
     name: RequiredText
     type: Literal["string", "int", "integer", "float", "number", "bool", "boolean"]
     unit: str | None = Field(default=None, max_length=64)
+    owners: list[RequiredText] = Field(default_factory=list, max_length=100)
+    enum: list[RequiredText] = Field(default_factory=list, max_length=200)
+    description: str = Field(default="", max_length=1000)
 
 
 class CreateOntologyRegistryRequest(StrictModel):
@@ -98,6 +101,12 @@ class CreateOntologyRegistryRequest(StrictModel):
             definition = {"type": item.type}
             if item.unit and item.unit.strip():
                 definition["unit"] = item.unit.strip()
+            if item.owners:
+                definition["owners"] = item.owners
+            if item.enum:
+                definition["enum"] = item.enum
+            if item.description.strip():
+                definition["description"] = item.description.strip()
             properties.setdefault(item.category, {})[item.name] = definition
 
         return {

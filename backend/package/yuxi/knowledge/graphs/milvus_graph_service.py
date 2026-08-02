@@ -5,7 +5,11 @@ import json
 import weakref
 from typing import Any
 
-from yuxi.knowledge.graphs.extractors import GraphExtractor, GraphExtractorFactory
+from yuxi.knowledge.graphs.extractors import (
+    GraphExtractor,
+    GraphExtractorFactory,
+    OntologyIdentityMismatchError,
+)
 from yuxi.knowledge.graphs.graph_utils import (
     build_graph_payload,
     compute_entity_id,
@@ -19,6 +23,7 @@ from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorSto
 from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_graph_repository import KnowledgeGraphRepository
+from yuxi.repositories.task_repository import TaskRepository
 from yuxi.storage.neo4j import (
     Neo4jConnectionManager,
     get_shared_neo4j_connection,
@@ -114,7 +119,7 @@ class MilvusGraphService:
     def driver(self):
         return self.connection.driver
 
-    async def get_status(self, kb_id: str, *, tasker: Any = None) -> dict[str, Any]:
+    async def get_status(self, kb_id: str, *, task_repository: TaskRepository | None = None) -> dict[str, Any]:
         kb = await self._get_milvus_kb(kb_id)
         params = dict(kb.additional_params or {})
         config = params.get(GRAPH_CONFIG_KEY) or {}
@@ -127,26 +132,11 @@ class MilvusGraphService:
         )
         entity_count, relationship_count = graph_counts
 
-        build_task_status = None
-        build_task_progress = 0
-        if tasker is not None:
-            active_task = await tasker.find_task_by_payload(
-                task_type=GRAPH_TASK_TYPE,
-                payload_match={"kb_id": kb_id},
-                statuses={"pending", "running"},
-            )
-            if active_task:
-                build_task_status = active_task.status
-                build_task_progress = round(active_task.progress)
-            else:
-                failed_task = await tasker.find_task_by_payload(
-                    task_type=GRAPH_TASK_TYPE,
-                    payload_match={"kb_id": kb_id},
-                    statuses={"failed", "cancelled"},
-                )
-                if failed_task:
-                    build_task_status = "failed"
-                    build_task_progress = 0
+        task_repository = task_repository or TaskRepository()
+        build_task = await task_repository.find_latest_by_payload(
+            task_type=GRAPH_TASK_TYPE,
+            payload_match={"kb_id": kb_id},
+        )
 
         return {
             "kb_id": kb_id,
@@ -162,8 +152,14 @@ class MilvusGraphService:
             "entity_count": entity_count,
             "relationship_count": relationship_count,
             "published": entity_count > 0 or relationship_count > 0,
-            "build_task_status": build_task_status,
-            "build_task_progress": build_task_progress,
+            "build_task_id": build_task.id if build_task else None,
+            "build_task_status": build_task.status if build_task else None,
+            "build_task_progress": round(build_task.progress) if build_task else 0,
+            "build_task_message": build_task.message if build_task else None,
+            "build_task_error": build_task.error if build_task else None,
+            "build_task_result": build_task.result if build_task else None,
+            "build_task_cancel_requested": build_task.cancel_requested if build_task else False,
+            "build_task_completed_at": build_task.completed_at if build_task else None,
         }
 
     async def configure(
@@ -299,14 +295,15 @@ class MilvusGraphService:
         total_pending = await self.chunk_repo.count_graph_pending_by_kb_id(kb_id)
         processed = 0
         failed = 0
-        failed_chunk_ids: set[str] = set()
+        failed_chunk_ids: list[str] = []
+        failed_chunk_id_set: set[str] = set()
         write_lock = asyncio.Lock()
 
         while True:
             if context is not None:
                 await context.raise_if_cancelled()
             chunks = await self.chunk_repo.list_graph_pending_by_kb_id(kb_id, batch_size)
-            unprocessed = [c for c in chunks if c.chunk_id not in failed_chunk_ids]
+            unprocessed = [c for c in chunks if c.chunk_id not in failed_chunk_id_set]
             if not unprocessed:
                 break
 
@@ -352,7 +349,8 @@ class MilvusGraphService:
                         processed += 1
                     except Exception as exc:
                         logger.error(f"Chunk 图谱构建失败 chunk_id={chunk.chunk_id}: {exc}")
-                        failed_chunk_ids.add(chunk.chunk_id)
+                        failed_chunk_id_set.add(chunk.chunk_id)
+                        failed_chunk_ids.append(chunk.chunk_id)
                         failed += 1
                     finally:
                         queue.task_done()
@@ -372,7 +370,13 @@ class MilvusGraphService:
                 raise
 
         remaining = await self.chunk_repo.count_graph_pending_by_kb_id(kb_id)
-        return {"kb_id": kb_id, "success": processed, "failed": failed, "remaining": remaining}
+        return {
+            "kb_id": kb_id,
+            "success": processed,
+            "failed": failed,
+            "remaining": remaining,
+            "failed_chunk_ids": failed_chunk_ids,
+        }
 
     @staticmethod
     def _get_worker_count(config: dict[str, Any]) -> int:
@@ -382,7 +386,7 @@ class MilvusGraphService:
             worker_count = int((config.get("extractor_options") or {}).get("concurrency_count") or 1)
         except (TypeError, ValueError):
             return 1
-        return max(1, min(worker_count, 1000))
+        return max(1, min(worker_count, 20))
 
     @staticmethod
     def _runtime_extractor_options(config: dict[str, Any]) -> dict[str, Any]:
@@ -392,7 +396,17 @@ class MilvusGraphService:
 
     async def _get_chunk_extraction_result(self, kb_id: str, chunk, extractor: GraphExtractor) -> dict[str, Any]:
         if chunk.extraction_result:
-            return extractor.normalize_result(chunk.extraction_result)
+            try:
+                return extractor.normalize_result(chunk.extraction_result)
+            except OntologyIdentityMismatchError:
+                raise
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    f"Chunk 抽取缓存无效，清理后重新抽取 chunk_id={chunk.chunk_id}, "
+                    f"error_type={exc.__class__.__name__}"
+                )
+                await self.chunk_repo.clear_extraction_result(chunk.chunk_id)
+                chunk.extraction_result = None
 
         extraction_result = await extractor.extract(
             chunk.content,
@@ -425,6 +439,8 @@ class MilvusGraphService:
             entity["id"]: record for entity, record in zip(entities, entity_records, strict=True)
         }
         triple_records = self._build_triple_records(kb_id, relations, entity_record_by_local_id, graph_payload)
+        if not relations:
+            return [], []
         content_preview = (chunk.content or "")[:300]
 
         # 预构建 Cypher 模板（同一 chunk 内复用）

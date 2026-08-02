@@ -8,7 +8,13 @@ import pytest
 from yuxi.knowledge.graphs.extractors import (
     GraphExtractorFactory,
     LLMGraphExtractor,
+    OntologyIdentityMismatchError,
     normalize_extraction_result,
+)
+from yuxi.knowledge.graphs.extractors.llm import (
+    MAX_CONCURRENCY_COUNT,
+    MODEL_MAX_ATTEMPTS,
+    MODEL_TIMEOUT_SECONDS,
 )
 from yuxi.knowledge.graphs.graph_utils import build_graph_payload
 from yuxi.knowledge.graphs.milvus_graph_service import (
@@ -134,7 +140,71 @@ def test_build_graph_payload_only_publishes_positive_facts():
 
     payload = build_graph_payload(normalized)
 
+    assert payload["entities"] == [
+        {"id": "e1", "text": "产品", "label": "Entity", "attributes": []},
+        {"id": "e2", "text": "在线模式", "label": "Entity", "attributes": []},
+    ]
     assert payload["relations"] == [{"source": "e1", "target": "e2", "text": "支持", "label": "SUPPORTS"}]
+
+
+def test_build_graph_payload_drops_entities_without_positive_facts():
+    normalized = normalize_extraction_result(
+        {
+            "entities": [{"text": "产品"}, {"text": "离线模式"}, {"text": "孤立功能"}],
+            "relations": [
+                {
+                    "source": "产品",
+                    "target": "离线模式",
+                    "text": "不再支持",
+                    "label": "SUPPORTS",
+                    "polarity": "negative",
+                    "assertion_kind": "retraction",
+                }
+            ],
+        },
+        "llm",
+    )
+
+    payload = build_graph_payload(normalized)
+
+    assert payload["entities"] == []
+    assert payload["relations"] == []
+    assert normalized["entities"] == [
+        {"text": "产品", "label": "Entity", "attributes": []},
+        {"text": "离线模式", "label": "Entity", "attributes": []},
+        {"text": "孤立功能", "label": "Entity", "attributes": []},
+    ]
+    assert normalized["relations"][0]["evidence"] == {"quote": "", "start_char": None, "end_char": None}
+
+
+def test_build_graph_payload_keeps_only_positive_relation_endpoints():
+    normalized = normalize_extraction_result(
+        {
+            "entities": [
+                {"text": "产品", "attributes": [{"text": "正式", "label": "status"}]},
+                {"text": "在线模式"},
+                {"text": "离线模式"},
+            ],
+            "relations": [
+                {"source": "产品", "target": "在线模式", "text": "支持", "label": "SUPPORTS"},
+                {
+                    "source": "产品",
+                    "target": "离线模式",
+                    "text": "不支持",
+                    "label": "SUPPORTS",
+                    "polarity": "negative",
+                },
+            ],
+        },
+        "llm",
+    )
+
+    payload = build_graph_payload(normalized)
+
+    assert [entity["text"] for entity in payload["entities"]] == ["产品", "在线模式"]
+    assert payload["entities"][0]["attributes"] == [{"text": "正式", "label": "status"}]
+    assert all(entity["text"] != "离线模式" for entity in payload["entities"])
+    assert len(payload["relations"]) == 1
 
 
 def test_normalize_extraction_result_accepts_llm_nested_relation_entities():
@@ -181,6 +251,66 @@ def test_llm_graph_extractor_rejects_custom_prompt():
 
     with pytest.raises(ValueError, match="不支持自定义完整 Prompt"):
         extractor.validate_options()
+
+
+def test_llm_graph_extractor_rejects_unsafe_concurrency():
+    extractor = LLMGraphExtractor({"model_spec": "test/model", "concurrency_count": MAX_CONCURRENCY_COUNT + 1})
+
+    with pytest.raises(ValueError, match=f"1 到 {MAX_CONCURRENCY_COUNT}"):
+        extractor.validate_options()
+
+
+def test_llm_graph_extractor_defaults_to_safe_concurrency():
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    extractor.validate_options()
+
+    assert extractor.options["concurrency_count"] == 5
+
+
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_retries_transient_model_errors(monkeypatch):
+    calls = 0
+    model = SimpleNamespace()
+
+    async def call(_messages, stream=False):
+        nonlocal calls
+        calls += 1
+        if calls < MODEL_MAX_ATTEMPTS:
+            try:
+                raise TimeoutError("provider timeout")
+            except TimeoutError as exc:
+                raise RuntimeError("wrapped") from exc
+        return SimpleNamespace(content='{"entities": [], "relations": []}')
+
+    model.call = call
+    select_model = MagicMock(return_value=model)
+    sleep = AsyncMock()
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.select_model", select_model)
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.asyncio.sleep", sleep)
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    result = await extractor.extract("测试", chunk_metadata={"chunk_id": "chunk_1"})
+
+    assert result["entities"] == []
+    assert calls == MODEL_MAX_ATTEMPTS
+    assert [call.args[0] for call in sleep.await_args_list] == [1, 2]
+    assert select_model.call_args.kwargs["timeout"] == MODEL_TIMEOUT_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_does_not_retry_non_transient_errors(monkeypatch):
+    model = SimpleNamespace(call=AsyncMock(side_effect=ValueError("invalid request")))
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.select_model", lambda **_kwargs: model)
+    sleep = AsyncMock()
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.asyncio.sleep", sleep)
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    with pytest.raises(ValueError, match="invalid request"):
+        await extractor.extract("测试", chunk_metadata={"chunk_id": "chunk_1"})
+
+    model.call.assert_awaited_once()
+    sleep.assert_not_awaited()
 
 
 def test_llm_graph_extractor_appends_schema_to_fixed_prompt():
@@ -352,6 +482,47 @@ async def test_milvus_graph_service_configure_persists_updated_concurrency():
 
 
 @pytest.mark.asyncio
+async def test_milvus_graph_service_status_returns_latest_task_details():
+    kb = SimpleNamespace(kb_type="milvus", additional_params={})
+    chunk_repo = SimpleNamespace(
+        count_current_by_kb_id=AsyncMock(return_value=4),
+        count_graph_pending_by_kb_id=AsyncMock(return_value=2),
+        count_graph_indexed_by_kb_id=AsyncMock(return_value=2),
+        count_with_extraction_result_by_kb_id=AsyncMock(return_value=3),
+    )
+    graph_repo = SimpleNamespace(count_by_current_kb_id=AsyncMock(return_value=(3, 2)))
+    task = SimpleNamespace(
+        id="task-new",
+        status="cancelled",
+        progress=45.4,
+        message="任务被取消",
+        error=None,
+        result={"success": 2, "failed": 0, "remaining": 2},
+        cancel_requested=True,
+        completed_at="2026-01-02T00:00:00Z",
+    )
+    task_repository = SimpleNamespace(find_latest_by_payload=AsyncMock(return_value=task))
+    service = MilvusGraphService(
+        kb_repo=SimpleNamespace(get_by_kb_id=AsyncMock(return_value=kb)),
+        chunk_repo=chunk_repo,
+        graph_repo=graph_repo,
+    )
+
+    status = await service.get_status("kb_test", task_repository=task_repository)
+
+    task_repository.find_latest_by_payload.assert_awaited_once_with(
+        task_type="knowledge_graph_index",
+        payload_match={"kb_id": "kb_test"},
+    )
+    assert status["build_task_id"] == "task-new"
+    assert status["build_task_status"] == "cancelled"
+    assert status["build_task_progress"] == 45
+    assert status["build_task_message"] == "任务被取消"
+    assert status["build_task_result"] == {"success": 2, "failed": 0, "remaining": 2}
+    assert status["build_task_cancel_requested"] is True
+
+
+@pytest.mark.asyncio
 async def test_milvus_graph_service_rejects_ontology_switch_when_cached_results_exist(monkeypatch):
     old_entry = SimpleNamespace(registry_id="old", version="1.0", digest="old-digest")
     new_entry = SimpleNamespace(registry_id="new", version="2.0", digest="new-digest")
@@ -504,6 +675,70 @@ def test_llm_graph_extractor_rejects_cached_result_from_different_ontology(monke
         )
 
 
+@pytest.mark.asyncio
+async def test_milvus_graph_service_reextracts_invalid_cached_result():
+    cached = {"entities": "invalid", "relations": []}
+    chunk = SimpleNamespace(
+        chunk_id="chunk_1",
+        file_id="file_1",
+        chunk_index=0,
+        content="产品支持组呼",
+        extraction_result=cached,
+    )
+    extractor = SimpleNamespace(
+        normalize_result=MagicMock(
+            side_effect=[ValueError("缓存格式错误"), {"entities": [], "relations": [], "metadata": {}}]
+        ),
+        extract=AsyncMock(return_value={"entities": [], "relations": []}),
+    )
+    chunk_repo = SimpleNamespace(
+        clear_extraction_result=AsyncMock(),
+        update_extraction_result=AsyncMock(),
+    )
+    service = MilvusGraphService(chunk_repo=chunk_repo)
+
+    result = await service._get_chunk_extraction_result("kb_test", chunk, extractor)
+
+    assert result == {"entities": [], "relations": [], "metadata": {}}
+    chunk_repo.clear_extraction_result.assert_awaited_once_with("chunk_1")
+    extractor.extract.assert_awaited_once()
+    assert extractor.extract.await_args.kwargs["chunk_metadata"] == {
+        "kb_id": "kb_test",
+        "chunk_id": "chunk_1",
+        "file_id": "file_1",
+        "chunk_index": 0,
+    }
+    chunk_repo.update_extraction_result.assert_awaited_once_with("chunk_1", result)
+    assert extractor.normalize_result.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_keeps_identity_mismatch_cache():
+    chunk = SimpleNamespace(
+        chunk_id="chunk_1",
+        file_id="file_1",
+        chunk_index=0,
+        content="产品支持组呼",
+        extraction_result={"metadata": {"ontology_digest": "old"}},
+    )
+    extractor = SimpleNamespace(
+        normalize_result=MagicMock(side_effect=OntologyIdentityMismatchError("请先清空抽取结果后重试")),
+        extract=AsyncMock(),
+    )
+    chunk_repo = SimpleNamespace(
+        clear_extraction_result=AsyncMock(),
+        update_extraction_result=AsyncMock(),
+    )
+    service = MilvusGraphService(chunk_repo=chunk_repo)
+
+    with pytest.raises(OntologyIdentityMismatchError, match="请先清空"):
+        await service._get_chunk_extraction_result("kb_test", chunk, extractor)
+
+    chunk_repo.clear_extraction_result.assert_not_awaited()
+    extractor.extract.assert_not_awaited()
+    chunk_repo.update_extraction_result.assert_not_awaited()
+
+
 def test_milvus_graph_service_writes_chunk_entity_and_relation():
     tx = MagicMock()
     session = MagicMock()
@@ -554,6 +789,51 @@ def test_milvus_graph_service_writes_chunk_entity_and_relation():
     assert any("MERGE (source)-[r:RELATION" in query for query in queries)
     entity_call = next(call for call in tx.run.call_args_list if "MERGE (e:Entity" in call.args[0])
     assert entity_call.kwargs["attributes"] == '[{"text": "工程师", "label": "Occupation"}]'
+
+
+def test_milvus_graph_service_skips_empty_formal_projection():
+    tx = MagicMock()
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.execute_write.side_effect = lambda func: func(tx)
+    driver = MagicMock()
+    driver.session.return_value = session
+    service = MilvusGraphService(neo4j_connection=SimpleNamespace(driver=driver))
+    chunk = SimpleNamespace(
+        chunk_id="chunk_1",
+        file_id="file_1",
+        kb_id="kb_test",
+        chunk_index=1,
+        content="产品不再支持离线模式",
+        start_char_pos=0,
+        end_char_pos=12,
+    )
+
+    entities, triples = service.write_chunk_graph(
+        "kb_test",
+        chunk,
+        normalize_extraction_result(
+            {
+                "entities": [{"text": "独立实体", "label": "Feature"}],
+                "relations": [
+                    {
+                        "source": {"text": "产品", "label": "Product"},
+                        "target": {"text": "离线模式", "label": "Feature"},
+                        "text": "不再支持",
+                        "label": "SUPPORTS",
+                        "polarity": "negative",
+                        "assertion_kind": "retraction",
+                    }
+                ],
+            },
+            "llm",
+        ),
+    )
+
+    assert entities == []
+    assert triples == []
+    driver.session.assert_not_called()
+    tx.run.assert_not_called()
 
 
 def test_milvus_graph_service_delete_file_graph_uses_scoped_streaming_queries():

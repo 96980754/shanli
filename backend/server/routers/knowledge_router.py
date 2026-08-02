@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
+from yuxi.repositories.task_repository import TaskRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
@@ -42,12 +43,14 @@ from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.document_version_service import DocumentVersionService
 from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
+from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
+from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
 from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
@@ -286,7 +289,7 @@ def _params_for_uploaded_document_item(item: str, params: dict) -> dict:
 
 async def _has_running_graph_build_task(kb_id: str) -> bool:
     return (
-        await tasker.find_task_by_payload(
+        await TaskRepository().find_latest_by_payload(
             task_type=GRAPH_TASK_TYPE,
             payload_match={"kb_id": kb_id},
             statuses=ACTIVE_GRAPH_BUILD_STATUSES,
@@ -742,7 +745,7 @@ async def delete_database(kb_id: str, current_user: User = Depends(get_admin_use
 @knowledge.get("/databases/{kb_id}/graph-build/status")
 async def get_graph_build_status(kb_id: str, current_user: User = Depends(get_admin_user)):
     try:
-        return await MilvusGraphService().get_status(kb_id, tasker=tasker)
+        return await MilvusGraphService().get_status(kb_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -795,25 +798,44 @@ async def index_graph_build(
         if not graph_status.get("locked"):
             raise HTTPException(status_code=400, detail="请先确认并锁定图谱抽取配置")
 
-        async def run_graph_index(context: TaskContext):
-            await context.set_message("任务初始化")
-            await context.set_progress(5.0, "准备构建图谱")
-            result = await service.build_pending_chunks(kb_id, batch_size=batch_size, context=context)
-            await context.set_result(result)
-            await context.set_progress(100.0, f"图谱构建完成，成功 {result['success']} 个，失败 {result['failed']} 个")
-            return result
-
-        task, created = await tasker.enqueue_unique_by_payload(
-            name=f"图谱构建 ({database['name']})",
-            task_type=GRAPH_TASK_TYPE,
-            payload={"kb_id": kb_id, "batch_size": batch_size},
-            coroutine=run_graph_index,
-            payload_match={"kb_id": kb_id},
-            statuses=ACTIVE_GRAPH_BUILD_STATUSES,
+        task_id = uuid.uuid4().hex
+        task_repository = TaskRepository()
+        task_record = await task_repository.create_if_no_active(
+            task_id=task_id,
+            data={
+                "name": f"图谱构建 ({database['name']})",
+                "type": GRAPH_TASK_TYPE,
+                "status": "pending",
+                "progress": 0.0,
+                "message": "任务已排队",
+                "payload": {"kb_id": kb_id, "batch_size": batch_size},
+            },
+            payload_key="kb_id",
+            payload_value=kb_id,
+            active_statuses=ACTIVE_GRAPH_BUILD_STATUSES,
         )
-        if not created:
+        if task_record is None:
             raise HTTPException(status_code=409, detail="该知识库已有正在运行的图谱构建任务")
-        return {"message": "图谱构建任务已提交", "status": "queued", "task_id": task.id}
+        try:
+            queue = await get_arq_pool()
+            await queue.enqueue_job(
+                "process_knowledge_graph_index",
+                task_id,
+                _job_id=f"task:{task_id}",
+            )
+        except Exception as exc:
+            await task_repository.upsert(
+                task_id,
+                {
+                    "status": "failed",
+                    "progress": 100.0,
+                    "message": "图谱构建任务投递失败",
+                    "error": str(exc),
+                    "completed_at": utc_now_naive(),
+                },
+            )
+            raise
+        return {"message": "图谱构建任务已提交", "status": "queued", "task_id": task_id}
     except HTTPException:
         raise
     except ValueError as e:
