@@ -160,6 +160,7 @@ class PostgresManager(metaclass=SingletonMeta):
             ),
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS normalized_name VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS original_filename VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS path VARCHAR(1024)",
@@ -536,6 +537,11 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_id ON knowledge_files(kb_id)",
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_filename ON knowledge_files(kb_id, filename)",
             "CREATE INDEX IF NOT EXISTS idx_kf_parent ON knowledge_files(parent_id)",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_folders_scope_name "
+                "ON knowledge_files(kb_id, COALESCE(parent_id, ''), normalized_name) "
+                "WHERE is_folder IS TRUE AND normalized_name IS NOT NULL"
+            ),
             "CREATE INDEX IF NOT EXISTS idx_kf_status ON knowledge_files(status)",
             "CREATE INDEX IF NOT EXISTS idx_kf_hash ON knowledge_files(content_hash)",
             "CREATE INDEX IF NOT EXISTS ix_evaluation_datasets_kb_id ON evaluation_datasets(kb_id)",
@@ -571,9 +577,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 "ON entity_link_candidates(assertion_id)"
             ),
             "CREATE INDEX IF NOT EXISTS ix_entity_link_candidates_kb_id ON entity_link_candidates(kb_id)",
-            (
-                "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_kb_status ON knowledge_conflicts(kb_id, status)"
-            ),
+            ("CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_kb_status ON knowledge_conflicts(kb_id, status)"),
             (
                 "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_entity_predicate "
                 "ON knowledge_conflicts(entity_id, predicate)"

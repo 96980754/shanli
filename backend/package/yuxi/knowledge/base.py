@@ -158,6 +158,7 @@ class KnowledgeBase(ABC):
             "kb_id": record.kb_id,
             "parent_id": record.parent_id,
             "filename": record.filename,
+            "normalized_name": getattr(record, "normalized_name", None),
             "file_type": record.file_type,
             "path": record.path,
             "markdown_file": record.markdown_file,
@@ -218,6 +219,7 @@ class KnowledgeBase(ABC):
             "kb_id": meta.get("kb_id"),
             "parent_id": meta.get("parent_id"),
             "filename": meta.get("filename") or "",
+            "normalized_name": meta.get("normalized_name"),
             "original_filename": meta.get("original_filename"),
             "file_type": meta.get("file_type"),
             "path": meta.get("path"),
@@ -1187,30 +1189,27 @@ class KnowledgeBase(ABC):
 
         return {"message": "删除成功"}
 
-    async def create_folder(self, kb_id: str, folder_name: str, parent_id: str | None = None) -> dict:
+    async def create_folder(
+        self,
+        kb_id: str,
+        folder_name: str,
+        parent_id: str | None = None,
+        created_by: str | None = None,
+    ) -> dict:
         """Create a folder in the database."""
         import uuid
 
-        if parent_id:
-            parent_meta = await self._load_file_meta(kb_id, parent_id)
-            if not parent_meta.get("is_folder"):
-                raise ValueError("Parent is not a folder")
-
         folder_id = f"folder-{uuid.uuid4()}"
+        from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        folder_meta = {
-            "file_id": folder_id,
-            "filename": folder_name,
-            "is_folder": True,
-            "parent_id": parent_id,
-            "kb_id": kb_id,
-            "created_at": utc_isoformat(),
-            "status": "done",
-            "path": folder_name,
-            "file_type": "folder",
-        }
-        await self._persist_file_meta(folder_id, folder_meta)
-        return folder_meta
+        record = await KnowledgeFileRepository().create_folder(
+            kb_id=kb_id,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            parent_id=parent_id,
+            created_by=created_by,
+        )
+        return self._file_record_to_meta(record)
 
     @abstractmethod
     async def update_content(self, kb_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:

@@ -36,6 +36,7 @@
       v-model:open="createFolderModalVisible"
       title="新建文件夹"
       :confirm-loading="createFolderLoading"
+      :ok-button-props="{ disabled: createFolderLoading || !normalizeFolderName(newFolderName) }"
       @ok="handleCreateFolder"
     >
       <a-input
@@ -436,7 +437,9 @@ import {
   getFilePrimaryAction,
   getFileStatusSortWeight,
   getFileStatusView,
-  getProcessingStageLabel
+  getProcessingStageLabel,
+  getFolderCreateErrorMessage,
+  normalizeFolderName
 } from '@/utils/knowledge_file_policy'
 import {
   CheckCircleFilled,
@@ -663,20 +666,22 @@ const toggleSelectionMode = () => {
 }
 
 const handleCreateFolder = async () => {
-  if (!newFolderName.value.trim()) {
+  if (createFolderLoading.value) return
+
+  const folderName = normalizeFolderName(newFolderName.value)
+  if (!folderName) {
     message.warning('请输入文件夹名称')
     return
   }
 
   createFolderLoading.value = true
   try {
-    await documentApi.createFolder(store.kbId, newFolderName.value, currentParentId.value)
+    await documentApi.createFolder(store.kbId, folderName, currentParentId.value)
     message.success('创建成功')
     createFolderModalVisible.value = false
-    handleRefresh()
+    await handleRefresh()
   } catch (error) {
-    console.error(error)
-    message.error('创建失败: ' + (error.message || '未知错误'))
+    message.error(getFolderCreateErrorMessage(error))
   } finally {
     createFolderLoading.value = false
   }

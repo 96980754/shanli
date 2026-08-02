@@ -148,7 +148,7 @@ export const documentApi = {
    */
   listDocuments: async (kbId, params = {}) => {
     const query = buildQuery(params)
-    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents${query ? `?${query}` : ''}`)
+    return apiGet(`/api/knowledge/databases/${kbId}/documents${query ? `?${query}` : ''}`)
   },
 
   /**
@@ -170,7 +170,7 @@ export const documentApi = {
    * @returns {Promise} - 创建结果
    */
   createFolder: async (kbId, folderName, parentId = null) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/folders`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/folders`, {
       folder_name: folderName,
       parent_id: parentId
     })

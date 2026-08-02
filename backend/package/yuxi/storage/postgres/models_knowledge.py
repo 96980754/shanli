@@ -90,6 +90,7 @@ class KnowledgeFile(Base):
     kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False, index=True)
     parent_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"), index=True)
     filename = Column(String(512), nullable=False)
+    normalized_name = Column(String(512))
     original_filename = Column(String(512))
     file_type = Column(String(64))
     path = Column(String(1024))

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import os
+import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text, union_all, update
+from sqlalchemy.exc import IntegrityError
 
 from yuxi.knowledge.enrichment import mark_enrichment_data_outdated
 from yuxi.storage.postgres.manager import pg_manager
@@ -25,6 +27,33 @@ FAILED_REPLACEMENT_CANDIDATE_STATUSES = {
     "error_parsing",
     "error_indexing",
 }
+
+
+class FolderNameConflictError(ValueError):
+    pass
+
+
+class InvalidFolderNameError(ValueError):
+    pass
+
+
+class ParentFolderNotFoundError(ValueError):
+    pass
+
+
+class ParentIsNotFolderError(ValueError):
+    pass
+
+
+def normalize_folder_name(folder_name: str) -> str:
+    normalized_name = unicodedata.normalize("NFKC", str(folder_name or "")).strip()
+    if not normalized_name:
+        raise InvalidFolderNameError("Folder name must not be empty")
+    if normalized_name in {".", ".."} or "/" in normalized_name or "\\" in normalized_name:
+        raise InvalidFolderNameError("Folder name contains invalid characters")
+    if any(ord(character) < 32 or ord(character) == 127 for character in normalized_name):
+        raise InvalidFolderNameError("Folder name contains invalid characters")
+    return normalized_name
 
 
 def stable_advisory_lock_key(namespace: str, value: str) -> int:
@@ -47,6 +76,7 @@ class KnowledgeFileRepository:
         "kb_id",
         "parent_id",
         "filename",
+        "normalized_name",
         "original_filename",
         "file_type",
         "path",
@@ -219,6 +249,76 @@ class KnowledgeFileRepository:
                 .order_by(KnowledgeFile.created_at.desc())
             )
             return list(result.scalars().all())
+
+    async def create_folder(
+        self,
+        *,
+        kb_id: str,
+        folder_id: str,
+        folder_name: str,
+        parent_id: str | None,
+        created_by: str | None = None,
+    ) -> KnowledgeFile:
+        normalized_name = normalize_folder_name(folder_name)
+        scope = parent_id or "<root>"
+        lock_key = stable_advisory_lock_key(
+            "knowledge-folder-name",
+            f"{kb_id}\0{scope}\0{normalized_name}",
+        )
+
+        try:
+            async with pg_manager.get_async_session_context() as session:
+                await session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+
+                if parent_id:
+                    parent = (
+                        await session.execute(
+                            select(KnowledgeFile).where(
+                                KnowledgeFile.kb_id == kb_id,
+                                KnowledgeFile.file_id == parent_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if parent is None:
+                        raise ParentFolderNotFoundError("Parent folder not found")
+                    if not parent.is_folder:
+                        raise ParentIsNotFolderError("Parent is not a folder")
+
+                siblings = list(
+                    (
+                        await session.execute(
+                            select(KnowledgeFile).where(
+                                KnowledgeFile.kb_id == kb_id,
+                                self._parent_condition(parent_id),
+                                KnowledgeFile.is_folder.is_(True),
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if any(
+                    normalize_folder_name(item.normalized_name or item.filename) == normalized_name for item in siblings
+                ):
+                    raise FolderNameConflictError("Folder name already exists in this directory")
+
+                record = KnowledgeFile(
+                    file_id=folder_id,
+                    kb_id=kb_id,
+                    parent_id=parent_id,
+                    filename=normalized_name,
+                    normalized_name=normalized_name,
+                    is_folder=True,
+                    status="done",
+                    path=normalized_name,
+                    file_type="folder",
+                    created_by=created_by,
+                )
+                session.add(record)
+                await session.flush()
+                return record
+        except IntegrityError as exc:
+            raise FolderNameConflictError("Folder name already exists in this directory") from exc
 
     async def list_by_content_hash(self, *, kb_id: str, content_hash: str) -> list[KnowledgeFile]:
         normalized_hash = content_hash.strip()
@@ -1206,5 +1306,19 @@ class KnowledgeFileRepository:
     async def delete_by_kb_id(self, kb_id: str) -> None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id))
-            for record in result.scalars().all():
+            records = list(result.scalars().all())
+            records_by_id = {record.file_id: record for record in records}
+
+            def depth(record: KnowledgeFile) -> int:
+                value = 0
+                parent_id = record.parent_id
+                visited = {record.file_id}
+                while parent_id and parent_id in records_by_id and parent_id not in visited:
+                    visited.add(parent_id)
+                    value += 1
+                    parent_id = records_by_id[parent_id].parent_id
+                return value
+
+            for record in sorted(records, key=depth, reverse=True):
                 await session.delete(record)
+                await session.flush()

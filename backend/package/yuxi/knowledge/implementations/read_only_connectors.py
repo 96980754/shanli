@@ -36,7 +36,14 @@ class ReadOnlyConnectors(KnowledgeBase):
     async def update_file_params(self, kb_id: str, file_id: str, params: dict, operator_id: str | None = None) -> None:
         raise self._readonly_error()
 
-    async def create_folder(self, kb_id: str, folder_name: str, parent_id: str | None = None) -> dict:
+    async def create_folder(
+        self,
+        kb_id: str,
+        folder_name: str,
+        parent_id: str | None = None,
+        created_by: str | None = None,
+    ) -> dict:
+        del created_by
         raise self._readonly_error()
 
     async def move_file(self, kb_id: str, file_id: str, new_parent_id: str | None) -> dict:

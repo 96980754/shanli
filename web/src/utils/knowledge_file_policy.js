@@ -5,6 +5,18 @@ export const FILE_ACTIONS = {
   CLEANING: 'cleaning'
 }
 
+export const normalizeFolderName = (value) =>
+  String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+
+export const getFolderCreateErrorMessage = (error) => {
+  const detail = error?.response?.data?.detail
+  if (detail?.code === 'folder_name_conflict') return '同一目录下已存在同名文件夹'
+  if (detail?.code === 'invalid_folder_name') return detail.message || '文件夹名称无效'
+  return error?.message || '创建文件夹失败'
+}
+
 const STATUS_VIEW = {
   uploaded: { label: '待解析', tone: 'status-warning', icon: 'clock' },
   parsing: { label: '解析中', tone: 'status-info', icon: 'progress' },

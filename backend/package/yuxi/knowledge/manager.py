@@ -319,10 +319,16 @@ class KnowledgeBaseManager:
                 return True
         return False
 
-    async def create_folder(self, kb_id: str, folder_name: str, parent_id: str = None) -> dict:
+    async def create_folder(
+        self,
+        kb_id: str,
+        folder_name: str,
+        parent_id: str = None,
+        created_by: str | None = None,
+    ) -> dict:
         """Create a folder in the database."""
         kb_instance = await self._get_kb_for_database(kb_id)
-        return await kb_instance.create_folder(kb_id, folder_name, parent_id)
+        return await kb_instance.create_folder(kb_id, folder_name, parent_id, created_by)
 
     async def create_database(
         self,

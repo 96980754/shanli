@@ -1030,7 +1030,7 @@ async def list_documents(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(100, ge=1, le=500, description="每页数量"),
     recursive: bool = Query(False, description="是否跨目录筛选"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """分页获取知识库文件列表。"""
     await _require_kb_permission(current_user, kb_id, "can_view")
@@ -2767,17 +2767,39 @@ async def create_folder(
     kb_id: str,
     folder_name: str = Body(..., embed=True),
     parent_id: str | None = Body(None, embed=True),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """创建文件夹"""
+    from yuxi.repositories.knowledge_file_repository import (
+        FolderNameConflictError,
+        InvalidFolderNameError,
+        ParentFolderNotFoundError,
+        ParentIsNotFolderError,
+    )
+
     try:
         await _ensure_database_supports_documents(kb_id, "文件夹创建")
-        return await knowledge_base.create_folder(kb_id, folder_name, parent_id)
+        await _require_kb_permission(current_user, kb_id, "can_manage")
+        return await knowledge_base.create_folder(kb_id, folder_name, parent_id, str(current_user.uid))
     except HTTPException:
         raise
+    except FolderNameConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "folder_name_conflict", "message": "同一目录下已存在同名文件夹"},
+        ) from exc
+    except InvalidFolderNameError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_folder_name", "message": "文件夹名称无效"},
+        ) from exc
+    except ParentFolderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="父文件夹不存在") from exc
+    except ParentIsNotFolderError as exc:
+        raise HTTPException(status_code=400, detail="目标父级不是文件夹") from exc
     except Exception as e:
-        logger.error(f"创建文件夹失败 {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("创建文件夹失败: {}", type(e).__name__)
+        raise HTTPException(status_code=500, detail="创建文件夹失败") from e
 
 
 @knowledge.put("/databases/{kb_id}/documents/{doc_id}/move")
