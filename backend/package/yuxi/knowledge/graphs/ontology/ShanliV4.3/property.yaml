@@ -1,0 +1,209 @@
+properties:
+  Hardware:
+    screen_size:
+      type: float
+      unit: inch
+      owners:
+      - Specification
+      description: 屏幕尺寸
+    screen_type:
+      type: string
+      owners:
+      - Specification
+      description: 屏幕类型
+    resolution:
+      type: string
+      unit: pixel
+      owners:
+      - Specification
+      description: 屏幕分辨率
+    battery_capacity:
+      type: int
+      unit: mAh
+      owners:
+      - Specification
+      description: 电池容量
+    weight:
+      type: float
+      unit: g
+      owners:
+      - Specification
+      description: 设备重量
+    dimensions:
+      type: string
+      owners:
+      - Specification
+      description: 设备尺寸
+    ip_rating:
+      type: string
+      owners:
+      - Specification
+      description: 防护等级
+    explosion_proof:
+      type: string
+      owners:
+      - Specification
+      description: 防爆等级
+    frequency:
+      type: string
+      unit: MHz/GHz
+      owners:
+      - Specification
+      description: 工作频段
+    camera:
+      type: string
+      owners:
+      - Specification
+      description: 摄像头规格
+    bluetooth:
+      type: string
+      owners:
+      - Specification
+      description: 蓝牙规格
+    wifi:
+      type: string
+      owners:
+      - Specification
+      description: Wi-Fi 规格
+    gnss:
+      type: string
+      owners:
+      - Specification
+      description: 卫星定位规格
+    standby_time:
+      type: string
+      owners:
+      - Specification
+      description: 待机时长
+    talk_time:
+      type: string
+      owners:
+      - Specification
+      description: 通话时长
+  Performance:
+    max_users:
+      type: int
+      owners:
+      - Specification
+      description: 最大用户数
+    concurrent_calls:
+      type: int
+      owners:
+      - Specification
+      description: 并发呼叫数
+    latency:
+      type: string
+      unit: ms
+      owners:
+      - Specification
+      description: 端到端时延
+    battery_life:
+      type: string
+      owners:
+      - Specification
+      description: 续航时间
+  Document:
+    document_type:
+      type: string
+      owners:
+      - Document
+      enum:
+      - WhitePaper
+      - SalesGuide
+      - UserManual
+      - FAQ
+      - Workflow
+      - DeploymentGuide
+      - Specification
+      - TestReport
+      - Certification
+      - Tender
+      - Case
+      - PPT
+      - Excel
+      - SLA
+      description: 文档业务类型
+  SellingPoint:
+    category:
+      type: string
+      owners:
+      - SellingPoint
+      enum:
+      - 国产化
+      - 性能
+      - 可靠性
+      - AI
+      - 成本
+      - 安全
+      - 兼容性
+      description: 卖点分类
+  Positioning:
+    market_level:
+      type: string
+      owners:
+      - Positioning
+      enum:
+      - 高端
+      - 中端
+      - 入门
+      description: 市场层级定位
+    industry_position:
+      type: string
+      owners:
+      - Positioning
+      enum:
+      - 公安
+      - 酒店
+      - 交通
+      - 能源
+      - 制造
+      - 通用
+      description: 行业定位
+    deployment_position:
+      type: string
+      owners:
+      - Positioning
+      enum:
+      - 公网
+      - 专网
+      - 混合
+      description: 部署定位
+  Roadmap:
+    name:
+      type: string
+      owners:
+      - Roadmap
+      description: 规划名称
+    status:
+      type: string
+      owners:
+      - Roadmap
+      enum:
+      - Planning
+      - Developing
+      - Testing
+      - Released
+      description: 规划状态
+    planned_date:
+      type: string
+      owners:
+      - Roadmap
+      description: 计划日期（ISO 日期字符串）
+    release_date:
+      type: string
+      owners:
+      - Roadmap
+      description: 发布日期（ISO 日期字符串）
+  CompatibleTarget:
+    target_type:
+      type: string
+      owners:
+      - CompatibleTarget
+      enum:
+      - Earphone
+      - Terminal
+      - Platform
+      - OS
+      - Camera
+      - Accessory
+      description: 兼容目标类型

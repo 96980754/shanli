@@ -14,6 +14,7 @@ from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import config as sys_config
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
+from yuxi.services.graph_build_worker import process_knowledge_graph_index
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.run_queue_service import (
     append_run_stream_event,
@@ -552,6 +553,7 @@ async def _worker_startup(ctx):
     pg_manager.initialize()
     await pg_manager.create_business_tables()
     await pg_manager.ensure_business_schema()
+    await pg_manager.ensure_knowledge_schema()
     await ensure_builtin_mcp_servers_in_db()
     async with pg_manager.get_async_session_context() as session:
         await init_builtin_skills(session)
@@ -559,11 +561,14 @@ async def _worker_startup(ctx):
 
 
 async def _worker_shutdown(ctx):
+    from yuxi.storage.neo4j import close_shared_neo4j_connection
+
+    close_shared_neo4j_connection()
     await pg_manager.close()
 
 
 class WorkerSettings:
-    functions = [process_agent_run]
+    functions = [process_agent_run, process_knowledge_graph_index]
     max_tries = 2
     retry_jobs = True
     job_timeout = 3600

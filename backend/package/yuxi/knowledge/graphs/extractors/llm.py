@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
+import httpx
 import json_repair
+
+from yuxi.utils import logger
 
 from yuxi.knowledge.graphs.extractors.base import normalize_extraction_result
 from yuxi.knowledge.graphs.ontology import (
@@ -47,6 +51,15 @@ SCHEMA_INSTRUCTION = """抽取 Schema 约束：
 {schema}
 """
 
+DEFAULT_CONCURRENCY_COUNT = 5
+MAX_CONCURRENCY_COUNT = 20
+MODEL_TIMEOUT_SECONDS = 180.0
+MODEL_MAX_ATTEMPTS = 3
+
+
+class OntologyIdentityMismatchError(ValueError):
+    pass
+
 
 class LLMGraphExtractor(GraphExtractor):
     extractor_type = "llm"
@@ -65,29 +78,43 @@ class LLMGraphExtractor(GraphExtractor):
             raise ValueError("LLM 抽取器需要 model_spec")
         if self.options.get("prompt"):
             raise ValueError("LLM 图谱抽取器不支持自定义完整 Prompt，请使用 Ontology 或领域 Schema 配置")
-        concurrency_count = self.options.get("concurrency_count", 1)
+        concurrency_count = self.options.get("concurrency_count", DEFAULT_CONCURRENCY_COUNT)
         try:
             concurrency_count = int(concurrency_count)
         except (TypeError, ValueError) as exc:
             raise ValueError("LLM 抽取器 concurrency_count 必须是整数") from exc
-        if concurrency_count < 1 or concurrency_count > 1000:
-            raise ValueError("LLM 抽取器 concurrency_count 必须在 1 到 1000 之间")
+        if concurrency_count < 1 or concurrency_count > MAX_CONCURRENCY_COUNT:
+            raise ValueError(f"LLM 抽取器 concurrency_count 必须在 1 到 {MAX_CONCURRENCY_COUNT} 之间")
+        self.options["concurrency_count"] = concurrency_count
         if self.options.get("model_params") is not None and not isinstance(self.options["model_params"], dict):
             raise ValueError("LLM 抽取器 model_params 必须是对象")
         self._prepare_ontology()
         self._validated = True
 
     async def extract(self, text: str, *, chunk_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-        del chunk_metadata
         self.validate_options()
         model = select_model(
             model_spec=self.options["model_spec"],
-            timeout=60.0,
+            timeout=MODEL_TIMEOUT_SECONDS,
             model_params=self.options.get("model_params") or {},
         )
-        response = await model.call(self._build_messages(text), stream=False)
-        result = json_repair.loads(response.content if response else "")
-        return self._enrich_evidence(result, text)
+        chunk_id = str((chunk_metadata or {}).get("chunk_id") or "unknown")
+        for attempt in range(1, MODEL_MAX_ATTEMPTS + 1):
+            try:
+                response = await model.call(self._build_messages(text), stream=False)
+                result = json_repair.loads(response.content if response else "")
+                return self._enrich_evidence(result, text)
+            except Exception as exc:
+                if attempt == MODEL_MAX_ATTEMPTS or not _is_retryable_model_error(exc):
+                    raise
+                delay = 2 ** (attempt - 1)
+                logger.warning(
+                    f"图谱模型调用失败，准备重试 chunk_id={chunk_id}, "
+                    f"attempt={attempt}/{MODEL_MAX_ATTEMPTS}, delay={delay}s, "
+                    f"error_type={_root_cause(exc).__class__.__name__}"
+                )
+                await asyncio.sleep(delay)
+        raise RuntimeError("图谱模型调用重试状态异常")
 
     def normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:
         normalized = normalize_extraction_result(result, self.extractor_type)
@@ -106,7 +133,7 @@ class LLMGraphExtractor(GraphExtractor):
             str(metadata.get("ontology_digest") or ""),
         )
         if any(cached_identity) and cached_identity != configured_identity:
-            raise ValueError("抽取结果使用了不同的 Core Ontology，请先清空抽取结果后重试")
+            raise OntologyIdentityMismatchError("抽取结果使用了不同的 Core Ontology，请先清空抽取结果后重试")
 
         normalize_ontology_aliases(normalized, self.ontology)
         validate_ontology_result(normalized, self.ontology)
@@ -191,3 +218,22 @@ class LLMGraphExtractor(GraphExtractor):
 
     def _build_prompt(self, text: str) -> str:
         return f"{self._build_system_prompt()}\n\n文本：\n{text}"
+
+
+def _root_cause(exc: BaseException) -> BaseException:
+    current = exc
+    seen: set[int] = set()
+    while current.__cause__ is not None and id(current.__cause__) not in seen:
+        seen.add(id(current))
+        current = current.__cause__
+    return current
+
+
+def _is_retryable_model_error(exc: BaseException) -> bool:
+    cause = _root_cause(exc)
+    if isinstance(cause, (TimeoutError, ConnectionError, httpx.TimeoutException, httpx.NetworkError)):
+        return True
+    if isinstance(cause, httpx.HTTPStatusError):
+        return cause.response.status_code == 429 or cause.response.status_code >= 500
+    status_code = getattr(cause, "status_code", None)
+    return status_code == 429 or isinstance(status_code, int) and status_code >= 500

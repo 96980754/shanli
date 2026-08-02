@@ -32,7 +32,7 @@ async def cancel_task(task_id: str, current_user: User = Depends(get_admin_user)
     success = await tasker.cancel_task(task_id)
     if not success:
         raise HTTPException(status_code=400, detail="Task cannot be cancelled")
-    return {"task_id": task_id, "status": "cancelled"}
+    return {"task_id": task_id, "status": "cancellation_requested"}
 
 
 @tasks.delete("/{task_id}")

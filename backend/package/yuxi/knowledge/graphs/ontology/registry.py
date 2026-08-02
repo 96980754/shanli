@@ -20,9 +20,11 @@ import yaml
 from yuxi import config
 
 DEFAULT_ONTOLOGY_REGISTRY_ID = "tongyong"
-_BUILTIN_REGISTRY_IDS = ("Generic", "ShanliV4.2")
+DEFAULT_GRAPH_ONTOLOGY_IDENTITY = ("shanli-preset", "4.3")
+_BUILTIN_REGISTRY_IDS = ("Generic", "ShanliV4.2", "ShanliV4.3")
 _BUILTIN_DISPLAY_NAMES = {
-    ("shanli-preset", "4.2"): "善理预设新版",
+    ("shanli-preset", "4.2"): "善理预设 V4.2（历史）",
+    ("shanli-preset", "4.3"): "善理预设新版",
 }
 _ONTOLOGY_ROOT = Path(__file__).parent
 _BUNDLE_FILENAMES = ("schema.json", "entity.yaml", "relation.yaml", "property.yaml")
@@ -63,6 +65,9 @@ class PropertyDefinition:
     name: str
     value_type: str
     unit: str | None
+    owners: tuple[str, ...]
+    enum: tuple[str, ...]
+    description: str
 
 
 @dataclass(frozen=True)
@@ -97,6 +102,7 @@ class OntologyRegistryEntry:
             "name": self.name,
             "status": self.status,
             "source": self.source,
+            "is_default": (self.registry_id, self.version) == DEFAULT_GRAPH_ONTOLOGY_IDENTITY,
         }
 
 
@@ -250,6 +256,9 @@ def get_ontology_registry_detail(
             "name": property_definition.name,
             "type": property_definition.value_type,
             "unit": property_definition.unit,
+            "owners": list(property_definition.owners),
+            "enum": list(property_definition.enum),
+            "description": property_definition.description,
         }
         for category in sorted(ontology.properties, key=str.casefold)
         for property_definition in sorted(ontology.properties[category].values(), key=lambda item: item.name.casefold())
@@ -550,7 +559,13 @@ def merge_ontology(core: OntologySpec, extension: dict[str, Any]) -> OntologySpe
     merged_properties = {
         **{
             category: {
-                name: {"type": item.value_type, **({"unit": item.unit} if item.unit else {})}
+                name: {
+                    "type": item.value_type,
+                    **({"unit": item.unit} if item.unit else {}),
+                    **({"owners": list(item.owners)} if item.owners else {}),
+                    **({"enum": list(item.enum)} if item.enum else {}),
+                    **({"description": item.description} if item.description else {}),
+                }
                 for name, item in values.items()
             }
             for category, values in core.properties.items()
@@ -589,8 +604,16 @@ def compile_ontology_prompt(ontology: OntologySpec) -> str:
     property_lines = []
     for category, values in ontology.properties.items():
         for item in values.values():
-            suffix = f", unit={item.unit}" if item.unit else ""
-            property_lines.append(f"- {category}.{item.name}: type={item.value_type}{suffix}")
+            details = [f"category={category}", f"type={item.value_type}"]
+            if item.unit:
+                details.append(f"unit={item.unit}")
+            if item.owners:
+                details.append(f"owners={' | '.join(item.owners)}")
+            if item.enum:
+                details.append(f"enum={' | '.join(item.enum)}")
+            if item.description:
+                details.append(f"description={item.description}")
+            property_lines.append(f"- {item.name}: {', '.join(details)}")
 
     sections = [
         "你必须严格按照指定 Ontology 抽取实体、关系和属性。",
@@ -611,9 +634,10 @@ def compile_ontology_prompt(ontology: OntologySpec) -> str:
         "强制规则：\n"
         "1. 实体 label 必须使用允许的实体类型。\n"
         "2. 关系 label 和 source/target 类型必须符合允许关系及方向。\n"
-        "3. 属性 label 必须使用允许属性的 key。\n"
-        "4. 禁止创建列表之外的实体类型、关系类型或属性。\n"
-        "5. 文本中没有符合 Ontology 的事实时，返回空 entities 和 relations。"
+        "3. attributes[].label 必须使用允许属性的裸 key，例如 screen_size；category 仅用于说明分组，禁止输出 Hardware.screen_size。属性定义了 owners 时只能挂载到允许的实体类型，定义了 enum 时值必须来自枚举。\n"
+        "4. 新抽取的证据关联统一使用 SUPPORTED_BY，不要生成历史兼容关系 HAS_EVIDENCE。\n"
+        "5. 禁止创建列表之外的实体类型、关系类型或属性。\n"
+        "6. 文本中没有符合 Ontology 的事实时，返回空 entities 和 relations。"
     )
     return "\n\n".join(sections)
 
@@ -661,13 +685,18 @@ def validate_ontology_result(result: dict[str, Any], ontology: OntologySpec) -> 
             definition = properties_by_name.get(attribute_label)
             if definition is None:
                 raise ValueError(f"Ontology 不允许属性: {attribute_label}")
+            if definition.owners and label not in definition.owners:
+                raise ValueError(f"属性 {attribute_label} 不允许用于实体类型: {label}")
             _validate_property_value(attribute.get("text"), definition)
 
+    forbidden_relations = set(ontology.rules.get("forbidden_relations", []))
     for relation in result.get("relations", []):
         label = relation.get("label")
         definition = ontology.relations.get(label)
         if definition is None:
             raise ValueError(f"Ontology 不允许关系类型: {label}")
+        if label in forbidden_relations:
+            raise ValueError(f"Ontology 禁止新抽取关系类型: {label}")
         source_label = (relation.get("source") or {}).get("label")
         target_label = (relation.get("target") or {}).get("label")
         if not _matches_endpoint(source_label, definition.source):
@@ -865,7 +894,7 @@ def _build_ontology(
 
     normalized_entity_aliases = _normalize_entity_aliases(entity_aliases, entities)
     normalized_relation_aliases = _normalize_relation_aliases(relation_aliases, relations)
-    normalized_properties = _normalize_properties(properties)
+    normalized_properties = _normalize_properties(properties, entities)
     rules = {
         key: value
         for key, value in schema.items()
@@ -919,7 +948,10 @@ def _normalize_relation_aliases(raw: Any, relations: dict[str, RelationDefinitio
     return result
 
 
-def _normalize_properties(raw: Any) -> dict[str, dict[str, PropertyDefinition]]:
+def _normalize_properties(
+    raw: Any,
+    entities: dict[str, EntityDefinition],
+) -> dict[str, dict[str, PropertyDefinition]]:
     if not isinstance(raw, dict):
         raise ValueError("property.yaml 的 properties 必须是对象")
     seen_names: dict[str, str] = {}
@@ -938,20 +970,29 @@ def _normalize_properties(raw: Any) -> dict[str, dict[str, PropertyDefinition]]:
             if folded in seen_names:
                 raise ValueError(f"属性 key 重复: {seen_names[folded]} 与 {property_name}")
             seen_names[folded] = property_name
-            value_type = _required_text(definition, "type", context=f"属性 {category}.{property_name}").lower()
+            context = f"属性 {category}.{property_name}"
+            value_type = _required_text(definition, "type", context=context).lower()
             if value_type not in _ALLOWED_PROPERTY_TYPES:
                 raise ValueError(
-                    f"属性 {category}.{property_name}.type 不支持: {value_type}，"
+                    f"{context}.type 不支持: {value_type}，"
                     f"可用类型: {', '.join(sorted(_ALLOWED_PROPERTY_TYPES))}"
                 )
             unit = definition.get("unit")
             if unit is not None and not isinstance(unit, str):
-                raise ValueError(f"属性 {category}.{property_name}.unit 必须是字符串")
+                raise ValueError(f"{context}.unit 必须是字符串")
+            owners = _property_owners(definition.get("owners", definition.get("owner")), entities, context)
+            enum = _optional_text_tuple(definition.get("enum"), f"{context}.enum")
+            if enum and value_type != "string":
+                raise ValueError(f"{context}.enum 仅支持 string 属性")
+            description = _optional_text(definition, "description", context)
             category_items[property_name] = PropertyDefinition(
                 category=category,
                 name=property_name,
                 value_type=value_type,
-                unit=unit,
+                unit=unit.strip() if isinstance(unit, str) and unit.strip() else None,
+                owners=owners,
+                enum=enum,
+                description=description,
             )
         result[category] = category_items
     return result
@@ -984,6 +1025,8 @@ def _validate_property_value(value: Any, definition: PropertyDefinition) -> None
     text = str(value or "").strip()
     if not text:
         raise ValueError(f"属性 {definition.name} 的值不能为空")
+    if definition.enum and text not in definition.enum:
+        raise ValueError(f"属性 {definition.name} 的值必须是: {', '.join(definition.enum)}")
     value_type = definition.value_type
     comparable = text
     if definition.unit and comparable.casefold().endswith(definition.unit.casefold()):
@@ -1046,6 +1089,32 @@ def _text_tuple(value: Any, context: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
         raise ValueError(f"{context} 必须是非空字符串数组")
     return tuple(item.strip() for item in value)
+
+
+def _optional_text_tuple(value: Any, context: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    items = _text_tuple(value, context)
+    normalized = [item.casefold() for item in items]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"{context} 不能包含重复值")
+    return items
+
+
+def _property_owners(
+    value: Any,
+    entities: dict[str, EntityDefinition],
+    context: str,
+) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    owners = (value.strip(),) if isinstance(value, str) and value.strip() else _text_tuple(value, f"{context}.owners")
+    unknown = [owner for owner in owners if owner not in entities]
+    if unknown:
+        raise ValueError(f"{context}.owners 引用未声明实体: {', '.join(unknown)}")
+    if len(owners) != len(set(owners)):
+        raise ValueError(f"{context}.owners 不能包含重复实体")
+    return owners
 
 
 def _endpoint_types(value: Any, relation_name: str, endpoint: str) -> tuple[str, ...]:

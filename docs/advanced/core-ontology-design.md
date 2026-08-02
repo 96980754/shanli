@@ -343,10 +343,26 @@ properties:
 层级含义为：
 
 ```text
-属性分类 → 属性 key → 类型与单位
+属性分类 → 属性 key → 类型、实体归属和可选约束
 ```
 
-属性分类主要用于组织和阅读；抽取结果实际使用的是属性 key，因此所有分类下的属性 key 必须全局唯一。
+属性分类主要用于组织和阅读；抽取结果实际使用的是属性 key，因此所有分类下的属性 key 必须全局唯一。属性定义还支持：
+
+- `owners`：允许挂载该属性的实体类型列表；未填写时仅用于兼容旧 Bundle，不限制实体类型。
+- `enum`：字符串属性允许的精确值列表。
+- `description`：属性业务说明，会进入抽取 Prompt 和 Registry 详情。
+
+例如：
+
+```yaml
+properties:
+  Positioning:
+    market_level:
+      type: string
+      owners: [Positioning]
+      enum: [高端, 中端, 入门]
+      description: 市场层级定位
+```
 
 当前支持的 `type`：
 
@@ -378,8 +394,10 @@ screen_size:
 - key 使用稳定的英文 snake_case，例如 `battery_capacity`。
 - 同一个业务含义只保留一个 key，避免同时存在 `battery`、`battery_size`、`battery_capacity`。
 - 数值应尽量拆分数值和单位；格式复杂或经常包含范围时可使用 `string`。
-- 当前不要使用 `enum`、日期、数组或嵌套对象等未支持类型。
-- `description`、`required` 等额外字段当前不会参与抽取校验；关键语义应体现在清晰的 key、类型和单位中。
+- `enum` 仅用于 `string` 属性；抽取值不在枚举列表中时校验失败。
+- 使用 `owners` 明确属性所属实体，避免属性仅因 key 存在就被挂到无关实体。
+- 日期语义当前仍使用 `string`，数组、对象和嵌套属性仍不支持。
+- `description` 用于解释业务含义，但不能替代稳定、清晰的属性 key。
 
 没有属性时使用：
 

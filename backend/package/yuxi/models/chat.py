@@ -34,7 +34,7 @@ class LangChainChatAdapter:
         except Exception as e:
             err = f"Error calling model: {e}, URL: {self.base_url}, Model: {self.model_name}"
             logger.error(err)
-            raise Exception(err)
+            raise RuntimeError(err) from e
 
     async def _stream_response(self, messages):
         async for chunk in self.model.astream(messages):
