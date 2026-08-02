@@ -1,11 +1,5 @@
 <template>
-  <a-modal
-    v-model:open="visible"
-    title="知识冲突审核"
-    width="1080px"
-    :footer="null"
-    @open-change="handleOpenChange"
-  >
+  <a-modal v-model:open="visible" title="知识冲突审核" width="1080px" :footer="null">
     <div class="conflict-toolbar">
       <a-select v-model:value="statusFilter" style="width: 160px" @change="load">
         <a-select-option value="">全部状态</a-select-option>
@@ -124,7 +118,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { knowledgeConflictApi } from '@/apis/knowledge_api'
 import {
@@ -174,6 +168,9 @@ const load = async () => {
 const handleOpenChange = (open) => {
   if (open) load()
 }
+
+// Ant Design Vue 4.2 does not emit afterOpenChange from Modal.
+watch(() => props.open, handleOpenChange)
 
 const resolve = async (item) => {
   const draft = drafts[item.conflict_id]
