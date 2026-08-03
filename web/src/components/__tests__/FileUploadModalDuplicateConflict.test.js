@@ -15,6 +15,10 @@ const componentSource = fs.readFileSync(
   path.join(testDirectory, '..', 'FileUploadModal.vue'),
   'utf8'
 )
+const databaseStoreSource = fs.readFileSync(
+  path.join(testDirectory, '..', '..', 'stores', 'database.js'),
+  'utf8'
+)
 
 const sameNameConflict = {
   conflict_type: 'same_name',
@@ -58,7 +62,7 @@ assert.match(componentSource, /:open="duplicateConflictOpen"/)
 assert.match(componentSource, /duplicateConflictIsExact/)
 assert.match(componentSource, /查看已有文件/)
 assert.match(componentSource, /display_path/)
-assert.match(componentSource, /emit\('view-existing-file', existing\.file_id\)/)
+assert.match(componentSource, /emit\('view-existing-file', existing\.file_id, existing\)/)
 assert.match(componentSource, /const duplicateConflictQueue = ref\(\[\]\)/)
 assert.match(componentSource, /@click="cancelDuplicateConflict"/)
 assert.match(componentSource, /resolveDuplicateConflict\(DUPLICATE_STRATEGIES\.KEEP_BOTH\)/)
@@ -68,5 +72,10 @@ assert.match(componentSource, /if \(duplicateConflictPending\.value\) return/)
 assert.match(componentSource, /parentId: selectedFolderId\.value/)
 assert.match(componentSource, /parent_ids\[file_path\] = file\.response\.parent_id/)
 assert.match(componentSource, /emit\('success'\)/)
+assert.match(componentSource, /kbId:\s*\{\s*type: String/)
+assert.match(componentSource, /props\.kbId \|\| store\.kbId/)
+assert.equal(componentSource.match(/databaseId: kbId\.value/g)?.length, 2)
+assert.match(databaseStoreSource, /databaseId \|\| kbId\.value/)
+assert.match(databaseStoreSource, /documentApi\.addDocuments\(targetKbId,/)
 
 console.log('file upload duplicate conflict component contract tests passed')

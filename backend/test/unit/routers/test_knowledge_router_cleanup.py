@@ -301,6 +301,31 @@ async def test_upload_replace_requires_upload_and_manage_permissions_before_read
     }
 
 
+async def test_delete_document_requires_manage_permission_before_read(monkeypatch):
+    calls = {"permissions": [], "read": 0}
+
+    async def deny_manage(_user, kb_id: str, action: str) -> None:
+        calls["permissions"].append((kb_id, action))
+        raise HTTPException(status_code=403, detail="知识库权限不足")
+
+    async def fake_get_file_basic_info(*_args, **_kwargs):
+        calls["read"] += 1
+        return {"meta": {}}
+
+    monkeypatch.setattr(knowledge_router, "_require_kb_permission", deny_manage)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_basic_info", fake_get_file_basic_info)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.delete_document(
+            "kb_1",
+            "file_1",
+            current_user=SimpleNamespace(uid="user_1"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert calls == {"permissions": [("kb_1", "can_manage")], "read": 0}
+
+
 async def test_upload_skip_returns_structured_success_without_storage_write(monkeypatch):
     calls = {"upload": 0}
 

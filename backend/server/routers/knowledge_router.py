@@ -588,19 +588,23 @@ async def get_accessible_databases(current_user: User = Depends(get_required_use
     try:
         databases = await knowledge_base.get_databases_by_uid(current_user.uid)
 
-        accessible = [
-            {
-                "name": db.get("name", ""),
-                "kb_id": db.get("kb_id"),
-                "description": db.get("description", ""),
-                "created_by": db.get("created_by"),
-                "kb_type": db.get("kb_type"),
-                "supports_documents": KnowledgeBaseFactory.get_kb_class(
-                    (db.get("kb_type") or "milvus").lower()
-                ).supports_documents,
-            }
-            for db in databases.get("databases", [])
-        ]
+        accessible = []
+        for db in databases.get("databases", []):
+            kb_id = db.get("kb_id")
+            accessible.append(
+                {
+                    "name": db.get("name", ""),
+                    "kb_id": kb_id,
+                    "description": db.get("description", ""),
+                    "created_by": db.get("created_by"),
+                    "kb_type": db.get("kb_type"),
+                    "can_view": True,
+                    "can_manage": bool(kb_id and await _has_kb_permission(current_user, kb_id, "can_manage")),
+                    "supports_documents": KnowledgeBaseFactory.get_kb_class(
+                        (db.get("kb_type") or "milvus").lower()
+                    ).supports_documents,
+                }
+            )
 
         return {"databases": accessible}
     except Exception as e:
@@ -2539,8 +2543,9 @@ async def batch_delete_documents(
 
 
 @knowledge.delete("/databases/{kb_id}/documents/{doc_id}")
-async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
+async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """删除文档或文件夹"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     logger.debug(f"DELETE document {doc_id} info in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档删除")
     try:

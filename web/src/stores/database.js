@@ -458,7 +458,7 @@ export const useDatabaseStore = defineStore('database', () => {
     })
   }
 
-  async function addFiles({ items, contentType, params, parentId }) {
+  async function addFiles({ items, contentType, params, parentId, databaseId }) {
     if (items.length === 0) {
       message.error(contentType === 'file' ? '请先上传文件' : '请输入有效的网页链接')
       return
@@ -470,7 +470,8 @@ export const useDatabaseStore = defineStore('database', () => {
       if (parentId) {
         requestParams.parent_id = parentId
       }
-      const data = await documentApi.addDocuments(kbId.value, items, requestParams)
+      const targetKbId = databaseId || kbId.value
+      const data = await documentApi.addDocuments(targetKbId, items, requestParams)
       if (data.status === 'success' || data.status === 'queued') {
         const itemType = contentType === 'file' ? '文件' : 'URL'
         enableAutoRefresh('auto')
@@ -478,11 +479,11 @@ export const useDatabaseStore = defineStore('database', () => {
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `知识库导入 (${kbId.value || ''})`,
+            name: `知识库导入 (${targetKbId || ''})`,
             task_type: 'knowledge_ingest',
             message: data.message,
             payload: {
-              kb_id: kbId.value,
+              kb_id: targetKbId,
               count: items.length,
               content_type: contentType
             }

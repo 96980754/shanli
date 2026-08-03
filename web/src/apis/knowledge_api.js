@@ -1,6 +1,7 @@
 import {
   apiGet,
   apiPost,
+  apiDelete,
   apiAdminGet,
   apiAdminPost,
   apiAdminPut,
@@ -418,7 +419,7 @@ export const documentApi = {
    * @returns {Promise} - 删除结果
    */
   deleteDocument: async (kbId, docId) => {
-    return apiAdminDelete(`/api/knowledge/databases/${kbId}/documents/${docId}`)
+    return apiDelete(`/api/knowledge/databases/${kbId}/documents/${docId}`)
   },
 
   /**

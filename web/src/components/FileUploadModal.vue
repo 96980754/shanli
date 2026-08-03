@@ -563,6 +563,10 @@ import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
 const props = defineProps({
+  kbId: {
+    type: String,
+    default: ''
+  },
   visible: {
     type: Boolean,
     default: false
@@ -726,7 +730,7 @@ const visible = computed({
   set: (value) => emit('update:visible', value)
 })
 
-const kbId = computed(() => store.kbId)
+const kbId = computed(() => props.kbId || store.kbId)
 const chunkLoading = computed(() => store.state.chunkLoading)
 
 // 上传模式
@@ -1341,7 +1345,7 @@ const cancelDuplicateConflict = () => {
 const viewDuplicateExistingFile = () => {
   const existing = duplicateConflictExisting.value
   if (!existing?.file_id || duplicateConflictPending.value) return
-  emit('view-existing-file', existing.file_id)
+  emit('view-existing-file', existing.file_id, existing)
   cancelDuplicateConflict()
 }
 
@@ -1753,7 +1757,8 @@ const chunkData = async () => {
         items,
         contentType: 'file',
         params,
-        parentId: selectedFolderId.value
+        parentId: selectedFolderId.value,
+        databaseId: kbId.value
       })
 
       emit('success')
@@ -1907,7 +1912,8 @@ const chunkData = async () => {
       items,
       contentType: 'file',
       params,
-      parentId: selectedFolderId.value
+      parentId: selectedFolderId.value,
+      databaseId: kbId.value
     })
 
     emit('success')

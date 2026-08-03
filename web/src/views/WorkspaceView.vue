@@ -1,5 +1,14 @@
 <template>
   <div class="workspace-view layout-container">
+    <FileUploadModal
+      v-model:visible="knowledgeUploadModalVisible"
+      :kb-id="selectedDatabase?.kb_id || ''"
+      :folder-tree="knowledgeFolderTree"
+      :current-folder-id="knowledgeFileBrowser.parentId"
+      @success="handleKnowledgeUploadSuccess"
+      @view-existing-file="openKnowledgeFileDetail"
+    />
+
     <PageHeader title="工作区" :loading="loadingTree || loadingPreview" :show-border="true">
       <template #actions>
         <a-button
@@ -10,17 +19,25 @@
           <template #icon><CircleHelp :size="16" /></template>
           使用说明
         </a-button>
-        <a-button :disabled="activeSourceKey !== 'personal'" @click="openCreateDirectoryModal">
-          新建文件夹
-        </a-button>
-        <a-button
-          type="primary"
-          :loading="uploadingFile"
-          :disabled="activeSourceKey !== 'personal'"
-          @click="openUploadFilePicker"
-        >
-          上传文件
-        </a-button>
+        <a-tooltip :title="workspaceActionDisabledReason">
+          <span>
+            <a-button :disabled="!canManageCurrentSource" @click="openCreateDirectoryModal">
+              新建文件夹
+            </a-button>
+          </span>
+        </a-tooltip>
+        <a-tooltip :title="workspaceActionDisabledReason">
+          <span>
+            <a-button
+              type="primary"
+              :loading="uploadingFile"
+              :disabled="!canManageCurrentSource"
+              @click="openUploadFilePicker"
+            >
+              上传文件
+            </a-button>
+          </span>
+        </a-tooltip>
       </template>
     </PageHeader>
 
@@ -78,7 +95,7 @@
             :deleting-paths="deletingPaths"
             :selection-mode="selectionMode"
             :loading="loadingTree"
-            :readonly="isKnowledgeSource"
+            :readonly="isKnowledgeSource && !canManageKnowledgeSource"
             :root-label="selectedDatabase?.name || '工作区'"
             :breadcrumb-items="isKnowledgeSource ? knowledgeBreadcrumbItems : null"
             :pagination="isKnowledgeSource ? knowledgePagination : null"
@@ -201,10 +218,11 @@ import { message, Modal } from 'ant-design-vue'
 import { ChevronLeft, ChevronRight, CircleHelp, LibraryBig } from 'lucide-vue-next'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import AgentFilePreview from '@/components/AgentFilePreview.vue'
+import FileUploadModal from '@/components/FileUploadModal.vue'
 import WorkspaceFileList from '@/components/workspace/WorkspaceFileList.vue'
 import WorkspacePreviewPane from '@/components/workspace/WorkspacePreviewPane.vue'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar.vue'
-import { databaseApi } from '@/apis/knowledge_api'
+import { databaseApi, documentApi } from '@/apis/knowledge_api'
 import { useUserStore } from '@/stores/user'
 import {
   createWorkspaceDirectory,
@@ -219,6 +237,11 @@ import {
   uploadWorkspaceFiles
 } from '@/apis/workspace_api'
 import { normalizePreviewResponse } from '@/utils/file_preview'
+import { getFolderCreateErrorMessage, normalizeFolderName } from '@/utils/knowledge_file_policy'
+import {
+  canManageWorkspaceSource,
+  getWorkspaceActionDisabledReason
+} from '@/utils/workspace_knowledge_policy'
 
 const userStore = useUserStore()
 
@@ -246,6 +269,7 @@ const newDirectoryName = ref('')
 const creatingDirectory = ref(false)
 const uploadingFile = ref(false)
 const uploadInputRef = ref(null)
+const knowledgeUploadModalVisible = ref(false)
 const deletingPaths = ref([])
 const sidebarCollapsed = ref(false)
 const previewWidthPercent = ref(50)
@@ -264,6 +288,15 @@ const knowledgeFileBrowser = reactive({
 
 const useInlinePreview = computed(() => workspaceMainWidth.value >= INLINE_PREVIEW_MIN_WIDTH)
 const isKnowledgeSource = computed(() => activeSourceKey.value.startsWith('database:'))
+const canManageKnowledgeSource = computed(
+  () => isKnowledgeSource.value && selectedDatabase.value?.can_manage === true
+)
+const canManageCurrentSource = computed(() =>
+  canManageWorkspaceSource(activeSourceKey.value, selectedDatabase.value)
+)
+const workspaceActionDisabledReason = computed(() =>
+  getWorkspaceActionDisabledReason(activeSourceKey.value, selectedDatabase.value)
+)
 const comparablePath = (path) => String(path || '/').replace(/\/$/, '') || '/'
 const isSameOrChildPath = (path, targetPath) => {
   const normalizedPath = comparablePath(path)
@@ -298,6 +331,24 @@ const knowledgePagination = computed(() => ({
   showSizeChanger: true,
   pageSizeOptions: ['100', '300', '500']
 }))
+
+const knowledgeFolderTree = computed(() => {
+  const roots = []
+  let currentLevel = roots
+  for (const item of knowledgeBreadcrumbItems.value
+    .slice(1)
+    .filter((node) => !node.isVirtualFolder)) {
+    const node = {
+      file_id: item.parentId,
+      filename: item.name,
+      is_folder: true,
+      children: []
+    }
+    currentLevel.push(node)
+    currentLevel = node.children
+  }
+  return roots
+})
 
 const selectedEntries = computed(() => {
   const selectedPathSet = new Set(selectedPaths.value)
@@ -504,6 +555,18 @@ const loadKnowledgeEntries = async (
   }
 }
 
+const refreshKnowledgeEntries = async () => {
+  if (!selectedDatabase.value || !isKnowledgeSource.value) return
+  const currentBreadcrumb = knowledgeBreadcrumbItems.value.at(-1)
+  await loadKnowledgeEntries(selectedDatabase.value, {
+    parentId: knowledgeFileBrowser.parentId,
+    pathPrefix: knowledgeFileBrowser.pathPrefix,
+    page: knowledgeFileBrowser.page,
+    pageSize: knowledgeFileBrowser.pageSize,
+    breadcrumbs: currentBreadcrumb ? [...knowledgeBreadcrumbItems.value] : null
+  })
+}
+
 const loadDatabases = async () => {
   loadingDatabases.value = true
   try {
@@ -523,6 +586,7 @@ const selectPersonalWorkspace = async () => {
   const wasKnowledgeSource = isKnowledgeSource.value
   activeSourceKey.value = 'personal'
   selectedDatabase.value = null
+  knowledgeUploadModalVisible.value = false
   knowledgeBreadcrumbItems.value = []
   closePreview()
   clearWorkspaceSelection()
@@ -534,6 +598,7 @@ const selectPersonalWorkspace = async () => {
 const selectWorkspacePath = async (path) => {
   activeSourceKey.value = 'personal'
   selectedDatabase.value = null
+  knowledgeUploadModalVisible.value = false
   knowledgeBreadcrumbItems.value = []
   closePreview()
   clearWorkspaceSelection()
@@ -566,6 +631,7 @@ const selectDatabase = async (database) => {
   closePreview()
   clearWorkspaceSelection()
   selectedDatabase.value = database
+  knowledgeUploadModalVisible.value = false
   activeSourceKey.value = `database:${database.kb_id}`
   await loadKnowledgeEntries(database)
 }
@@ -667,7 +733,10 @@ const handleSavePreviewFile = async (content) => {
 }
 
 const openCreateDirectoryModal = () => {
-  if (activeSourceKey.value !== 'personal') return
+  if (!canManageCurrentSource.value) {
+    message.warning(workspaceActionDisabledReason.value)
+    return
+  }
   newDirectoryName.value = ''
   createDirectoryModalVisible.value = true
 }
@@ -682,7 +751,9 @@ const closeAgentsGuideModal = () => {
 
 const createDirectory = async () => {
   if (creatingDirectory.value) return
-  const directoryName = newDirectoryName.value.trim()
+  const directoryName = isKnowledgeSource.value
+    ? normalizeFolderName(newDirectoryName.value)
+    : newDirectoryName.value.trim()
   if (!directoryName) {
     message.warning('请输入文件夹名')
     return
@@ -690,25 +761,64 @@ const createDirectory = async () => {
 
   creatingDirectory.value = true
   try {
-    await createWorkspaceDirectory(currentPath.value, directoryName)
-    await loadWorkspaceEntries(currentPath.value)
+    if (isKnowledgeSource.value) {
+      await documentApi.createFolder(
+        selectedDatabase.value.kb_id,
+        directoryName,
+        knowledgeFileBrowser.parentId
+      )
+      await refreshKnowledgeEntries()
+    } else {
+      await createWorkspaceDirectory(currentPath.value, directoryName)
+      await loadWorkspaceEntries(currentPath.value)
+    }
     createDirectoryModalVisible.value = false
     newDirectoryName.value = ''
     message.success('文件夹创建成功')
   } catch (error) {
     console.warn('创建文件夹失败:', error)
-    message.error(error?.message || '创建文件夹失败')
+    message.error(
+      isKnowledgeSource.value
+        ? getFolderCreateErrorMessage(error)
+        : error?.message || '创建文件夹失败'
+    )
   } finally {
     creatingDirectory.value = false
   }
 }
 
 const openUploadFilePicker = () => {
-  if (activeSourceKey.value !== 'personal' || uploadingFile.value) return
+  if (!canManageCurrentSource.value) {
+    message.warning(workspaceActionDisabledReason.value)
+    return
+  }
+  if (isKnowledgeSource.value) {
+    knowledgeUploadModalVisible.value = true
+    return
+  }
+  if (uploadingFile.value) return
   if (uploadInputRef.value) {
     uploadInputRef.value.value = ''
     uploadInputRef.value.click()
   }
+}
+
+const handleKnowledgeUploadSuccess = async () => {
+  await refreshKnowledgeEntries()
+}
+
+const openKnowledgeFileDetail = async (fileId, existing = {}) => {
+  if (!selectedDatabase.value?.kb_id || !fileId) return
+  knowledgeUploadModalVisible.value = false
+  await loadKnowledgePreview({
+    source: 'knowledge',
+    kb_id: selectedDatabase.value.kb_id,
+    file_id: fileId,
+    name: existing.filename || '已有文档',
+    path: `/knowledge/${selectedDatabase.value.kb_id}/file/${fileId}`,
+    is_dir: false,
+    status: existing.status || 'done'
+  })
 }
 
 const handleUploadInputChange = async (event) => {
@@ -761,7 +871,15 @@ const deleteEntries = async (targetEntries) => {
   const paths = targetEntries.map((entry) => entry.path)
   deletingPaths.value = paths
   try {
-    await Promise.all(paths.map((path) => deleteWorkspacePath(path)))
+    if (isKnowledgeSource.value) {
+      await Promise.all(
+        targetEntries.map((entry) =>
+          documentApi.deleteDocument(selectedDatabase.value.kb_id, entry.file_id)
+        )
+      )
+    } else {
+      await Promise.all(paths.map((path) => deleteWorkspacePath(path)))
+    }
     if (
       selectedEntry.value &&
       paths.some((path) => isSameOrChildPath(selectedEntry.value.path, path))
@@ -769,12 +887,20 @@ const deleteEntries = async (targetEntries) => {
       closePreview()
     }
     clearWorkspaceSelection()
-    await loadWorkspaceEntries(currentPath.value)
+    if (isKnowledgeSource.value) {
+      await refreshKnowledgeEntries()
+    } else {
+      await loadWorkspaceEntries(currentPath.value)
+    }
     message.success(paths.length > 1 ? '选中项删除成功' : '删除成功')
   } catch (error) {
     console.warn('删除工作区文件失败:', error)
     message.error(error?.message || '删除失败')
-    await loadWorkspaceEntries(currentPath.value)
+    if (isKnowledgeSource.value) {
+      await refreshKnowledgeEntries()
+    } else {
+      await loadWorkspaceEntries(currentPath.value)
+    }
   } finally {
     deletingPaths.value = []
   }

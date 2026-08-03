@@ -518,6 +518,9 @@ async def test_get_accessible_databases(test_client, admin_headers, knowledge_da
     # 验证知识库在列表中
     kb_ids = [db["kb_id"] for db in payload["databases"]]
     assert knowledge_database["kb_id"] in kb_ids
+    database = next(db for db in payload["databases"] if db["kb_id"] == knowledge_database["kb_id"])
+    assert database["can_view"] is True
+    assert database["can_manage"] is True
 
 
 async def test_create_database_defaults_to_global_share_config(test_client, admin_headers):
