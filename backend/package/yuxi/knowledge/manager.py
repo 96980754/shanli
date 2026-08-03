@@ -762,7 +762,12 @@ class KnowledgeBaseManager:
             return False
         return await self.document_file_exists(kb_id, file_name)
 
-    async def get_same_name_files(self, kb_id: str, filename: str) -> list[dict]:
+    async def get_same_name_files(
+        self,
+        kb_id: str,
+        filename: str,
+        parent_id: str | None = None,
+    ) -> list[dict]:
         """获取同一知识库中同名文件列表
         基于原始文件名直接比较
         返回基础信息：文件名、大小、上传时间
@@ -783,7 +788,11 @@ class KnowledgeBaseManager:
 
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, filename=filename)
+        records = await KnowledgeFileRepository().list_same_name_files(
+            kb_id=kb_id,
+            parent_id=parent_id,
+            filename=filename,
+        )
         return [
             {
                 "file_id": record.file_id,

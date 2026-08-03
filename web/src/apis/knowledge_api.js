@@ -701,6 +701,7 @@ export const fileApi = {
 
     const query = buildQuery({
       kb_id: kbId,
+      parent_id: options.parentId,
       duplicate_strategy: options.duplicateStrategy || 'prompt',
       replace_file_id: options.replaceFileId
     })

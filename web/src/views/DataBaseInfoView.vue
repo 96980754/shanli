@@ -14,6 +14,7 @@
       :is-folder-mode="isFolderUploadMode"
       :mode="addFilesMode"
       @success="onFileUploadSuccess"
+      @view-existing-file="store.openFileDetail"
     />
 
     <div v-if="detailLoading" class="database-detail-loading">

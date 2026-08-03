@@ -3,6 +3,7 @@ import pytest
 from yuxi.repositories.knowledge_file_repository import (
     InvalidFolderNameError,
     KnowledgeFileRepository,
+    normalize_document_filename,
     normalize_folder_name,
     stable_advisory_lock_key,
 )
@@ -18,6 +19,10 @@ def test_stable_advisory_lock_key_is_deterministic_and_namespaced():
 def test_keep_both_name_generation_is_case_insensitive_and_sequential():
     existing = {"report.pdf", "report (1).pdf"}
     assert KnowledgeFileRepository._next_available_filename("Report.PDF", existing) == "Report (2).PDF"
+
+
+def test_document_filename_normalization_trims_nfkc_and_casefolds():
+    assert normalize_document_filename("  Ｐｒｏｄｕｃｔ.TXT  ") == "product.txt"
 
 
 def test_processing_progress_is_clamped_to_protocol_range():

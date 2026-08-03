@@ -70,6 +70,15 @@ class DuplicateStrategyError(ValueError):
     pass
 
 
+class InvalidReplacementTargetError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("替换目标不属于当前文件夹或文件名不匹配")
+        self.detail = {
+            "code": "invalid_replacement_target",
+            "message": "替换目标不属于当前文件夹或文件名不匹配",
+        }
+
+
 class ReplacementCleanupInvariantError(RuntimeError):
     pass
 
@@ -108,6 +117,7 @@ class DocumentIngestionService:
         self,
         *,
         kb_id: str,
+        parent_id: str | None = None,
         filename: str,
         content_hash: str,
         file_size: int,
@@ -115,7 +125,14 @@ class DocumentIngestionService:
         replace_file_id: str | None = None,
     ) -> UploadDecision:
         strategy = self._validate_strategy(duplicate_strategy)
-        incoming = {"filename": filename, "size": file_size, "content_hash": content_hash}
+        normalized_parent_id = self._normalize_optional_string(parent_id)
+        await self.file_repository.validate_parent_folder(kb_id=kb_id, parent_id=normalized_parent_id)
+        incoming = {
+            "filename": filename,
+            "size": file_size,
+            "content_hash": content_hash,
+            "parent_id": normalized_parent_id,
+        }
 
         exact_records = await self.file_repository.list_by_content_hash(kb_id=kb_id, content_hash=content_hash)
         if exact_records:
@@ -126,30 +143,33 @@ class DocumentIngestionService:
             raise DuplicateConflictError(
                 conflict_type="exact_content",
                 incoming=incoming,
-                conflicts=self._serialize_conflicts(exact_records),
+                conflicts=await self.serialize_conflicts(exact_records),
                 allowed_strategies=EXACT_CONTENT_STRATEGIES,
                 message="同一知识库中已存在内容完全相同的文件",
             )
 
-        same_name_records = await self.file_repository.list_same_name_files(kb_id=kb_id, filename=filename)
+        same_name_records = await self.file_repository.list_same_name_files(
+            kb_id=kb_id,
+            parent_id=normalized_parent_id,
+            filename=filename,
+        )
         if not same_name_records:
             if strategy == "replace":
-                message = "replace_file_id is not an active same-name document in this knowledge base"
-                raise DuplicateStrategyError(message)
+                raise InvalidReplacementTargetError()
             return UploadDecision(action="upload")
 
         if strategy == "prompt":
             raise DuplicateConflictError(
                 conflict_type="same_name",
                 incoming=incoming,
-                conflicts=self._serialize_conflicts(same_name_records),
+                conflicts=await self.serialize_conflicts(same_name_records),
                 allowed_strategies=SAME_NAME_STRATEGIES,
-                message="同一知识库中已存在同名但内容不同的文件",
+                message="同一文件夹中已存在同名但内容不同的文件",
             )
         if strategy == "skip":
             return UploadDecision(action="skipped", existing_file_id=same_name_records[0].file_id)
         if strategy == "replace" and not any(record.file_id == replace_file_id for record in same_name_records):
-            raise DuplicateStrategyError("replace_file_id is not an active same-name document in this knowledge base")
+            raise InvalidReplacementTargetError()
         if strategy == "replace" and replace_file_id:
             pending_candidates = await self.file_repository.list_pending_replacement_candidates(
                 kb_id=kb_id,
@@ -299,7 +319,7 @@ class DocumentIngestionService:
                 cleanup_pending=not cleanup_succeeded,
             )
         if outcome.action == "invalid_replace_target":
-            raise DuplicateStrategyError("replace_file_id is not an active same-name document in this knowledge base")
+            raise InvalidReplacementTargetError()
         if outcome.action == "replacement_in_progress" and outcome.existing is not None:
             raise ReplacementInProgressError(
                 target_file_id=replace_file_id or "",
@@ -311,12 +331,17 @@ class DocumentIngestionService:
             message = (
                 "同一知识库中已存在内容完全相同的文件"
                 if conflict_type == "exact_content"
-                else "同一知识库中已存在同名但内容不同的文件"
+                else "同一文件夹中已存在同名但内容不同的文件"
             )
             raise DuplicateConflictError(
                 conflict_type=conflict_type,
-                incoming={"filename": filename, "size": file_size, "content_hash": content_hash},
-                conflicts=self._serialize_conflicts(list(outcome.conflicts)),
+                incoming={
+                    "filename": filename,
+                    "size": file_size,
+                    "content_hash": content_hash,
+                    "parent_id": record_data["parent_id"],
+                },
+                conflicts=await self.serialize_conflicts(list(outcome.conflicts)),
                 allowed_strategies=allowed,
                 message=message,
                 cleanup_pending=not cleanup_succeeded,
@@ -645,12 +670,14 @@ class DocumentIngestionService:
         normalized = value.strip()
         return normalized or None
 
-    @staticmethod
-    def _serialize_conflicts(records: list[Any]) -> list[dict[str, Any]]:
+    async def serialize_conflicts(self, records: list[Any]) -> list[dict[str, Any]]:
+        display_paths = await self.file_repository.build_document_display_paths(records)
         return [
             {
                 "file_id": record.file_id,
                 "filename": record.filename,
+                "parent_id": record.parent_id,
+                "display_path": display_paths.get(record.file_id) or record.filename,
                 "size": int(record.file_size or 0),
                 "content_hash": record.content_hash,
                 "status": record.status,
@@ -771,6 +798,7 @@ __all__ = [
     "DocumentIngestionService",
     "DuplicateConflictError",
     "DuplicateStrategyError",
+    "InvalidReplacementTargetError",
     "ReplacementCleanupInvariantError",
     "ReplacementInProgressError",
     "REPLACEMENT_CLEANUP_MAX_RETRIES",

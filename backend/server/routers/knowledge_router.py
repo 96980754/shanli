@@ -9,7 +9,6 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Upload
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from yuxi.permissions.knowledge import KnowledgePermissionService
-from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.base import FileStatus
@@ -40,10 +39,13 @@ from yuxi.knowledge.utils.sample_question_utils import (
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
+from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
+from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from yuxi.services.document_ingestion_service import (
     DocumentIngestionService,
     DuplicateConflictError,
     DuplicateStrategyError,
+    InvalidReplacementTargetError,
     ReplacementInProgressError,
 )
 from yuxi.services.document_cleaning_service import (
@@ -368,7 +370,7 @@ def _validate_uploaded_document_items(items: list[str], params: dict) -> None:
     if preprocessed_map is not None and not isinstance(preprocessed_map, dict):
         raise HTTPException(status_code=400, detail="params._preprocessed_map must be an object")
 
-    for map_key in ("duplicate_strategies", "replace_file_ids", "source_paths"):
+    for map_key in ("duplicate_strategies", "replace_file_ids", "source_paths", "parent_ids"):
         value = params.get(map_key)
         if value is not None and not isinstance(value, dict):
             raise HTTPException(status_code=400, detail=f"params.{map_key} must be an object")
@@ -386,6 +388,7 @@ def _params_for_uploaded_document_item(item: str, params: dict) -> dict:
         "source_paths": "source_path",
         "duplicate_strategies": "duplicate_strategy",
         "replace_file_ids": "replace_file_id",
+        "parent_ids": "parent_id",
     }
     for map_key, item_key in item_value_maps.items():
         values = item_params.pop(map_key, None)
@@ -1158,6 +1161,13 @@ async def add_documents(
                         "error_type": "replacement_in_progress",
                         "conflict": add_error.detail,
                     }
+                except InvalidReplacementTargetError as add_error:
+                    processed_items[idx - 1] = {
+                        "status": "failed",
+                        "error": add_error.detail["message"],
+                        "error_type": add_error.detail["code"],
+                        "conflict": add_error.detail,
+                    }
                 except DuplicateStrategyError as add_error:
                     processed_items[idx - 1] = {
                         "status": "failed",
@@ -1399,6 +1409,32 @@ async def add_uploaded_documents(
                     "error": add_error.detail["message"],
                     "error_type": "replacement_in_progress",
                     "conflict": add_error.detail,
+                }
+            )
+        except InvalidReplacementTargetError as add_error:
+            if len(payload.items) == 1:
+                raise HTTPException(status_code=409, detail=add_error.detail)
+            failed_items.append(
+                {
+                    "index": index,
+                    "status": "failed",
+                    "error": add_error.detail["message"],
+                    "error_type": add_error.detail["code"],
+                    "conflict": add_error.detail,
+                }
+            )
+        except ParentFolderNotFoundError as add_error:
+            if len(payload.items) == 1:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "parent_folder_not_found", "message": "父文件夹不存在"},
+                ) from add_error
+            failed_items.append(
+                {
+                    "index": index,
+                    "status": "failed",
+                    "error": "父文件夹不存在",
+                    "error_type": "parent_folder_not_found",
                 }
             )
         except DuplicateStrategyError as add_error:
@@ -2969,6 +3005,7 @@ async def import_workspace_files(
 async def upload_file(
     file: UploadFile = File(...),
     kb_id: str = Query(..., min_length=1),
+    parent_id: str | None = Query(None),
     duplicate_strategy: str = Query("prompt"),
     replace_file_id: str | None = Query(None),
     current_user: User = Depends(get_required_user),
@@ -2978,6 +3015,7 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="No selected file")
 
     normalized_strategy = duplicate_strategy.strip().lower()
+    normalized_parent_id = str(parent_id or "").strip() or None
     await _require_kb_permission(current_user, kb_id, "can_upload")
     if normalized_strategy == "replace":
         await _require_kb_permission(current_user, kb_id, "can_manage")
@@ -3015,6 +3053,7 @@ async def upload_file(
     try:
         decision = await ingestion_service.check_upload_conflict(
             kb_id=kb_id,
+            parent_id=normalized_parent_id,
             filename=filename,
             content_hash=content_hash,
             file_size=len(file_bytes),
@@ -3025,6 +3064,13 @@ async def upload_file(
         raise HTTPException(status_code=409, detail=conflict.detail)
     except ReplacementInProgressError as conflict:
         raise HTTPException(status_code=409, detail=conflict.detail)
+    except InvalidReplacementTargetError as conflict:
+        raise HTTPException(status_code=409, detail=conflict.detail)
+    except ParentFolderNotFoundError as conflict:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "parent_folder_not_found", "message": "父文件夹不存在"},
+        ) from conflict
     except DuplicateStrategyError as strategy_error:
         raise HTTPException(status_code=400, detail=str(strategy_error))
 
@@ -3052,7 +3098,7 @@ async def upload_file(
         raise HTTPException(status_code=502, detail="文件暂存失败，请稍后重试") from storage_error
 
     # 检测同名文件（基于原始文件名）
-    same_name_files = DocumentIngestionService._serialize_conflicts(list(decision.conflicts))
+    same_name_files = await ingestion_service.serialize_conflicts(list(decision.conflicts))
     has_same_name = bool(same_name_files)
 
     return {
@@ -3062,6 +3108,7 @@ async def upload_file(
         "file_path": minio_url,  # MinIO路径作为主要路径
         "minio_path": minio_url,  # MinIO路径
         "kb_id": kb_id,
+        "parent_id": normalized_parent_id,
         "content_hash": content_hash,
         "filename": filename,
         "original_filename": basename,  # 原始文件名（去掉后缀）

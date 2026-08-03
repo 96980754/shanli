@@ -424,13 +424,33 @@
 
   <a-modal
     :open="duplicateConflictOpen"
-    title="处理同名文件"
+    :title="duplicateConflictIsExact ? '文档已存在' : '处理同名文件'"
     width="680px"
     :closable="!duplicateConflictPending"
     :mask-closable="false"
     @cancel="cancelDuplicateConflict"
   >
-    <div v-if="duplicateConflict" class="duplicate-resolution">
+    <div v-if="duplicateConflictIsExact" class="duplicate-resolution">
+      <section class="duplicate-resolution-card">
+        <h4>已有文档</h4>
+        <dl>
+          <dt>文件名</dt>
+          <dd>{{ duplicateConflictExisting?.filename || '-' }}</dd>
+          <dt>所在位置</dt>
+          <dd>
+            {{
+              duplicateConflictExisting?.display_path || duplicateConflictExisting?.filename || '-'
+            }}
+          </dd>
+          <dt>当前状态</dt>
+          <dd>{{ duplicateConflictExisting?.status || '-' }}</dd>
+        </dl>
+      </section>
+      <p class="duplicate-resolution-tip">
+        {{ getDuplicateConflictMessage(duplicateConflict?.detail) }}
+      </p>
+    </div>
+    <div v-else-if="duplicateConflict" class="duplicate-resolution">
       <div class="duplicate-resolution-grid">
         <section class="duplicate-resolution-card">
           <h4>当前文件</h4>
@@ -464,24 +484,38 @@
       </p>
     </div>
     <template #footer>
-      <a-button :disabled="duplicateConflictPending" @click="cancelDuplicateConflict"
-        >取消</a-button
-      >
-      <a-button
-        :loading="duplicateConflictPending"
-        :disabled="duplicateConflictPending"
-        @click="resolveDuplicateConflict(DUPLICATE_STRATEGIES.KEEP_BOTH)"
-      >
-        保留两份
-      </a-button>
-      <a-button
-        danger
-        type="primary"
-        :disabled="duplicateConflictPending"
-        @click="confirmReplacement"
-      >
-        替换现有文件
-      </a-button>
+      <template v-if="duplicateConflictIsExact">
+        <a-button :disabled="duplicateConflictPending" @click="cancelDuplicateConflict"
+          >关闭</a-button
+        >
+        <a-button
+          type="primary"
+          :disabled="duplicateConflictPending"
+          @click="viewDuplicateExistingFile"
+        >
+          查看已有文件
+        </a-button>
+      </template>
+      <template v-else>
+        <a-button :disabled="duplicateConflictPending" @click="cancelDuplicateConflict"
+          >取消</a-button
+        >
+        <a-button
+          :loading="duplicateConflictPending"
+          :disabled="duplicateConflictPending"
+          @click="resolveDuplicateConflict(DUPLICATE_STRATEGIES.KEEP_BOTH)"
+        >
+          保留两份
+        </a-button>
+        <a-button
+          danger
+          type="primary"
+          :disabled="duplicateConflictPending"
+          @click="confirmReplacement"
+        >
+          替换现有文件
+        </a-button>
+      </template>
     </template>
   </a-modal>
 </template>
@@ -551,7 +585,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:visible', 'success'])
+const emit = defineEmits(['update:visible', 'success', 'view-existing-file'])
 
 const store = useDatabaseStore()
 const configStore = useConfigStore()
@@ -705,6 +739,9 @@ const duplicateConflictQueue = ref([])
 const duplicateConflictPending = ref(false)
 const duplicateConflict = computed(() => duplicateConflictQueue.value[0] || null)
 const duplicateConflictOpen = computed(() => Boolean(duplicateConflict.value))
+const duplicateConflictIsExact = computed(
+  () => duplicateConflict.value?.detail?.conflict_type === 'exact_content'
+)
 const duplicateConflictExisting = computed(
   () => duplicateConflict.value?.detail?.conflicts?.[0] || null
 )
@@ -1301,6 +1338,13 @@ const cancelDuplicateConflict = () => {
   duplicateConflictQueue.value.shift()
 }
 
+const viewDuplicateExistingFile = () => {
+  const existing = duplicateConflictExisting.value
+  if (!existing?.file_id || duplicateConflictPending.value) return
+  emit('view-existing-file', existing.file_id)
+  cancelDuplicateConflict()
+}
+
 const enqueueDuplicateConflict = (detail, task) => {
   const uid = task.options.file?.uid
   if (duplicateConflictQueue.value.some((item) => item.task.options.file?.uid === uid)) return
@@ -1424,6 +1468,7 @@ const customRequest = async (options) => {
 
   const task = {
     options,
+    parentId: selectedFolderId.value,
     xhr: null,
     canceled: false
   }
@@ -1502,7 +1547,8 @@ const runUploadTask = (task) => {
       buildKnowledgeUploadUrl(
         currentKbId,
         task.duplicateStrategy || DUPLICATE_STRATEGIES.PROMPT,
-        task.replaceFileId
+        task.replaceFileId,
+        task.parentId
       )
     )
 
@@ -1560,7 +1606,7 @@ const runUploadTask = (task) => {
       }
       file.response = errorResp
       const duplicateDetail = getDuplicateConflictDetail(errorResp)
-      if (duplicateDetail?.conflict_type === 'same_name') {
+      if (duplicateDetail) {
         enqueueDuplicateConflict(duplicateDetail, task)
       }
       const error = new Error(getSafeUploadErrorMessage(errorResp))
@@ -1600,10 +1646,7 @@ const handleFileUpload = (info) => {
     const file = info.file
     const conflictDetail = getDuplicateConflictDetail(file?.response)
     if (conflictDetail) {
-      if (conflictDetail.conflict_type === 'exact_content') {
-        message.error(getDuplicateConflictMessage(conflictDetail))
-        removeUploadFile(file)
-      }
+      // 重复冲突由专用弹窗处理；完全重复只允许查看已有文件。
     } else if (getReplacementInProgressDetail(file?.response)) {
       message.error(getSafeUploadErrorMessage(file?.response))
       duplicateConflictQueue.value = duplicateConflictQueue.value.filter(
@@ -1815,6 +1858,7 @@ const chunkData = async () => {
   const duplicate_strategies = {}
   const replace_file_ids = {}
   const source_paths = {}
+  const parent_ids = {}
   for (const file of fileList.value) {
     if (file.status !== 'done') continue
     const file_path = file.response?.file_path
@@ -1828,6 +1872,9 @@ const chunkData = async () => {
       file.response?.duplicate_strategy || DUPLICATE_STRATEGIES.PROMPT
     if (file.response?.replace_file_id) {
       replace_file_ids[file_path] = file.response.replace_file_id
+    }
+    if (file.response && Object.hasOwn(file.response, 'parent_id')) {
+      parent_ids[file_path] = file.response.parent_id
     }
     if (file.response?.filename) source_paths[file_path] = file.response.filename
   }
@@ -1845,7 +1892,8 @@ const chunkData = async () => {
       file_sizes,
       duplicate_strategies,
       replace_file_ids,
-      source_paths
+      source_paths,
+      parent_ids
     }
     if (autoConfirmResolved.value) {
       params.auto_index = autoIndex.value

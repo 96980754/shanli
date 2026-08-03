@@ -55,12 +55,18 @@ assert.equal(
 assert.equal(getSafeUploadErrorMessage(replacementConflict), '文件正在被其他用户更新，请稍后重试')
 
 assert.match(componentSource, /:open="duplicateConflictOpen"/)
+assert.match(componentSource, /duplicateConflictIsExact/)
+assert.match(componentSource, /查看已有文件/)
+assert.match(componentSource, /display_path/)
+assert.match(componentSource, /emit\('view-existing-file', existing\.file_id\)/)
 assert.match(componentSource, /const duplicateConflictQueue = ref\(\[\]\)/)
 assert.match(componentSource, /@click="cancelDuplicateConflict"/)
 assert.match(componentSource, /resolveDuplicateConflict\(DUPLICATE_STRATEGIES\.KEEP_BOTH\)/)
 assert.match(componentSource, /confirmReplacement/)
 assert.match(componentSource, /:disabled="duplicateConflictPending"/)
 assert.match(componentSource, /if \(duplicateConflictPending\.value\) return/)
+assert.match(componentSource, /parentId: selectedFolderId\.value/)
+assert.match(componentSource, /parent_ids\[file_path\] = file\.response\.parent_id/)
 assert.match(componentSource, /emit\('success'\)/)
 
 console.log('file upload duplicate conflict component contract tests passed')

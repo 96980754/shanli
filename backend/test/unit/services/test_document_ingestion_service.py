@@ -13,6 +13,7 @@ from yuxi.services.document_ingestion_service import (
     DocumentIngestionService,
     DuplicateConflictError,
     DuplicateStrategyError,
+    InvalidReplacementTargetError,
     ReplacementCleanupInvariantError,
     ReplacementInProgressError,
 )
@@ -48,6 +49,7 @@ def make_record(
     content_hash: str = "hash_1",
     is_active: bool = True,
     status: str = "indexed",
+    parent_id: str | None = None,
 ):
     return SimpleNamespace(
         file_id=file_id,
@@ -58,6 +60,7 @@ def make_record(
         is_active=is_active,
         status=status,
         created_at=None,
+        parent_id=parent_id,
     )
 
 
@@ -68,11 +71,20 @@ class ConflictRepository:
     async def list_by_content_hash(self, *, kb_id: str, content_hash: str):
         return [record for record in self.records if record.kb_id == kb_id and record.content_hash == content_hash]
 
-    async def list_same_name_files(self, *, kb_id: str, filename: str):
+    async def validate_parent_folder(self, *, kb_id: str, parent_id: str | None):
+        return None
+
+    async def build_document_display_paths(self, records):
+        return {record.file_id: record.filename for record in records}
+
+    async def list_same_name_files(self, *, kb_id: str, parent_id: str | None, filename: str):
         return [
             record
             for record in self.records
-            if record.kb_id == kb_id and record.is_active and record.filename.casefold() == filename.casefold()
+            if record.kb_id == kb_id
+            and record.parent_id == parent_id
+            and record.is_active
+            and record.filename.casefold() == filename.casefold()
         ]
 
     async def list_pending_replacement_candidates(self, *, kb_id: str, replacement_target_file_id: str):
@@ -166,7 +178,7 @@ async def test_same_name_is_case_insensitive_and_supports_three_confirmed_strate
     )
     assert replaced.action == "upload"
 
-    with pytest.raises(DuplicateStrategyError, match="same-name document"):
+    with pytest.raises(InvalidReplacementTargetError) as exc_info:
         await service.check_upload_conflict(
             kb_id="kb_1",
             filename="report.pdf",
@@ -175,6 +187,44 @@ async def test_same_name_is_case_insensitive_and_supports_three_confirmed_strate
             duplicate_strategy="replace",
             replace_file_id="file_from_other_kb",
         )
+    assert exc_info.value.detail["code"] == "invalid_replacement_target"
+
+
+async def test_same_name_conflict_is_scoped_to_parent_folder_but_exact_content_is_global():
+    first_folder = make_record("file_1", filename="产品说明.txt", content_hash="old", parent_id="folder_1")
+    service = DocumentIngestionService(file_repository=ConflictRepository([first_folder]))
+
+    different_folder = await service.check_upload_conflict(
+        kb_id="kb_1",
+        parent_id="folder_2",
+        filename="产品说明.txt",
+        content_hash="new",
+        file_size=8,
+        duplicate_strategy="prompt",
+    )
+    assert different_folder.action == "upload"
+
+    with pytest.raises(DuplicateConflictError) as same_folder:
+        await service.check_upload_conflict(
+            kb_id="kb_1",
+            parent_id="folder_1",
+            filename="产品说明.txt",
+            content_hash="new",
+            file_size=8,
+            duplicate_strategy="prompt",
+        )
+    assert same_folder.value.detail["conflict_type"] == "same_name"
+
+    with pytest.raises(DuplicateConflictError) as exact_content:
+        await service.check_upload_conflict(
+            kb_id="kb_1",
+            parent_id="folder_2",
+            filename="另一名称.txt",
+            content_hash="old",
+            file_size=8,
+            duplicate_strategy="prompt",
+        )
+    assert exact_content.value.detail["conflict_type"] == "exact_content"
 
 
 async def test_replace_reports_existing_in_progress_candidate_without_storage_details():
@@ -225,6 +275,9 @@ async def test_second_stage_hashes_server_object_and_ignores_client_hash(monkeyp
                 conflicts=(existing,),
                 conflict_type="exact_content",
             )
+
+        async def build_document_display_paths(self, records):
+            return {record.file_id: record.filename for record in records}
 
     class FakeMinio:
         public_endpoint = "localhost:9000"

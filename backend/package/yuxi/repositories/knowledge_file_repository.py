@@ -56,6 +56,10 @@ def normalize_folder_name(folder_name: str) -> str:
     return normalized_name
 
 
+def normalize_document_filename(filename: str) -> str:
+    return unicodedata.normalize("NFKC", str(filename or "")).strip().replace("\\", "/").casefold()
+
+
 def stable_advisory_lock_key(namespace: str, value: str) -> int:
     """Return a process-independent signed 64-bit PostgreSQL advisory lock key."""
     digest = hashlib.sha256(f"{namespace}\0{value}".encode()).digest()[:8]
@@ -232,8 +236,14 @@ class KnowledgeFileRepository:
             )
             return list(result.scalars().all())
 
-    async def list_same_name_files(self, *, kb_id: str, filename: str) -> list[KnowledgeFile]:
-        normalized_filename = filename.strip()
+    async def list_same_name_files(
+        self,
+        *,
+        kb_id: str,
+        parent_id: str | None,
+        filename: str,
+    ) -> list[KnowledgeFile]:
+        normalized_filename = normalize_document_filename(filename)
         if not normalized_filename:
             return []
 
@@ -242,13 +252,64 @@ class KnowledgeFileRepository:
                 select(KnowledgeFile)
                 .where(
                     KnowledgeFile.kb_id == kb_id,
+                    self._parent_condition(parent_id),
                     KnowledgeFile.is_folder.is_(False),
                     KnowledgeFile.is_active.is_(True),
-                    func.lower(KnowledgeFile.filename) == normalized_filename.lower(),
+                    or_(
+                        KnowledgeFile.normalized_name == normalized_filename,
+                        and_(
+                            KnowledgeFile.normalized_name.is_(None),
+                            func.lower(func.trim(KnowledgeFile.filename)) == normalized_filename,
+                        ),
+                    ),
                 )
                 .order_by(KnowledgeFile.created_at.desc())
             )
             return list(result.scalars().all())
+
+    async def validate_parent_folder(self, *, kb_id: str, parent_id: str | None) -> None:
+        if not parent_id:
+            return
+        async with pg_manager.get_async_session_context() as session:
+            parent = (
+                await session.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id == parent_id,
+                        KnowledgeFile.is_folder.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            if parent is None:
+                raise ParentFolderNotFoundError("Parent folder not found")
+
+    async def build_document_display_paths(self, records: list[KnowledgeFile]) -> dict[str, str]:
+        paths: dict[str, str] = {}
+        async with pg_manager.get_async_session_context() as session:
+            folder_cache: dict[str, KnowledgeFile | None] = {}
+            for record in records:
+                parts = [str(record.filename or "")]
+                parent_id = record.parent_id
+                visited: set[str] = set()
+                while parent_id and parent_id not in visited and len(visited) < 64:
+                    visited.add(parent_id)
+                    if parent_id not in folder_cache:
+                        folder_cache[parent_id] = (
+                            await session.execute(
+                                select(KnowledgeFile).where(
+                                    KnowledgeFile.kb_id == record.kb_id,
+                                    KnowledgeFile.file_id == parent_id,
+                                    KnowledgeFile.is_folder.is_(True),
+                                )
+                            )
+                        ).scalar_one_or_none()
+                    folder = folder_cache[parent_id]
+                    if folder is None:
+                        break
+                    parts.append(str(folder.filename or ""))
+                    parent_id = folder.parent_id
+                paths[record.file_id] = "/".join(reversed([part for part in parts if part]))
+        return paths
 
     async def create_folder(
         self,
@@ -431,21 +492,46 @@ class KnowledgeFileRepository:
         kb_id = str(sanitized_data.get("kb_id") or "")
         content_hash = str(sanitized_data.get("content_hash") or "").strip()
         filename = str(sanitized_data.get("filename") or "").strip()
+        parent_id = self._normalize_parent_id(sanitized_data.get("parent_id"))
+        normalized_filename = normalize_document_filename(filename)
         if not kb_id or not content_hash or not filename:
             raise ValueError("kb_id, content_hash and filename are required")
+        sanitized_data["parent_id"] = parent_id
+        sanitized_data["normalized_name"] = normalized_filename
 
         lock_keys = {
             stable_advisory_lock_key("knowledge-file-content", f"{kb_id}\0{content_hash}"),
-            stable_advisory_lock_key("knowledge-file-name", f"{kb_id}\0{filename.casefold()}"),
+            stable_advisory_lock_key(
+                "knowledge-file-name",
+                f"{kb_id}\0{parent_id or '<root>'}\0{normalized_filename}",
+            ),
         }
         if duplicate_strategy == "keep_both":
-            lock_keys.add(stable_advisory_lock_key("knowledge-file-name-allocation", kb_id))
+            lock_keys.add(
+                stable_advisory_lock_key(
+                    "knowledge-file-name-allocation",
+                    f"{kb_id}\0{parent_id or '<root>'}",
+                )
+            )
         if duplicate_strategy == "replace" and replace_file_id:
             lock_keys.add(stable_advisory_lock_key("knowledge-file-replacement-target", f"{kb_id}\0{replace_file_id}"))
 
         async with pg_manager.get_async_session_context() as session:
             for lock_key in sorted(lock_keys):
                 await session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+
+            if parent_id:
+                parent = (
+                    await session.execute(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == parent_id,
+                            KnowledgeFile.is_folder.is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if parent is None:
+                    raise ParentFolderNotFoundError("Parent folder not found")
 
             exact_records = list(
                 (
@@ -488,9 +574,16 @@ class KnowledgeFileRepository:
                         select(KnowledgeFile)
                         .where(
                             KnowledgeFile.kb_id == kb_id,
+                            self._parent_condition(parent_id),
                             KnowledgeFile.is_folder.is_(False),
                             KnowledgeFile.is_active.is_(True),
-                            func.lower(KnowledgeFile.filename) == filename.lower(),
+                            or_(
+                                KnowledgeFile.normalized_name == normalized_filename,
+                                and_(
+                                    KnowledgeFile.normalized_name.is_(None),
+                                    func.lower(func.trim(KnowledgeFile.filename)) == normalized_filename,
+                                ),
+                            ),
                         )
                         .order_by(KnowledgeFile.created_at.desc(), KnowledgeFile.file_id.asc())
                     )
@@ -514,9 +607,16 @@ class KnowledgeFileRepository:
                         .where(
                             KnowledgeFile.kb_id == kb_id,
                             KnowledgeFile.file_id == replace_file_id,
+                            self._parent_condition(parent_id),
                             KnowledgeFile.is_folder.is_(False),
                             KnowledgeFile.is_active.is_(True),
-                            func.lower(KnowledgeFile.filename) == filename.lower(),
+                            or_(
+                                KnowledgeFile.normalized_name == normalized_filename,
+                                and_(
+                                    KnowledgeFile.normalized_name.is_(None),
+                                    func.lower(func.trim(KnowledgeFile.filename)) == normalized_filename,
+                                ),
+                            ),
                         )
                         .with_for_update()
                     )
@@ -568,23 +668,29 @@ class KnowledgeFileRepository:
                         }
                     )
             elif duplicate_strategy == "keep_both" and same_name_records:
-                all_names = set(
-                    (
-                        await session.execute(
-                            select(func.lower(KnowledgeFile.filename)).where(
-                                KnowledgeFile.kb_id == kb_id,
-                                KnowledgeFile.is_folder.is_(False),
-                                KnowledgeFile.is_active.is_(True),
-                            )
+                sibling_names = (
+                    await session.execute(
+                        select(KnowledgeFile.filename).where(
+                            KnowledgeFile.kb_id == kb_id,
+                            self._parent_condition(parent_id),
+                            KnowledgeFile.is_folder.is_(False),
+                            KnowledgeFile.is_active.is_(True),
                         )
-                    ).scalars()
-                )
+                    )
+                ).scalars()
+                all_names = {normalize_document_filename(name) for name in sibling_names}
                 sanitized_data["filename"] = self._next_available_filename(filename, all_names)
+                sanitized_data["normalized_name"] = normalize_document_filename(sanitized_data["filename"])
 
             record = KnowledgeFile(file_id=file_id, **sanitized_data)
             session.add(record)
             await session.flush()
             return DocumentCreateOutcome(action="created", record=record)
+
+    @staticmethod
+    def _normalize_parent_id(parent_id: object) -> str | None:
+        normalized = str(parent_id or "").strip()
+        return normalized or None
 
     async def switch_active_version(self, *, kb_id: str, new_file_id: str, old_file_id: str) -> KnowledgeFile:
         async with pg_manager.get_async_session_context() as session:
@@ -709,7 +815,7 @@ class KnowledgeFileRepository:
             max_stem_length = max(1, 512 - len(directory) - len(extension) - len(suffix) - (1 if directory else 0))
             candidate_leaf = f"{stem[:max_stem_length]}{suffix}{extension}"
             candidate = f"{directory}/{candidate_leaf}" if directory else candidate_leaf
-            if candidate.lower() not in existing_lower_names:
+            if normalize_document_filename(candidate) not in existing_lower_names:
                 return candidate
             counter += 1
 

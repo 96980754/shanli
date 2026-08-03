@@ -26,10 +26,13 @@ async def _upload(
     content: bytes,
     strategy: str = "prompt",
     replace_file_id: str | None = None,
+    parent_id: str | None = None,
 ):
     params = {"kb_id": kb_id, "duplicate_strategy": strategy}
     if replace_file_id:
         params["replace_file_id"] = replace_file_id
+    if parent_id:
+        params["parent_id"] = parent_id
     return await client.post(
         "/api/knowledge/files/upload",
         params=params,
@@ -45,6 +48,7 @@ async def _add_uploaded(
     upload_payload: dict,
     strategy: str,
     replace_file_id: str | None = None,
+    parent_id: str | None = None,
 ):
     item = upload_payload["file_path"]
     params = {
@@ -55,6 +59,8 @@ async def _add_uploaded(
     }
     if replace_file_id:
         params["replace_file_ids"] = {item: replace_file_id}
+    if parent_id:
+        params["parent_ids"] = {item: parent_id}
     return await client.post(
         f"/api/knowledge/databases/{kb_id}/documents/add",
         json={
@@ -188,6 +194,209 @@ async def test_upload_conflict_protocol_distinguishes_content_and_name(
         assert "only supports the skip strategy" in response.json()["detail"]
 
 
+async def test_same_name_conflicts_are_scoped_to_parent_but_exact_content_remains_global(
+    test_client,
+    admin_headers,
+    knowledge_database,
+):
+    kb_id = knowledge_database["kb_id"]
+    suffix = uuid.uuid4().hex
+
+    async def create_folder(name: str) -> str:
+        response = await test_client.post(
+            f"/api/knowledge/databases/{kb_id}/folders",
+            json={"folder_name": name, "parent_id": None},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["file_id"]
+
+    first_parent = await create_folder(f"scope-a-{suffix}")
+    second_parent = await create_folder(f"scope-b-{suffix}")
+    filename = f"scope-{suffix}.txt"
+    first_content = f"first-{suffix}".encode()
+    second_content = f"second-{suffix}".encode()
+
+    first_upload = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        first_content,
+        parent_id=first_parent,
+    )
+    assert first_upload.status_code == 200, first_upload.text
+    first_add = await _add_uploaded(
+        test_client,
+        admin_headers,
+        kb_id,
+        first_upload.json(),
+        "prompt",
+        parent_id=first_parent,
+    )
+    assert first_add.status_code == 200, first_add.text
+    first_file_id = first_add.json()["items"][0]["file_id"]
+    await KnowledgeFileRepository().update_fields(
+        file_id=first_file_id,
+        kb_id=kb_id,
+        data={"status": "error_indexing"},
+    )
+
+    different_folder = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        second_content,
+        parent_id=second_parent,
+    )
+    assert different_folder.status_code == 200, different_folder.text
+    assert different_folder.json()["parent_id"] == second_parent
+    different_folder_add = await _add_uploaded(
+        test_client,
+        admin_headers,
+        kb_id,
+        different_folder.json(),
+        "prompt",
+        parent_id=second_parent,
+    )
+    assert different_folder_add.status_code == 200, different_folder_add.text
+
+    root_upload = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        f"root-{suffix}".encode(),
+    )
+    assert root_upload.status_code == 200, root_upload.text
+    root_add = await _add_uploaded(test_client, admin_headers, kb_id, root_upload.json(), "prompt")
+    assert root_add.status_code == 200, root_add.text
+
+    same_folder = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        f"third-{suffix}".encode(),
+        parent_id=first_parent,
+    )
+    assert same_folder.status_code == 409
+    assert same_folder.json()["detail"]["conflict_type"] == "same_name"
+
+    exact_across_folders = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        f"renamed-{suffix}.txt",
+        first_content,
+        parent_id=second_parent,
+    )
+    assert exact_across_folders.status_code == 409
+    exact_detail = exact_across_folders.json()["detail"]
+    assert exact_detail["conflict_type"] == "exact_content"
+    assert exact_detail["conflicts"][0]["file_id"] == first_file_id
+    assert exact_detail["conflicts"][0]["parent_id"] == first_parent
+    assert exact_detail["conflicts"][0]["display_path"].endswith(filename)
+
+    invalid_replace = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        f"replace-{suffix}".encode(),
+        strategy="replace",
+        replace_file_id=first_file_id,
+        parent_id=second_parent,
+    )
+    assert invalid_replace.status_code == 409
+    assert invalid_replace.json()["detail"]["code"] == "invalid_replacement_target"
+
+    staged_for_invalid_second_phase = await _upload(
+        test_client,
+        admin_headers,
+        kb_id,
+        filename,
+        f"second-phase-replace-{suffix}".encode(),
+        strategy="keep_both",
+        parent_id=second_parent,
+    )
+    assert staged_for_invalid_second_phase.status_code == 200, staged_for_invalid_second_phase.text
+    invalid_second_phase = await _add_uploaded(
+        test_client,
+        admin_headers,
+        kb_id,
+        staged_for_invalid_second_phase.json(),
+        "replace",
+        replace_file_id=first_file_id,
+        parent_id=second_parent,
+    )
+    assert invalid_second_phase.status_code == 409
+    assert invalid_second_phase.json()["detail"]["code"] == "invalid_replacement_target"
+
+
+async def test_concurrent_cross_folder_same_name_is_independent_but_content_hash_is_global(
+    test_client,
+    admin_headers,
+    knowledge_database,
+):
+    kb_id = knowledge_database["kb_id"]
+    suffix = uuid.uuid4().hex
+    parent_ids = []
+    for name in (f"concurrent-a-{suffix}", f"concurrent-b-{suffix}"):
+        response = await test_client.post(
+            f"/api/knowledge/databases/{kb_id}/folders",
+            json={"folder_name": name, "parent_id": None},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        parent_ids.append(response.json()["file_id"])
+
+    filename = f"cross-folder-{suffix}.txt"
+    uploads = await asyncio.gather(
+        _upload(test_client, admin_headers, kb_id, filename, b"one", parent_id=parent_ids[0]),
+        _upload(test_client, admin_headers, kb_id, filename, b"two", parent_id=parent_ids[1]),
+    )
+    assert [response.status_code for response in uploads] == [200, 200]
+    additions = await asyncio.gather(
+        *(
+            _add_uploaded(
+                test_client,
+                admin_headers,
+                kb_id,
+                upload.json(),
+                "prompt",
+                parent_id=parent_id,
+            )
+            for upload, parent_id in zip(uploads, parent_ids, strict=True)
+        )
+    )
+    assert [response.status_code for response in additions] == [200, 200]
+
+    identical_uploads = await asyncio.gather(
+        _upload(test_client, admin_headers, kb_id, f"same-a-{suffix}.txt", b"same", parent_id=parent_ids[0]),
+        _upload(test_client, admin_headers, kb_id, f"same-b-{suffix}.txt", b"same", parent_id=parent_ids[1]),
+    )
+    assert [response.status_code for response in identical_uploads] == [200, 200]
+    identical_additions = await asyncio.gather(
+        *(
+            _add_uploaded(
+                test_client,
+                admin_headers,
+                kb_id,
+                upload.json(),
+                "prompt",
+                parent_id=parent_id,
+            )
+            for upload, parent_id in zip(identical_uploads, parent_ids, strict=True)
+        ),
+        return_exceptions=False,
+    )
+    assert sorted(response.status_code for response in identical_additions) == [200, 409]
+    conflict = next(response for response in identical_additions if response.status_code == 409)
+    assert conflict.json()["detail"]["conflict_type"] == "exact_content"
+
+
 async def test_concurrent_same_name_prompt_creates_one_record_and_removes_losing_stage(
     test_client,
     admin_headers,
@@ -208,7 +417,7 @@ async def test_concurrent_same_name_prompt_creates_one_record_and_removes_losing
     conflict_response = next(response for response in additions if response.status_code == 409)
     assert conflict_response.json()["detail"]["conflict_type"] == "same_name"
 
-    records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, filename=filename)
+    records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, parent_id=None, filename=filename)
     assert len(records) == 1
     for upload, addition in zip(uploads, additions, strict=True):
         object_size = await _staged_object_size(upload.json())
