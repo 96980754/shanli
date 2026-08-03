@@ -38,6 +38,49 @@ BACKGROUND_TASK_TIMEOUT_SECONDS = 90.0
 SANDBOX_CONTAINER_PREFIX = os.getenv("YUXI_SANDBOX_CONTAINER_PREFIX", "yuxi-sandbox")
 
 
+async def _hard_delete_test_users(*, user_ids: list[int] | None = None, department_id: int | None = None) -> None:
+    from sqlalchemy import delete as sqlalchemy_delete
+    from sqlalchemy import select
+    from yuxi.storage.postgres.manager import pg_manager
+    from yuxi.storage.postgres.models_business import (
+        AgentEnv,
+        APIKey,
+        CLIAuthSession,
+        OperationLog,
+        User,
+        UserConfig,
+    )
+
+    async with pg_manager.get_async_session_context() as session:
+        query = select(User.id, User.uid)
+        if department_id is not None:
+            query = query.where(User.department_id == department_id)
+        elif user_ids:
+            query = query.where(User.id.in_(user_ids))
+        else:
+            raise ValueError("Test user cleanup requires user_ids or department_id")
+
+        users = (await session.execute(query)).all()
+        if not users:
+            return
+
+        resolved_user_ids = [user.id for user in users]
+        user_uids = [user.uid for user in users]
+        await session.execute(
+            sqlalchemy_delete(CLIAuthSession).where(CLIAuthSession.approved_user_id.in_(resolved_user_ids))
+        )
+        await session.execute(sqlalchemy_delete(APIKey).where(APIKey.user_id.in_(resolved_user_ids)))
+        await session.execute(sqlalchemy_delete(OperationLog).where(OperationLog.user_id.in_(resolved_user_ids)))
+        await session.execute(sqlalchemy_delete(AgentEnv).where(AgentEnv.uid.in_(user_uids)))
+        await session.execute(sqlalchemy_delete(UserConfig).where(UserConfig.uid.in_(user_uids)))
+        await session.execute(sqlalchemy_delete(User).where(User.id.in_(resolved_user_ids)))
+
+
+@pytest.fixture
+def hard_delete_test_users():
+    return _hard_delete_test_users
+
+
 @pytest.fixture(scope="session", autouse=True)
 def ensure_live_api_schema():
     if not ADMIN_LOGIN or not ADMIN_PASSWORD:
@@ -415,13 +458,16 @@ async def standard_user(test_client: httpx.AsyncClient, admin_headers: dict[str,
         }
     finally:
         cleanup_error = None
-        for _ in range(3):
-            response = await test_client.delete(f"/api/auth/users/{user_payload['id']}", headers=admin_headers)
-            if response.status_code in (200, 404):
-                cleanup_error = None
-                break
-            cleanup_error = response
-            await anyio.sleep(0.3)
+        try:
+            for _ in range(3):
+                response = await test_client.delete(f"/api/auth/users/{user_payload['id']}", headers=admin_headers)
+                if response.status_code in (200, 404):
+                    cleanup_error = None
+                    break
+                cleanup_error = response
+                await anyio.sleep(0.3)
+        finally:
+            await _hard_delete_test_users(user_ids=[user_payload["id"]])
         if cleanup_error is not None:
             assert cleanup_error.status_code == 200, (
                 f"Failed to cleanup test user {user_payload['uid']}: {cleanup_error.text}"

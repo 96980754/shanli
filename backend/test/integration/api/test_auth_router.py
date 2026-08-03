@@ -116,32 +116,39 @@ async def test_profile_requires_authentication(test_client):
     assert response.json()["detail"] == "请登录后再访问"
 
 
-async def test_admin_can_create_and_delete_user(test_client, admin_headers):
+async def test_admin_can_create_and_delete_user(test_client, admin_headers, hard_delete_test_users):
     suffix = uuid.uuid4().hex[:8]
+    created_user_id = None
     payload = {
         "username": f"rtu_{suffix}",
         "password": "routerTest123!",
         "role": "user",
     }
-    create_response = await test_client.post("/api/auth/users", json=payload, headers=admin_headers)
-    assert create_response.status_code == 200, create_response.text
+    try:
+        create_response = await test_client.post("/api/auth/users", json=payload, headers=admin_headers)
+        assert create_response.status_code == 200, create_response.text
 
-    created_user = create_response.json()
-    assert created_user["username"] == payload["username"]
-    assert created_user["role"] == payload["role"]
+        created_user = create_response.json()
+        created_user_id = created_user["id"]
+        assert created_user["username"] == payload["username"]
+        assert created_user["role"] == payload["role"]
 
-    delete_response = await test_client.delete(f"/api/auth/users/{created_user['id']}", headers=admin_headers)
-    assert delete_response.status_code == 200, delete_response.text
-    delete_payload = delete_response.json()
-    assert delete_payload["success"] is True
-    assert delete_payload["message"] == "用户已删除"
+        delete_response = await test_client.delete(f"/api/auth/users/{created_user_id}", headers=admin_headers)
+        assert delete_response.status_code == 200, delete_response.text
+        delete_payload = delete_response.json()
+        assert delete_payload["success"] is True
+        assert delete_payload["message"] == "用户已删除"
+    finally:
+        if created_user_id is not None:
+            await hard_delete_test_users(user_ids=[created_user_id])
 
 
-async def test_department_admin_is_limited_to_own_department_users(test_client, admin_headers):
+async def test_department_admin_is_limited_to_own_department_users(test_client, admin_headers, hard_delete_test_users):
     await _require_superadmin(test_client, admin_headers)
 
     user_ids: list[int] = []
     admin_ids: list[int] = []
+    hard_delete_user_ids: list[int] = []
     department_ids: list[int] = []
 
     try:
@@ -151,11 +158,13 @@ async def test_department_admin_is_limited_to_own_department_users(test_client, 
         department_b = dept_b["department"]
         department_ids.extend([department_a["id"], department_b["id"]])
         admin_ids.extend([dept_a["admin_id"], dept_b["admin_id"]])
+        hard_delete_user_ids.extend(admin_ids)
 
         user_a = await _create_user(test_client, dept_a["admin_headers"], "a")
         user_b = await _create_user(test_client, dept_b["admin_headers"], "b")
         superadmin_created_user = await _create_user(test_client, admin_headers, "s", department_id=department_b["id"])
         user_ids.extend([user_a["id"], user_b["id"], superadmin_created_user["id"]])
+        hard_delete_user_ids.extend(user_ids)
 
         assert user_a["department_id"] == department_a["id"]
         assert superadmin_created_user["department_id"] == department_b["id"]
@@ -219,12 +228,30 @@ async def test_department_admin_is_limited_to_own_department_users(test_client, 
         assert own_delete.status_code == 200, own_delete.text
         user_ids.remove(user_a["id"])
     finally:
-        for user_id in user_ids:
-            await _cleanup_user(test_client, admin_headers, user_id)
-        for admin_id in admin_ids:
-            await _cleanup_user(test_client, admin_headers, admin_id)
-        for department_id in department_ids:
-            await _cleanup_department(test_client, admin_headers, department_id)
+        cleanup_errors: list[Exception] = []
+        try:
+            for user_id in user_ids:
+                try:
+                    await _cleanup_user(test_client, admin_headers, user_id)
+                except Exception as exc:
+                    cleanup_errors.append(exc)
+            for admin_id in admin_ids:
+                try:
+                    await _cleanup_user(test_client, admin_headers, admin_id)
+                except Exception as exc:
+                    cleanup_errors.append(exc)
+        finally:
+            try:
+                await hard_delete_test_users(user_ids=hard_delete_user_ids)
+            except Exception as exc:
+                cleanup_errors.append(exc)
+            for department_id in department_ids:
+                try:
+                    await _cleanup_department(test_client, admin_headers, department_id)
+                except Exception as exc:
+                    cleanup_errors.append(exc)
+        if cleanup_errors:
+            raise cleanup_errors[0]
 
 
 async def test_invalid_token_is_rejected(test_client):

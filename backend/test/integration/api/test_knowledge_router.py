@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from yuxi.knowledge.chunking.ragflow_like.presets import CHUNK_PRESET_IDS
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -69,21 +70,33 @@ async def _delete_user_by_id(test_client, admin_headers, user_id):
     assert response.status_code in (200, 404), response.text
 
 
-async def _find_user_id_by_uid(test_client, admin_headers, uid):
-    response = await test_client.get("/api/auth/users", headers=admin_headers)
-    assert response.status_code == 200, response.text
-    for user in response.json():
-        if user["uid"] == uid:
-            return user["id"]
-    return None
-
-
-async def _delete_department_with_admin(test_client, admin_headers, department):
-    admin_user_id = await _find_user_id_by_uid(test_client, admin_headers, department["admin_uid"])
-    if admin_user_id:
-        await _delete_user_by_id(test_client, admin_headers, admin_user_id)
+async def _delete_department_with_admin(test_client, admin_headers, department, hard_delete_test_users):
+    await hard_delete_test_users(department_id=department["id"])
     response = await test_client.delete(f"/api/departments/{department['id']}", headers=admin_headers)
     assert response.status_code in (200, 404), response.text
+
+
+@pytest_asyncio.fixture
+async def test_department_factory(test_client, admin_headers, hard_delete_test_users):
+    departments = []
+
+    async def create(prefix):
+        department = await _create_test_department(test_client, admin_headers, prefix)
+        departments.append(department)
+        return department
+
+    try:
+        yield create
+    finally:
+        cleanup_errors = []
+        for department in reversed(departments):
+            try:
+                await _delete_department_with_admin(test_client, admin_headers, department, hard_delete_test_users)
+            except Exception as exc:
+                cleanup_errors.append((department["id"], exc))
+        if cleanup_errors:
+            department_id, error = cleanup_errors[0]
+            raise AssertionError(f"Failed to cleanup test department {department_id}: {error}") from error
 
 
 async def _create_test_database(test_client, admin_headers, share_config=None):
@@ -532,9 +545,11 @@ async def test_create_database_defaults_to_global_share_config(test_client, admi
         await test_client.delete(f"/api/knowledge/databases/{kb_id}", headers=admin_headers)
 
 
-async def test_department_share_config_filters_accessible_databases(test_client, admin_headers):
-    department_a = await _create_test_department(test_client, admin_headers, "pytest_dept_a")
-    department_b = await _create_test_department(test_client, admin_headers, "pytest_dept_b")
+async def test_department_share_config_filters_accessible_databases(
+    test_client, admin_headers, test_department_factory
+):
+    department_a = await test_department_factory("pytest_dept_a")
+    department_b = await test_department_factory("pytest_dept_b")
     user_a = user_b = None
     database = None
 
@@ -560,13 +575,11 @@ async def test_department_share_config_filters_accessible_databases(test_client,
             await _delete_user_by_id(test_client, admin_headers, user_a["user"]["id"])
         if user_b:
             await _delete_user_by_id(test_client, admin_headers, user_b["user"]["id"])
-        await _delete_department_with_admin(test_client, admin_headers, department_a)
-        await _delete_department_with_admin(test_client, admin_headers, department_b)
 
 
-async def test_user_share_config_filters_accessible_databases(test_client, admin_headers):
-    department_a = await _create_test_department(test_client, admin_headers, "pytest_dept_a")
-    department_b = await _create_test_department(test_client, admin_headers, "pytest_dept_b")
+async def test_user_share_config_filters_accessible_databases(test_client, admin_headers, test_department_factory):
+    department_a = await test_department_factory("pytest_dept_a")
+    department_b = await test_department_factory("pytest_dept_b")
     user_a = user_b = None
     database = None
 
@@ -592,12 +605,12 @@ async def test_user_share_config_filters_accessible_databases(test_client, admin
             await _delete_user_by_id(test_client, admin_headers, user_a["user"]["id"])
         if user_b:
             await _delete_user_by_id(test_client, admin_headers, user_b["user"]["id"])
-        await _delete_department_with_admin(test_client, admin_headers, department_a)
-        await _delete_department_with_admin(test_client, admin_headers, department_b)
 
 
-async def test_user_access_options_include_all_departments_for_admin(test_client, admin_headers):
-    department = await _create_test_department(test_client, admin_headers, "pytest_access_options")
+async def test_user_access_options_include_all_departments_for_admin(
+    test_client, admin_headers, test_department_factory
+):
+    department = await test_department_factory("pytest_access_options")
     user = None
 
     try:
@@ -610,7 +623,6 @@ async def test_user_access_options_include_all_departments_for_admin(test_client
     finally:
         if user:
             await _delete_user_by_id(test_client, admin_headers, user["user"]["id"])
-        await _delete_department_with_admin(test_client, admin_headers, department)
 
 
 async def test_get_knowledge_base_types(test_client, admin_headers):

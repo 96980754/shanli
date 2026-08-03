@@ -11,7 +11,7 @@ import pytest
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
-async def test_superadmin_can_delete_department_with_users(test_client, admin_headers):
+async def test_superadmin_can_delete_department_with_users(test_client, admin_headers, hard_delete_test_users):
     suffix = uuid.uuid4().hex[:8]
     department_payload = {
         "name": f"pytest_department_{suffix}",
@@ -49,11 +49,15 @@ async def test_superadmin_can_delete_department_with_users(test_client, admin_he
         list_users_response = await test_client.get("/api/auth/users", headers=admin_headers)
         assert list_users_response.status_code == 200, list_users_response.text
         users_before_delete = list_users_response.json()
-        department_admin = next((user for user in users_before_delete if user["uid"] == department_payload["admin_uid"]), None)
+        department_admin = next(
+            (user for user in users_before_delete if user["uid"] == department_payload["admin_uid"]), None
+        )
         assert department_admin is not None
         department_admin_id = department_admin["id"]
 
-        delete_department_response = await test_client.delete(f"/api/departments/{department_id}", headers=admin_headers)
+        delete_department_response = await test_client.delete(
+            f"/api/departments/{department_id}", headers=admin_headers
+        )
         assert delete_department_response.status_code == 200, delete_department_response.text
         assert delete_department_response.json()["success"] is True
         department_id = None
@@ -77,12 +81,24 @@ async def test_superadmin_can_delete_department_with_users(test_client, admin_he
         assert migrated_user is not None
         assert migrated_user["department_id"] == 1
     finally:
-        if department_admin_id is not None:
-            await test_client.delete(f"/api/auth/users/{department_admin_id}", headers=admin_headers)
-        if created_user_id is not None:
-            await test_client.delete(f"/api/auth/users/{created_user_id}", headers=admin_headers)
-        if department_id is not None:
-            await test_client.delete(f"/api/departments/{department_id}", headers=admin_headers)
+        cleanup_errors: list[Exception] = []
+        user_ids = [user_id for user_id in (department_admin_id, created_user_id) if user_id is not None]
+        try:
+            for user_id in user_ids:
+                response = await test_client.delete(f"/api/auth/users/{user_id}", headers=admin_headers)
+                if response.status_code not in {200, 404}:
+                    cleanup_errors.append(AssertionError(response.text))
+        finally:
+            try:
+                await hard_delete_test_users(user_ids=user_ids)
+            except Exception as exc:
+                cleanup_errors.append(exc)
+            if department_id is not None:
+                response = await test_client.delete(f"/api/departments/{department_id}", headers=admin_headers)
+                if response.status_code not in {200, 404}:
+                    cleanup_errors.append(AssertionError(response.text))
+        if cleanup_errors:
+            raise cleanup_errors[0]
 
 
 async def test_superadmin_cannot_delete_default_department(test_client, admin_headers):
