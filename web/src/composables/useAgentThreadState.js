@@ -32,7 +32,9 @@ export function useAgentThreadState({
         pendingInterrupt: null,
         onGoingConv: createOnGoingConvState(),
         agentState: null,
-        contextCompressing: false
+        contextCompressing: false,
+        generationPhase: null,
+        activeToolName: null
       }
     }
     return chatState.threadStates[threadId]

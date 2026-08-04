@@ -232,6 +232,57 @@ async def test_resolve_configured_runtime_tools_registers_skill_gated_tools():
     assert _KB_TOOL_NAMES <= {tool.name for tool in tools}
 
 
+@pytest.mark.asyncio
+async def test_resolve_runtime_tools_gates_ask_user_question_off_by_default(monkeypatch):
+    """开关默认关闭时，即使 context.tools 保留 ask_user_question 也不挂载给模型。"""
+    fake_instances = [
+        SimpleNamespace(name="ask_user_question"),
+        SimpleNamespace(name="ocr_parse_file"),
+    ]
+    monkeypatch.setattr(
+        "yuxi.agents.toolkits.service.get_tool_instances_by_category",
+        lambda category=None: fake_instances,
+    )
+    context = SimpleNamespace(
+        tools=["ask_user_question", "ocr_parse_file"],
+        mcps=None,
+        _readable_skills=[],
+        _runtime_skill_dependency_map={},
+    )
+
+    tools = await resolve_configured_runtime_tools(context)
+
+    names = {tool.name for tool in tools}
+    assert "ask_user_question" not in names
+    assert "ocr_parse_file" in names
+
+
+@pytest.mark.asyncio
+async def test_resolve_runtime_tools_enables_ask_user_question_when_switch_on(monkeypatch):
+    """开关开启时挂载 ask_user_question，即使它不在 context.tools 列表。"""
+    fake_instances = [
+        SimpleNamespace(name="ask_user_question"),
+        SimpleNamespace(name="ocr_parse_file"),
+    ]
+    monkeypatch.setattr(
+        "yuxi.agents.toolkits.service.get_tool_instances_by_category",
+        lambda category=None: fake_instances,
+    )
+    context = SimpleNamespace(
+        tools=["ocr_parse_file"],
+        mcps=None,
+        ask_user_question_enabled=True,
+        _readable_skills=[],
+        _runtime_skill_dependency_map={},
+    )
+
+    tools = await resolve_configured_runtime_tools(context)
+
+    names = {tool.name for tool in tools}
+    assert "ask_user_question" in names
+    assert "ocr_parse_file" in names
+
+
 def _make_gated_request(activated):
     base = SimpleNamespace(name="read_file")
     gated = [SimpleNamespace(name="list_kbs"), SimpleNamespace(name="query_kb")]

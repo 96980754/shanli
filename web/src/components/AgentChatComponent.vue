@@ -1773,9 +1773,31 @@ const isReplyLoading = computed(() => {
   const threadState = currentThreadState.value
   return Boolean(threadState?.replyLoadingVisible)
 })
-const replyLoadingText = computed(() =>
-  currentThreadState.value?.contextCompressing ? '正在压缩上下文...' : '正在生成回复...'
-)
+const TOOL_STATUS_TEXT = {
+  query_kb: '正在查询知识库...',
+  list_kbs: '正在获取知识库列表...',
+  find_kb_document: '正在查找相关文档...',
+  open_kb_document: '正在读取相关文档...',
+  get_mindmap: '正在获取知识导图...',
+  search_file: '正在搜索文件...',
+  ocr_parse_file: '正在解析文件...',
+  web_search: '正在搜索网页...',
+  subagent_status: '正在处理子任务...'
+}
+
+const replyLoadingText = computed(() => {
+  const threadState = currentThreadState.value
+  if (!threadState) return '正在生成回复...'
+  if (threadState.contextCompressing) return '正在压缩上下文...'
+  if (threadState.generationPhase === 'tool' && threadState.activeToolName) {
+    return (
+      TOOL_STATUS_TEXT[threadState.activeToolName] ||
+      `正在调用 ${threadState.activeToolName}...`
+    )
+  }
+  if (threadState.generationPhase === 'finalizing') return '正在整理答案...'
+  return '正在生成回复...'
+})
 const isSendButtonDisabled = computed(() => {
   return (
     sendCooldownActive.value ||
@@ -1834,7 +1856,10 @@ const insertOptimisticHumanMessage = (
 ) => {
   if (!threadState || !requestId) return
   threadState.pendingRequestId = requestId
-  threadState.replyLoadingVisible = false
+  // 发送后立即显示“正在生成回复…”，无需等待 run 的 init 事件回传。
+  threadState.replyLoadingVisible = true
+  threadState.generationPhase = 'generating'
+  threadState.activeToolName = null
   threadState.onGoingConv.msgChunks[requestId] = [
     buildOptimisticHumanMessage({ requestId, text, imageContent, attachments })
   ]
@@ -2811,6 +2836,13 @@ const showMsgRefs = (msg, conv) => {
 }
 
 const getConversationSources = (conv) => {
+  // 拒答/系统错误时即使对话内存在检索候选，也不展示来源与下载，避免误导用户以为文档里有答案。
+  const lastMessage = getLastMessage(conv)
+  const disposition = lastMessage?.extra_metadata?.knowledge_disposition
+  const dispositionType = disposition?.type
+  if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
+    return { knowledgeChunks: [], webSources: [] }
+  }
   return MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
 }
 
