@@ -5,7 +5,6 @@
     width="920px"
     :footer="null"
     :destroy-on-close="true"
-    @after-open-change="handleOpenChange"
   >
     <div v-if="loading" class="qa-loading">
       <a-spin tip="正在加载 QA 知识对..." />
@@ -19,6 +18,7 @@
           <a-button :loading="actionLoading" @click="generate">自动生成草稿</a-button>
           <a-button @click="startManual">手工新增</a-button>
           <a-button
+            v-if="payload?.confirmable"
             type="primary"
             :disabled="confirmableItems.length === 0"
             :loading="actionLoading"
@@ -29,6 +29,12 @@
         </div>
       </div>
 
+      <a-alert
+        v-if="payload?.draft_mode"
+        type="info"
+        show-icon
+        message="文档待确认清洗：QA 草稿基于当前清洗文本生成，确认入库后会自动绑定正式 chunks 并可同步检索。"
+      />
       <a-alert
         v-if="draft"
         type="info"
@@ -44,15 +50,25 @@
           :auto-size="{ minRows: 3, maxRows: 8 }"
           placeholder="答案"
         />
-        <a-select
-          v-model:value="draft.source_chunk_ids"
-          mode="tags"
-          :open="false"
-          placeholder="输入来源 chunk ID 后按回车"
-        />
+        <div class="chunk-tags-editor">
+          <a-tag
+            v-for="(chunkId, index) in draft.source_chunk_ids"
+            :key="`${chunkId}-${index}`"
+            closable
+            @close="removeChunkId(index)"
+          >
+            {{ chunkId }}
+          </a-tag>
+          <a-input
+            v-model:value="chunkIdInput"
+            placeholder="输入来源 chunk ID 后按回车"
+            @pressEnter="addChunkId"
+            @blur="addChunkId"
+          />
+        </div>
         <div
           v-for="(evidence, index) in draft.evidence"
-          :key="`${evidence.chunk_id}-${index}`"
+          :key="`evidence-${index}`"
           class="evidence-editor"
         >
           <a-input v-model:value="evidence.chunk_id" placeholder="chunk ID" />
@@ -83,7 +99,10 @@
           <div v-if="!payload?.readonly" class="qa-card-actions">
             <a-button size="small" @click="edit(item)">编辑</a-button>
             <a-button
-              v-if="item.status !== 'confirmed' || item.sync_status !== 'synced'"
+              v-if="
+                payload?.confirmable &&
+                (item.status !== 'confirmed' || item.sync_status !== 'synced')
+              "
               size="small"
               type="primary"
               :loading="actionLoading"
@@ -126,7 +145,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 
@@ -151,6 +170,7 @@ const confirmableItems = computed(() =>
 )
 const draft = ref(null)
 const generationMessage = ref('')
+const chunkIdInput = ref('')
 
 const statusLabel = (item) => {
   if (item.sync_status === 'failed') return '同步失败'
@@ -178,6 +198,8 @@ const handleOpenChange = (open) => {
   if (open) load()
 }
 
+watch(() => props.open, handleOpenChange)
+
 const startManual = () => {
   draft.value = {
     qa_id: null,
@@ -187,6 +209,19 @@ const startManual = () => {
     source_chunk_ids: [],
     evidence: [{ chunk_id: '', text: '' }]
   }
+}
+
+const addChunkId = () => {
+  const value = String(chunkIdInput.value || '').trim()
+  if (!value) return
+  if (!draft.value?.source_chunk_ids?.includes(value)) {
+    draft.value?.source_chunk_ids?.push(value)
+  }
+  chunkIdInput.value = ''
+}
+
+const removeChunkId = (index) => {
+  draft.value?.source_chunk_ids?.splice(index, 1)
 }
 
 const edit = (item) => {
@@ -313,6 +348,18 @@ const rejectOne = (item) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.chunk-tags-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chunk-tags-editor .ant-input {
+  flex: 1;
+  min-width: 240px;
 }
 
 .qa-toolbar,

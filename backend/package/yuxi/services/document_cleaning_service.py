@@ -37,9 +37,15 @@ class DocumentCleaningService:
         *,
         file_repository: KnowledgeFileRepository | None = None,
         cleaner: OptionalAIDocumentCleaner | None = None,
+        qa_service=None,
     ):
         self.file_repository = file_repository or KnowledgeFileRepository()
         self.cleaner = cleaner or OptionalAIDocumentCleaner()
+        if qa_service is None:
+            from yuxi.services.document_qa_service import DocumentQAService
+
+            qa_service = DocumentQAService()
+        self.qa_service = qa_service
 
     @staticmethod
     def resolve_auto_confirm(params: dict[str, Any] | None) -> bool:
@@ -122,6 +128,14 @@ class DocumentCleaningService:
         if not sanitized.strip():
             raise DocumentCleaningError("清洗草稿不包含可保存内容")
         return sanitized
+
+    async def _mark_pending_qas_outdated(self, record) -> None:
+        if int(record.chunk_count or 0) > 0:
+            return
+        try:
+            await self.qa_service.mark_file_qas_outdated(kb_id=record.kb_id, file_id=record.file_id)
+        except Exception as exc:  # noqa: BLE001 - QA staleness must not block draft saving
+            logger.warning("Failed to mark pending QA drafts outdated: {}", sanitize_processing_error(exc))
 
     async def get_preview(self, *, kb_id: str, file_id: str) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
@@ -226,6 +240,7 @@ class DocumentCleaningService:
                     operator_id=operator_id,
                     expected_version=int(updated.cleaning_version or next_version),
                 )
+            await self._mark_pending_qas_outdated(updated)
             return await self.get_preview(kb_id=kb_id, file_id=file_id)
         except CleaningVersionConflict:
             raise
@@ -255,6 +270,12 @@ class DocumentCleaningService:
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
         cleaned = self._validate_content(content)
+        previous_content = None
+        if record.cleaning_draft_file:
+            try:
+                previous_content = await self._read_markdown(record.cleaning_draft_file)
+            except Exception:  # noqa: BLE001 - QA staleness detection is best-effort; saving must not fail
+                previous_content = None
         next_version = max(0, int(expected_version)) + 1
         previous_draft_path = record.cleaning_draft_file
         draft_path = await self._save_draft(kb_id, file_id, next_version, cleaned)
@@ -301,6 +322,8 @@ class DocumentCleaningService:
             raise CleaningVersionConflict("清洗草稿已被其他编辑更新，请刷新后重试")
         if previous_draft_path and previous_draft_path != record.markdown_file:
             await self._delete_draft(previous_draft_path)
+        if previous_content is not None and formal_content_hash(previous_content) != formal_content_hash(cleaned):
+            await self._mark_pending_qas_outdated(updated)
         return await self.get_preview(kb_id=kb_id, file_id=file_id)
 
     async def cancel_draft(
@@ -516,10 +539,22 @@ class DocumentCleaningService:
             file_id=target_record.file_id,
             operator_id=operator_id,
         )
-        from yuxi.services.document_qa_service import DocumentQAService, enqueue_auto_document_qa
+        from yuxi.services.document_qa_service import enqueue_auto_document_qa
 
+        try:
+            await self.qa_service.rebase_draft_qas(
+                kb_id=kb_id,
+                file_id=target_record.file_id,
+                operator_id=operator_id,
+            )
+        except Exception as rebase_error:  # noqa: BLE001 - QA rebind must not fail an already confirmed index
+            logger.warning(
+                "Failed to rebind draft QA for {}: {}",
+                target_record.file_id,
+                sanitize_processing_error(rebase_error),
+            )
         if body_changed:
-            await DocumentQAService().mark_file_qas_outdated(kb_id=kb_id, file_id=record.file_id)
+            await self.qa_service.mark_file_qas_outdated(kb_id=kb_id, file_id=record.file_id)
         await enqueue_auto_document_qa(
             kb_id=kb_id,
             file_id=target_record.file_id,
