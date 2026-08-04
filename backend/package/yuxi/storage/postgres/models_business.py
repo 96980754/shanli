@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -395,6 +396,63 @@ class Message(Base):
         return {
             "role": self.role,
             "content": self.content,
+        }
+
+
+class KnowledgeGap(Base):
+    __tablename__ = "knowledge_gaps"
+    __table_args__ = (
+        UniqueConstraint("question_hash", "agent_slug", "kb_scope_hash", name="uq_knowledge_gaps_scope"),
+        Index("ix_knowledge_gaps_status_seen", "status", "last_seen_at"),
+        Index("ix_knowledge_gaps_agent_seen", "agent_slug", "last_seen_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    question = Column(Text, nullable=False)
+    normalized_question = Column(Text, nullable=False)
+    question_hash = Column(String(64), nullable=False)
+    agent_slug = Column(String(100), nullable=False)
+    kb_scope = Column(JSON, nullable=False, default=list)
+    kb_scope_hash = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="new")
+    reason = Column(String(64), nullable=False)
+    occurrence_count = Column(Integer, nullable=False, default=1)
+    uid = Column(String(100), nullable=True)
+    conversation_thread_id = Column(String(64), nullable=True)
+    assistant_message_id = Column(
+        Integer,
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    first_seen_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    last_seen_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    resolution_note = Column(Text, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "question": self.question,
+            "agent_slug": self.agent_slug,
+            "kb_scope": self.kb_scope or [],
+            "status": self.status,
+            "reason": self.reason,
+            "occurrence_count": self.occurrence_count,
+            "uid": self.uid,
+            "conversation_thread_id": self.conversation_thread_id,
+            "assistant_message_id": self.assistant_message_id,
+            "first_seen_at": format_utc_datetime(self.first_seen_at),
+            "last_seen_at": format_utc_datetime(self.last_seen_at),
+            "resolution_note": self.resolution_note,
+            "resolved_at": format_utc_datetime(self.resolved_at),
+            "resolved_by": self.resolved_by,
+            "created_at": format_utc_datetime(self.created_at),
+            "updated_at": format_utc_datetime(self.updated_at),
         }
 
 

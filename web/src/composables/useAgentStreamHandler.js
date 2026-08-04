@@ -77,6 +77,19 @@ const toolFinishedMessage = (chunk) => {
   return { ...output, type: 'tool', id }
 }
 
+// tool-started 事件仅用于生成阶段状态提示：切换“正在查询知识库…”等文案。
+const toolStartedInfo = (chunk) => {
+  const streamEvent = chunk?.event
+  if (!streamEvent || streamEvent.method !== 'tools') return null
+
+  const data = streamEvent.data
+  if (!data || data.event !== 'tool-started') return null
+
+  const toolName = data.tool_name || data.tool
+  if (!toolName) return null
+  return { toolName }
+}
+
 export function useAgentStreamHandler({
   getThreadState,
   processApprovalInStream,
@@ -124,6 +137,8 @@ export function useAgentStreamHandler({
           }
           threadState.replyLoadingVisible = true
           threadState.contextCompressing = false
+          threadState.generationPhase = 'generating'
+          threadState.activeToolName = null
         }
         return false
 
@@ -148,11 +163,32 @@ export function useAgentStreamHandler({
               threadState.onGoingConv.msgChunks[messageChunk.id].push(messageChunk)
             }
           }
+          // 最终回答正文开始流式输出时隐藏生成状态；仅 reasoning_content 的增量不触发。
+          const finalDelta = chunk?.stream_event
+          if (
+            finalDelta?.type === 'message_delta' &&
+            typeof finalDelta.content === 'string' &&
+            finalDelta.content
+          ) {
+            threadState.replyLoadingVisible = false
+            threadState.generationPhase = null
+            threadState.activeToolName = null
+          }
         }
         return false
 
       case 'stream_event':
         {
+          // 工具开始：切换到具体工具状态文案（“正在查询知识库…”）。
+          const startedInfo = toolStartedInfo(chunk)
+          if (startedInfo) {
+            threadState.activeToolName = startedInfo.toolName
+            threadState.generationPhase = 'tool'
+            // 兜底：即使极短的过渡文本已提前隐藏加载状态，工具执行期间也要重新显示。
+            threadState.replyLoadingVisible = true
+            break
+          }
+
           // 工具结果需立即落地（不经平滑层），写入 msgChunks 后由 convertToolResultToMessages
           // 按 tool_call_id 关联到对应 AI 消息的 tool_call，驱动其完成态。
           const toolMessage = toolFinishedMessage(chunk)
@@ -161,6 +197,7 @@ export function useAgentStreamHandler({
               threadState.onGoingConv.msgChunks[toolMessage.id] = []
             }
             threadState.onGoingConv.msgChunks[toolMessage.id].push(toolMessage)
+            threadState.generationPhase = 'finalizing'
           }
         }
         return false
@@ -175,6 +212,8 @@ export function useAgentStreamHandler({
           threadState.pendingRequestId = null
           threadState.pendingInterrupt = null
           threadState.contextCompressing = false
+          threadState.generationPhase = null
+          threadState.activeToolName = null
         }
         return true
 
@@ -182,6 +221,8 @@ export function useAgentStreamHandler({
       case 'human_approval_required':
         streamSmoother?.flushThread(threadId)
         threadState.replyLoadingVisible = false
+        threadState.generationPhase = null
+        threadState.activeToolName = null
         console.log(`${debugPrefix}[approval_required]`, {
           threadId,
           currentAgentId: unref(currentAgentId)
@@ -233,6 +274,8 @@ export function useAgentStreamHandler({
           threadState.pendingRequestId = null
           threadState.pendingInterrupt = null
           threadState.contextCompressing = false
+          threadState.generationPhase = null
+          threadState.activeToolName = null
           console.log(`${debugPrefix}[finished]`, {
             threadId,
             currentAgentId: unref(currentAgentId),
@@ -265,6 +308,8 @@ export function useAgentStreamHandler({
           threadState.replyLoadingVisible = false
           threadState.pendingRequestId = null
           threadState.contextCompressing = false
+          threadState.generationPhase = null
+          threadState.activeToolName = null
           const pendingInterrupt = extractPendingInterrupt(chunk, threadId)
           if (pendingInterrupt) {
             threadState.pendingInterrupt = pendingInterrupt

@@ -1122,6 +1122,8 @@ class MilvusKB(KnowledgeBase):
 
         except Exception as e:
             logger.error(f"Milvus query error: {e}, {traceback.format_exc()}")
+            if agent_call:
+                raise
             return []
 
     async def _retrieve_graph_chunks(

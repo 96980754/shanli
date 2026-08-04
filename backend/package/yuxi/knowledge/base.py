@@ -8,12 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from yuxi.knowledge.chunking.ragflow_like.presets import ensure_chunk_defaults_in_additional_params
-from yuxi.knowledge.schemas import (
-    FindOutputSchema,
-    FindWindowSchema,
-    SearchOutputSchema,
-    SearchResultSchema,
-)
+from yuxi.knowledge.schemas import FindOutputSchema, FindWindowSchema, SearchResultSchema
 from yuxi.knowledge.utils import resolve_processing_params, sanitize_processing_params
 from yuxi.services.file_preview import (
     MAX_BINARY_PREVIEW_SIZE_BYTES,
@@ -764,9 +759,9 @@ class KnowledgeBase(ABC):
         }
 
     @staticmethod
-    def build_search_output(kb_id: str, retrieval_results: Any) -> dict[str, Any] | Any:
+    def build_search_output(kb_id: str, retrieval_results: Any) -> dict[str, Any]:
         if not isinstance(retrieval_results, list):
-            return retrieval_results
+            raise TypeError("检索结果必须是列表")
 
         results = []
         for index, chunk in enumerate(retrieval_results):
@@ -801,7 +796,7 @@ class KnowledgeBase(ABC):
                 )
             )
 
-        return SearchOutputSchema(kb_id=str(kb_id), results=results).model_dump()
+        return {"kb_id": str(kb_id), "results": [item.model_dump() for item in results]}
 
     @staticmethod
     def _build_find_file_windows(

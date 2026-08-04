@@ -177,6 +177,32 @@ def test_filesystem_middleware_keeps_read_file_result_inline_to_avoid_evict_loop
     assert result.content == content
 
 
+def test_filesystem_middleware_keeps_query_kb_result_inline_to_preserve_sources() -> None:
+    class _Backend:
+        artifacts_root = "/"
+
+        def __init__(self):
+            self.writes: list[tuple[str, str]] = []
+
+        def write(self, path: str, content: str):
+            self.writes.append((path, content))
+            return SimpleNamespace(error=None)
+
+    backend = _Backend()
+    middleware = create_agent_filesystem_middleware(tool_token_limit_before_evict=1)
+    middleware.backend = backend
+    request = SimpleNamespace(tool_call={"name": "query_kb"}, runtime=SimpleNamespace())
+    content = "x" * 100
+
+    result = middleware.wrap_tool_call(
+        request,
+        lambda _: ToolMessage(content=content, name="query_kb", tool_call_id="call-query-kb"),
+    )
+
+    assert backend.writes == []
+    assert result.content == content
+
+
 def test_custom_composite_glob_only_searches_routes_from_root() -> None:
     class _Backend:
         def __init__(self, name: str):

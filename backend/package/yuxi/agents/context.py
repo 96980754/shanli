@@ -189,6 +189,14 @@ class BaseContext:
         },
     )
 
+    ask_user_question_enabled: bool = field(
+        default=False,
+        metadata={
+            "name": "向用户提问",
+            "description": "允许智能体在信息不足时弹窗向用户提问澄清。默认关闭。",
+        },
+    )
+
     knowledges: list[str] | None = field(
         default=None,
         metadata={
@@ -431,7 +439,7 @@ async def resolve_agent_resource_options(
         options["tools"] = [
             _resource_option(tool["slug"], tool.get("name"), tool.get("description"))
             for tool in get_tool_metadata(category="buildin")
-            if tool.get("slug")
+            if tool.get("slug") and tool.get("slug") != "ask_user_question"
         ]
     if "knowledges" in fields_to_load:
         from yuxi.knowledge.runtime import knowledge_base

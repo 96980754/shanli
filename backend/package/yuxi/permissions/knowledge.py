@@ -125,5 +125,5 @@ class KnowledgePermissionService:
             return EffectiveKnowledgePermissions()
         db_info = {"created_by": None, "share_config": share_config}
         if KnowledgeBaseManager._database_info_accessible(user, db_info):
-            return EffectiveKnowledgePermissions(can_view=True, can_search=True)
+            return EffectiveKnowledgePermissions(can_view=True, can_search=True, can_download=True)
         return EffectiveKnowledgePermissions()

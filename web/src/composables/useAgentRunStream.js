@@ -249,6 +249,10 @@ export function useAgentRunStream({
     ts.runLastSeq = normalizeRunSeq(afterSeq)
     ts.lastRetryableJobTry = null
     ts.isStreaming = true
+    // 流启动即显示“正在生成回复…”，后续由 init / tool-started / message_delta 事件细化与收起。
+    ts.replyLoadingVisible = true
+    ts.generationPhase = 'generating'
+    ts.activeToolName = null
     saveActiveRunSnapshot(threadId, runId, ts.runLastSeq)
     const touchedThreadIds = new Set([threadId])
     let sawTerminalEvent = false

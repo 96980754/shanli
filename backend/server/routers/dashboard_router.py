@@ -10,7 +10,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import Integer, String, cast, distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
+from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
 from yuxi.utils.logging_config import logger
@@ -987,3 +988,65 @@ async def get_call_timeseries_stats(
         logger.error(f"Error getting call timeseries stats: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to get call timeseries stats: {str(e)}")
+
+
+@dashboard.get("/knowledge-gaps")
+async def list_knowledge_gaps(
+    status: str | None = Query(default=None),
+    agent_slug: str | None = Query(default=None, max_length=100),
+    reason: str | None = Query(default=None, max_length=64),
+    query: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_superadmin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    del current_user
+    try:
+        return await KnowledgeGapAdminService().list(
+            db,
+            status=status,
+            agent_slug=agent_slug,
+            reason=reason,
+            query=query,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@dashboard.get("/knowledge-gaps/{gap_id}")
+async def get_knowledge_gap(
+    gap_id: int,
+    current_user: User = Depends(get_superadmin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    del current_user
+    item = await KnowledgeGapAdminService().get(db, gap_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="知识缺口不存在")
+    return {"item": item}
+
+
+@dashboard.patch("/knowledge-gaps/{gap_id}")
+async def update_knowledge_gap(
+    gap_id: int,
+    data: dict[str, Any] = Body(...),
+    current_user: User = Depends(get_superadmin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        item = await KnowledgeGapAdminService().update(
+            db,
+            gap_id,
+            status=str(data.get("status") or ""),
+            resolution_note=data.get("resolution_note"),
+            operator_uid=current_user.uid,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if item is None:
+        raise HTTPException(status_code=404, detail="知识缺口不存在")
+    await db.commit()
+    return {"item": item}

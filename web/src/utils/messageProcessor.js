@@ -106,38 +106,48 @@ export class MessageProcessor {
   static extractKnowledgeChunksFromConversation(conv, databases = []) {
     if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return []
 
-    const databaseNames = new Set(
+    const databaseNames = new Map(
       (databases || [])
-        .map((db) => db?.name)
-        .filter((name) => typeof name === 'string' && name.trim())
+        .filter((db) => db?.kb_id)
+        .map((db) => [db.kb_id, db.name || db.kb_id])
     )
-    if (databaseNames.size === 0) return []
-
     const normalizedChunks = []
     const dedupSet = new Set()
 
-    const appendChunk = (chunk, kbName) => {
+    const appendChunk = (chunk, outputKbId) => {
       if (!chunk || typeof chunk !== 'object') return
       const content = typeof chunk.content === 'string' ? chunk.content.trim() : ''
       if (!content) return
 
       const metadata = chunk.metadata && typeof chunk.metadata === 'object' ? chunk.metadata : {}
-      const dedupKey =
-        metadata.chunk_id && typeof metadata.chunk_id === 'string'
-          ? `${kbName}::${metadata.chunk_id}`
-          : `${kbName}::${content}`
+      const kbId = chunk.kb_id || outputKbId || ''
+      const fileId = chunk.file_id || metadata.file_id || ''
+      if (!kbId) return
+
+      const chunkId = metadata.chunk_id || chunk.id || ''
+      const dedupKey = chunkId
+        ? `${kbId}::${chunkId}`
+        : `${kbId}::${fileId}::${content}`
       if (dedupSet.has(dedupKey)) return
       dedupSet.add(dedupKey)
 
-      const score = typeof chunk.score === 'number' ? chunk.score : null
+      const score =
+        typeof chunk.score === 'number'
+          ? chunk.score
+          : typeof metadata.score === 'number'
+            ? metadata.score
+            : null
       normalizedChunks.push({
-        kb_name: kbName,
+        kb_id: kbId,
+        file_id: fileId,
+        kb_name: databaseNames.get(kbId) || kbId,
         content,
         score,
         metadata: {
+          ...metadata,
           source: metadata.source || '',
-          file_id: metadata.file_id || '',
-          chunk_id: metadata.chunk_id || '',
+          file_id: fileId,
+          chunk_id: chunkId,
           chunk_index: metadata.chunk_index
         }
       })
@@ -160,23 +170,21 @@ export class MessageProcessor {
       if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
 
       for (const toolCall of msg.tool_calls) {
-        const kbName = toolCall?.name || toolCall?.function?.name
-        if (!databaseNames.has(kbName)) continue
+        const toolName = toolCall?.name || toolCall?.function?.name
+        if (toolName !== 'query_kb') continue
 
         const content = toolCall?.tool_call_result?.content
         const parsed = parseToolResultContent(content)
-        if (!parsed) continue
-
-        // Milvus / Dify: 直接是 chunks 数组
-        if (Array.isArray(parsed)) {
-          for (const chunk of parsed) appendChunk(chunk, kbName)
+        if (
+          !parsed ||
+          parsed.schema_version !== 1 ||
+          parsed.status !== 'ok' ||
+          !Array.isArray(parsed.results)
+        ) {
           continue
         }
 
-        const wrappedChunks = parsed?.data?.chunks
-        if (Array.isArray(wrappedChunks)) {
-          for (const chunk of wrappedChunks) appendChunk(chunk, kbName)
-        }
+        for (const chunk of parsed.results) appendChunk(chunk, parsed.kb_id)
       }
     }
 

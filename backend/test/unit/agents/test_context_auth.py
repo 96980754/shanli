@@ -39,6 +39,32 @@ def test_get_configurable_items_filters_admin_fields_for_user():
     assert "max_execution_steps" not in items
 
 
+def test_get_configurable_items_exposes_ask_user_question_enabled_default_off():
+    items = BaseContext.get_configurable_items()
+
+    item = items["ask_user_question_enabled"]
+    assert item["default"] is False
+    assert item["name"] == "向用户提问"
+
+
+@pytest.mark.asyncio
+async def test_resolve_agent_resource_options_excludes_ask_user_question(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules,
+        "yuxi.agents.toolkits.service",
+        types.SimpleNamespace(
+            get_tool_metadata=lambda category=None: [
+                {"slug": "ask_user_question", "name": "向用户提问", "description": ""},
+                {"slug": "tavily_search", "name": "Tavily", "description": ""},
+            ]
+        ),
+    )
+
+    options = await context_module.resolve_agent_resource_options({"tools"}, db=object(), user=object())
+
+    assert [option["key"] for option in options["tools"]] == ["tavily_search"]
+
+
 def test_get_configurable_items_allows_admin_and_superadmin_fields():
     admin_items = BaseContext.get_configurable_items(user_role="admin")
     superadmin_items = SuperAdminOnlyContext.get_configurable_items(user_role="superadmin")
@@ -145,7 +171,7 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
         "yuxi.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
-                {"slug": "ask_user_question", "name": "Ask User", "description": ""},
+                {"slug": "sample_tool", "name": "Sample", "description": ""},
                 {"slug": "tavily_search", "name": "Tavily", "description": ""},
             ]
         ),
@@ -189,7 +215,7 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
         context_schema=ChatBotContext,
     )
 
-    assert normalized["tools"] == ["ask_user_question", "tavily_search"]
+    assert normalized["tools"] == ["sample_tool", "tavily_search"]
     assert normalized["knowledges"] == ["kb-b"]
     assert normalized["mcps"] == ["mcp-a", "mcp-b"]
     assert normalized["skills"] == []
@@ -286,7 +312,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
         "yuxi.agents.toolkits.service",
         types.SimpleNamespace(
             get_tool_metadata=lambda category=None: [
-                {"slug": "ask_user_question", "name": "Ask User", "description": ""}
+                {"slug": "sample_tool", "name": "Sample", "description": ""}
             ]
         ),
     )
@@ -312,7 +338,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     )
     context = ChatBotContext(
         uid="u1",
-        tools=["ask_user_question", "missing"],
+        tools=["sample_tool", "missing"],
         knowledges=["kb-a", "missing"],
         mcps=None,
         skills=["skill-a", "missing"],
@@ -321,7 +347,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
 
     prepared = await context_module.prepare_agent_runtime_context(context)
 
-    assert prepared.tools == ["ask_user_question"]
+    assert prepared.tools == ["sample_tool"]
     assert prepared.knowledges == ["kb-a"]
     assert prepared.mcps == ["mcp-a"]
     assert prepared.skills == ["skill-a"]

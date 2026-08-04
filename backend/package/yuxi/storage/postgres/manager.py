@@ -934,6 +934,34 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS ix_conversations_is_pinned ON conversations(is_pinned)",
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_model_providers_provider_id ON model_providers(provider_id)",
             "CREATE INDEX IF NOT EXISTS ix_model_providers_is_enabled ON model_providers(is_enabled)",
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_gaps (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                normalized_question TEXT NOT NULL,
+                question_hash VARCHAR(64) NOT NULL,
+                agent_slug VARCHAR(100) NOT NULL,
+                kb_scope JSONB NOT NULL DEFAULT '[]'::jsonb,
+                kb_scope_hash VARCHAR(64) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'new',
+                reason VARCHAR(64) NOT NULL,
+                occurrence_count INTEGER NOT NULL DEFAULT 1,
+                uid VARCHAR(100),
+                conversation_thread_id VARCHAR(64),
+                assistant_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+                first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                resolution_note TEXT,
+                resolved_at TIMESTAMPTZ,
+                resolved_by VARCHAR(100),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_gaps_scope UNIQUE (question_hash, agent_slug, kb_scope_hash),
+                CONSTRAINT uq_knowledge_gaps_assistant_message UNIQUE (assistant_message_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_status_seen ON knowledge_gaps(status, last_seen_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_agent_seen ON knowledge_gaps(agent_slug, last_seen_at DESC)",
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警
