@@ -210,6 +210,48 @@ async def test_list_documents_requires_view_permission(monkeypatch):
     assert service.calls == [({"uid": "viewer", "role": "admin", "department_id": 1}, "kb-1", "can_view")]
 
 
+async def test_download_document_requires_view_and_download_permissions(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    get_file_download = AsyncMock(
+        return_value={"filename": "demo.txt", "content": b"demo", "media_type": "text/plain"}
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_download", get_file_download)
+
+    response = await knowledge_router.download_document(
+        "kb-1",
+        "file-1",
+        current_user=user(uid="viewer", role="user"),
+    )
+
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_download"),
+    ]
+    get_file_download.assert_awaited_once_with(kb_id="kb-1", file_id="file-1", variant="original")
+    assert response.media_type == "text/plain"
+
+
+async def test_download_document_rejects_download_only_permission(monkeypatch):
+    class DownloadOnlyPermissionService:
+        async def has_permission(self, user, kb_id, action):
+            return action == "can_download"
+
+    get_file_download = AsyncMock()
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", DownloadOnlyPermissionService)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_download", get_file_download)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.download_document(
+            "kb-1",
+            "file-1",
+            current_user=user(uid="viewer", role="user"),
+        )
+
+    assert exc_info.value.status_code == 403
+    get_file_download.assert_not_awaited()
+
+
 async def test_scoped_document_search_requires_manage_permission(monkeypatch):
     service, _repository = install_fakes(monkeypatch, allowed=False)
 

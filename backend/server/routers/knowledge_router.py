@@ -2058,6 +2058,7 @@ async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/download")
 async def download_document(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """下载原始文件"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
     await _require_kb_permission(current_user, kb_id, "can_download")
     logger.debug(f"Download document {doc_id} from {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档下载")

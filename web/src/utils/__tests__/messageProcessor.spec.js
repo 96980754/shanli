@@ -2,95 +2,151 @@ import assert from 'node:assert/strict'
 
 import { MessageProcessor } from '../messageProcessor.js'
 
-const databases = [{ name: '财税库' }, { name: 'DifyKB' }, { name: 'LightGraphKB' }]
+const databases = [
+  { kb_id: 'kb-finance', name: '财税库' },
+  { kb_id: 'kb-other', name: '其他知识库' }
+]
+
+const queryOutput = (overrides = {}) => ({
+  schema_version: 1,
+  status: 'ok',
+  reason: null,
+  kb_id: 'kb-finance',
+  results: [
+    {
+      id: 'c1',
+      kb_id: 'kb-finance',
+      file_id: 'f1',
+      content: 'A',
+      score: 0.9,
+      metadata: { source: 'doc-a.pdf', chunk_id: 'c1', chunk_index: 1 }
+    }
+  ],
+  error: null,
+  ...overrides
+})
 
 const run = () => {
-  const conv = {
+  const realtimeMessages = MessageProcessor.convertToolResultToMessages([
+    {
+      type: 'ai',
+      tool_calls: [{ id: 'call-1', name: 'query_kb', args: { kb_id: 'kb-finance' } }]
+    },
+    {
+      type: 'tool',
+      tool_call_id: 'call-1',
+      content: JSON.stringify(queryOutput())
+    }
+  ])
+  const realtimeChunks = MessageProcessor.extractKnowledgeChunksFromConversation(
+    { messages: realtimeMessages },
+    databases
+  )
+
+  assert.equal(realtimeChunks.length, 1)
+  assert.deepEqual(
+    {
+      kb_id: realtimeChunks[0].kb_id,
+      file_id: realtimeChunks[0].file_id,
+      kb_name: realtimeChunks[0].kb_name,
+      source: realtimeChunks[0].metadata.source
+    },
+    { kb_id: 'kb-finance', file_id: 'f1', kb_name: '财税库', source: 'doc-a.pdf' }
+  )
+
+  const historyConv = {
     messages: [
       {
         type: 'ai',
         tool_calls: [
           {
-            name: '财税库',
+            function: { name: 'query_kb' },
             tool_call_result: {
-              content: JSON.stringify([
-                {
-                  content: 'A',
-                  score: 0.9,
-                  metadata: { source: 'doc-a', chunk_id: 'c1', file_id: 'f1', chunk_index: 1 }
-                },
-                {
-                  content: 'A',
-                  score: 0.8,
-                  metadata: { source: 'doc-a', chunk_id: 'c1', file_id: 'f1', chunk_index: 1 }
-                }
-              ])
-            }
-          },
-          {
-            name: 'LightGraphKB',
-            tool_call_result: {
-              content: JSON.stringify({
-                data: {
-                  chunks: [
-                    {
-                      content: 'B',
-                      score: 0.4,
-                      metadata: { source: 'doc-b', chunk_id: 'c2', file_id: 'f2', chunk_index: 2 }
+              content: queryOutput({
+                results: [
+                  {
+                    id: 'c2',
+                    content: 'B',
+                    metadata: {
+                      source: 'doc-b.docx',
+                      file_id: 'f2',
+                      chunk_id: 'c2',
+                      chunk_index: 2,
+                      score: 0.4
                     }
-                  ]
-                }
+                  }
+                ]
               })
             }
-          },
-          {
-            name: 'not_kb_tool',
-            tool_call_result: {
-              content: JSON.stringify([{ content: 'X', score: 0.99, metadata: { chunk_id: 'cx' } }])
-            }
-          },
-          {
-            name: 'DifyKB',
-            tool_call_result: { content: 'not-json' }
           }
         ]
       }
     ]
   }
+  const historyChunks = MessageProcessor.extractKnowledgeChunksFromConversation(historyConv, [])
 
-  const chunks = MessageProcessor.extractKnowledgeChunksFromConversation(conv, databases)
+  assert.equal(historyChunks.length, 1)
+  assert.equal(historyChunks[0].kb_id, 'kb-finance')
+  assert.equal(historyChunks[0].file_id, 'f2')
+  assert.equal(historyChunks[0].kb_name, 'kb-finance')
+  assert.equal(historyChunks[0].score, 0.4)
 
-  // 1. Milvus/Dify 数组提取
-  assert.equal(
-    chunks.some((c) => c.content === 'A' && c.kb_name === '财税库'),
-    true
-  )
+  const dedupConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'query_kb',
+            tool_call_result: {
+              content: JSON.stringify(
+                queryOutput({
+                  results: [
+                    queryOutput().results[0],
+                    { ...queryOutput().results[0], score: 0.8 },
+                    {
+                      ...queryOutput().results[0],
+                      kb_id: 'kb-other',
+                      file_id: 'f-other',
+                      content: 'C'
+                    }
+                  ]
+                })
+              )
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const dedupChunks = MessageProcessor.extractKnowledgeChunksFromConversation(dedupConv, databases)
 
-  // 2. 对象包装的 data.chunks 提取
-  assert.equal(
-    chunks.some((c) => c.content === 'B' && c.kb_name === 'LightGraphKB'),
-    true
-  )
+  assert.equal(dedupChunks.length, 2)
+  assert.equal(dedupChunks[0].score, 0.9)
+  assert.equal(dedupChunks.some((chunk) => chunk.kb_id === 'kb-other'), true)
 
-  // 3. 非知识库工具忽略
-  assert.equal(
-    chunks.some((c) => c.content === 'X'),
-    false
-  )
-
-  // 4. 非法 JSON 自动跳过
-  assert.equal(
-    chunks.some((c) => c.kb_name === 'DifyKB'),
-    false
-  )
-
-  // 5. 去重生效（chunk_id=c1 仅一条）
-  assert.equal(chunks.filter((c) => c.metadata?.chunk_id === 'c1').length, 1)
-
-  // 6. 分数排序（A 0.9 在 B 0.4 前）
-  const idxA = chunks.findIndex((c) => c.content === 'A')
-  const idxB = chunks.findIndex((c) => c.content === 'B')
-  assert.equal(idxA < idxB, true)
+  const ignoredConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'query_kb',
+            tool_call_result: {
+              content: JSON.stringify(
+                queryOutput({ status: 'insufficient', reason: 'no_results', results: [] })
+              )
+            }
+          },
+          {
+            name: 'other_tool',
+            tool_call_result: { content: JSON.stringify(queryOutput()) }
+          }
+        ]
+      }
+    ]
+  }
+  assert.deepEqual(MessageProcessor.extractKnowledgeChunksFromConversation(ignoredConv, databases), [])
 
   const conversations = MessageProcessor.convertServerHistoryToMessages([
     { type: 'human', content: '请选择语言' },
@@ -115,7 +171,7 @@ const run = () => {
   })
   assert.deepEqual(assistantBody, { content: '最终答案', reasoningContent: '推理过程' })
 
-  console.log('messageProcessor extractKnowledgeChunksFromConversation: all assertions passed')
+  console.log('messageProcessor query_kb source extraction: all assertions passed')
 }
 
 run()
