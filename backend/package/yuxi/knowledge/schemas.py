@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SearchInputSchema(BaseModel):
@@ -17,9 +17,51 @@ class SearchResultSchema(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, description="来源、分数、chunk_index 等附加信息")
 
 
+SearchStatus = Literal["ok", "insufficient", "error"]
+InsufficientReason = Literal["no_results", "empty_content"]
+SearchErrorReason = Literal[
+    "invalid_request",
+    "permission_denied",
+    "knowledge_base_unavailable",
+    "retrieval_error",
+    "invalid_result",
+]
+SearchReason = InsufficientReason | SearchErrorReason
+
+
+class SearchErrorSchema(BaseModel):
+    code: SearchErrorReason
+    message: str
+
+
 class SearchOutputSchema(BaseModel):
+    schema_version: Literal[1] = 1
+    status: SearchStatus
+    reason: SearchReason | None = None
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
     results: list[SearchResultSchema] = Field(default_factory=list, description="检索结果列表")
+    error: SearchErrorSchema | None = None
+
+    @model_validator(mode="after")
+    def validate_status_contract(self):
+        non_empty_results = [item for item in self.results if item.content.strip()]
+        if self.status == "ok":
+            if self.reason is not None or self.error is not None or not non_empty_results:
+                raise ValueError("ok 状态必须包含非空结果，且不能包含 reason/error")
+            if len(non_empty_results) != len(self.results):
+                raise ValueError("ok 状态不能包含空正文结果")
+        elif self.status == "insufficient":
+            if self.reason not in {"no_results", "empty_content"} or self.results or self.error is not None:
+                raise ValueError("insufficient 状态必须包含有效 reason，且 results/error 为空")
+        elif self.reason not in {
+            "invalid_request",
+            "permission_denied",
+            "knowledge_base_unavailable",
+            "retrieval_error",
+            "invalid_result",
+        } or self.results or self.error is None or self.error.code != self.reason:
+            raise ValueError("error 状态必须包含匹配的 reason/error，且 results 为空")
+        return self
 
 
 class FindInputSchema(BaseModel):

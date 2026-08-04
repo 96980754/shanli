@@ -1,4 +1,4 @@
-import { apiAdminGet } from './base'
+import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch } from './base'
 
 /**
  * Dashboard API模块
@@ -128,5 +128,18 @@ export const dashboardApi = {
    */
   getCallTimeseries: (type = 'models', timeRange = '14days') => {
     return apiAdminGet(`/api/dashboard/stats/calls/timeseries?type=${type}&time_range=${timeRange}`)
-  }
+  },
+
+  getKnowledgeGaps: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiSuperAdminGet(`/api/dashboard/knowledge-gaps?${query.toString()}`)
+  },
+
+  getKnowledgeGap: (gapId) => apiSuperAdminGet(`/api/dashboard/knowledge-gaps/${gapId}`),
+
+  updateKnowledgeGap: (gapId, data) =>
+    apiSuperAdminPatch(`/api/dashboard/knowledge-gaps/${gapId}`, data)
 }

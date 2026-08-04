@@ -198,10 +198,41 @@ def _find_query_target(
     return target_info, normalized_kb_id, None
 
 
-async def _build_query_output(target_kb_id: str, result: Any) -> Any:
-    if isinstance(result, dict) and result.get("kb_id") == target_kb_id and isinstance(result.get("results"), list):
-        return SearchOutputSchema(**result).model_dump()
-    return KnowledgeBase.build_search_output(target_kb_id, result)
+async def _build_query_output(target_kb_id: str, result: Any) -> dict[str, Any]:
+    try:
+        if isinstance(result, dict) and result.get("kb_id") == target_kb_id and isinstance(result.get("results"), list):
+            normalized = KnowledgeBase.build_search_output(target_kb_id, result["results"])
+        else:
+            normalized = KnowledgeBase.build_search_output(target_kb_id, result)
+    except (TypeError, ValueError) as exc:
+        return _query_error(target_kb_id, "invalid_result", "知识库返回了无法解析的检索结果")
+
+    results = normalized["results"]
+    if not results:
+        return SearchOutputSchema(
+            status="insufficient",
+            reason="no_results",
+            kb_id=target_kb_id,
+        ).model_dump()
+
+    non_empty_results = [item for item in results if str(item.get("content") or "").strip()]
+    if not non_empty_results:
+        return SearchOutputSchema(
+            status="insufficient",
+            reason="empty_content",
+            kb_id=target_kb_id,
+        ).model_dump()
+
+    return SearchOutputSchema(status="ok", kb_id=target_kb_id, results=non_empty_results).model_dump()
+
+
+def _query_error(kb_id: str, reason: str, message: str) -> dict[str, Any]:
+    return SearchOutputSchema(
+        status="error",
+        reason=reason,
+        kb_id=str(kb_id or ""),
+        error={"code": reason, "message": message},
+    ).model_dump()
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=QueryKBInput)
@@ -212,9 +243,9 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
     file_id 可继续用于 find_kb_document 或 open_kb_document。
     """
     if not kb_id:
-        return "请提供 kb_id"
+        return _query_error("", "invalid_request", "请提供 kb_id")
     if not query_text:
-        return "请提供查询内容"
+        return _query_error(kb_id, "invalid_request", "请提供查询内容")
 
     knowledge_base = _get_knowledge_base()
     retrievers = knowledge_base.get_retrievers()
@@ -225,7 +256,8 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         visible_kbs=visible_kbs,
     )
     if target_error:
-        return target_error
+        reason = "permission_denied" if visible_kbs else "knowledge_base_unavailable"
+        return _query_error(kb_id, reason, target_error)
 
     try:
         retriever = target_info["retriever"]
@@ -241,8 +273,8 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         return await _build_query_output(target_kb_id, result)
 
     except Exception as e:
-        logger.error(f"检索失败: {e}")
-        return f"检索失败: {str(e)}"
+        logger.exception("知识库检索失败 kb_id={}: {}", target_kb_id, e)
+        return _query_error(target_kb_id, "retrieval_error", "知识库检索服务暂时不可用")
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=OpenKBDocumentInput)

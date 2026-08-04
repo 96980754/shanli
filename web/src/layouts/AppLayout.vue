@@ -8,7 +8,8 @@ import {
   Box,
   PanelLeftClose,
   PanelLeftOpen,
-  MessageCirclePlus
+  MessageCirclePlus,
+  CircleHelp
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -134,6 +135,12 @@ const mainList = computed(() => {
       path: '/dashboard',
       icon: BarChart3,
       activeIcon: BarChart3
+    })
+    items.push({
+      name: '知识缺口',
+      path: '/knowledge-gaps',
+      icon: CircleHelp,
+      activeIcon: CircleHelp
     })
   }
 

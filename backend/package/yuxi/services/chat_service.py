@@ -31,6 +31,12 @@ from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.repositories.subagent_thread_repository import SubagentThreadRepository
 from yuxi.services.conversation_service import serialize_attachment
 from yuxi.services.input_message_service import AgentRunInputMessage
+from yuxi.services.knowledge_answer_disposition import (
+    apply_knowledge_disposition,
+    build_knowledge_evidence,
+    is_final_assistant_message,
+)
+from yuxi.services.knowledge_gap_service import record_knowledge_gap
 from yuxi.services.langfuse_service import (
     LangfuseRunContext,
     build_run_context,
@@ -519,8 +525,11 @@ async def save_messages_from_langgraph_state(
         return
 
     existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
+    knowledge_question, knowledge_evidence = build_knowledge_evidence(messages)
 
     last_ai_message = None
+    final_ai_message = None
+    final_ai_metadata = None
     for msg in messages:
         if hasattr(msg, "model_dump"):
             msg_dict = msg.model_dump()
@@ -544,6 +553,11 @@ async def save_messages_from_langgraph_state(
             continue
 
         if msg_type == "ai":
+            msg_dict = apply_knowledge_disposition(
+                msg_dict,
+                question=knowledge_question,
+                evidence=knowledge_evidence,
+            )
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,
@@ -552,13 +566,32 @@ async def save_messages_from_langgraph_state(
                 run_id=run_id,
                 request_id=request_id,
             )
+            if is_final_assistant_message(msg_dict):
+                final_ai_message = last_ai_message
+                final_ai_metadata = msg_dict
         elif msg_type == "tool":
             await _save_tool_message(conv_repo, msg_dict)
 
-    if run_id and last_ai_message:
+    output_message = final_ai_message or last_ai_message
+    if run_id and output_message:
         run_repo = AgentRunRepository(conv_repo.db)
-        await run_repo.set_output_message(run_id, last_ai_message.id)
+        await run_repo.set_output_message(run_id, output_message.id)
         await conv_repo.db.commit()
+
+    if final_ai_message and isinstance(final_ai_metadata, dict):
+        disposition = final_ai_metadata.get("knowledge_disposition") or {}
+        evidence = final_ai_metadata.get("knowledge_evidence") or {}
+        if disposition.get("type") == "knowledge_refusal":
+            conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
+            await record_knowledge_gap(
+                question=str(final_ai_metadata.get("knowledge_question") or ""),
+                agent_slug=str(getattr(conversation, "agent_id", "") or ""),
+                kb_scope=evidence.get("kb_scope") or [],
+                reason=str(disposition.get("reason") or ""),
+                uid=str(getattr(conversation, "uid", "") or "") or None,
+                conversation_thread_id=thread_id,
+                assistant_message_id=final_ai_message.id,
+            )
 
 
 def _extract_interrupt_info(state) -> Any | None:

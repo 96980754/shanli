@@ -75,6 +75,19 @@ const router = createRouter({
       ]
     },
     {
+      path: '/knowledge-gaps',
+      name: 'knowledge-gaps',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'KnowledgeGapsComp',
+          component: () => import('../views/KnowledgeGapsView.vue'),
+          meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
+        }
+      ]
+    },
+    {
       path: '/model-manage',
       name: 'model-manage',
       component: AppLayout,
