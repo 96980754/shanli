@@ -115,6 +115,8 @@ class BaseEmbeddingModel(ABC):
 class OtherEmbedding(BaseEmbeddingModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        if not self.api_key:
+            raise ValueError("Embedding API key 未配置，无法调用外部向量模型")
         self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def build_payload(self, message: list[str] | str) -> dict:

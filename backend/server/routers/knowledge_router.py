@@ -16,6 +16,7 @@ from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.base import FileStatus
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
+from yuxi.knowledge.document_qa import QAValidationError
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import (
     GRAPH_TASK_TYPE,
@@ -264,14 +265,14 @@ class QABatchGenerateRequest(QAGenerateRequest):
 
 
 class QAEvidenceItem(BaseModel):
-    chunk_id: str = Field(min_length=1, max_length=128)
+    chunk_id: str = Field(default="", max_length=128)
     text: str = Field(min_length=1, max_length=5000)
 
 
 class QAWriteRequest(BaseModel):
     question: str = Field(min_length=1, max_length=300)
     answer: str = Field(min_length=1, max_length=2000)
-    source_chunk_ids: list[str] = Field(min_length=1, max_length=100)
+    source_chunk_ids: list[str] = Field(default_factory=list, max_length=100)
     evidence: list[QAEvidenceItem] = Field(min_length=1, max_length=100)
     version: int | None = Field(default=None, ge=1)
 
@@ -2029,6 +2030,8 @@ def _raise_enrichment_http_error(error: Exception) -> None:
 
 
 def _raise_qa_http_error(error: Exception) -> None:
+    if isinstance(error, QAValidationError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
     if isinstance(error, QANotFound):
         raise HTTPException(status_code=404, detail=str(error)) from error
     if isinstance(error, QAVersionConflict):

@@ -852,7 +852,6 @@ class MilvusKB(KnowledgeBase):
             raise ValueError(f"Failed to get Milvus collection for {kb_id}")
 
         embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
-        embedding_function = self._get_embedding_function(embedding_model_spec)
 
         file_meta = await self._load_file_meta(kb_id, file_id)
         allowed_statuses = {
@@ -925,6 +924,7 @@ class MilvusKB(KnowledgeBase):
             else:
                 await self.delete_file_chunks_only(kb_id, file_id)
 
+            embedding_function = self._get_embedding_function(embedding_model_spec)
             await self._embed_and_store_chunks(kb_id, file_id, collection, chunks, embedding_function)
             await asyncio.to_thread(collection.flush)
 

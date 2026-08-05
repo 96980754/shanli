@@ -298,6 +298,35 @@ async def test_draft_mode_manual_create_update_and_reject():
         expected_version=updated["version"],
     )
     assert rejected["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_draft_mode_manual_create_auto_binds_evidence_without_chunk_ids():
+    record = _file(
+        status=FileStatus.WAITING_CONFIRMATION,
+        cleaning_draft_file="minio://parsed/kb-1/draft.md",
+    )
+    service, repo, _index = _service(record)
+
+    async def fake_draft_chunks(_record):
+        return [
+            SimpleNamespace(chunk_id="draft-chunk-1", content="Shanli 2.1 支持向量检索，默认批次大小为 40。"),
+        ], formal_content_hash("draft")
+
+    service._draft_chunks = fake_draft_chunks
+    created = await service.create_manual(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+        question="Shanli 2.1 支持什么检索？",
+        answer="Shanli 2.1 支持向量检索，默认批次大小为 40。",
+        source_chunk_ids=[],
+        evidence=[{"chunk_id": "", "text": "Shanli 2.1 支持向量检索，默认批次大小为 40。"}],
+    )
+    assert created["status"] == "draft"
+    assert created["source"] == "manual"
+    assert created["source_chunk_ids"] == ["draft-chunk-1"]
+    assert created["evidence"][0]["chunk_id"] == "draft-chunk-1"
     assert len(repo.records) == 1
 
 

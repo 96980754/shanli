@@ -145,6 +145,37 @@ class DocumentQAService:
         return chunks, formal_content_hash(markdown)
 
     @staticmethod
+    def _bind_draft_evidence(
+        chunks: list[Any],
+        evidence: list[dict[str, str]],
+        source_chunk_ids: list[str],
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Draft-mode manual QA may omit source chunks; bind evidence to matching draft preview chunks."""
+        requested = [str(value) for value in source_chunk_ids or [] if str(value).strip()]
+        if requested:
+            return requested, evidence
+        content_by_id = {chunk.chunk_id: chunk.content for chunk in chunks}
+        resolved_ids: list[str] = []
+        normalized: list[dict[str, str]] = []
+        for item in evidence or []:
+            text = str(item.get("text") or "").strip()
+            chunk_id = str(item.get("chunk_id") or "").strip()
+            if not text:
+                normalized.append({"chunk_id": chunk_id, "text": text})
+                continue
+            if chunk_id and chunk_id in content_by_id and text in content_by_id[chunk_id]:
+                normalized.append({"chunk_id": chunk_id, "text": text})
+                resolved_ids.append(chunk_id)
+                continue
+            matches = [cid for cid, content in content_by_id.items() if text in content]
+            if matches:
+                normalized.append({"chunk_id": matches[0], "text": text})
+                resolved_ids.extend(matches)
+            else:
+                normalized.append({"chunk_id": chunk_id, "text": text})
+        return list(dict.fromkeys(resolved_ids)), normalized
+
+    @staticmethod
     def _public(record, *, idempotent: bool = False) -> dict[str, Any]:
         return {
             "qa_id": record.qa_id,
@@ -313,6 +344,8 @@ class DocumentQAService:
         evidence: list[dict[str, str]],
     ) -> dict[str, Any]:
         record, chunks, content_hash = await self._context(kb_id, file_id)
+        if record.status == DRAFT_QA_STATUS:
+            source_chunk_ids, evidence = self._bind_draft_evidence(chunks, evidence, source_chunk_ids)
         validated = normalize_and_validate_qa(
             {
                 "question": question,
@@ -362,6 +395,8 @@ class DocumentQAService:
         evidence: list[dict[str, str]],
     ) -> dict[str, Any]:
         file_record, chunks, content_hash = await self._context(kb_id, file_id)
+        if file_record.status == DRAFT_QA_STATUS:
+            source_chunk_ids, evidence = self._bind_draft_evidence(chunks, evidence, source_chunk_ids)
         current = await self.qa_repository.get_by_qa_id(qa_id)
         if current is None or current.kb_id != kb_id or current.file_id != file_id:
             raise QANotFound("QA 不存在")

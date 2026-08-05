@@ -290,6 +290,36 @@ async def test_confirm_rebinds_draft_qa_after_indexing(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_confirm_saves_draft_and_returns_error_indexing_when_index_fails(monkeypatch):
+    record = _record(
+        status=FileStatus.WAITING_CONFIRMATION,
+        cleaning_version=1,
+        cleaning_draft_file="minio://parsed/draft.md",
+    )
+    service, _repository, _saved, _qa_service = _service(monkeypatch, record)
+
+    async def fail_index(_kb_id, file_id, operator_id=None, params=None):
+        del file_id, operator_id, params
+        record.status = FileStatus.ERROR_INDEXING
+        record.error_message = "Embedding async request failed: Illegal header value"
+        raise RuntimeError("Embedding async request failed: Illegal header value b'Bearer '")
+
+    monkeypatch.setattr(cleaning_service_module.knowledge_base, "index_file", fail_index)
+
+    result = await service.confirm(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+        expected_version=1,
+    )
+
+    assert result["status"] == FileStatus.ERROR_INDEXING
+    assert "Illegal header" in (result["index_error"] or "")
+    assert record.status == FileStatus.ERROR_INDEXING
+    assert record.markdown_file == "minio://parsed/draft.md"
+
+
+@pytest.mark.asyncio
 async def test_concurrent_initial_confirmation_only_indexes_once(monkeypatch):
     record = _record(
         status=FileStatus.WAITING_CONFIRMATION,

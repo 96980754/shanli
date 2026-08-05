@@ -526,44 +526,58 @@ class DocumentCleaningService:
                 raise CleaningVersionConflict("清洗草稿已被其他编辑更新，请刷新后重试")
             target_record = updated
 
-        result = await knowledge_base.index_file(
-            kb_id,
-            target_record.file_id,
-            operator_id=operator_id,
-            params=record.processing_params or {},
-        )
-        from yuxi.services.document_enrichment_service import enqueue_auto_document_enrichment
-
-        await enqueue_auto_document_enrichment(
-            kb_id=kb_id,
-            file_id=target_record.file_id,
-            operator_id=operator_id,
-        )
-        from yuxi.services.document_qa_service import enqueue_auto_document_qa
-
         try:
-            await self.qa_service.rebase_draft_qas(
+            result = await knowledge_base.index_file(
+                kb_id,
+                target_record.file_id,
+                operator_id=operator_id,
+                params=record.processing_params or {},
+            )
+            index_status = result.get("status") or FileStatus.INDEXED
+            index_error = None
+        except Exception as index_error_exc:  # noqa: BLE001 - external adapters may be unavailable
+            logger.error(
+                "Cleaning confirm saved, indexing failed for {}: {}",
+                target_record.file_id,
+                sanitize_processing_error(index_error_exc),
+            )
+            index_status = FileStatus.ERROR_INDEXING
+            index_error = sanitize_processing_error(index_error_exc)
+
+        if index_error is None:
+            from yuxi.services.document_enrichment_service import enqueue_auto_document_enrichment
+
+            await enqueue_auto_document_enrichment(
                 kb_id=kb_id,
                 file_id=target_record.file_id,
                 operator_id=operator_id,
             )
-        except Exception as rebase_error:  # noqa: BLE001 - QA rebind must not fail an already confirmed index
-            logger.warning(
-                "Failed to rebind draft QA for {}: {}",
-                target_record.file_id,
-                sanitize_processing_error(rebase_error),
+            from yuxi.services.document_qa_service import enqueue_auto_document_qa
+
+            try:
+                await self.qa_service.rebase_draft_qas(
+                    kb_id=kb_id,
+                    file_id=target_record.file_id,
+                    operator_id=operator_id,
+                )
+            except Exception as rebase_error:  # noqa: BLE001 - QA rebind must not fail a confirmed index
+                logger.warning(
+                    "Failed to rebind draft QA for {}: {}",
+                    target_record.file_id,
+                    sanitize_processing_error(rebase_error),
+                )
+            if body_changed:
+                await self.qa_service.mark_file_qas_outdated(kb_id=kb_id, file_id=record.file_id)
+            await enqueue_auto_document_qa(
+                kb_id=kb_id,
+                file_id=target_record.file_id,
+                operator_id=operator_id,
             )
-        if body_changed:
-            await self.qa_service.mark_file_qas_outdated(kb_id=kb_id, file_id=record.file_id)
-        await enqueue_auto_document_qa(
-            kb_id=kb_id,
-            file_id=target_record.file_id,
-            operator_id=operator_id,
-        )
         return {
             "file_id": target_record.file_id,
             "previous_file_id": file_id if created_candidate else None,
-            "status": result.get("status") or FileStatus.INDEXED,
+            "status": index_status,
+            "index_error": index_error,
             "idempotent": False,
         }
 

@@ -228,14 +228,29 @@ const confirmDraft = () => {
     okText: '确认并入库',
     cancelText: '返回编辑',
     onOk: async () => {
-      const payload = await runAction(
-        () =>
-          documentApi.confirmCleaningDraft(props.kbId, props.fileId, draft.value.cleaning_version),
-        '文档已确认并完成入库'
-      )
-      if (payload) {
+      actionLoading.value = true
+      try {
+        const payload = await documentApi.confirmCleaningDraft(
+          props.kbId,
+          props.fileId,
+          draft.value.cleaning_version
+        )
+        if (payload?.status === 'error_indexing') {
+          message.warning(
+            `最终文本与 QA 已保存，但入库失败：${payload.index_error || '外部向量模型不可用'}。可在文件列表重试入库。`
+          )
+          emit('changed', payload)
+          return false
+        }
+        message.success('文档已确认并完成入库')
         emit('confirmed', payload)
         visible.value = false
+        return true
+      } catch (error) {
+        message.error(error.message || '操作失败，请刷新后重试')
+        return false
+      } finally {
+        actionLoading.value = false
       }
     }
   })
