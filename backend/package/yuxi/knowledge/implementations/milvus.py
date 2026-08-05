@@ -31,6 +31,7 @@ from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.document_qa_repository import DocumentQARepository
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+from yuxi.repositories.knowledge_publish_repository import KnowledgePublishRepository
 from yuxi.utils import hashstr, logger
 
 MILVUS_AVAILABLE = True
@@ -637,12 +638,27 @@ class MilvusKB(KnowledgeBase):
             for record in await DocumentQARepository().list_by_qa_ids(qa_ids)
             if record.kb_id == kb_id and record.status == "confirmed" and record.sync_status == "synced"
         }
+        assertion_ids = [
+            chunk_id.removeprefix("assertion:") for chunk_id in chunk_ids if chunk_id.startswith("assertion:")
+        ]
+        published_assertions = {
+            record.assertion_id: record
+            for record in await KnowledgePublishRepository().list_published_assertions(
+                kb_id=kb_id,
+                assertion_ids=assertion_ids,
+            )
+        }
         chunks[:] = [
             chunk
             for chunk in chunks
             if not (
                 str((chunk.get("metadata") or {}).get("chunk_id") or "").startswith("qa:")
                 and str((chunk.get("metadata") or {}).get("chunk_id") or "") not in qa_by_vector_id
+            )
+            and not (
+                str((chunk.get("metadata") or {}).get("chunk_id") or "").startswith("assertion:")
+                and str((chunk.get("metadata") or {}).get("chunk_id") or "").removeprefix("assertion:")
+                not in published_assertions
             )
         ]
         for chunk in chunks:
@@ -661,6 +677,18 @@ class MilvusKB(KnowledgeBase):
                     "evidence": list(qa_record.evidence or []),
                     "answer_source": qa_record.source,
                     "confirmed_by": qa_record.confirmed_by,
+                }
+            assertion_id = str(metadata.get("chunk_id") or "").removeprefix("assertion:")
+            assertion_record = published_assertions.get(assertion_id)
+            if assertion_record is not None:
+                metadata["source_metadata"] = {
+                    "source_type": "reviewed_knowledge_assertion",
+                    "assertion_id": assertion_record.assertion_id,
+                    "entity_id": assertion_record.linked_entity_id,
+                    "predicate": assertion_record.predicate,
+                    "file_id": assertion_record.file_id,
+                    "chunk_id": assertion_record.chunk_id,
+                    "evidence": assertion_record.evidence,
                 }
             metadata["source"] = filenames.get(str(metadata.get("file_id") or ""), "") or "未知来源"
 
@@ -1386,7 +1414,7 @@ class MilvusKB(KnowledgeBase):
             graph_max_nodes = max(int(query_params.get("graph_max_nodes", 10000)), 1)
 
             vector_store = await _run_milvus_query_io(MilvusGraphVectorStore)
-            entity_hits, triple_hits = await asyncio.gather(
+            entity_hits, triple_hits, assertion_hits = await asyncio.gather(
                 vector_store.search_entities(
                     kb_id=kb_id,
                     query_text=query_text,
@@ -1399,10 +1427,17 @@ class MilvusKB(KnowledgeBase):
                     embedding_model_spec=embedding_model_spec,
                     top_k=triple_top_k,
                 ),
+                vector_store.search_reviewed_assertions(
+                    kb_id=kb_id,
+                    query_text=query_text,
+                    embedding_model_spec=embedding_model_spec,
+                    top_k=graph_top_k,
+                ),
             )
+            assertion_chunks = await self._build_reviewed_assertion_chunks(kb_id, assertion_hits)
             seed_weights = await self._build_graph_seed_weights(kb_id, base_chunks, entity_hits, triple_hits)
             if not seed_weights:
-                return []
+                return assertion_chunks
 
             graph_service = MilvusGraphService()
             graph_scores = await graph_service.query_and_rank_chunks_by_ppr(
@@ -1413,17 +1448,53 @@ class MilvusKB(KnowledgeBase):
                 damping=float(query_params.get("ppr_damping", 0.85)),
             )
             if not graph_scores:
-                return []
+                return assertion_chunks
 
             chunks = await KnowledgeChunkRepository().list_by_chunk_ids([chunk_id for chunk_id, _ in graph_scores])
             score_by_chunk_id = dict(graph_scores)
-            return [
+            chunk_results = [
                 self._build_chunk_from_record(chunk, score_by_chunk_id[chunk.chunk_id], score_field="graph_score")
                 for chunk in chunks
             ]
+            return assertion_chunks + chunk_results
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Graph retrieval failed for {kb_id}: {exc}")
             return []
+
+    async def _build_reviewed_assertion_chunks(self, kb_id: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        assertion_ids = [str(hit.get("id") or "") for hit in hits if hit.get("id")]
+        records = await KnowledgePublishRepository().list_published_assertions(
+            kb_id=kb_id,
+            assertion_ids=assertion_ids,
+        )
+        record_by_id = {record.assertion_id: record for record in records}
+        results = []
+        for hit in hits:
+            assertion_id = str(hit.get("id") or "")
+            record = record_by_id.get(assertion_id)
+            if record is None:
+                continue
+            value = record.normalized_value if record.normalized_value is not None else record.raw_value
+            content = f"{record.entity_name} {record.predicate}: {value}"
+            results.append(
+                {
+                    "content": content,
+                    "metadata": {
+                        "source": "未知来源",
+                        "chunk_id": f"assertion:{assertion_id}",
+                        "file_id": record.file_id,
+                        "assertion_id": assertion_id,
+                        "resolution_id": hit.get("resolution_id"),
+                        "entity_id": record.linked_entity_id,
+                        "predicate": record.predicate,
+                        "source_chunk_id": record.chunk_id,
+                        "evidence": record.evidence,
+                    },
+                    "score": float(hit.get("score") or 0.0),
+                    "graph_score": float(hit.get("score") or 0.0),
+                }
+            )
+        return results
 
     async def _build_graph_seed_weights(
         self,

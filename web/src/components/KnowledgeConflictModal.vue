@@ -107,11 +107,23 @@
           </a-button>
         </div>
         <a-alert
-          v-if="item.publish_status === 'pending'"
-          type="info"
+          v-if="item.publish_status !== 'not_requested'"
+          :type="publishAlertType(item.publish_status)"
           show-icon
-          message="审核结果已保存；正式图谱投影适配器尚未接入，当前等待同步。"
-        />
+          :message="`图谱发布：${publishStatusLabel(item.publish_status)}`"
+          :description="item.publish_error || undefined"
+        >
+          <template v-if="canRetry(item, payload?.readonly)" #action>
+            <a-button
+              size="small"
+              :loading="retryingId === item.conflict_id"
+              :disabled="retryingId === item.conflict_id"
+              @click="retryPublish(item)"
+            >
+              重试发布
+            </a-button>
+          </template>
+        </a-alert>
       </section>
     </a-spin>
   </a-modal>
@@ -124,9 +136,11 @@ import { knowledgeConflictApi } from '@/apis/knowledge_api'
 import {
   KNOWLEDGE_CONFLICT_RESOLUTIONS,
   formatKnowledgeValue,
+  canRetryKnowledgePublish,
   knowledgeConflictClassificationColor,
   knowledgeConflictClassificationLabel,
-  knowledgeConflictStatusLabel
+  knowledgeConflictStatusLabel,
+  knowledgePublishStatusLabel
 } from '@/utils/knowledge_conflict_policy'
 
 const props = defineProps({
@@ -142,6 +156,7 @@ const visible = computed({
 const payload = ref(null)
 const loading = ref(false)
 const resolvingId = ref('')
+const retryingId = ref('')
 const errorMessage = ref('')
 const statusFilter = ref('pending')
 const drafts = reactive({})
@@ -192,9 +207,26 @@ const resolve = async (item) => {
   }
 }
 
+const retryPublish = async (item) => {
+  retryingId.value = item.conflict_id
+  try {
+    await knowledgeConflictApi.retryPublish(props.kbId, item.conflict_id)
+    message.success('发布任务已重新提交')
+    await load()
+  } catch (error) {
+    message.error(error.message || '重新发布失败')
+  } finally {
+    retryingId.value = ''
+  }
+}
+
 const classificationLabel = knowledgeConflictClassificationLabel
 const classificationColor = knowledgeConflictClassificationColor
 const statusLabel = knowledgeConflictStatusLabel
+const publishStatusLabel = knowledgePublishStatusLabel
+const canRetry = canRetryKnowledgePublish
+const publishAlertType = (status) =>
+  ({ succeeded: 'success', failed: 'error', dead_letter: 'error' })[status] || 'info'
 </script>
 
 <style scoped lang="less">

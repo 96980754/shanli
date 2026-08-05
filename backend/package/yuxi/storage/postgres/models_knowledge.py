@@ -376,6 +376,51 @@ class KnowledgeConflict(Base):
     version = Column(Integer, nullable=False, default=1)
 
 
+class KnowledgeConflictPublishTask(Base):
+    """Durable outbox task for publishing one reviewed assertion version."""
+
+    __tablename__ = "knowledge_conflict_publish_tasks"
+    __table_args__ = (
+        UniqueConstraint("task_id", name="uq_knowledge_conflict_publish_tasks_task_id"),
+        UniqueConstraint(
+            "conflict_id",
+            "expected_version",
+            name="uq_knowledge_conflict_publish_tasks_conflict_version",
+        ),
+        Index("ix_knowledge_conflict_publish_tasks_status_retry", "status", "next_attempt_at"),
+        Index("ix_knowledge_conflict_publish_tasks_kb_id", "kb_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False)
+    conflict_id = Column(
+        String(64),
+        ForeignKey("knowledge_conflicts.conflict_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assertion_id = Column(
+        String(64),
+        ForeignKey("knowledge_assertions.assertion_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    resolution_id = Column(String(64), nullable=False)
+    entity_id = Column(String(64), nullable=True)
+    expected_version = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False, default="pending")
+    neo4j_status = Column(String(32), nullable=False, default="pending")
+    vector_status = Column(String(32), nullable=False, default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=5)
+    error_code = Column(String(64))
+    last_error = Column(Text)
+    next_attempt_at = Column(DateTime(timezone=True))
+    lease_expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    completed_at = Column(DateTime(timezone=True))
+
+
 class DocumentQAPair(Base):
     """Document-bound QA draft and confirmed answer."""
 

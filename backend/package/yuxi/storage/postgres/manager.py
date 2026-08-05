@@ -491,6 +491,42 @@ class PostgresManager(metaclass=SingletonMeta):
             )
             """,
             """
+            CREATE TABLE IF NOT EXISTS knowledge_conflict_publish_tasks (
+                id SERIAL PRIMARY KEY,
+                task_id VARCHAR(64) NOT NULL UNIQUE,
+                conflict_id VARCHAR(64) NOT NULL
+                    REFERENCES knowledge_conflicts(conflict_id) ON DELETE CASCADE,
+                assertion_id VARCHAR(64) NOT NULL
+                    REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                resolution_id VARCHAR(64) NOT NULL,
+                entity_id VARCHAR(64),
+                expected_version INTEGER NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                neo4j_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                vector_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 5,
+                error_code VARCHAR(64),
+                last_error TEXT,
+                next_attempt_at TIMESTAMPTZ,
+                lease_expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                completed_at TIMESTAMPTZ,
+                CONSTRAINT uq_knowledge_conflict_publish_tasks_conflict_version
+                    UNIQUE (conflict_id, expected_version)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_knowledge_conflict_publish_tasks_status_retry
+            ON knowledge_conflict_publish_tasks (status, next_attempt_at)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_knowledge_conflict_publish_tasks_kb_id
+            ON knowledge_conflict_publish_tasks (kb_id)
+            """,
+            """
             CREATE TABLE IF NOT EXISTS knowledge_graph_entity_mentions (
                 id SERIAL PRIMARY KEY,
                 entity_id VARCHAR(64) NOT NULL REFERENCES knowledge_graph_entities(entity_id) ON DELETE CASCADE,

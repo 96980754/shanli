@@ -188,6 +188,12 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "incoming_assertion_id VARCHAR(64) NOT NULL UNIQUE" in statements
     assert "publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'" in statements
     assert "ix_knowledge_conflicts_kb_status" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_conflict_publish_tasks" in statements
+    assert "UNIQUE (conflict_id, expected_version)" in statements
+    assert "neo4j_status VARCHAR(32) NOT NULL DEFAULT 'pending'" in statements
+    assert "vector_status VARCHAR(32) NOT NULL DEFAULT 'pending'" in statements
+    assert "lease_expires_at TIMESTAMPTZ" in statements
+    assert "ix_knowledge_conflict_publish_tasks_status_retry" in statements
     assert "cleaning_version INTEGER NOT NULL DEFAULT 0" in statements
     assert "confirmed_at TIMESTAMPTZ" in statements
     assert "confirmed_by VARCHAR(64)" in statements
@@ -213,5 +219,13 @@ def test_document_qa_model_has_unique_index_names():
     from yuxi.storage.postgres.models_knowledge import DocumentQAPair
 
     index_names = [index.name for index in DocumentQAPair.__table__.indexes]
+
+    assert len(index_names) == len(set(index_names))
+
+
+def test_knowledge_publish_task_model_has_unique_index_names():
+    from yuxi.storage.postgres.models_knowledge import KnowledgeConflictPublishTask
+
+    index_names = [index.name for index in KnowledgeConflictPublishTask.__table__.indexes]
 
     assert len(index_names) == len(set(index_names))

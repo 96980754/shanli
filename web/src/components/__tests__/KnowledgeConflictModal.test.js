@@ -34,6 +34,14 @@ assert.match(
 )
 assert.match(componentSource, /@click="resolve\(item\)"/)
 assert.match(componentSource, /knowledgeConflictApi\.resolve\(props\.kbId, item\.conflict_id, \{/)
+assert.match(
+  componentSource,
+  /knowledgeConflictApi\.retryPublish\(props\.kbId, item\.conflict_id\)/
+)
+assert.match(componentSource, /canRetry\(item, payload\?\.readonly\)/)
+assert.match(componentSource, /:loading="retryingId === item\.conflict_id"/)
+assert.match(componentSource, /publishStatusLabel\(item\.publish_status\)/)
+assert.match(componentSource, /item\.publish_error \|\| undefined/)
 
 assert.match(componentSource, /classificationLabel\(item\.classification\)/)
 for (const classification of ['DUPLICATE', 'COMPLETION', 'UPDATE', 'CONFLICT'])

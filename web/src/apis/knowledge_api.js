@@ -521,6 +521,10 @@ export const knowledgeConflictApi = {
     return apiPost(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}/resolve`, resolution)
   },
 
+  retryPublish: async (kbId, conflictId) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}/publish/retry`, {})
+  },
+
   batchResolve: async (kbId, items) => {
     return apiPost(`/api/knowledge/databases/${kbId}/conflicts/batch-resolve`, { items })
   },

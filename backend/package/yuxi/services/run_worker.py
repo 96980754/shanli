@@ -22,6 +22,10 @@ from yuxi.services.document_ingestion_service import (
     process_document_replacement_cleanup,
 )
 from yuxi.services.input_message_service import restore_chat_input_message
+from yuxi.services.knowledge_conflict_publish_service import (
+    process_knowledge_conflict_publish,
+    recover_knowledge_conflict_publish_tasks,
+)
 from yuxi.services.run_queue_service import (
     append_run_stream_event,
     clear_cancel_signal,
@@ -563,6 +567,7 @@ async def _worker_startup(ctx):
     async with pg_manager.get_async_session_context() as session:
         await init_builtin_skills(session)
     await DocumentIngestionService().recover_pending_replacement_cleanups(queue=ctx.get("redis"))
+    await recover_knowledge_conflict_publish_tasks(ctx)
     sys_config.start_runtime_sync()
 
 
@@ -578,13 +583,15 @@ class WorkerSettings:
     functions = [
         process_agent_run,
         func(process_document_replacement_cleanup, max_tries=REPLACEMENT_CLEANUP_MAX_TRIES),
+        process_knowledge_conflict_publish,
     ]
     cron_jobs = [
         cron(
             recover_document_replacement_cleanups,
             minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
             unique=True,
-        )
+        ),
+        cron(recover_knowledge_conflict_publish_tasks, minute=set(range(60)), unique=True),
     ]
     max_tries = 2
     retry_jobs = True

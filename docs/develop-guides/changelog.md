@@ -14,6 +14,7 @@
 - 系统配置接口权限下放：`GET /api/system/config` 由 admin 收紧到任意登录用户可读，便于普通用户读取 `default_ocr_engine` 等运行时配置；接口会暴露 `sandbox_provisioner_url`、`sandbox_virtual_path_prefix`、默认模型 ID 等基础设施信息（不包含任何密钥/Token），如有更高保密要求请通过反向代理限制该路径。
 
 ### 开发记录
+- 完成知识冲突裁决发布闭环：人工裁决与发布任务在同一 PostgreSQL 事务中落库（outbox），ARQ Worker 通过 `FOR UPDATE SKIP LOCKED` 原子领取并带租约执行，Neo4j 以稳定键 MERGE 幂等写入、图向量库以 assertion 主键 upsert 且对过期版本做有界删除，全部目标成功后才回写 succeeded；ARQ 通知失败由每分钟恢复扫描兜底，processing 超时租约可重新领取，超过重试上限进入 dead_letter；新增 can_manage 重试接口，前端展示待发布/发布中/已发布/发布失败/需人工处理并支持权限内重试；GraphRAG 仅检索已发布、active 的最新有效 assertion，按知识库隔离并携带 assertion/resolution/证据来源元数据；发布错误经统一脱敏，不泄露连接串、密钥与堆栈。
 - 工作区中的“我的知识库”和“共享知识库”挂载节点按真实 `can_manage` 权限复用知识库文件上传、新建文件夹、删除和冲突处理能力；只读知识库继续允许浏览与预览，Agents 等普通工作区目录保持原文件接口和行为不变。
 
 - 修复文档同名冲突误跨文件夹匹配：内容哈希继续在知识库范围内全局去重，同名检测、保留两份和安全替换改为限定在同一父目录；完全重复提示补充已有文档的逻辑位置，跨目录替换目标会被明确拒绝。

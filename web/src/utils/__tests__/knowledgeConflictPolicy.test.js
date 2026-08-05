@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import {
   KNOWLEDGE_CONFLICT_RESOLUTIONS,
+  canRetryKnowledgePublish,
   formatKnowledgeValue,
   knowledgeConflictClassificationLabel,
-  knowledgeConflictStatusLabel
+  knowledgeConflictStatusLabel,
+  knowledgePublishStatusLabel
 } from '../knowledge_conflict_policy.js'
 
 assert.equal(knowledgeConflictClassificationLabel('DUPLICATE'), '重复')
@@ -15,6 +17,16 @@ assert.equal(knowledgeConflictClassificationLabel('INVALID'), '无效')
 assert.equal(knowledgeConflictStatusLabel('pending'), '待处理')
 assert.equal(formatKnowledgeValue(['Windows', 'Linux']), 'Windows、Linux')
 assert.equal(formatKnowledgeValue(100, '人'), '100 人')
+
+assert.notEqual(knowledgePublishStatusLabel('pending'), 'pending')
+assert.notEqual(knowledgePublishStatusLabel('processing'), 'processing')
+assert.notEqual(knowledgePublishStatusLabel('succeeded'), 'succeeded')
+assert.notEqual(knowledgePublishStatusLabel('failed'), 'failed')
+assert.notEqual(knowledgePublishStatusLabel('dead_letter'), 'dead_letter')
+assert.equal(canRetryKnowledgePublish({ publish_status: 'failed' }, false), true)
+assert.equal(canRetryKnowledgePublish({ publish_status: 'dead_letter' }, false), true)
+assert.equal(canRetryKnowledgePublish({ publish_status: 'processing' }, false), false)
+assert.equal(canRetryKnowledgePublish({ publish_status: 'failed' }, true), false)
 
 const useNew = KNOWLEDGE_CONFLICT_RESOLUTIONS.find((item) => item.value === 'use_new')
 assert.ok(useNew)

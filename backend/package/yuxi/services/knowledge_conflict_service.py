@@ -10,6 +10,11 @@ from yuxi.knowledge.graphs.graph_utils import compute_entity_id
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_conflict_repository import KnowledgeConflictRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+from yuxi.services.knowledge_conflict_publish_service import (
+    KnowledgeConflictPublishService,
+    serialize_publish_task,
+)
+from yuxi.utils.logging_config import logger
 
 
 class KnowledgeConflictError(ValueError):
@@ -32,15 +37,15 @@ class KnowledgeConflictService:
         file_repository: KnowledgeFileRepository | None = None,
         chunk_repository: KnowledgeChunkRepository | None = None,
         detector: ConflictDetector | None = None,
+        publish_service: KnowledgeConflictPublishService | None = None,
     ):
         self.repository = repository or KnowledgeConflictRepository()
         self.file_repository = file_repository or KnowledgeFileRepository()
         self.chunk_repository = chunk_repository or KnowledgeChunkRepository()
         self.detector = detector or ConflictDetector()
+        self.publish_service = publish_service or KnowledgeConflictPublishService()
 
-    async def evaluate(
-        self, *, kb_id: str, payload: dict[str, Any], operator_id: str
-    ) -> dict[str, Any]:
+    async def evaluate(self, *, kb_id: str, payload: dict[str, Any], operator_id: str) -> dict[str, Any]:
         file_record, chunk = await self._validate_evidence(kb_id=kb_id, payload=payload)
         entity_type = str(payload["entity_type"]).strip()
         entity_name = str(payload["entity_name"]).strip()
@@ -68,9 +73,7 @@ class KnowledgeConflictService:
                 "extraction_method": str(payload.get("extraction_method") or "manual"),
                 "confidence": payload.get("confidence"),
                 "status": "candidate",
-                "source": "manual"
-                if payload.get("extraction_method") == "manual"
-                else "generated",
+                "source": "manual" if payload.get("extraction_method") == "manual" else "generated",
             }
         )
 
@@ -126,17 +129,13 @@ class KnowledgeConflictService:
         )
         return await self._serialize_conflict(conflict, assertion=assertion)
 
-    async def list_conflicts(
-        self, *, kb_id: str, status: str | None = None
-    ) -> dict[str, Any]:
+    async def list_conflicts(self, *, kb_id: str, status: str | None = None) -> dict[str, Any]:
         conflicts = await self.repository.list_conflicts(kb_id=kb_id, status=status)
         items = [await self._serialize_conflict(conflict) for conflict in conflicts]
         return {"items": items, "total": len(items)}
 
     async def get_conflict(self, *, kb_id: str, conflict_id: str) -> dict[str, Any]:
-        conflict = await self.repository.get_conflict(
-            kb_id=kb_id, conflict_id=conflict_id
-        )
+        conflict = await self.repository.get_conflict(kb_id=kb_id, conflict_id=conflict_id)
         if conflict is None:
             raise KnowledgeConflictNotFound("knowledge conflict not found")
         return await self._serialize_conflict(conflict)
@@ -175,9 +174,7 @@ class KnowledgeConflictService:
         operator_id: str,
         target_entity_id: str | None = None,
     ) -> dict[str, Any]:
-        conflict = await self.repository.get_conflict(
-            kb_id=kb_id, conflict_id=conflict_id
-        )
+        conflict = await self.repository.get_conflict(kb_id=kb_id, conflict_id=conflict_id)
         if conflict is None:
             raise KnowledgeConflictNotFound("knowledge conflict not found")
         assertion = await self.repository.get_assertion(
@@ -189,12 +186,8 @@ class KnowledgeConflictService:
 
         if resolution == "link_existing_entity":
             if not target_entity_id:
-                raise KnowledgeConflictError(
-                    "target_entity_id is required when linking an existing entity"
-                )
-            target = await self.repository.get_entity(
-                kb_id=kb_id, entity_id=target_entity_id
-            )
+                raise KnowledgeConflictError("target_entity_id is required when linking an existing entity")
+            target = await self.repository.get_entity(kb_id=kb_id, entity_id=target_entity_id)
             if target is None:
                 raise KnowledgeConflictNotFound("linked entity not found")
             existing = await self.repository.list_published_assertions(
@@ -214,9 +207,7 @@ class KnowledgeConflictService:
                     target_entity_id=target_entity_id,
                     normalized_value=detection.normalized_incoming_value,
                     detection={
-                        "existing_assertion_ids": list(
-                            detection.existing_assertion_ids
-                        ),
+                        "existing_assertion_ids": list(detection.existing_assertion_ids),
                         "conflict_type": detection.conflict_type,
                         "classification": detection.classification.value,
                         "existing_value": [item.raw_value for item in existing] or None,
@@ -235,20 +226,14 @@ class KnowledgeConflictService:
             except LookupError as exc:
                 raise KnowledgeConflictNotFound(str(exc)) from exc
             except ValueError as exc:
-                raise KnowledgeConflictVersionError(
-                    "knowledge conflict was updated by another reviewer"
-                ) from exc
-            return await self._serialize_conflict(
-                reclassified, assertion=linked_assertion
-            )
+                raise KnowledgeConflictVersionError("knowledge conflict was updated by another reviewer") from exc
+            return await self._serialize_conflict(reclassified, assertion=linked_assertion)
 
         create_entity = None
         if resolution == "create_new_entity":
             normalized_name = normalize_entity_name(assertion.entity_name)
             create_entity = {
-                "entity_id": compute_entity_id(
-                    kb_id, normalized_name, assertion.entity_type
-                ),
+                "entity_id": compute_entity_id(kb_id, normalized_name, assertion.entity_type),
                 "kb_id": kb_id,
                 "normalized_name": normalized_name,
                 "label": assertion.entity_type,
@@ -269,11 +254,11 @@ class KnowledgeConflictService:
             raise KnowledgeConflictNotFound(str(exc)) from exc
         except ValueError as exc:
             if str(exc) == "version conflict":
-                raise KnowledgeConflictVersionError(
-                    "knowledge conflict was updated by another reviewer"
-                ) from exc
+                raise KnowledgeConflictVersionError("knowledge conflict was updated by another reviewer") from exc
             raise KnowledgeConflictError(str(exc)) from exc
-        return await self._serialize_conflict(resolved, assertion=resolved_assertion)
+        payload = await self._serialize_conflict(resolved, assertion=resolved_assertion)
+        await self._enqueue_publish_task(payload)
+        return payload
 
     async def batch_resolve(
         self,
@@ -297,32 +282,39 @@ class KnowledgeConflictService:
             )
         return {"items": results, "total": len(results)}
 
+    async def retry_publish(self, *, kb_id: str, conflict_id: str) -> dict[str, Any]:
+        conflict = await self.repository.get_conflict(kb_id=kb_id, conflict_id=conflict_id)
+        if conflict is None:
+            raise KnowledgeConflictNotFound("knowledge conflict not found")
+        task = await self.publish_service.retry(kb_id=kb_id, conflict_id=conflict_id)
+        if task is None:
+            raise KnowledgeConflictError("knowledge conflict has no publish task")
+        return task
+
+    async def _enqueue_publish_task(self, conflict_payload: dict[str, Any]) -> None:
+        task = conflict_payload.get("publish_task")
+        if not task or task.get("status") not in {"pending", "failed"}:
+            return
+        try:
+            await self.publish_service.enqueue(task["task_id"])
+        except Exception as exc:  # noqa: BLE001 - PostgreSQL outbox remains recoverable
+            logger.warning(
+                "Failed to enqueue durable knowledge publish task {}: {}", task["task_id"], type(exc).__name__
+            )
+
     async def _validate_evidence(self, *, kb_id: str, payload: dict[str, Any]):
         file_record = await self.file_repository.get_by_file_id(str(payload["file_id"]))
-        if (
-            file_record is None
-            or file_record.kb_id != kb_id
-            or not file_record.is_active
-            or file_record.is_folder
-        ):
+        if file_record is None or file_record.kb_id != kb_id or not file_record.is_active or file_record.is_folder:
             raise KnowledgeConflictNotFound("source document not found")
         if file_record.status != "indexed":
             raise KnowledgeConflictError("source document must be active and indexed")
 
         chunk = await self.chunk_repository.get_by_chunk_id(str(payload["chunk_id"]))
-        if (
-            chunk is None
-            or chunk.kb_id != kb_id
-            or chunk.file_id != file_record.file_id
-        ):
-            raise KnowledgeConflictError(
-                "source chunk does not belong to the source document"
-            )
+        if chunk is None or chunk.kb_id != kb_id or chunk.file_id != file_record.file_id:
+            raise KnowledgeConflictError("source chunk does not belong to the source document")
         evidence = str(payload["evidence"]).strip()
         if not evidence or evidence not in chunk.content:
-            raise KnowledgeConflictError(
-                "evidence must be an exact excerpt from the source chunk"
-            )
+            raise KnowledgeConflictError("evidence must be an exact excerpt from the source chunk")
         return file_record, chunk
 
     async def _link_entity(
@@ -336,9 +328,7 @@ class KnowledgeConflictService:
         hints: dict[str, Any],
     ):
         if requested_entity_id:
-            entity = await self.repository.get_entity(
-                kb_id=kb_id, entity_id=requested_entity_id
-            )
+            entity = await self.repository.get_entity(kb_id=kb_id, entity_id=requested_entity_id)
             if entity is None:
                 raise KnowledgeConflictNotFound("linked entity not found")
             return (
@@ -358,9 +348,7 @@ class KnowledgeConflictService:
             )
 
         normalized_name = normalize_entity_name(entity_name)
-        entities = await self.repository.list_entities(
-            kb_id=kb_id, entity_type=entity_type
-        )
+        entities = await self.repository.list_entities(kb_id=kb_id, entity_type=entity_type)
         deterministic: list[tuple[Any, list[str]]] = []
         fuzzy: list[tuple[Any, float]] = []
         business_id = normalize_entity_name(str(hints.get("business_id") or ""))
@@ -370,27 +358,14 @@ class KnowledgeConflictService:
         for entity in entities:
             attributes = entity.attributes or {}
             rules: list[str] = []
-            if (
-                business_id
-                and normalize_entity_name(str(attributes.get("business_id") or ""))
-                == business_id
-            ):
+            if business_id and normalize_entity_name(str(attributes.get("business_id") or "")) == business_id:
                 rules.append("exact_business_id")
-            entity_model = normalize_entity_name(
-                str(attributes.get("product_model") or "")
-            )
+            entity_model = normalize_entity_name(str(attributes.get("product_model") or ""))
             if product_model and entity_model == product_model:
                 rules.append("product_model")
-                if (
-                    brand
-                    and normalize_entity_name(str(attributes.get("brand") or ""))
-                    == brand
-                ):
+                if brand and normalize_entity_name(str(attributes.get("brand") or "")) == brand:
                     rules.append("brand_and_model")
-            aliases = [
-                normalize_entity_name(str(value))
-                for value in attributes.get("aliases") or []
-            ]
+            aliases = [normalize_entity_name(str(value)) for value in attributes.get("aliases") or []]
             if normalized_name == entity.normalized_name:
                 rules.append("normalized_name")
             if normalized_name in aliases:
@@ -398,9 +373,7 @@ class KnowledgeConflictService:
             if rules:
                 deterministic.append((entity, rules))
                 continue
-            similarity = SequenceMatcher(
-                None, normalized_name, entity.normalized_name
-            ).ratio()
+            similarity = SequenceMatcher(None, normalized_name, entity.normalized_name).ratio()
             if similarity >= 0.72:
                 fuzzy.append((entity, similarity))
 
@@ -409,17 +382,11 @@ class KnowledgeConflictService:
             return (
                 "linked",
                 entity,
-                [
-                    _link_row(
-                        assertion_id, kb_id, entity_name, entity, rules, 1.0, "linked"
-                    )
-                ],
+                [_link_row(assertion_id, kb_id, entity_name, entity, rules, 1.0, "linked")],
             )
         if deterministic:
             rows = [
-                _link_row(
-                    assertion_id, kb_id, entity_name, entity, rules, 1.0, "ambiguous"
-                )
+                _link_row(assertion_id, kb_id, entity_name, entity, rules, 1.0, "ambiguous")
                 for entity, rules in deterministic
             ]
             return "ambiguous", None, rows
@@ -457,9 +424,7 @@ class KnowledgeConflictService:
             ],
         )
 
-    async def _serialize_conflict(
-        self, conflict: Any, *, assertion: Any | None = None
-    ) -> dict[str, Any]:
+    async def _serialize_conflict(self, conflict: Any, *, assertion: Any | None = None) -> dict[str, Any]:
         assertion = assertion or await self.repository.get_assertion(
             kb_id=conflict.kb_id,
             assertion_id=conflict.incoming_assertion_id,
@@ -468,11 +433,13 @@ class KnowledgeConflictService:
             raise KnowledgeConflictNotFound("incoming assertion not found")
         existing = []
         for assertion_id in conflict.existing_assertion_ids or []:
-            record = await self.repository.get_assertion(
-                kb_id=conflict.kb_id, assertion_id=assertion_id
-            )
+            record = await self.repository.get_assertion(kb_id=conflict.kb_id, assertion_id=assertion_id)
             if record:
                 existing.append(_serialize_assertion(record))
+        publish_task = await self.publish_service.repository.get_task_for_conflict(
+            kb_id=conflict.kb_id,
+            conflict_id=conflict.conflict_id,
+        )
         return {
             "conflict_id": conflict.conflict_id,
             "kb_id": conflict.kb_id,
@@ -498,6 +465,7 @@ class KnowledgeConflictService:
             "resolved_at": conflict.resolved_at,
             "publish_status": conflict.publish_status,
             "publish_error": conflict.publish_error,
+            "publish_task": serialize_publish_task(publish_task) if publish_task else None,
             "created_at": conflict.created_at,
             "updated_at": conflict.updated_at,
             "version": conflict.version,
@@ -512,9 +480,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     try:
         return datetime.fromisoformat(str(value))
     except ValueError as exc:
-        raise KnowledgeConflictError(
-            "valid_from and valid_to must use ISO date/time format"
-        ) from exc
+        raise KnowledgeConflictError("valid_from and valid_to must use ISO date/time format") from exc
 
 
 def _link_row(

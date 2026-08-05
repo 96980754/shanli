@@ -124,3 +124,90 @@ async def test_unsynced_qa_projection_is_removed_from_query_results(monkeypatch)
     await object.__new__(MilvusKB)._hydrate_chunk_sources("kb-1", chunks)
 
     assert [chunk["metadata"]["chunk_id"] for chunk in chunks] == ["chunk-1"]
+
+
+async def test_reviewed_assertion_hydration_rechecks_postgres_publish_state(monkeypatch):
+    class FakeFileRepository:
+        async def get_filenames_by_file_ids(self, **_kwargs):
+            return {"file-1": "specification.md"}
+
+    class FakeChunkRepository:
+        async def list_by_chunk_ids(self, _chunk_ids):
+            return []
+
+    class FakeQARepository:
+        async def list_by_qa_ids(self, _qa_ids):
+            return []
+
+    class FakePublishRepository:
+        async def list_published_assertions(self, *, kb_id, assertion_ids):
+            assert kb_id == "kb-1"
+            assert assertion_ids == ["assertion-1", "assertion-stale"]
+            return [
+                SimpleNamespace(
+                    assertion_id="assertion-1",
+                    linked_entity_id="entity-1",
+                    predicate="max_concurrent_users",
+                    file_id="file-1",
+                    chunk_id="source-chunk-1",
+                    evidence="M200 V2 supports 200 concurrent users.",
+                )
+            ]
+
+    monkeypatch.setattr(milvus_module, "KnowledgeFileRepository", FakeFileRepository)
+    monkeypatch.setattr(milvus_module, "KnowledgeChunkRepository", FakeChunkRepository)
+    monkeypatch.setattr(milvus_module, "DocumentQARepository", FakeQARepository)
+    monkeypatch.setattr(milvus_module, "KnowledgePublishRepository", FakePublishRepository)
+    chunks = [
+        {"metadata": {"file_id": "file-1", "chunk_id": "assertion:assertion-1"}},
+        {"metadata": {"file_id": "file-1", "chunk_id": "assertion:assertion-stale"}},
+    ]
+
+    await object.__new__(MilvusKB)._hydrate_chunk_sources("kb-1", chunks)
+
+    assert [chunk["metadata"]["chunk_id"] for chunk in chunks] == ["assertion:assertion-1"]
+    metadata = chunks[0]["metadata"]
+    assert metadata["source"] == "specification.md"
+    assert metadata["source_metadata"] == {
+        "source_type": "reviewed_knowledge_assertion",
+        "assertion_id": "assertion-1",
+        "entity_id": "entity-1",
+        "predicate": "max_concurrent_users",
+        "file_id": "file-1",
+        "chunk_id": "source-chunk-1",
+        "evidence": "M200 V2 supports 200 concurrent users.",
+    }
+
+
+async def test_reviewed_assertion_chunks_filter_wrong_kb_and_unpublished_hits(monkeypatch):
+    class FakePublishRepository:
+        async def list_published_assertions(self, *, kb_id, assertion_ids):
+            assert kb_id == "kb-1"
+            assert assertion_ids == ["assertion-1", "assertion-pending", "assertion-other-kb"]
+            return [
+                SimpleNamespace(
+                    assertion_id="assertion-1",
+                    entity_name="MiniServer M200",
+                    predicate="max_concurrent_users",
+                    normalized_value=200,
+                    raw_value=200,
+                    file_id="file-1",
+                    chunk_id="source-chunk-1",
+                    linked_entity_id="entity-1",
+                    evidence="M200 V2 supports 200 concurrent users.",
+                )
+            ]
+
+    monkeypatch.setattr(milvus_module, "KnowledgePublishRepository", FakePublishRepository)
+    hits = [
+        {"id": "assertion-1", "resolution_id": "resolution-1", "score": 0.98},
+        {"id": "assertion-pending", "resolution_id": "resolution-2", "score": 0.95},
+        {"id": "assertion-other-kb", "resolution_id": "resolution-3", "score": 0.91},
+    ]
+
+    chunks = await object.__new__(MilvusKB)._build_reviewed_assertion_chunks("kb-1", hits)
+
+    assert len(chunks) == 1
+    assert chunks[0]["content"] == "MiniServer M200 max_concurrent_users: 200"
+    assert chunks[0]["metadata"]["assertion_id"] == "assertion-1"
+    assert chunks[0]["metadata"]["resolution_id"] == "resolution-1"

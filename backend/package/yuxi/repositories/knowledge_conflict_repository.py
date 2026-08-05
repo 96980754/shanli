@@ -4,20 +4,20 @@ from typing import Any
 
 from sqlalchemy import select
 
+from yuxi.repositories.knowledge_publish_repository import build_publish_identity
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_knowledge import (
     EntityLinkCandidate,
     KnowledgeAssertion,
     KnowledgeConflict,
+    KnowledgeConflictPublishTask,
     KnowledgeGraphEntity,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 
 
 class KnowledgeConflictRepository:
-    async def get_entity(
-        self, *, kb_id: str, entity_id: str
-    ) -> KnowledgeGraphEntity | None:
+    async def get_entity(self, *, kb_id: str, entity_id: str) -> KnowledgeGraphEntity | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeGraphEntity).where(
@@ -27,9 +27,7 @@ class KnowledgeConflictRepository:
             )
             return result.scalar_one_or_none()
 
-    async def list_entities(
-        self, *, kb_id: str, entity_type: str
-    ) -> list[KnowledgeGraphEntity]:
+    async def list_entities(self, *, kb_id: str, entity_type: str) -> list[KnowledgeGraphEntity]:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeGraphEntity)
@@ -58,9 +56,7 @@ class KnowledgeConflictRepository:
     ) -> KnowledgeAssertion:
         async with pg_manager.get_async_session_context() as session:
             assertion = await session.scalar(
-                select(KnowledgeAssertion)
-                .where(KnowledgeAssertion.assertion_id == assertion_id)
-                .with_for_update()
+                select(KnowledgeAssertion).where(KnowledgeAssertion.assertion_id == assertion_id).with_for_update()
             )
             if assertion is None:
                 raise LookupError("assertion not found")
@@ -71,9 +67,7 @@ class KnowledgeConflictRepository:
             await session.flush()
             return assertion
 
-    async def create_link_candidates(
-        self, rows: list[dict[str, Any]]
-    ) -> list[EntityLinkCandidate]:
+    async def create_link_candidates(self, rows: list[dict[str, Any]]) -> list[EntityLinkCandidate]:
         if not rows:
             return []
         async with pg_manager.get_async_session_context() as session:
@@ -89,9 +83,7 @@ class KnowledgeConflictRepository:
             await session.flush()
             return conflict
 
-    async def get_assertion(
-        self, *, kb_id: str, assertion_id: str
-    ) -> KnowledgeAssertion | None:
+    async def get_assertion(self, *, kb_id: str, assertion_id: str) -> KnowledgeAssertion | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeAssertion).where(
@@ -117,9 +109,7 @@ class KnowledgeConflictRepository:
             conditions.append(KnowledgeAssertion.predicate == predicate)
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
-                select(KnowledgeAssertion)
-                .where(*conditions)
-                .order_by(KnowledgeAssertion.created_at.asc())
+                select(KnowledgeAssertion).where(*conditions).order_by(KnowledgeAssertion.created_at.asc())
             )
             return list(result.scalars().all())
 
@@ -136,15 +126,11 @@ class KnowledgeConflictRepository:
             result = await session.execute(
                 select(KnowledgeConflict)
                 .where(*conditions)
-                .order_by(
-                    KnowledgeConflict.created_at.desc(), KnowledgeConflict.id.desc()
-                )
+                .order_by(KnowledgeConflict.created_at.desc(), KnowledgeConflict.id.desc())
             )
             return list(result.scalars().all())
 
-    async def get_conflict(
-        self, *, kb_id: str, conflict_id: str
-    ) -> KnowledgeConflict | None:
+    async def get_conflict(self, *, kb_id: str, conflict_id: str) -> KnowledgeConflict | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeConflict).where(
@@ -159,9 +145,7 @@ class KnowledgeConflictRepository:
             result = await session.execute(
                 select(EntityLinkCandidate)
                 .where(EntityLinkCandidate.kb_id == kb_id)
-                .order_by(
-                    EntityLinkCandidate.created_at.desc(), EntityLinkCandidate.id.desc()
-                )
+                .order_by(EntityLinkCandidate.created_at.desc(), EntityLinkCandidate.id.desc())
             )
             return list(result.scalars().all())
 
@@ -199,9 +183,7 @@ class KnowledgeConflictRepository:
                 raise LookupError("entity not found")
             assertion = await session.scalar(
                 select(KnowledgeAssertion)
-                .where(
-                    KnowledgeAssertion.assertion_id == conflict.incoming_assertion_id
-                )
+                .where(KnowledgeAssertion.assertion_id == conflict.incoming_assertion_id)
                 .with_for_update()
             )
             if assertion is None:
@@ -219,16 +201,10 @@ class KnowledgeConflictRepository:
             assertion.updated_at = now
 
             link_result = await session.execute(
-                select(EntityLinkCandidate).where(
-                    EntityLinkCandidate.assertion_id == assertion.assertion_id
-                )
+                select(EntityLinkCandidate).where(EntityLinkCandidate.assertion_id == assertion.assertion_id)
             )
             for candidate in link_result.scalars().all():
-                candidate.status = (
-                    "linked"
-                    if candidate.target_entity_id == target_entity_id
-                    else "rejected"
-                )
+                candidate.status = "linked" if candidate.target_entity_id == target_entity_id else "rejected"
                 candidate.resolved_by = operator_id
                 candidate.resolved_at = now
             await session.flush()
@@ -258,20 +234,18 @@ class KnowledgeConflictRepository:
                 raise LookupError("conflict not found")
             assertion = await session.scalar(
                 select(KnowledgeAssertion)
-                .where(
-                    KnowledgeAssertion.assertion_id == conflict.incoming_assertion_id
-                )
+                .where(KnowledgeAssertion.assertion_id == conflict.incoming_assertion_id)
                 .with_for_update()
             )
             if assertion is None:
                 raise LookupError("assertion not found")
 
             if conflict.status == "resolved" and conflict.resolution == resolution:
+                if conflict.publish_status in {"pending", "processing", "failed", "dead_letter", "succeeded"}:
+                    await self._ensure_publish_task(session, conflict, assertion)
                 entity = (
                     await session.scalar(
-                        select(KnowledgeGraphEntity).where(
-                            KnowledgeGraphEntity.entity_id == assertion.linked_entity_id
-                        )
+                        select(KnowledgeGraphEntity).where(KnowledgeGraphEntity.entity_id == assertion.linked_entity_id)
                     )
                     if assertion.linked_entity_id
                     else None
@@ -305,8 +279,8 @@ class KnowledgeConflictRepository:
             }
             reject_resolutions = {"keep_old", "reject_incoming"}
             if resolution in publish_resolutions:
-                assertion.status = "published"
-                assertion.published_at = now
+                assertion.status = "accepted"
+                assertion.published_at = None
                 conflict.publish_status = "pending"
             elif resolution in reject_resolutions:
                 assertion.status = "rejected"
@@ -317,19 +291,6 @@ class KnowledgeConflictRepository:
                 conflict.publish_status = "not_requested"
             else:
                 raise ValueError("unsupported resolution")
-
-            if resolution == "use_new":
-                existing_ids = list(conflict.existing_assertion_ids or [])
-                if existing_ids:
-                    existing_result = await session.execute(
-                        select(KnowledgeAssertion).where(
-                            KnowledgeAssertion.kb_id == kb_id,
-                            KnowledgeAssertion.assertion_id.in_(existing_ids),
-                        )
-                    )
-                    for existing in existing_result.scalars().all():
-                        existing.status = "superseded"
-                        existing.updated_at = now
 
             if resolution != "defer":
                 conflict.status = "resolved"
@@ -342,17 +303,38 @@ class KnowledgeConflictRepository:
             assertion.updated_at = now
 
             link_result = await session.execute(
-                select(EntityLinkCandidate).where(
-                    EntityLinkCandidate.assertion_id == assertion.assertion_id
-                )
+                select(EntityLinkCandidate).where(EntityLinkCandidate.assertion_id == assertion.assertion_id)
             )
             for candidate in link_result.scalars().all():
                 candidate.resolved_by = operator_id
                 candidate.resolved_at = now
-                if (
-                    assertion.linked_entity_id
-                    and candidate.target_entity_id == assertion.linked_entity_id
-                ):
+                if assertion.linked_entity_id and candidate.target_entity_id == assertion.linked_entity_id:
                     candidate.status = "linked"
+            if resolution in publish_resolutions:
+                await self._ensure_publish_task(session, conflict, assertion)
             await session.flush()
             return conflict, assertion, entity
+
+    async def _ensure_publish_task(self, session, conflict, assertion) -> KnowledgeConflictPublishTask:
+        task_id, resolution_id = build_publish_identity(conflict.conflict_id, conflict.version)
+        task = await session.scalar(
+            select(KnowledgeConflictPublishTask).where(KnowledgeConflictPublishTask.task_id == task_id)
+        )
+        if task is not None:
+            return task
+        task = KnowledgeConflictPublishTask(
+            task_id=task_id,
+            conflict_id=conflict.conflict_id,
+            assertion_id=assertion.assertion_id,
+            kb_id=conflict.kb_id,
+            resolution_id=resolution_id,
+            entity_id=assertion.linked_entity_id,
+            expected_version=conflict.version,
+            status="pending",
+            neo4j_status="pending",
+            vector_status="pending",
+            max_attempts=5,
+        )
+        session.add(task)
+        await session.flush()
+        return task

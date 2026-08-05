@@ -8,9 +8,20 @@ from httpx import ASGITransport, AsyncClient
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_conflict_repository import KnowledgeConflictRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+from yuxi.repositories.knowledge_publish_repository import KnowledgePublishRepository
+from yuxi.services.knowledge_conflict_publish_service import KnowledgeConflictPublishService
 from yuxi.storage.postgres.manager import pg_manager
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+
+
+async def _complete_publish_projection(kb_id: str, conflict_id: str) -> None:
+    repository = KnowledgePublishRepository()
+    task = await repository.get_task_for_conflict(kb_id=kb_id, conflict_id=conflict_id)
+    assert task is not None
+    await repository.mark_target_succeeded(task.task_id, "neo4j")
+    await repository.mark_target_succeeded(task.task_id, "vector")
+    assert await repository.mark_succeeded(task.task_id) is True
 
 
 def _assertion_payload(
@@ -46,14 +57,21 @@ async def test_product_specification_conflict_review_flow(
     admin_headers,
     admin_user,
     view_only_user,
+    monkeypatch,
 ) -> None:
+    async def keep_publish_task_pending(_self, _task_id, *, queue=None):
+        return True
+
+    monkeypatch.setattr(KnowledgeConflictPublishService, "enqueue", keep_publish_task_pending)
     pg_manager.initialize()
     await pg_manager.ensure_knowledge_schema()
     kb_id = knowledge_database["kb_id"]
     unique = uuid.uuid4().hex
     file_id = f"file-conflict-{unique}"
     chunk_id = f"chunk-conflict-{unique}"
-    evidence = "Shanli Conflict Demo V1 最大并发用户数为 100，支持 Windows 和 Linux。V2 最大并发用户数为 200，重量为 1000 g。"
+    evidence = (
+        "Shanli Conflict Demo V1 最大并发用户数为 100，支持 Windows 和 Linux。V2 最大并发用户数为 200，重量为 1000 g。"
+    )
 
     await KnowledgeFileRepository().upsert(
         file_id,
@@ -116,7 +134,8 @@ async def test_product_specification_conflict_review_flow(
             },
         )
         assert create_entity.status_code == 200, create_entity.text
-        assert create_entity.json()["incoming_assertion"]["status"] == "published"
+        assert create_entity.json()["incoming_assertion"]["status"] == "accepted"
+        await _complete_publish_projection(kb_id, first_conflict["conflict_id"])
 
         duplicate = await client.post(
             f"/api/knowledge/databases/{kb_id}/assertions/evaluate",
@@ -154,6 +173,7 @@ async def test_product_specification_conflict_review_flow(
             },
         )
         assert publish_windows.status_code == 200, publish_windows.text
+        await _complete_publish_projection(kb_id, windows.json()["conflict_id"])
 
         linux = await client.post(
             f"/api/knowledge/databases/{kb_id}/assertions/evaluate",
@@ -205,9 +225,7 @@ async def test_product_specification_conflict_review_flow(
             base_url="http://test",
             headers=view_only_user["headers"],
         ) as readonly_client:
-            readable = await readonly_client.get(
-                f"/api/knowledge/databases/{kb_id}/conflicts"
-            )
+            readable = await readonly_client.get(f"/api/knowledge/databases/{kb_id}/conflicts")
             assert readable.status_code == 200, readable.text
             assert readable.json()["readonly"] is True
             forbidden = await readonly_client.post(
@@ -235,7 +253,7 @@ async def test_product_specification_conflict_review_flow(
         assert resolved.status_code == 200, resolved.text
         resolved_payload = resolved.json()
         assert resolved_payload["status"] == "resolved"
-        assert resolved_payload["incoming_assertion"]["status"] == "published"
+        assert resolved_payload["incoming_assertion"]["status"] == "accepted"
         assert resolved_payload["publish_status"] == "pending"
 
         repeated = await client.post(
@@ -248,6 +266,7 @@ async def test_product_specification_conflict_review_flow(
         )
         assert repeated.status_code == 200, repeated.text
         assert repeated.json()["version"] == resolved_payload["version"]
+        await _complete_publish_projection(kb_id, conflict_payload["conflict_id"])
 
         stale_overwrite = await client.post(
             f"/api/knowledge/databases/{kb_id}/conflicts/{conflict_payload['conflict_id']}/resolve",
@@ -260,13 +279,9 @@ async def test_product_specification_conflict_review_flow(
         assert stale_overwrite.status_code == 409, stale_overwrite.text
         assert stale_overwrite.json()["detail"]["code"] == "knowledge_conflict_version"
 
-        detail = await client.get(
-            f"/api/knowledge/databases/{kb_id}/conflicts/{conflict_payload['conflict_id']}"
-        )
+        detail = await client.get(f"/api/knowledge/databases/{kb_id}/conflicts/{conflict_payload['conflict_id']}")
         assert detail.status_code == 200, detail.text
-        assert (
-            detail.json()["incoming_assertion"]["evidence"] == "V2 最大并发用户数为 200"
-        )
+        assert detail.json()["incoming_assertion"]["evidence"] == "V2 最大并发用户数为 200"
         assert detail.json()["resolution"] == "use_new"
         assert detail.json()["resolved_by"] == admin_user["uid"]
 

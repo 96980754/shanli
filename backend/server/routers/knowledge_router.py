@@ -860,6 +860,19 @@ async def resolve_knowledge_conflict(
         _raise_knowledge_conflict_http_error(error)
 
 
+@knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/publish/retry")
+async def retry_knowledge_conflict_publish(
+    kb_id: str,
+    conflict_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().retry_publish(kb_id=kb_id, conflict_id=conflict_id)
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/conflicts/batch-resolve")
 async def batch_resolve_knowledge_conflicts(
     kb_id: str,

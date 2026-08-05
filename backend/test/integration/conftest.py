@@ -274,12 +274,23 @@ async def wait_for_arq_idle(*, timeout: float = BACKGROUND_TASK_TIMEOUT_SECONDS)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while loop.time() < deadline:
-        queued = int(await redis.zcard(default_queue_name))
-        in_progress = [key async for key in redis.scan_iter(match="arq:in-progress:*")]
-        if queued == 0 and not in_progress:
+        queued_job_ids = await redis.zrange(default_queue_name, 0, -1)
+        queued = [
+            job_id
+            for job_id in queued_job_ids
+            if not (job_id.decode() if isinstance(job_id, bytes) else str(job_id)).startswith("cron:")
+        ]
+        in_progress = [
+            key
+            async for key in redis.scan_iter(match="arq:in-progress:*")
+            if not (key.decode() if isinstance(key, bytes) else str(key)).startswith("arq:in-progress:cron:")
+        ]
+        if not queued and not in_progress:
             return
         await asyncio.sleep(0.25)
-    raise AssertionError(f"ARQ did not become idle within {timeout}s; queued={queued}, in_progress={len(in_progress)}")
+    raise AssertionError(
+        f"ARQ did not become idle within {timeout}s; queued={len(queued)}, in_progress={len(in_progress)}"
+    )
 
 
 @pytest.fixture(scope="function")
