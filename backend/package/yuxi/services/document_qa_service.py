@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import secrets
+from types import SimpleNamespace
 from typing import Any
 
 from yuxi import config
 from yuxi.knowledge.base import FileStatus
+from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.document_qa import (
     DocumentQAGenerator,
     QAProviderUnavailable,
@@ -12,7 +14,12 @@ from yuxi.knowledge.document_qa import (
 )
 from yuxi.knowledge.enrichment import formal_content_hash
 from yuxi.knowledge.runtime import knowledge_base
-from yuxi.knowledge.utils import is_minio_url, parse_minio_url, sanitize_processing_error
+from yuxi.knowledge.utils import (
+    is_minio_url,
+    parse_minio_url,
+    resolve_processing_params,
+    sanitize_processing_error,
+)
 from yuxi.repositories.document_qa_repository import DocumentQARepository
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
@@ -20,6 +27,9 @@ from yuxi.services.task_service import TaskContext, tasker
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
+
+DRAFT_QA_STATUS = FileStatus.WAITING_CONFIRMATION
+INDEXED_QA_STATUSES = {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP}
 
 
 class DocumentQAError(ValueError):
@@ -71,7 +81,7 @@ class DocumentQAService:
         if (
             not record.is_active
             or not record.confirmed_at
-            or record.status not in {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP}
+            or record.status not in INDEXED_QA_STATUSES
             or not record.markdown_file
         ):
             raise QANotFound("文档不是当前已确认且可检索的正式版本")
@@ -88,17 +98,51 @@ class DocumentQAService:
 
     async def _context(self, kb_id: str, file_id: str, selected_chunk_ids: list[str] | None = None):
         record = await self._get_file(kb_id, file_id)
-        self._assert_eligible(record)
-        chunks = await self.chunk_repository.list_by_file_id(file_id)
+        if record.status == DRAFT_QA_STATUS:
+            chunks, content_hash = await self._draft_chunks(record)
+        else:
+            self._assert_eligible(record)
+            chunks = await self.chunk_repository.list_by_file_id(file_id)
+            markdown = await self._read_markdown(record.markdown_file)
+            content_hash = formal_content_hash(markdown)
         if selected_chunk_ids:
             selected = set(selected_chunk_ids)
             chunks = [chunk for chunk in chunks if chunk.chunk_id in selected]
             if len(chunks) != len(selected):
                 raise DocumentQAError("选中的来源 chunk 不属于当前文档")
         if not chunks:
-            raise DocumentQAError("文档没有稳定的正式 chunks")
-        markdown = await self._read_markdown(record.markdown_file)
-        return record, chunks, formal_content_hash(markdown)
+            raise DocumentQAError("文档没有可用于 QA 的文本片段")
+        return record, chunks, content_hash
+
+    async def _draft_chunks(self, record):
+        """Split the pending cleaning draft with the same deterministic chunker used at indexing."""
+        if not getattr(record, "cleaning_draft_file", None):
+            raise DocumentQAError("文档尚未生成清洗草稿")
+        markdown = await self._read_markdown(record.cleaning_draft_file)
+        kb_additional_params = None
+        try:
+            kb = await knowledge_base.aget_kb(record.kb_id)
+            kb_additional_params = (kb.databases_meta or {}).get(record.kb_id, {}).get("metadata")
+        except Exception:  # noqa: BLE001 - kb metadata is only a fallback for draft chunking
+            kb_additional_params = None
+        params = resolve_processing_params(
+            kb_additional_params=kb_additional_params,
+            file_processing_params=getattr(record, "processing_params", None),
+        )
+        chunk_records = chunk_markdown(
+            markdown,
+            record.file_id,
+            getattr(record, "filename", "") or "",
+            params,
+        )
+        chunks = [
+            SimpleNamespace(chunk_id=chunk["chunk_id"], content=chunk["content"])
+            for chunk in chunk_records
+            if chunk.get("content")
+        ]
+        if not chunks:
+            raise DocumentQAError("当前清洗文本无法生成可用于 QA 的文本片段")
+        return chunks, formal_content_hash(markdown)
 
     @staticmethod
     def _public(record, *, idempotent: bool = False) -> dict[str, Any]:
@@ -134,6 +178,10 @@ class DocumentQAService:
         return {
             "file_id": file_id,
             "cleaning_version": int(record.cleaning_version or 0),
+            "draft_mode": record.status == DRAFT_QA_STATUS,
+            "confirmable": bool(
+                record.status in INDEXED_QA_STATUSES and record.confirmed_at and int(record.chunk_count or 0) > 0
+            ),
             "items": [self._public(item) for item in items],
         }
 
@@ -170,7 +218,10 @@ class DocumentQAService:
             return {"file_id": file_id, "status": "skipped", "items": []}
 
         latest = await self._get_file(kb_id, file_id)
-        latest_markdown = await self._read_markdown(latest.markdown_file)
+        latest_source = (
+            getattr(latest, "cleaning_draft_file", None) if latest.status == DRAFT_QA_STATUS else latest.markdown_file
+        )
+        latest_markdown = await self._read_markdown(latest_source)
         if (
             not latest.is_active
             or int(latest.cleaning_version or 0) != cleaning_version
@@ -386,6 +437,8 @@ class DocumentQAService:
         current = await self.qa_repository.get_by_qa_id(qa_id)
         if current is None or current.kb_id != kb_id or current.file_id != file_id:
             raise QANotFound("QA 不存在")
+        if file_record.status == DRAFT_QA_STATUS:
+            raise DocumentQAError("文档尚未确认清洗入库，QA 将在清洗确认后与正式 chunks 绑定")
         if (
             current.status == "confirmed"
             and current.sync_status == "synced"
@@ -534,6 +587,78 @@ class DocumentQAService:
 
     async def mark_file_qas_outdated(self, *, kb_id: str, file_id: str) -> int:
         return await self.qa_repository.mark_outdated_by_file_id(kb_id=kb_id, file_id=file_id)
+
+    async def rebase_draft_qas(self, *, kb_id: str, file_id: str, operator_id: str | None = None) -> int:
+        """Rebind draft-mode QA pairs to the real chunks created after cleaning confirmation."""
+        record = await self._get_file(kb_id, file_id)
+        if not record.is_active or not record.markdown_file:
+            raise DocumentQAError("文档没有可用的正式 Markdown")
+        markdown = await self._read_markdown(record.markdown_file)
+        confirmed_hash = formal_content_hash(markdown)
+        chunks = await self.chunk_repository.list_by_file_id(file_id)
+        chunk_by_id = {chunk.chunk_id: chunk for chunk in chunks}
+        rows = await self.qa_repository.list_by_file_id(kb_id=kb_id, file_id=file_id)
+
+        rebound = 0
+        for row in rows:
+            if row.status == "rejected" or row.content_hash != confirmed_hash:
+                continue
+            source_chunk_ids = list(row.source_chunk_ids or [])
+            if all(chunk_id in chunk_by_id for chunk_id in source_chunk_ids):
+                continue
+            new_source_chunk_ids: list[str] = []
+            new_evidence: list[dict[str, str]] = []
+            unmatched = False
+            for evidence in row.evidence or []:
+                if not isinstance(evidence, dict):
+                    continue
+                chunk_id = str(evidence.get("chunk_id") or "")
+                text = str(evidence.get("text") or "")
+                real_chunk_id = self._find_chunk_for_evidence(chunk_by_id, text, chunk_id)
+                if real_chunk_id is None:
+                    unmatched = True
+                    new_evidence.append({"chunk_id": chunk_id, "text": text})
+                    continue
+                if real_chunk_id not in new_source_chunk_ids:
+                    new_source_chunk_ids.append(real_chunk_id)
+                new_evidence.append({"chunk_id": real_chunk_id, "text": text})
+            updated = await self.qa_repository.update_with_version(
+                kb_id=kb_id,
+                file_id=file_id,
+                qa_id=row.qa_id,
+                expected_version=row.version,
+                data={
+                    "source_chunk_ids": new_source_chunk_ids,
+                    "evidence": new_evidence,
+                    "content_hash": confirmed_hash,
+                    "possibly_outdated": unmatched or row.possibly_outdated,
+                    "updated_by": operator_id,
+                },
+            )
+            if updated is not None:
+                rebound += 1
+        return rebound
+
+    @staticmethod
+    def _find_chunk_for_evidence(
+        chunk_by_id: dict[str, Any],
+        text: str,
+        preferred_chunk_id: str | None = None,
+    ) -> str | None:
+        if not text:
+            return None
+        normalized = " ".join(text.split())
+        if preferred_chunk_id in chunk_by_id:
+            preferred_content = chunk_by_id[preferred_chunk_id].content
+            if text in preferred_content or (normalized and normalized in " ".join(preferred_content.split())):
+                return preferred_chunk_id
+        for chunk_id, chunk in chunk_by_id.items():
+            if text in chunk.content:
+                return chunk_id
+        for chunk_id, chunk in chunk_by_id.items():
+            if normalized and normalized in " ".join(chunk.content.split()):
+                return chunk_id
+        return None
 
 
 async def enqueue_document_qa_generation(

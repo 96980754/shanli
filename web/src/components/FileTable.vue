@@ -52,6 +52,7 @@
       :file-id="cleaningFileId"
       @changed="handleRefresh"
       @confirmed="handleCleaningConfirmed"
+      @open-qa="handleOpenQA"
     />
 
     <DocumentEnrichmentModal
@@ -620,6 +621,11 @@ const openEnrichment = (record) => {
 const openDocumentQA = (record) => {
   closePopover(record.file_id)
   qaFileId.value = record.file_id
+  qaModalVisible.value = true
+}
+
+const handleOpenQA = (fileId) => {
+  qaFileId.value = fileId
   qaModalVisible.value = true
 }
 

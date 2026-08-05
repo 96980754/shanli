@@ -66,6 +66,7 @@ from yuxi.services.document_qa_service import (
     DocumentQAService,
     QANotFound,
     QAVersionConflict,
+    enqueue_auto_document_qa,
     enqueue_document_qa_generation,
 )
 from yuxi.services.knowledge_conflict_service import (
@@ -1243,6 +1244,11 @@ async def add_documents(
                     }
                     if not auto_confirm:
                         processed_items[record["index"]] = record["file_meta"]
+                        await enqueue_auto_document_qa(
+                            kb_id=kb_id,
+                            file_id=file_id,
+                            operator_id=current_user.uid,
+                        )
                 except Exception as cleaning_error:
                     logger.error("清洗文件失败 {}: {}", file_id, sanitize_processing_error(cleaning_error))
                     error_type = "timeout" if isinstance(cleaning_error, TimeoutError) else "cleaning_failed"

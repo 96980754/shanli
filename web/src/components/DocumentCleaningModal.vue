@@ -5,7 +5,6 @@
     width="1180px"
     :footer="null"
     :destroy-on-close="true"
-    @after-open-change="handleOpenChange"
   >
     <div v-if="loading" class="loading-state">
       <a-spin tip="正在加载清洗草稿..." />
@@ -86,6 +85,9 @@
         <template v-if="!draft.readonly">
           <a-button :loading="actionLoading" @click="cancelDraft">取消草稿</a-button>
           <a-button :loading="actionLoading" @click="regenerateDraft">重新生成</a-button>
+          <a-button v-if="draft.status === 'waiting_confirmation'" @click="openQA"
+            >QA 知识对</a-button
+          >
           <a-button :loading="actionLoading" @click="saveDraft">保存草稿</a-button>
           <a-button type="primary" :loading="actionLoading" @click="confirmDraft">
             确认并入库
@@ -97,7 +99,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
@@ -108,7 +110,7 @@ const props = defineProps({
   fileId: { type: [String, Number], default: '' }
 })
 
-const emit = defineEmits(['update:open', 'confirmed', 'changed'])
+const emit = defineEmits(['update:open', 'confirmed', 'changed', 'open-qa'])
 const visible = computed({
   get: () => props.open,
   set: (value) => emit('update:open', value)
@@ -164,6 +166,8 @@ const loadDraft = async () => {
 const handleOpenChange = (open) => {
   if (open) loadDraft()
 }
+
+watch(() => props.open, handleOpenChange)
 
 const runAction = async (action, successText) => {
   actionLoading.value = true
@@ -235,6 +239,10 @@ const confirmDraft = () => {
       }
     }
   })
+}
+
+const openQA = () => {
+  emit('open-qa', props.fileId)
 }
 </script>
 

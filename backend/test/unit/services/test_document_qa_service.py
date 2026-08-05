@@ -4,6 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from yuxi.knowledge.base import FileStatus
+from yuxi.knowledge.enrichment import formal_content_hash
+from yuxi.knowledge.runtime import knowledge_base
 from yuxi.services.document_qa_service import (
     DocumentQAError,
     DocumentQAService,
@@ -137,6 +139,22 @@ class _Generator:
         ]
 
 
+class _DraftGenerator:
+    async def generate(self, chunks, **_kwargs):
+        source = next(chunk for chunk in chunks if "Shanli" in chunk.content)
+        evidence_text = "Shanli 2.1 支持向量检索，默认批次大小为 40。"
+        return [
+            {
+                "question": "Shanli 2.1 支持什么检索？",
+                "answer": evidence_text,
+                "source_chunk_ids": [source.chunk_id],
+                "evidence": [{"chunk_id": source.chunk_id, "text": evidence_text}],
+                "model_name": "pytest-draft-qa",
+                "model_version": "1",
+            }
+        ]
+
+
 class _UnavailableGenerator:
     async def generate(self, _chunks, **_kwargs):
         raise QAProviderUnavailable("not configured")
@@ -176,7 +194,6 @@ def _service(record=None):
 @pytest.mark.parametrize(
     "record",
     [
-        _file(status=FileStatus.WAITING_CONFIRMATION),
         _file(is_active=False),
         _file(confirmed_at=None),
         _file(status=FileStatus.ERROR_INDEXING),
@@ -191,6 +208,165 @@ async def test_generation_only_accepts_active_confirmed_indexed_document(record)
             file_id="file-1",
             operator_id="user-1",
         )
+
+
+@pytest.mark.asyncio
+async def test_draft_mode_requires_pending_cleaning_draft():
+    service, _repo, _index = _service(_file(status=FileStatus.WAITING_CONFIRMATION))
+
+    with pytest.raises(DocumentQAError, match="尚未生成清洗草稿"):
+        await service.generate_drafts(
+            kb_id="kb-1",
+            file_id="file-1",
+            operator_id="user-1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_draft_mode_generation_binds_to_pending_cleaning_text(monkeypatch):
+    record = _file(
+        status=FileStatus.WAITING_CONFIRMATION,
+        cleaning_draft_file="minio://parsed/kb-1/draft.md",
+        processing_params={},
+        filename="doc.md",
+    )
+    service, repo, index = _service(record)
+    service.generator = _DraftGenerator()
+
+    async def fake_aget_kb(_kb_id):
+        return SimpleNamespace(databases_meta={})
+
+    monkeypatch.setattr(knowledge_base, "aget_kb", fake_aget_kb)
+
+    result = await service.generate_drafts(kb_id="kb-1", file_id="file-1", operator_id="user-1")
+
+    assert len(result["items"]) == 1
+    assert repo.records[0].status == "draft"
+    assert repo.records[0].cleaning_version == 3
+    assert repo.records[0].source == "generated"
+    assert repo.records[0].source_chunk_ids
+    assert repo.records[0].content_hash == formal_content_hash(await service._read_markdown(""))
+    assert index.upserts == []
+
+
+@pytest.mark.asyncio
+async def test_draft_mode_manual_create_update_and_reject():
+    record = _file(
+        status=FileStatus.WAITING_CONFIRMATION,
+        cleaning_draft_file="minio://parsed/kb-1/draft.md",
+    )
+    service, repo, _index = _service(record)
+
+    async def fake_draft_chunks(_record):
+        return [
+            SimpleNamespace(chunk_id="draft-chunk-1", content="Shanli 2.1 支持向量检索，默认批次大小为 40。"),
+        ], formal_content_hash("draft")
+
+    service._draft_chunks = fake_draft_chunks
+    created = await service.create_manual(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+        question="Shanli 2.1 支持什么检索？",
+        answer="Shanli 2.1 支持向量检索，默认批次大小为 40。",
+        source_chunk_ids=["draft-chunk-1"],
+        evidence=[{"chunk_id": "draft-chunk-1", "text": "Shanli 2.1 支持向量检索，默认批次大小为 40。"}],
+    )
+    assert created["status"] == "draft"
+    assert created["source"] == "manual"
+    assert created["cleaning_version"] == 3
+
+    updated = await service.update(
+        kb_id="kb-1",
+        file_id="file-1",
+        qa_id=created["qa_id"],
+        operator_id="user-2",
+        expected_version=created["version"],
+        question="Shanli 2.1 的默认检索能力是什么？",
+        answer=created["answer"],
+        source_chunk_ids=created["source_chunk_ids"],
+        evidence=created["evidence"],
+    )
+    assert updated["source"] == "manual"
+    assert updated["version"] == created["version"] + 1
+
+    rejected = await service.reject_or_delete(
+        kb_id="kb-1",
+        file_id="file-1",
+        qa_id=created["qa_id"],
+        operator_id="user-2",
+        expected_version=updated["version"],
+    )
+    assert rejected["status"] == "rejected"
+    assert len(repo.records) == 1
+
+
+@pytest.mark.asyncio
+async def test_draft_mode_qa_cannot_confirm_before_ingestion():
+    record = _file(
+        status=FileStatus.WAITING_CONFIRMATION,
+        cleaning_draft_file="minio://parsed/kb-1/draft.md",
+    )
+    service, _repo, index = _service(record)
+
+    async def fake_draft_chunks(_record):
+        return [
+            SimpleNamespace(chunk_id="draft-chunk-1", content="Shanli 2.1 支持向量检索，默认批次大小为 40。"),
+        ], formal_content_hash("draft")
+
+    service._draft_chunks = fake_draft_chunks
+    created = await service.create_manual(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+        question="Shanli 2.1 支持什么检索？",
+        answer="Shanli 2.1 支持向量检索，默认批次大小为 40。",
+        source_chunk_ids=["draft-chunk-1"],
+        evidence=[{"chunk_id": "draft-chunk-1", "text": "Shanli 2.1 支持向量检索，默认批次大小为 40。"}],
+    )
+
+    with pytest.raises(DocumentQAError, match="尚未确认清洗入库"):
+        await service.confirm(
+            kb_id="kb-1",
+            file_id="file-1",
+            qa_id=created["qa_id"],
+            operator_id="user-1",
+            expected_version=created["version"],
+        )
+    assert index.upserts == []
+
+
+@pytest.mark.asyncio
+async def test_rebase_draft_qas_binds_preview_chunks_to_real_chunks():
+    service, repo, _index = _service()
+    confirmed_hash = formal_content_hash(await service._read_markdown(""))
+    await repo.create(
+        {
+            "qa_id": "qa-draft-1",
+            "kb_id": "kb-1",
+            "file_id": "file-1",
+            "question": "Shanli 2.1 支持什么检索？",
+            "question_hash": "draft-hash",
+            "answer": "Shanli 2.1 支持向量检索，默认批次大小为 40。",
+            "source_chunk_ids": ["file-1_chunk_0"],
+            "evidence": [{"chunk_id": "file-1_chunk_0", "text": "Shanli 2.1 支持向量检索"}],
+            "source": "generated",
+            "status": "draft",
+            "sync_status": "pending",
+            "cleaning_version": 3,
+            "content_hash": confirmed_hash,
+            "possibly_outdated": False,
+            "deleted_by_user": False,
+        }
+    )
+
+    rebound = await service.rebase_draft_qas(kb_id="kb-1", file_id="file-1", operator_id="user-1")
+
+    assert rebound == 1
+    assert repo.records[0].source_chunk_ids == ["chunk-1"]
+    assert repo.records[0].evidence[0]["chunk_id"] == "chunk-1"
+    assert repo.records[0].content_hash == confirmed_hash
+    assert repo.records[0].possibly_outdated is False
 
 
 @pytest.mark.asyncio

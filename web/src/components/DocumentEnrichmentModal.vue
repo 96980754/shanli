@@ -5,7 +5,6 @@
     width="820px"
     :footer="null"
     :destroy-on-close="true"
-    @after-open-change="handleOpenChange"
   >
     <div v-if="loading" class="loading-state">
       <a-spin tip="正在加载摘要、关键词和标签..." />
@@ -157,7 +156,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 
@@ -231,6 +230,8 @@ const load = async () => {
 const handleOpenChange = (open) => {
   if (open) load()
 }
+
+watch(() => props.open, handleOpenChange)
 
 const waitForGeneration = async (previousVersion) => {
   for (let attempt = 0; attempt < 30 && visible.value; attempt += 1) {

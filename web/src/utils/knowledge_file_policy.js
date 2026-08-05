@@ -170,7 +170,14 @@ export const canOpenDocumentQA = (record) =>
     record &&
     !record.is_folder &&
     record.is_active !== false &&
-    ['done', 'indexed', 'error_replacement_cleanup'].includes(record.status)
+    [
+      'done',
+      'indexed',
+      'error_replacement_cleanup',
+      'waiting_confirmation',
+      'confirmed',
+      'error_indexing'
+    ].includes(record.status)
   )
 
 export const canDownloadFile = (record) =>
