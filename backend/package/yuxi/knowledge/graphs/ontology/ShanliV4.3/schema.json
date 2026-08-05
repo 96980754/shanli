@@ -1,0 +1,388 @@
+{
+  "registry_id": "shanli-preset",
+  "version": "4.3",
+  "name": "善理预设 V4.3",
+  "status": "active",
+  "design_principles": "本体只描述长期稳定、可复用、可建立关系网络的业务对象。文档内容统一作为 Document 类型由 RAG 检索；KG 仅承载需要跨文档共享、可推理、可推荐的知识。",
+  "system_division": "RAG负责文档 / KG负责推理 / Agent负责流程",
+  "layers": {
+    "product_knowledge": {
+      "description": "产品知识层（稳定）",
+      "entities": [
+        "Company",
+        "Brand",
+        "ProductCategory",
+        "ProductFamily",
+        "Product",
+        "Solution",
+        "Feature",
+        "Technology",
+        "Scenario",
+        "Industry",
+        "Specification",
+        "Standard",
+        "Certification",
+        "DeploymentMode",
+        "Document",
+        "Evidence"
+      ]
+    },
+    "business_knowledge": {
+      "description": "业务知识层（可扩展）",
+      "entities": [
+        "SellingPoint",
+        "Positioning",
+        "Roadmap",
+        "Case",
+        "CompatibleTarget",
+        "Capability"
+      ]
+    }
+  },
+  "entities": {
+    "Company": {
+      "description": "产品所属企业",
+      "examples": [
+        "善理通益信息科技（深圳）有限公司"
+      ]
+    },
+    "Brand": {
+      "description": "产品品牌",
+      "examples": [
+        "POCSTARS"
+      ]
+    },
+    "ProductCategory": {
+      "description": "产品大类",
+      "examples": [
+        "通信",
+        "定位",
+        "企业数字化"
+      ]
+    },
+    "ProductFamily": {
+      "description": "产品族",
+      "examples": [
+        "PTT",
+        "MCSTARS",
+        "Geo-Location"
+      ]
+    },
+    "Product": {
+      "description": "可独立销售的产品/解决方案",
+      "examples": [
+        "POCSTARS-MNO",
+        "F10"
+      ]
+    },
+    "Solution": {
+      "description": "产品组合形成的行业方案",
+      "examples": [
+        "公安执法解决方案"
+      ]
+    },
+    "Feature": {
+      "description": "用户可直接感知的功能/能力",
+      "examples": [
+        "组呼",
+        "蓝牙",
+        "实时视频"
+      ]
+    },
+    "Technology": {
+      "description": "实现功能的后台技术方法",
+      "examples": [
+        "WebRTC",
+        "微服务架构",
+        "MCX"
+      ]
+    },
+    "Scenario": {
+      "description": "产品被使用的具体场景",
+      "examples": [
+        "公安执法",
+        "铁路运输",
+        "应急救援"
+      ]
+    },
+    "Industry": {
+      "description": "产品服务的行业领域",
+      "examples": [
+        "公共安全",
+        "交通运输",
+        "能源"
+      ]
+    },
+    "Specification": {
+      "description": "产品的规格参数（Property模式：category+key+value+unit）",
+      "examples": [
+        "screen_size:2.4inch",
+        "battery:5200mAh"
+      ]
+    },
+    "Standard": {
+      "description": "产品遵循的外部标准",
+      "examples": [
+        "3GPP MCX",
+        "SIP",
+        "TETRA"
+      ]
+    },
+    "Certification": {
+      "description": "产品获得的认证",
+      "examples": [
+        "CE",
+        "FCC",
+        "IP68"
+      ]
+    },
+    "DeploymentMode": {
+      "description": "产品的部署方式",
+      "examples": [
+        "SaaS",
+        "私有化部署",
+        "云部署"
+      ]
+    },
+    "Document": {
+      "description": "知识的原始载体",
+      "type_enum": [
+        "WhitePaper",
+        "SalesGuide",
+        "UserManual",
+        "FAQ",
+        "Workflow",
+        "DeploymentGuide",
+        "Specification",
+        "TestReport",
+        "Certification",
+        "Tender",
+        "Case",
+        "PPT",
+        "Excel",
+        "SLA"
+      ]
+    },
+    "Evidence": {
+      "description": "事实的证据节点",
+      "examples": [
+        "{sentence,chunk_index,source}"
+      ]
+    },
+    "SellingPoint": {
+      "description": "产品卖点/差异化优势（含category分类）",
+      "examples": [
+        "国产化",
+        "高可靠",
+        "低时延"
+      ]
+    },
+    "Positioning": {
+      "description": "产品定位（三维枚举）",
+      "fields": {
+        "market_level": [
+          "高端",
+          "中端",
+          "入门"
+        ],
+        "industry_position": [
+          "公安",
+          "酒店",
+          "交通",
+          "能源",
+          "制造",
+          "通用"
+        ],
+        "deployment_position": [
+          "公网",
+          "专网",
+          "混合"
+        ]
+      }
+    },
+    "Roadmap": {
+      "description": "产品规划路线图",
+      "fields": {
+        "name": "string",
+        "status": [
+          "Planning",
+          "Developing",
+          "Testing",
+          "Released"
+        ],
+        "planned_date": "date",
+        "release_date": "date"
+      }
+    },
+    "Case": {
+      "description": "成功案例（多产品）",
+      "examples": [
+        "某市公安局项目"
+      ]
+    },
+    "CompatibleTarget": {
+      "description": "兼容目标对象",
+      "examples": [
+        "Motorola耳机",
+        "Linux",
+        "摄像头"
+      ]
+    },
+    "Capability": {
+      "description": "跨产品的抽象能力层",
+      "examples": [
+        "视频",
+        "定位",
+        "AI",
+        "GIS",
+        "调度",
+        "录音"
+      ]
+    }
+  },
+  "relations": {
+    "HAS_FAMILY": {
+      "source": "ProductCategory",
+      "target": "ProductFamily",
+      "description": "产品分类包含产品族"
+    },
+    "HAS_PRODUCT": {
+      "source": "ProductFamily",
+      "target": "Product",
+      "description": "产品族包含具体产品"
+    },
+    "SUPPORTS": {
+      "source": "Product",
+      "target": "Feature",
+      "description": "产品支持某项用户可感知功能"
+    },
+    "USES": {
+      "source": "Product",
+      "target": "Technology",
+      "description": "产品采用某项实现技术"
+    },
+    "USED_IN": {
+      "source": "Product",
+      "target": "Scenario",
+      "description": "产品用于某个具体业务场景"
+    },
+    "APPLICABLE_TO": {
+      "source": "Product",
+      "target": "Industry",
+      "description": "产品适用于某个行业领域"
+    },
+    "COMPLIES_WITH": {
+      "source": "Product",
+      "target": "Standard",
+      "description": "产品遵循某项外部标准"
+    },
+    "HAS_CERTIFICATION": {
+      "source": "Product",
+      "target": "Certification",
+      "description": "产品获得某项认证"
+    },
+    "HAS_DEPLOYMENT": {
+      "source": "Product",
+      "target": "DeploymentMode",
+      "description": "产品支持某种部署方式"
+    },
+    "HAS_SPEC": {
+      "source": "Product",
+      "target": "Specification",
+      "description": "产品具有某项结构化规格参数"
+    },
+    "HAS_DOCUMENT": {
+      "source": "Product",
+      "target": "Document",
+      "description": "产品关联某份业务文档"
+    },
+    "HAS_SELLING_POINT": {
+      "source": "Product",
+      "target": "SellingPoint",
+      "description": "产品具有某项卖点或差异化优势"
+    },
+    "HAS_POSITIONING": {
+      "source": "Product",
+      "target": "Positioning",
+      "description": "产品具有某种市场、行业或部署定位"
+    },
+    "HAS_CAPABILITY": {
+      "source": "Product",
+      "target": "Capability",
+      "description": "产品具备某项跨产品抽象能力"
+    },
+    "HAS_ROADMAP": {
+      "source": "Product",
+      "target": "Roadmap",
+      "description": "产品关联某项规划路线图"
+    },
+    "PLANS": {
+      "source": "Roadmap",
+      "target": "Feature",
+      "description": "产品规划计划交付某项功能"
+    },
+    "USES_PRODUCT": {
+      "source": "Case",
+      "target": "Product",
+      "description": "案例涉及或采用某项产品"
+    },
+    "COMPATIBLE_WITH": {
+      "source": "Product",
+      "target": "CompatibleTarget",
+      "description": "产品兼容某种设备、平台、系统或附件"
+    },
+    "SUPPORTED_BY": {
+      "source": "Any",
+      "target": "Evidence",
+      "description": "知识对象由证据节点支撑；新抽取统一使用该关系"
+    },
+    "EXTRACTED_FROM": {
+      "source": "Evidence",
+      "target": "Document",
+      "description": "证据摘取或定位自某份原始文档"
+    },
+    "BELONGS_TO": {
+      "source": "Scenario",
+      "target": "Industry",
+      "description": "具体业务场景归属于某个行业"
+    },
+    "HAS_EVIDENCE": {
+      "source": "Any",
+      "target": "Evidence",
+      "description": "历史兼容证据关联；新抽取不得主动使用"
+    }
+  },
+  "conflict_detection": {
+    "single_valued_relations": [],
+    "keyed_value_relations": [
+      "HAS_SPEC"
+    ]
+  },
+  "feature_vs_technology": {
+    "rule": "Feature=用户可直接感知的能力；Technology=实现能力的后台方法",
+    "examples": [
+      {
+        "name": "实时视频",
+        "type": "Feature"
+      },
+      {
+        "name": "蓝牙",
+        "type": "Feature"
+      },
+      {
+        "name": "WebRTC",
+        "type": "Technology"
+      },
+      {
+        "name": "微服务架构",
+        "type": "Technology"
+      }
+    ]
+  },
+  "evidence_relation_policy": {
+    "rule": "新抽取的证据关联统一使用 SUPPORTED_BY；HAS_EVIDENCE 仅用于兼容历史图谱。"
+  },
+  "forbidden_relations": [
+    "HAS_EVIDENCE"
+  ]
+}

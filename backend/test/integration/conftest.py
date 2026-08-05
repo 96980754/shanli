@@ -538,6 +538,7 @@ async def knowledge_database(
                 "embedding_model_spec": "siliconflow-cn:Pro/BAAI/bge-m3",
                 "kb_type": "milvus",
                 "additional_params": {},
+                "share_config": {"access_level": "user", "user_uids": [], "department_ids": []},
             },
             headers=admin_headers,
         )

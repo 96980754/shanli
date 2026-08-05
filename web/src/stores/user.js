@@ -18,6 +18,7 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userRole.value === 'admin' || userRole.value === 'superadmin')
   const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+  const isRegularUser = computed(() => userRole.value === 'user')
 
   // 动作
   async function login(credentials) {
@@ -387,6 +388,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     isAdmin,
     isSuperAdmin,
+    isRegularUser,
 
     // 方法
     login,
@@ -417,5 +419,8 @@ export const checkAdminPermission = () => {
 // 检查当前用户是否有超级管理员权限
 export const checkSuperAdminPermission = () => {
   const userStore = useUserStore()
-  return userStore.isSuperAdmin
+  if (!userStore.isSuperAdmin) {
+    throw new Error('需要超级管理员权限')
+  }
+  return true
 }

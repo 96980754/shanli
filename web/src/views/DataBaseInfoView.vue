@@ -4,6 +4,7 @@
       v-model:open="store.state.fileDetailModalVisible"
       :kb-id="kbId"
       :file-id="store.fileDetailFileId"
+      :can-download="kbPermissions.can_download"
       @closed="store.closeFileDetail"
     />
 
@@ -13,6 +14,9 @@
       :current-folder-id="currentFolderId"
       :is-folder-mode="isFolderUploadMode"
       :mode="addFilesMode"
+      :can-upload="kbPermissions.can_upload"
+      :can-manage="kbPermissions.can_manage"
+      :defer-processing="!userStore.isAdmin"
       @success="onFileUploadSuccess"
       @view-existing-file="store.openFileDetail"
     />
@@ -47,6 +51,7 @@
               <span>复制 ID</span>
             </button>
             <button
+              v-if="kbPermissions.can_grant"
               type="button"
               class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
               @click="activeTab = 'permissions'"
@@ -55,6 +60,7 @@
               <span>权限设置</span>
             </button>
             <button
+              v-if="kbPermissions.can_manage"
               type="button"
               class="lucide-icon-btn extension-panel-action extension-panel-action-primary"
               @click="showEditModal"
@@ -91,6 +97,7 @@
               <div class="file-info-title">
                 <div class="file-info-title-row">
                   <button
+                    v-if="kbPermissions.can_upload"
                     type="button"
                     class="lucide-icon-btn extension-panel-action extension-panel-action-primary"
                     @click="showAddFilesModal()"
@@ -99,6 +106,7 @@
                     <span>上传</span>
                   </button>
                   <button
+                    v-if="userStore.isAdmin"
                     type="button"
                     class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
                     @click="showCreateFolderModal"
@@ -110,7 +118,7 @@
               </div>
               <div class="file-panel-status">
                 <button
-                  v-if="pendingParseCount > 0"
+                  v-if="userStore.isAdmin && pendingParseCount > 0"
                   type="button"
                   class="file-stat-card file-stat-action file-stat-summary"
                   :disabled="store.state.chunkLoading"
@@ -119,11 +127,11 @@
                   <FileText :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ pendingParseCount }}</strong>
-                    <span>待解析</span>
+                    <span>待审核</span>
                   </div>
                 </button>
                 <button
-                  v-if="pendingIndexCount > 0"
+                  v-if="userStore.isAdmin && pendingIndexCount > 0"
                   type="button"
                   class="file-stat-card file-stat-action file-stat-summary"
                   :disabled="store.state.chunkLoading"
@@ -150,6 +158,7 @@
                   </div>
                 </div>
                 <button
+                  v-if="userStore.isAdmin"
                   type="button"
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
@@ -166,6 +175,7 @@
                   </div>
                 </button>
                 <button
+                  v-if="userStore.isAdmin"
                   type="button"
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
@@ -183,17 +193,32 @@
                 </button>
               </div>
             </div>
-            <FileTable ref="fileTableRef" />
+            <FileTable
+              ref="fileTableRef"
+              :can-upload="userStore.isAdmin"
+              :can-download="kbPermissions.can_download"
+              :can-delete="kbPermissions.can_delete"
+              :can-manage="userStore.isAdmin"
+            />
           </div>
 
-          <div v-show="activeTab === 'query'" class="tab-panel query-config-panel">
+          <div
+            v-if="userStore.isAdmin"
+            v-show="activeTab === 'query'"
+            class="tab-panel query-config-panel"
+          >
             <div class="query-config-layout">
               <div class="query-test-pane">
-                <QuerySection ref="querySectionRef" :visible="true" @toggle-visible="() => {}" />
+                <QuerySection
+                  ref="querySectionRef"
+                  :visible="true"
+                  :can-manage="userStore.isAdmin"
+                  @toggle-visible="() => {}"
+                />
               </div>
-              <aside class="query-config-pane" aria-label="检索配置">
+              <aside v-if="userStore.isAdmin" class="query-config-pane" aria-label="检索配置">
                 <div class="search-config-wrapper">
-                  <div class="search-config-header">
+                  <div v-if="kbPermissions.can_manage" class="query-config-header">
                     <div>
                       <h3>检索配置</h3>
                       <p>调整当前知识库的检索参数。</p>
@@ -220,36 +245,12 @@
             </div>
           </div>
 
-          <div v-if="isMilvus && activeTab === 'graph'" class="tab-panel">
+          <div v-if="isMilvus && userStore.isAdmin && activeTab === 'graph'" class="tab-panel">
             <KnowledgeGraphSection
               :visible="true"
               :active="activeTab === 'graph'"
               @toggle-visible="() => {}"
             />
-          </div>
-
-          <div v-if="isMilvus && activeTab === 'mindmap'" class="tab-panel">
-            <MindMapSection v-if="kbId" :kb-id="kbId" ref="mindmapSectionRef" />
-          </div>
-
-          <div v-if="isMilvus && activeTab === 'evaluation'" class="tab-panel">
-            <RAGEvaluationTab
-              v-if="kbId"
-              :kb-id="kbId"
-              @switch-to-benchmarks="activeTab = 'benchmarks'"
-            />
-          </div>
-
-          <div v-if="isMilvus && activeTab === 'benchmarks'" class="tab-panel">
-            <div class="benchmark-management-container">
-              <div class="benchmark-content">
-                <EvaluationBenchmarks
-                  v-if="kbId && isEvaluationSupported"
-                  :kb-id="kbId"
-                  @benchmark-selected="activeTab = 'evaluation'"
-                />
-              </div>
-            </div>
           </div>
 
           <div v-if="activeTab === 'permissions'" class="tab-panel">
@@ -273,6 +274,13 @@
       <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical">
         <a-form-item label="知识库名称" name="name" required>
           <a-input v-model:value="editForm.name" placeholder="请输入知识库名称" />
+        </a-form-item>
+        <a-form-item label="内容分类" name="category_id" required>
+          <a-select
+            v-model:value="editForm.category_id"
+            :options="categoryOptions"
+            placeholder="请选择内容分类"
+          />
         </a-form-item>
         <a-form-item label="知识库描述" name="description">
           <AiTextarea
@@ -385,8 +393,6 @@ import { useTaskerStore } from '@/stores/tasker'
 import { useUserStore } from '@/stores/user'
 import {
   ArrowLeft,
-  BarChart3,
-  ClipboardList,
   Copy,
   Database as DatabaseIcon,
   FileUp,
@@ -394,7 +400,6 @@ import {
   FolderPlus,
   Hash,
   LoaderCircle,
-  Map as MapIcon,
   Network,
   Pencil,
   Save,
@@ -409,14 +414,11 @@ import FileDetailModal from '@/components/FileDetailModal.vue'
 import FileUploadModal from '@/components/FileUploadModal.vue'
 import KnowledgeGraphSection from '@/components/KnowledgeGraphSection.vue'
 import QuerySection from '@/components/QuerySection.vue'
-import MindMapSection from '@/components/MindMapSection.vue'
-import RAGEvaluationTab from '@/components/RAGEvaluationTab.vue'
-import EvaluationBenchmarks from '@/components/EvaluationBenchmarks.vue'
 import SearchConfigPanel from '@/components/SearchConfigPanel.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
-import { databaseApi } from '@/apis/knowledge_api'
+import { databaseApi, categoryApi } from '@/apis/knowledge_api'
 import { departmentApi } from '@/apis/department_api'
 import { authApi } from '@/apis/auth_api'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
@@ -448,7 +450,22 @@ const isNotionKb = computed(() => kbType.value === 'notion')
 const isConnector = computed(
   () => isCurrentDatabaseLoaded.value && kbUtils.isReadOnlyDatabase(database.value)
 )
-const isEvaluationSupported = computed(() => isMilvus.value)
+const kbPermissions = reactive({
+  can_view: false,
+  can_search: false,
+  can_upload: false,
+  can_download: false,
+  can_delete: false,
+  can_manage: false,
+  can_grant: false,
+  can_export: false
+})
+
+const loadDatabaseAccess = async (databaseId) => {
+  const access = await databaseApi.getDatabaseAccess(databaseId)
+  Object.assign(kbPermissions, access)
+}
+
 const kbTypeIcon = computed(() => getKbTypeIcon(kbType.value || 'milvus'))
 
 const databaseSubtitle = computed(() => {
@@ -463,19 +480,20 @@ const databaseSubtitle = computed(() => {
 })
 
 const tabs = computed(() => {
-  if (isMilvus.value) {
-    return [
-      { key: 'filetable', label: '文件管理', icon: FileText },
-      { key: 'query', label: '检索测试', icon: Search },
-      { key: 'graph', label: '知识图谱', icon: Network },
-      { key: 'mindmap', label: '知识导图', icon: MapIcon },
-      { key: 'evaluation', label: 'RAG 评估', icon: BarChart3 },
-      { key: 'benchmarks', label: '评估基准', icon: ClipboardList },
-      { key: 'permissions', label: '权限设置', icon: Settings }
-    ]
+  const items = []
+  if (isMilvus.value && kbPermissions.can_view) {
+    items.push({ key: 'filetable', label: '文件管理', icon: FileText })
   }
-
-  return [{ key: 'query', label: '检索测试', icon: Search }]
+  if (userStore.isAdmin) {
+    items.push({ key: 'query', label: '检索测试', icon: Search })
+  }
+  if (isMilvus.value && userStore.isAdmin) {
+    items.push({ key: 'graph', label: '知识图谱', icon: Network })
+  }
+  if (kbPermissions.can_grant) {
+    items.push({ key: 'permissions', label: '权限设置', icon: Settings })
+  }
+  return items
 })
 
 const visibleTabs = computed(() => tabs.value)
@@ -561,13 +579,13 @@ const pendingIndexCount = computed(() => {
 const confirmBatchParse = () => {
   const count = pendingParseCount.value
   if (count <= 0) {
-    message.info('没有待解析文档')
+    message.info('没有待审核文档')
     return
   }
 
   Modal.confirm({
-    title: '解析待解析文件',
-    content: `将提交 ${formatStatNumber(count)} 个待解析文件，任务会在后台按批处理，可在任务中心查看进度。`,
+    title: '解析待审核文件',
+    content: `将提交 ${formatStatNumber(count)} 个待审核文件，任务会在后台按批处理，可在任务中心查看进度。`,
     okText: '提交解析',
     cancelText: '取消',
     onOk: () => store.parsePendingFiles(count)
@@ -587,7 +605,6 @@ const confirmBatchIndex = () => {
   }
 }
 
-const mindmapSectionRef = ref(null)
 const querySectionRef = ref(null)
 const searchConfigSaving = ref(false)
 const searchConfigPanelRef = ref(null)
@@ -664,7 +681,8 @@ watch(
     resetFileSelectionState()
     store.stopAutoRefresh()
     try {
-      await store.getDatabaseInfo(nextKbId, false)
+      await loadDatabaseAccess(nextKbId)
+      await store.getDatabaseInfo(nextKbId, !userStore.isAdmin)
       store.startAutoRefresh()
     } finally {
       detailLoading.value = false
@@ -743,12 +761,17 @@ const copyDatabaseId = async () => {
 
 const departments = ref([])
 const users = ref([])
+const categories = ref([])
+const categoryOptions = computed(() =>
+  categories.value.map((category) => ({ label: category.name, value: category.id }))
+)
 const editModalVisible = ref(false)
 const editFormRef = ref(null)
 const shareConfigFormRef = ref(null)
 const editForm = reactive({
   name: '',
   description: '',
+  category_id: null,
   auto_generate_questions: false,
   chunk_preset_id: DEFAULT_CHUNK_PRESET_ID,
   dify_api_url: '',
@@ -760,7 +783,8 @@ const editForm = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入知识库名称' }]
+  name: [{ required: true, message: '请输入知识库名称' }],
+  category_id: [{ required: true, message: '请选择内容分类' }]
 }
 
 const editPresetDescription = computed(() => getChunkPresetDescription(editForm.chunk_preset_id))
@@ -768,7 +792,7 @@ const fileList = computed(() => {
   return (store.documentFiles || []).map((f) => f.filename).filter(Boolean)
 })
 
-const canEditShareConfig = computed(() => userStore.isSuperAdmin || userStore.isAdmin)
+const canEditShareConfig = computed(() => kbPermissions.can_manage)
 
 const shareConfigDisplay = computed(() => {
   const shareConfig = database.value?.share_config || { access_level: 'global' }
@@ -826,9 +850,19 @@ const loadUsers = async () => {
   }
 }
 
+const loadCategories = async () => {
+  try {
+    const data = await categoryApi.getCategories()
+    categories.value = data.items || []
+  } catch {
+    categories.value = []
+  }
+}
+
 const showEditModal = () => {
   editForm.name = database.value.name || ''
   editForm.description = database.value.description || ''
+  editForm.category_id = database.value.category_id || null
   editForm.auto_generate_questions =
     database.value.additional_params?.auto_generate_questions || false
   editForm.chunk_preset_id =
@@ -868,6 +902,7 @@ const handleEditSubmit = () => {
       const updateData = {
         name: editForm.name,
         description: editForm.description,
+        category_id: editForm.category_id,
         additional_params: {},
         share_config: {
           access_level: formConfig.access_level,
@@ -928,6 +963,7 @@ const deleteDatabase = () => {
 
 onMounted(() => {
   loadChunkPresetOptions()
+  loadCategories()
   loadDepartments()
   loadUsers()
 })

@@ -241,7 +241,7 @@ async def test_legacy_office_real_conversion_parse_chunk_index_and_retrieve(
         assert chunks
         assert all(chunk.source_metadata["original_format"] == suffix.removeprefix(".") for chunk in chunks)
         assert all(chunk.source_metadata["normalized_format"] == f"{suffix}x".removeprefix(".") for chunk in chunks)
-        results = await kb.aquery(marker, kb_id, search_mode="vector", final_top_k=20, similarity_threshold=-1.0)
+        results = await kb.aquery(marker, kb_id, search_mode="vector", final_top_k=20, similarity_threshold=-1.0, use_reranker=False)
         assert file_id in _result_file_ids(results)
 
 
@@ -298,5 +298,5 @@ async def test_gif_webp_real_first_frame_ocr_chunk_index_and_retrieve(
         assert all(chunk.source_metadata["original_format"] == suffix.removeprefix(".") for chunk in chunks)
         assert all(chunk.source_metadata["normalized_format"] == "png" for chunk in chunks)
         assert all(chunk.source_metadata["page_number"] == 1 for chunk in chunks)
-        results = await kb.aquery(marker, kb_id, search_mode="vector", final_top_k=20, similarity_threshold=-1.0)
+        results = await kb.aquery(marker, kb_id, search_mode="vector", final_top_k=20, similarity_threshold=-1.0, use_reranker=False)
         assert file_id in _result_file_ids(results)

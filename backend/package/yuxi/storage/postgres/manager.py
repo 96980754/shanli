@@ -123,6 +123,69 @@ class PostgresManager(metaclass=SingletonMeta):
         """确保知识库 schema 包含所有必要字段"""
         self._check_initialized()
         stmts = [
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_base_categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(64) NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                is_protected BOOLEAN NOT NULL DEFAULT FALSE,
+                created_by VARCHAR(64),
+                updated_by VARCHAR(64),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM pg_index index_info
+                    JOIN pg_class index_class ON index_class.oid = index_info.indexrelid
+                    JOIN pg_class table_class ON table_class.oid = index_info.indrelid
+                    JOIN pg_namespace namespace ON namespace.oid = table_class.relnamespace
+                    WHERE namespace.nspname = current_schema()
+                      AND table_class.relname = 'knowledge_base_categories'
+                      AND index_class.relname = 'uq_knowledge_base_categories_lower_name'
+                      AND pg_get_expr(index_info.indexprs, index_info.indrelid) = 'lower(''name''::text)'
+                ) THEN
+                    DROP INDEX uq_knowledge_base_categories_lower_name;
+                END IF;
+            END $$
+            """,
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_base_categories_lower_name "
+                "ON knowledge_base_categories(lower(name))"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_base_categories_default "
+                "ON knowledge_base_categories(is_default) WHERE is_default IS TRUE"
+            ),
+            """
+            INSERT INTO knowledge_base_categories (name, sort_order, is_default, is_protected)
+            SELECT '其他', 10000, TRUE, TRUE
+            WHERE NOT EXISTS (SELECT 1 FROM knowledge_base_categories WHERE is_default IS TRUE)
+            """,
+            "UPDATE knowledge_base_categories SET is_protected = TRUE WHERE is_default IS TRUE",
+            "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS category_id INTEGER",
+            """
+            UPDATE knowledge_bases
+            SET category_id = (SELECT id FROM knowledge_base_categories WHERE is_default IS TRUE LIMIT 1)
+            WHERE category_id IS NULL
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_knowledge_bases_category_id') THEN
+                    ALTER TABLE knowledge_bases
+                    ADD CONSTRAINT fk_knowledge_bases_category_id
+                    FOREIGN KEY (category_id) REFERENCES knowledge_base_categories(id) ON DELETE RESTRICT;
+                END IF;
+            END $$
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_bases_category_id ON knowledge_bases(category_id)",
+            "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS embedding_model_spec VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS llm_model_spec VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_bases DROP COLUMN IF EXISTS embed_info",
@@ -161,6 +224,11 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_bases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS normalized_name VARCHAR(512)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS document_version INTEGER",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS supersedes_file_id VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS original_filename VARCHAR(512)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS path VARCHAR(1024)",
@@ -172,6 +240,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS file_size BIGINT",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS chunk_count INTEGER DEFAULT 0",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS token_count BIGINT DEFAULT 0",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS view_count BIGINT NOT NULL DEFAULT 0",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS content_type VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS processing_params JSONB",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parse_metadata JSONB",
@@ -251,6 +320,166 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS created_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS updated_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
+            """
+            UPDATE knowledge_files
+            SET logical_document_id = file_id,
+                document_version = 1,
+                is_current = TRUE,
+                activated_at = COALESCE(activated_at, created_at, NOW())
+            WHERE is_folder IS NOT TRUE
+              AND (logical_document_id IS NULL OR document_version IS NULL)
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'fk_knowledge_files_supersedes_file_id'
+                ) THEN
+                    ALTER TABLE knowledge_files
+                    ADD CONSTRAINT fk_knowledge_files_supersedes_file_id
+                    FOREIGN KEY (supersedes_file_id) REFERENCES knowledge_files(file_id) ON DELETE SET NULL;
+                END IF;
+            END $$
+            """,
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)",
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS old_file_id VARCHAR(64) "
+                "REFERENCES knowledge_files(file_id) ON DELETE SET NULL"
+            ),
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS new_file_id VARCHAR(64) "
+                "REFERENCES knowledge_files(file_id) ON DELETE CASCADE"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS conflict_key VARCHAR(512)",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS old_fact JSONB",
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS incoming_assertion_id VARCHAR(64) "
+                "REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE"
+            ),
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS entity_id VARCHAR(64) "
+                "REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS predicate VARCHAR(128)",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS existing_assertion_ids JSONB",
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS "
+                "requires_review BOOLEAN NOT NULL DEFAULT TRUE"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS classification VARCHAR(32)",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS existing_value JSONB",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS incoming_value JSONB",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS normalized_existing_value JSONB",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS normalized_incoming_value JSONB",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS detection_rules JSONB",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS severity VARCHAR(16)",
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS "
+                "requires_review BOOLEAN NOT NULL DEFAULT TRUE"
+            ),
+            (
+                "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS "
+                "publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'"
+            ),
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS resolution_reason TEXT",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS publish_error TEXT",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()",
+            "ALTER TABLE IF EXISTS knowledge_conflicts ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1",
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_conflicts (
+                id SERIAL PRIMARY KEY,
+                conflict_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                logical_document_id VARCHAR(64),
+                old_file_id VARCHAR(64) REFERENCES knowledge_files(file_id) ON DELETE SET NULL,
+                new_file_id VARCHAR(64) REFERENCES knowledge_files(file_id) ON DELETE CASCADE,
+                conflict_type VARCHAR(64) NOT NULL,
+                conflict_key VARCHAR(512),
+                old_fact JSONB,
+                new_fact JSONB,
+                entity_id VARCHAR(64)
+                    REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL,
+                predicate VARCHAR(128),
+                existing_assertion_ids JSONB,
+                incoming_assertion_id VARCHAR(64) UNIQUE
+                    REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE,
+                classification VARCHAR(32),
+                existing_value JSONB,
+                incoming_value JSONB,
+                normalized_existing_value JSONB,
+                normalized_incoming_value JSONB,
+                detection_rules JSONB,
+                severity VARCHAR(16),
+                requires_review BOOLEAN NOT NULL DEFAULT TRUE,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                resolution VARCHAR(64),
+                resolution_reason TEXT,
+                resolved_by VARCHAR(64),
+                resolved_at TIMESTAMPTZ,
+                publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested',
+                publish_error TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                version INTEGER NOT NULL DEFAULT 1,
+                CONSTRAINT uq_knowledge_conflicts_candidate UNIQUE (new_file_id, conflict_type, conflict_key)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_validation_reports (
+                id SERIAL PRIMARY KEY,
+                report_id VARCHAR(64) NOT NULL UNIQUE,
+                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
+                logical_document_id VARCHAR(64) NOT NULL,
+                old_file_id VARCHAR(64) NOT NULL,
+                old_filename VARCHAR(512),
+                old_document_version INTEGER,
+                candidate_file_id VARCHAR(64) NOT NULL,
+                candidate_filename VARCHAR(512),
+                candidate_document_version INTEGER,
+                ontology_registry_id VARCHAR(128),
+                ontology_version VARCHAR(64),
+                ontology_digest VARCHAR(128),
+                extraction_schema_version INTEGER,
+                status VARCHAR(32) NOT NULL DEFAULT 'processing',
+                decision VARCHAR(32) NOT NULL DEFAULT 'pending',
+                new_count INTEGER NOT NULL DEFAULT 0,
+                changed_count INTEGER NOT NULL DEFAULT 0,
+                removed_count INTEGER NOT NULL DEFAULT 0,
+                conflict_count INTEGER NOT NULL DEFAULT 0,
+                inconclusive BOOLEAN NOT NULL DEFAULT FALSE,
+                summary JSONB,
+                failure_message TEXT,
+                reviewed_by VARCHAR(64),
+                reviewed_at TIMESTAMPTZ,
+                completed_at TIMESTAMPTZ,
+                published_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_validation_reports_candidate UNIQUE (candidate_file_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_validation_items (
+                id SERIAL PRIMARY KEY,
+                item_id VARCHAR(64) NOT NULL UNIQUE,
+                report_id VARCHAR(64) NOT NULL
+                    REFERENCES knowledge_validation_reports(report_id) ON DELETE CASCADE,
+                item_index INTEGER NOT NULL,
+                change_type VARCHAR(32) NOT NULL,
+                severity VARCHAR(32) NOT NULL,
+                decision VARCHAR(32) NOT NULL DEFAULT 'pending',
+                fact_key VARCHAR(512) NOT NULL,
+                relation VARCHAR(256),
+                old_fact JSONB,
+                new_fact JSONB,
+                old_evidence JSONB,
+                new_evidence JSONB,
+                review_required BOOLEAN NOT NULL DEFAULT FALSE,
+                reason TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_validation_items_report_index UNIQUE (report_id, item_index)
+            )
+            """,
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS created_by VARCHAR(64)",
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ",
             "ALTER TABLE IF EXISTS evaluation_datasets ADD COLUMN IF NOT EXISTS build_metadata JSONB",
@@ -459,38 +688,6 @@ class PostgresManager(metaclass=SingletonMeta):
             )
             """,
             """
-            CREATE TABLE IF NOT EXISTS knowledge_conflicts (
-                id SERIAL PRIMARY KEY,
-                conflict_id VARCHAR(64) NOT NULL UNIQUE,
-                kb_id VARCHAR(80) NOT NULL REFERENCES knowledge_bases(kb_id) ON DELETE CASCADE,
-                entity_id VARCHAR(64)
-                    REFERENCES knowledge_graph_entities(entity_id) ON DELETE SET NULL,
-                predicate VARCHAR(128) NOT NULL,
-                existing_assertion_ids JSONB NOT NULL,
-                incoming_assertion_id VARCHAR(64) NOT NULL UNIQUE
-                    REFERENCES knowledge_assertions(assertion_id) ON DELETE CASCADE,
-                conflict_type VARCHAR(64) NOT NULL,
-                classification VARCHAR(32) NOT NULL,
-                existing_value JSONB,
-                incoming_value JSONB NOT NULL,
-                normalized_existing_value JSONB,
-                normalized_incoming_value JSONB,
-                detection_rules JSONB NOT NULL,
-                severity VARCHAR(16) NOT NULL,
-                requires_review BOOLEAN NOT NULL DEFAULT TRUE,
-                status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                resolution VARCHAR(64),
-                resolution_reason TEXT,
-                resolved_by VARCHAR(64),
-                resolved_at TIMESTAMPTZ,
-                publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested',
-                publish_error TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW(),
-                version INTEGER NOT NULL DEFAULT 1
-            )
-            """,
-            """
             CREATE TABLE IF NOT EXISTS knowledge_conflict_publish_tasks (
                 id SERIAL PRIMARY KEY,
                 task_id VARCHAR(64) NOT NULL UNIQUE,
@@ -571,12 +768,43 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS idx_kb_type ON knowledge_bases(kb_type)",
             "CREATE INDEX IF NOT EXISTS idx_kb_name ON knowledge_bases(name)",
             "CREATE INDEX IF NOT EXISTS idx_kf_kb_id ON knowledge_files(kb_id)",
-            "CREATE INDEX IF NOT EXISTS idx_kf_kb_filename ON knowledge_files(kb_id, filename)",
-            "CREATE INDEX IF NOT EXISTS idx_kf_parent ON knowledge_files(parent_id)",
             (
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_folders_scope_name "
                 "ON knowledge_files(kb_id, COALESCE(parent_id, ''), normalized_name) "
                 "WHERE is_folder IS TRUE AND normalized_name IS NOT NULL"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_files_logical_document_id ON knowledge_files(logical_document_id)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_files_supersedes_file_id ON knowledge_files(supersedes_file_id)",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version "
+                "ON knowledge_files(kb_id, logical_document_id, document_version) "
+                "WHERE logical_document_id IS NOT NULL AND document_version IS NOT NULL"
+            ),
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version "
+                "ON knowledge_files(kb_id, logical_document_id) "
+                "WHERE is_current IS TRUE AND is_folder IS NOT TRUE"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_kb_id ON knowledge_conflicts(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_logical_document_id "
+                "ON knowledge_conflicts(logical_document_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_new_file_id ON knowledge_conflicts(new_file_id)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_conflicts_status ON knowledge_conflicts(status)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_kb_id ON knowledge_validation_reports(kb_id)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_logical_document_id "
+                "ON knowledge_validation_reports(logical_document_id)"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_reports_status ON knowledge_validation_reports(status)",
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_items_report_id "
+                "ON knowledge_validation_items(report_id)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_validation_items_change_type "
+                "ON knowledge_validation_items(change_type)"
             ),
             "CREATE INDEX IF NOT EXISTS idx_kf_status ON knowledge_files(status)",
             "CREATE INDEX IF NOT EXISTS idx_kf_hash ON knowledge_files(content_hash)",
@@ -992,6 +1220,34 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS ix_conversations_is_pinned ON conversations(is_pinned)",
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_model_providers_provider_id ON model_providers(provider_id)",
             "CREATE INDEX IF NOT EXISTS ix_model_providers_is_enabled ON model_providers(is_enabled)",
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_gaps (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                normalized_question TEXT NOT NULL,
+                question_hash VARCHAR(64) NOT NULL,
+                agent_slug VARCHAR(100) NOT NULL,
+                kb_scope JSONB NOT NULL DEFAULT '[]'::jsonb,
+                kb_scope_hash VARCHAR(64) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'new',
+                reason VARCHAR(64) NOT NULL,
+                occurrence_count INTEGER NOT NULL DEFAULT 1,
+                uid VARCHAR(100),
+                conversation_thread_id VARCHAR(64),
+                assistant_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+                first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                resolution_note TEXT,
+                resolved_at TIMESTAMPTZ,
+                resolved_by VARCHAR(100),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_knowledge_gaps_scope UNIQUE (question_hash, agent_slug, kb_scope_hash),
+                CONSTRAINT uq_knowledge_gaps_assistant_message UNIQUE (assistant_message_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_status_seen ON knowledge_gaps(status, last_seen_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_agent_seen ON knowledge_gaps(agent_slug, last_seen_at DESC)",
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警

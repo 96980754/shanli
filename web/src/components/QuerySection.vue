@@ -129,6 +129,7 @@
               <span class="suggestion-text">{{ example }}</span>
             </button>
             <button
+              v-if="props.canManage"
               type="button"
               class="suggestion-row"
               @click="() => generateSampleQuestions(false)"
@@ -139,7 +140,11 @@
           </div>
 
           <div v-else class="suggestions-empty">
-            <button class="suggestion-row" @click="() => generateSampleQuestions(false)">
+            <button
+              v-if="props.canManage"
+              class="suggestion-row"
+              @click="() => generateSampleQuestions(false)"
+            >
               <RefreshCw class="suggestion-icon" />
               <span class="suggestion-text">生成示例问题</span>
             </button>
@@ -161,7 +166,7 @@ import { Braces, RefreshCw } from 'lucide-vue-next'
 const store = useDatabaseStore()
 const MAX_VISIBLE_EXAMPLES = 10
 
-defineProps({
+const props = defineProps({
   visible: {
     type: Boolean,
     default: true
@@ -169,6 +174,10 @@ defineProps({
   style: {
     type: Object,
     default: () => ({})
+  },
+  canManage: {
+    type: Boolean,
+    default: false
   }
 })
 

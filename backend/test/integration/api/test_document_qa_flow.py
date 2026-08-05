@@ -255,6 +255,7 @@ async def test_draft_mode_qa_generated_before_cleaning_confirmation(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         qa_hit = next(item for item in search if item["metadata"]["chunk_id"] == f"qa:{draft['qa_id']}")
         assert qa_hit["metadata"]["file_id"] == file_id
@@ -423,6 +424,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert all(item["metadata"]["chunk_id"] != f"qa:{draft['qa_id']}" for item in before_confirm)
 
@@ -441,6 +443,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         qa_hit = next(item for item in search if item["metadata"]["chunk_id"] == f"qa:{draft['qa_id']}")
         assert "默认批次大小为 40" in qa_hit["content"]
@@ -469,6 +472,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert all(item["metadata"]["chunk_id"] != f"qa:{draft['qa_id']}" for item in after_edit)
 
@@ -518,6 +522,7 @@ async def test_document_qa_generate_edit_confirm_search_and_body_version(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert all(item["metadata"]["chunk_id"] != f"qa:{draft['qa_id']}" for item in stale_search)
         await kb_background_waiter(kb_id)

@@ -454,6 +454,11 @@ async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.Mo
         calls.append("recover_replacement_cleanups")
         return 0
 
+    async def fake_recover_conflict_publish_tasks(ctx):
+        assert ctx.get("redis") == "worker-redis"
+        calls.append("recover_conflict_publish_tasks")
+        return 0
+
     monkeypatch.setattr(run_worker.pg_manager, "initialize", fake_initialize)
     monkeypatch.setattr(run_worker.pg_manager, "create_business_tables", fake_create_business_tables)
     monkeypatch.setattr(run_worker.pg_manager, "ensure_business_schema", fake_ensure_business_schema)
@@ -466,6 +471,7 @@ async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.Mo
         "recover_pending_replacement_cleanups",
         fake_recover,
     )
+    monkeypatch.setattr(run_worker, "recover_knowledge_conflict_publish_tasks", fake_recover_conflict_publish_tasks)
     monkeypatch.setattr(run_worker.sys_config, "start_runtime_sync", fake_start_runtime_sync)
 
     await run_worker._worker_startup({"redis": "worker-redis"})
@@ -478,6 +484,7 @@ async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.Mo
         "ensure_builtin_mcp_servers_in_db",
         "init_builtin_skills",
         "recover_replacement_cleanups",
+        "recover_conflict_publish_tasks",
         "start_runtime_sync",
     ]
 

@@ -1,0 +1,129 @@
+relations:
+  HAS_FAMILY:
+    aliases:
+    - 属于类别
+    - 产品分类
+  HAS_PRODUCT:
+    aliases:
+    - 包含产品
+    - 旗下产品
+    - 子产品
+  SUPPORTS:
+    aliases:
+    - 支持
+    - 具备
+    - 拥有
+    - 提供
+    - 集成
+    - 内置
+    - 实现
+  USES:
+    aliases:
+    - 采用
+    - 使用
+    - 基于
+    - 依赖
+    - 应用
+    - 搭载
+  USED_IN:
+    aliases:
+    - 用于
+    - 应用于
+    - 服务于
+    - 覆盖
+  APPLICABLE_TO:
+    aliases:
+    - 适用行业
+    - 适用于
+    - 适合
+    - 面向
+    - 行业领域
+  COMPLIES_WITH:
+    aliases:
+    - 符合
+    - 遵循
+    - 遵守
+    - 满足
+    - 按照
+  HAS_CERTIFICATION:
+    aliases:
+    - 获得认证
+    - 通过认证
+    - 具备认证
+    - 取得认证
+  HAS_DEPLOYMENT:
+    aliases:
+    - 支持部署
+    - 部署方式
+    - 可部署
+    - 部署于
+    - 部署在
+  HAS_SPEC:
+    aliases:
+    - 规格
+    - 参数
+    - 配置
+    - 尺寸
+    - 容量
+    - 指标
+  HAS_DOCUMENT:
+    aliases:
+    - 有文档
+    - 提供文档
+    - 关联文档
+  HAS_SELLING_POINT:
+    aliases:
+    - 卖点
+    - 优势
+    - 特点
+    - 亮点
+  HAS_POSITIONING:
+    aliases:
+    - 产品定位
+    - 市场定位
+  HAS_CAPABILITY:
+    aliases:
+    - 能力
+    - 具备能力
+    - 核心能力
+    - 擅长
+  HAS_ROADMAP:
+    aliases:
+    - 规划
+    - 计划
+    - 路线图
+    - 版本计划
+  PLANS:
+    aliases:
+    - 规划上线
+    - 计划上线
+    - 计划推出
+  USES_PRODUCT:
+    aliases:
+    - 涉及产品
+    - 采用产品
+    - 使用产品
+  COMPATIBLE_WITH:
+    aliases:
+    - 兼容
+    - 适配
+    - 配合
+  SUPPORTED_BY:
+    aliases:
+    - 有证据
+    - 由证据支持
+    - 证据
+    - 依据
+  EXTRACTED_FROM:
+    aliases:
+    - 提取自
+    - 摘取自
+    - 来自文档
+    - 来源于文档
+  BELONGS_TO:
+    aliases:
+    - 属于行业
+    - 所属行业
+    - 归属行业
+  HAS_EVIDENCE:
+    aliases: []

@@ -21,6 +21,7 @@ from yuxi.services.document_ingestion_service import (
     DocumentIngestionService,
     process_document_replacement_cleanup,
 )
+from yuxi.services.graph_build_worker import process_knowledge_graph_index
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.knowledge_conflict_publish_service import (
     process_knowledge_conflict_publish,
@@ -576,6 +577,9 @@ async def recover_document_replacement_cleanups(ctx):
 
 
 async def _worker_shutdown(ctx):
+    from yuxi.storage.neo4j import close_shared_neo4j_connection
+
+    close_shared_neo4j_connection()
     await pg_manager.close()
 
 
@@ -584,6 +588,7 @@ class WorkerSettings:
         process_agent_run,
         func(process_document_replacement_cleanup, max_tries=REPLACEMENT_CLEANUP_MAX_TRIES),
         process_knowledge_conflict_publish,
+        process_knowledge_graph_index,
     ]
     cron_jobs = [
         cron(

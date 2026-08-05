@@ -20,6 +20,18 @@ def validate_username(username: str) -> tuple[bool, str]:
     return True, ""
 
 
+def validate_explicit_uid(uid: str) -> tuple[bool, str]:
+    if not uid:
+        return False, "UID 不能为空"
+    if uid != uid.strip():
+        return False, "UID 不能包含首尾空格"
+    if len(uid) > 64:
+        return False, "UID 长度不能超过64个字符"
+    if not re.fullmatch(r"[a-zA-Z0-9_.@-]+", uid):
+        return False, "UID 只能包含英文、数字、下划线、短横线、点和@"
+    return True, ""
+
+
 def generate_uid(username: str) -> str:
     uid = re.sub(r"[^a-zA-Z0-9_]", "", to_pinyin(username.strip()))
     if uid and uid[0].isdigit():

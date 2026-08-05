@@ -12,6 +12,7 @@ from yuxi.utils.logging_config import logger
 
 TaskCoroutine = Callable[["TaskContext"], Awaitable[Any]]
 TERMINAL_STATUSES = {"success", "failed", "cancelled"}
+EXTERNAL_TASK_TYPES = {"knowledge_graph_index"}
 # 纯进度推进时，进度增量小于该阈值则只更新内存、不落库（前端读内存，不受影响）
 PROGRESS_PERSIST_DELTA = 2.0
 # 内存与数据库各保留最近多少条终态任务，超出的自动清理
@@ -137,12 +138,14 @@ class Tasker:
         async with self._lock:
             if not self._started:
                 return
-            for worker in self._workers:
-                worker.cancel()
-            await asyncio.gather(*self._workers, return_exceptions=True)
+            workers = list(self._workers)
             self._workers.clear()
             self._started = False
-            logger.info("Tasker shutdown complete")
+
+        for worker in workers:
+            worker.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+        logger.info("Tasker shutdown complete")
 
     async def enqueue(
         self,
@@ -200,18 +203,25 @@ class Tasker:
         payload_match: dict[str, Any],
         statuses: set[str] | None,
     ) -> Task | None:
-        for task in self._tasks.values():
-            if task.type != task_type:
-                continue
-            if statuses is not None and task.status not in statuses:
-                continue
-            if all(task.payload.get(key) == value for key, value in payload_match.items()):
-                return task
-        return None
+        matches = [
+            task
+            for task in self._tasks.values()
+            if task.type == task_type
+            and (statuses is None or task.status in statuses)
+            and all(task.payload.get(key) == value for key, value in payload_match.items())
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda task: (task.created_at or "", task.updated_at or "", task.id))
 
     async def list_tasks(self, status: str | None = None, limit: int = 100) -> dict[str, Any]:
         async with self._lock:
-            all_tasks = list(self._tasks.values())
+            task_map = dict(self._tasks)
+        for record in await self._repo.list_all():
+            record_data = record.to_dict()
+            if record_data.get("type") in EXTERNAL_TASK_TYPES:
+                task_map[record_data["id"]] = Task.from_dict(record_data)
+        all_tasks = list(task_map.values())
 
         status_counter = Counter(task.status for task in all_tasks)
         type_counter = Counter(task.type for task in all_tasks)
@@ -238,9 +248,16 @@ class Tasker:
     async def get_task(self, task_id: str) -> dict[str, Any] | None:
         async with self._lock:
             task = self._tasks.get(task_id)
-        return task.to_dict() if task else None
+        if task and task.type not in EXTERNAL_TASK_TYPES:
+            return task.to_dict()
+        record = await self._repo.get_by_id(task_id)
+        return record.to_dict() if record else (task.to_dict() if task else None)
 
     async def cancel_task(self, task_id: str) -> bool:
+        record = await self._repo.get_by_id(task_id)
+        if record and record.type in EXTERNAL_TASK_TYPES:
+            return await self._repo.request_cancel(task_id)
+
         async with self._lock:
             task = self._tasks.get(task_id)
             if not task:
@@ -255,6 +272,12 @@ class Tasker:
 
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task by id. Returns True if deleted, False if not found."""
+        record = await self._repo.get_by_id(task_id)
+        if record and record.type in EXTERNAL_TASK_TYPES:
+            if record.status not in TERMINAL_STATUSES:
+                return False
+            return await self._repo.delete(task_id)
+
         async with self._lock:
             if task_id not in self._tasks:
                 return False
@@ -294,6 +317,8 @@ class Tasker:
                         )
                     except asyncio.CancelledError:
                         await self._mark_cancelled(task_id, "任务被取消")
+                        if not self._started:
+                            return
                     except Exception as exc:  # noqa: BLE001
                         logger.exception("Task {} failed: {}", task_id, exc)
                         await self._update_task(
@@ -397,11 +422,15 @@ class Tasker:
         interrupted = 0
         for record in records:
             task = Task.from_dict(record.to_dict())
+            if task.type in EXTERNAL_TASK_TYPES:
+                continue
             if task.status not in TERMINAL_STATUSES:
                 # 进程重启后内存队列已丢失，无法续跑，统一标记为失败
                 task.message = "服务重启时任务中断" if task.status == "running" else "服务重启时任务未继续执行"
                 task.status = "failed"
-                task.updated_at = utc_isoformat()
+                task.error = task.message
+                task.completed_at = utc_isoformat()
+                task.updated_at = task.completed_at
                 await self._persist_task(task)
                 interrupted += 1
             self._tasks[task.id] = task

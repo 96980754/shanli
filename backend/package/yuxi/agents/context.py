@@ -168,7 +168,7 @@ class BaseContext:
         default="You are a helpful assistant.",
         metadata={"name": "系统提示词", "description": "用来描述智能体的角色和行为", "kind": "prompt"},
     )
-
+# 傻逼
     model: str = field(
         default="",
         metadata={
@@ -186,6 +186,14 @@ class BaseContext:
             "description": "内置的工具。默认选择当前用户可用的全部工具。",
             "type": "list",
             "kind": "tools",
+        },
+    )
+
+    ask_user_question_enabled: bool = field(
+        default=False,
+        metadata={
+            "name": "向用户提问",
+            "description": "允许智能体在信息不足时弹窗向用户提问澄清。默认关闭。",
         },
     )
 
@@ -431,7 +439,7 @@ async def resolve_agent_resource_options(
         options["tools"] = [
             _resource_option(tool["slug"], tool.get("name"), tool.get("description"))
             for tool in get_tool_metadata(category="buildin")
-            if tool.get("slug")
+            if tool.get("slug") and tool.get("slug") != "ask_user_question"
         ]
     if "knowledges" in fields_to_load:
         from yuxi.knowledge.runtime import knowledge_base

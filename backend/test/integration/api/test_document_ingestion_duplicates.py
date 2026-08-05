@@ -949,6 +949,7 @@ async def test_real_replacement_saga_preserves_history_and_switches_milvus_visib
                 search_mode=search_mode,
                 final_top_k=10,
                 similarity_threshold=-1.0,
+                use_reranker=False,
             )
             assert new_file_id not in _result_file_ids(before_switch)
 
@@ -1009,6 +1010,7 @@ async def test_real_replacement_saga_preserves_history_and_switches_milvus_visib
                 search_mode=search_mode,
                 final_top_k=10,
                 similarity_threshold=-1.0,
+                use_reranker=False,
             )
             assert new_file_id in _result_file_ids(after_switch)
 

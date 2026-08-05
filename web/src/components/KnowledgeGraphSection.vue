@@ -176,9 +176,12 @@
                 <span class="status-label">状态</span>
                 <a-tag v-if="isBuildActive" color="blue" size="small">构建中</a-tag>
                 <a-tag v-else-if="isBuildFailed" color="red" size="small">构建失败</a-tag>
-                <a-tag v-else-if="graphBuildStatus?.locked" color="green" size="small"
-                  >已配置</a-tag
-                >
+                <a-tag v-else-if="isBuildCancelled" size="small">已取消</a-tag>
+                <a-tag v-else-if="graphBuildStatus?.published" color="green" size="small">已创建</a-tag>
+                <a-tag v-else-if="graphBuildStatus?.configured && graphBuildStatus?.locked" color="orange" size="small">
+                  已配置，未创建
+                </a-tag>
+                <a-tag v-else-if="graphBuildStatus?.configured" color="orange" size="small">已配置，待确认</a-tag>
                 <a-tag v-else color="orange" size="small">未配置</a-tag>
               </div>
               <a-progress
@@ -188,6 +191,18 @@
                 size="small"
                 style="margin-bottom: 10px"
               />
+              <a-alert
+                v-if="buildTaskFailureMessage"
+                :type="isBuildFailed ? 'error' : 'warning'"
+                show-icon
+                class="build-task-alert"
+                :message="buildTaskFailureMessage"
+              />
+              <div v-if="buildTaskResult" class="build-result-summary">
+                <span>成功 {{ buildTaskResult.success ?? 0 }}</span>
+                <span>失败 {{ buildTaskResult.failed ?? 0 }}</span>
+                <span>剩余 {{ buildTaskResult.remaining ?? 0 }}</span>
+              </div>
               <div class="stats-grid">
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.total_chunks ?? '-' }}</span>
@@ -212,7 +227,7 @@
               </div>
               <div class="build-actions">
                 <a-button
-                  v-if="!graphBuildStatus?.locked"
+                  v-if="!graphBuildStatus?.configured"
                   type="primary"
                   block
                   @click="openGraphConfig"
@@ -223,7 +238,7 @@
                   构建中 {{ graphBuildStatus?.build_task_progress ?? 0 }}%
                 </a-button>
                 <a-button
-                  v-else-if="isBuildFailed"
+                  v-else-if="canRetryBuild"
                   type="primary"
                   block
                   :disabled="!graphBuildStatus?.pending_chunks"
@@ -242,7 +257,7 @@
                 </a-button>
                 <div class="actions-secondary">
                   <a-button
-                    v-if="graphBuildStatus?.locked && !isBuildActive"
+                    v-if="graphBuildStatus?.configured && !isBuildActive"
                     size="small"
                     type="text"
                     @click="openGraphConfig"
@@ -253,7 +268,7 @@
                     size="small"
                     type="text"
                     danger
-                    v-if="graphBuildStatus?.locked && !isBuildActive"
+                    v-if="graphBuildStatus?.configured && !isBuildActive"
                     @click="confirmResetGraph"
                     >重置</a-button
                   >
@@ -315,11 +330,32 @@
             @select-model="(spec) => (graphConfigForm.model_spec = spec)"
           />
         </a-form-item>
-        <a-form-item label="Schema">
+        <a-form-item v-if="!isLegacyGraphConfig" label="Core Ontology">
+          <a-select
+            v-model:value="graphConfigForm.ontology_key"
+            :loading="ontologyRegistryLoading"
+            :options="ontologyRegistryOptions"
+            placeholder="选择 Core Ontology"
+            show-search
+            option-filter-prop="label"
+            @change="selectOntologyRegistry"
+          />
+          <div class="ontology-help">
+            Core Ontology 固化企业知识结构；领域扩展只能新增实体、关系、词典和属性，不能覆盖 Core。
+          </div>
+        </a-form-item>
+        <a-form-item :label="isLegacyGraphConfig ? '旧版自由文本 Schema' : '领域 Ontology 扩展（YAML）'">
           <a-textarea
+            v-if="isLegacyGraphConfig"
             v-model:value="graphConfigForm.schema"
             :rows="6"
-            placeholder="描述实体类型、关系类型和属性约束。后端会把 Schema 拼接到固定抽取 Prompt 中。"
+            placeholder="历史配置继续按原方式追加到固定抽取 Prompt。"
+          />
+          <a-textarea
+            v-else
+            v-model:value="graphConfigForm.domain_schema"
+            :rows="10"
+            placeholder="entities:\n  DomainEntity:\n    description: 领域实体\nrelations:\n  DOMAIN_RELATION:\n    source: DomainEntity\n    target: DomainEntity"
           />
         </a-form-item>
         <div class="form-grid two-columns">
@@ -327,7 +363,7 @@
             <a-input-number
               v-model:value="graphConfigForm.concurrency_count"
               :min="1"
-              :max="1000"
+              :max="MAX_GRAPH_CONCURRENCY"
               :step="1"
               style="width: 100%"
             />
@@ -365,6 +401,7 @@ import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
 import { getKbTypeLabel } from '@/utils/kb_utils'
 import { unifiedApi } from '@/apis/graph_api'
 import { graphBuildApi } from '@/apis/knowledge_api'
+import { ontologyRegistryApi } from '@/apis/ontology_api'
 import { Modal, message } from 'ant-design-vue'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import { useGraph } from '@/composables/useGraph'
@@ -400,6 +437,8 @@ const subgraphParams = reactive({
 const searchInput = ref('')
 const graphBuildStatus = ref(null)
 const graphBuildLoading = ref(false)
+const ontologyRegistries = ref([])
+const ontologyRegistryLoading = ref(false)
 const showGraphConfig = ref(false)
 let buildStatusPollTimer = null
 
@@ -431,8 +470,27 @@ const isBuildFailed = computed(() => {
   return graphBuildStatus.value?.build_task_status === 'failed'
 })
 
+const isBuildCancelled = computed(() => {
+  return graphBuildStatus.value?.build_task_status === 'cancelled'
+})
+
+const buildTaskResult = computed(() => graphBuildStatus.value?.build_task_result || null)
+
+const buildTaskFailureMessage = computed(() => {
+  if (!isBuildFailed.value && !isBuildCancelled.value) return ''
+  return (
+    graphBuildStatus.value?.build_task_error ||
+    graphBuildStatus.value?.build_task_message ||
+    (isBuildCancelled.value ? '图谱构建任务已取消' : '图谱构建任务失败')
+  )
+})
+
 const pendingGraphChunks = computed(() => {
   return Number(graphBuildStatus.value?.pending_chunks ?? 0)
+})
+
+const canRetryBuild = computed(() => {
+  return (isBuildFailed.value || isBuildCancelled.value) && pendingGraphChunks.value > 0
 })
 
 const hasPendingGraphChunks = computed(() => pendingGraphChunks.value > 0)
@@ -440,6 +498,7 @@ const hasPendingGraphChunks = computed(() => pendingGraphChunks.value > 0)
 const isGraphIndexComplete = computed(() => {
   return (
     Boolean(graphBuildStatus.value?.locked) &&
+    Boolean(graphBuildStatus.value?.published) &&
     !isBuildActive.value &&
     pendingGraphChunks.value === 0
   )
@@ -453,9 +512,11 @@ const graphIndexDotStatus = computed(() => {
 })
 
 const graphIndexButtonTitle = computed(() => {
+  if (isBuildActive.value) return '索引管理，索引中'
   if (hasPendingGraphChunks.value) return `索引管理，${pendingGraphChunks.value} 待索引`
   if (isGraphIndexComplete.value) return '索引管理，已全部索引'
-  if (isBuildActive.value) return '索引管理，索引中'
+  if (isGraphConfigured.value && !graphBuildStatus.value?.locked) return '索引管理，配置尚未确认'
+  if (graphBuildStatus.value?.locked && !graphBuildStatus.value?.published) return '索引管理，已配置但尚未创建图谱'
   return '索引管理'
 })
 
@@ -469,7 +530,12 @@ const toggleSettingsPanel = () => {
   showBuildPanel.value = false
 }
 
-const isEditingGraphConfig = computed(() => Boolean(graphBuildStatus.value?.locked))
+const isGraphConfigured = computed(() => Boolean(graphBuildStatus.value?.configured))
+const isEditingGraphConfig = computed(() => isGraphConfigured.value)
+const isLegacyGraphConfig = computed(() => {
+  if (!isEditingGraphConfig.value) return false
+  return !graphBuildStatus.value?.config?.extractor_options?.ontology_registry_id
+})
 
 const graphConfigTitle = computed(() =>
   isEditingGraphConfig.value ? '修改图谱抽取配置' : '配置图谱抽取器'
@@ -500,11 +566,19 @@ watch(
   },
   { immediate: true }
 )
+const DEFAULT_GRAPH_CONCURRENCY = 5
+const MAX_GRAPH_CONCURRENCY = 20
+
 const graphConfigForm = reactive({
   extractor_type: 'llm',
   model_spec: '',
+  ontology_key: '',
+  ontology_registry_id: '',
+  ontology_version: '',
+  ontology_digest: '',
+  domain_schema: '',
   schema: '',
-  concurrency_count: 50,
+  concurrency_count: DEFAULT_GRAPH_CONCURRENCY,
   model_params_text: ''
 })
 
@@ -515,12 +589,12 @@ const graphLoaded = ref(false)
 const isGraphSupported = computed(() => GRAPH_SUPPORTED_KB_TYPES.has(kbType.value?.toLowerCase()))
 const hasGraphNodes = computed(() => graph.graphData.nodes.length > 0)
 const showGraphConfigEmpty = computed(
-  () => isMilvus.value && !graphBuildStatus.value?.locked && !graphBuildLoading.value
+  () => isMilvus.value && !isGraphConfigured.value && !graphBuildLoading.value
 )
 const showGraphDataEmpty = computed(
   () =>
     isMilvus.value &&
-    Boolean(graphBuildStatus.value?.locked) &&
+    isGraphConfigured.value &&
     graphLoaded.value &&
     !graph.fetching &&
     !hasGraphNodes.value
@@ -532,7 +606,9 @@ const graphDataEmptyDescription = computed(() => {
   if (searchInput.value.trim()) return '换个关键词或调整图谱设置后再搜索。'
   if (isBuildActive.value) return '图谱索引正在运行，完成后会展示实体与关系。'
   if (hasPendingGraphChunks.value) return '当前还有待索引 Chunk，完成索引后会展示实体与关系。'
-  return '当前知识库还没有可展示的实体与关系。'
+  if (!graphBuildStatus.value?.total_chunks) return '当前没有可用于创建知识图谱的文档 Chunk。'
+  if (!graphBuildStatus.value?.published) return '抽取器已配置，但当前版本尚未形成可展示的图谱。'
+  return '当前筛选条件下没有可展示的实体与关系。'
 })
 
 let pendingLoadTimer = null
@@ -578,19 +654,74 @@ const parseModelParams = () => {
   return params
 }
 
+const ontologyEntryKey = (entry) =>
+  `${entry.registry_id}:${entry.version}:${entry.digest}`
+
+const ontologyRegistryOptions = computed(() =>
+  ontologyRegistries.value.map((entry) => ({
+    value: ontologyEntryKey(entry),
+    label: `${entry.name} · ${entry.registry_id} · ${entry.version}`
+  }))
+)
+
+const selectOntologyRegistry = (key) => {
+  const entry = ontologyRegistries.value.find((item) => ontologyEntryKey(item) === key)
+  if (!entry) return
+  graphConfigForm.ontology_registry_id = entry.registry_id
+  graphConfigForm.ontology_version = entry.version
+  graphConfigForm.ontology_digest = entry.digest
+}
+
+const findConfiguredOntology = (options, ontology) => {
+  const registryId = options.ontology_registry_id || ontology.registry_id
+  const version = options.ontology_version || ontology.version
+  const digest = options.ontology_digest || ontology.digest
+  return ontologyRegistries.value.find((entry) => {
+    if (entry.registry_id !== registryId || entry.version !== version) return false
+    return !digest || entry.digest === digest
+  })
+}
+
+const loadOntologyRegistries = async () => {
+  ontologyRegistryLoading.value = true
+  try {
+    const result = await ontologyRegistryApi.list()
+    ontologyRegistries.value = result.items || []
+  } catch (e) {
+    console.error('Failed to load ontology registries:', e)
+    message.error(getErrorDetail(e, '加载 Core Ontology 失败'))
+  } finally {
+    ontologyRegistryLoading.value = false
+  }
+}
+
 const fillGraphConfigForm = () => {
   const config = graphBuildStatus.value?.config
   const options = config?.extractor_options || {}
+  const ontology = graphBuildStatus.value?.ontology || {}
   graphConfigForm.extractor_type = 'llm'
   graphConfigForm.model_spec = options.model_spec || configStore.config?.default_model || ''
+  const selectedOntology = findConfiguredOntology(options, ontology)
+    || ontologyRegistries.value.find((entry) => entry.is_default)
+    || ontologyRegistries.value.find((entry) => entry.source === 'builtin')
+    || ontologyRegistries.value[0]
+  graphConfigForm.ontology_key = selectedOntology ? ontologyEntryKey(selectedOntology) : ''
+  graphConfigForm.ontology_registry_id = selectedOntology?.registry_id || ''
+  graphConfigForm.ontology_version = selectedOntology?.version || ''
+  graphConfigForm.ontology_digest = selectedOntology?.digest || ''
+  graphConfigForm.domain_schema = options.domain_schema || ''
   graphConfigForm.schema = options.schema || ''
-  graphConfigForm.concurrency_count = Number(options.concurrency_count || 50)
+  graphConfigForm.concurrency_count = Number(options.concurrency_count || DEFAULT_GRAPH_CONCURRENCY)
   graphConfigForm.model_params_text = options.model_params
     ? JSON.stringify(options.model_params)
     : ''
 }
 
-const openGraphConfig = () => {
+const openGraphConfig = async () => {
+  if (!isLegacyGraphConfig.value) {
+    await loadOntologyRegistries()
+    if (!ontologyRegistries.value.length) return
+  }
   fillGraphConfigForm()
   showGraphConfig.value = true
 }
@@ -601,16 +732,54 @@ const selectExtractorType = (option) => {
 }
 
 const buildExtractorOptions = () => {
-  return {
+  const options = {
     model_spec: graphConfigForm.model_spec,
-    schema: graphConfigForm.schema.trim(),
-    concurrency_count: graphConfigForm.concurrency_count || 50,
+    concurrency_count: graphConfigForm.concurrency_count || DEFAULT_GRAPH_CONCURRENCY,
     model_params: parseModelParams()
   }
+  if (isLegacyGraphConfig.value) {
+    options.schema = graphConfigForm.schema.trim()
+    return options
+  }
+  options.ontology_registry_id = graphConfigForm.ontology_registry_id
+  options.ontology_version = graphConfigForm.ontology_version
+  options.ontology_digest = graphConfigForm.ontology_digest
+  options.domain_schema = graphConfigForm.domain_schema.trim()
+  return options
+}
+
+const hasExistingGraphData = () => {
+  const status = graphBuildStatus.value || {}
+  return [
+    status.indexed_chunks,
+    status.extraction_result_count,
+    status.entity_count,
+    status.relationship_count
+  ].some((count) => Number(count || 0) > 0)
+}
+
+const isOntologyChanged = () => {
+  const options = graphBuildStatus.value?.config?.extractor_options || {}
+  const ontology = graphBuildStatus.value?.ontology || {}
+  return (
+    graphConfigForm.ontology_registry_id !==
+      (options.ontology_registry_id || ontology.registry_id) ||
+    graphConfigForm.ontology_version !== (options.ontology_version || ontology.version) ||
+    graphConfigForm.ontology_digest !== (options.ontology_digest || ontology.digest)
+  )
 }
 
 const configureGraphBuild = async () => {
   try {
+    if (
+      !isLegacyGraphConfig.value &&
+      isEditingGraphConfig.value &&
+      isOntologyChanged() &&
+      hasExistingGraphData()
+    ) {
+      message.warning('当前知识库已有图谱或抽取数据，请先重置后再切换 Core Ontology')
+      return
+    }
     document.activeElement?.blur()
     await nextTick()
     await graphBuildApi.configure(kbId.value, {
@@ -790,6 +959,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="less">
+.ontology-help {
+  margin-top: 6px;
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .graph-section {
   height: 100%;
   display: flex;
@@ -1013,6 +1189,18 @@ onUnmounted(() => {
       color: var(--gray-600);
       font-size: 12px;
     }
+  }
+
+  .build-task-alert {
+    margin-bottom: 8px;
+  }
+
+  .build-result-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: var(--gray-600);
+    font-size: 12px;
   }
 
   .stats-grid {

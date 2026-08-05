@@ -1,8 +1,25 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateIndex
 
 from yuxi.storage.postgres.manager import PostgresManager
+from yuxi.storage.postgres.models_knowledge import KnowledgeBaseCategory
+
+
+def test_category_name_index_references_name_column():
+    index = next(
+        index
+        for index in KnowledgeBaseCategory.__table__.indexes
+        if index.name == "uq_knowledge_base_categories_lower_name"
+    )
+
+    sql = str(CreateIndex(index).compile(dialect=postgresql.dialect()))
+
+    assert "UNIQUE INDEX" in sql
+    assert "lower(name)" in sql
+    assert "lower('name')" not in sql
 
 
 class _RecordingConnection:
@@ -141,6 +158,68 @@ async def test_ensure_business_schema_removes_unbound_api_keys_before_requiring_
 
 
 @pytest.mark.asyncio
+async def test_ensure_knowledge_schema_backfills_document_versions_before_unique_indexes():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)" in statements
+    assert "ADD COLUMN IF NOT EXISTS document_version INTEGER" in statements
+    assert "ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE" in statements
+    assert "SET logical_document_id = file_id" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_conflicts" in statements
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version" in statements
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version" in statements
+    assert statements.index("SET logical_document_id = file_id") < statements.index(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_document_version"
+    )
+    assert statements.index("SET logical_document_id = file_id") < statements.index(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_files_current_version"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_knowledge_schema_creates_validation_report_tables():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "CREATE TABLE IF NOT EXISTS knowledge_validation_reports" in statements
+    assert "CREATE TABLE IF NOT EXISTS knowledge_validation_items" in statements
+    assert "uq_knowledge_validation_reports_candidate UNIQUE (candidate_file_id)" in statements
+    assert "REFERENCES knowledge_validation_reports(report_id) ON DELETE CASCADE" in statements
+    assert "old_file_id VARCHAR(64) NOT NULL" in statements
+    assert "candidate_file_id VARCHAR(64) NOT NULL" in statements
+    assert "ix_knowledge_validation_reports_status" in statements
+    assert "ix_knowledge_validation_items_change_type" in statements
+    assert statements.index("CREATE TABLE IF NOT EXISTS knowledge_validation_reports") < statements.index(
+        "CREATE TABLE IF NOT EXISTS knowledge_validation_items"
+    )
+
+
+@pytest.mark.asyncio
 async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     manager = PostgresManager()
     original_initialized = manager._initialized
@@ -185,7 +264,7 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "CREATE TABLE IF NOT EXISTS knowledge_assertions" in statements
     assert "CREATE TABLE IF NOT EXISTS entity_link_candidates" in statements
     assert "CREATE TABLE IF NOT EXISTS knowledge_conflicts" in statements
-    assert "incoming_assertion_id VARCHAR(64) NOT NULL UNIQUE" in statements
+    assert "incoming_assertion_id VARCHAR(64) UNIQUE" in statements
     assert "publish_status VARCHAR(32) NOT NULL DEFAULT 'not_requested'" in statements
     assert "ix_knowledge_conflicts_kb_status" in statements
     assert "CREATE TABLE IF NOT EXISTS knowledge_conflict_publish_tasks" in statements
@@ -229,3 +308,42 @@ def test_knowledge_publish_task_model_has_unique_index_names():
     index_names = [index.name for index in KnowledgeConflictPublishTask.__table__.indexes]
 
     assert len(index_names) == len(set(index_names))
+
+
+@pytest.mark.asyncio
+async def test_ensure_knowledge_schema_backfills_categories_before_requiring_category_id():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_knowledge_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "CREATE TABLE IF NOT EXISTS knowledge_base_categories" in statements
+    assert "pg_get_expr(index_info.indexprs, index_info.indrelid)" in statements
+    assert "lower(''name''::text)" in statements
+    assert "DROP INDEX uq_knowledge_base_categories_lower_name" in statements
+    assert "ON knowledge_base_categories(lower(name))" in statements
+    assert "uq_knowledge_base_categories_lower_name" in statements
+    assert "uq_knowledge_base_categories_default" in statements
+    assert "SELECT '其他', 10000, TRUE, TRUE" in statements
+    assert "SET category_id = (SELECT id FROM knowledge_base_categories" in statements
+    assert "FOREIGN KEY (category_id) REFERENCES knowledge_base_categories(id) ON DELETE RESTRICT" in statements
+    assert "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL" in statements
+    assert statements.index("pg_get_expr(index_info.indexprs, index_info.indrelid)") < statements.index(
+        "ON knowledge_base_categories(lower(name))"
+    )
+    assert statements.index("SELECT '其他', 10000, TRUE, TRUE") < statements.index(
+        "SET category_id = (SELECT id FROM knowledge_base_categories"
+    )
+    assert statements.index("SET category_id = (SELECT id FROM knowledge_base_categories") < statements.index(
+        "ALTER TABLE IF EXISTS knowledge_bases ALTER COLUMN category_id SET NOT NULL"
+    )

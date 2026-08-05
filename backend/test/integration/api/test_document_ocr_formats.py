@@ -156,5 +156,6 @@ async def test_png_jpeg_and_scanned_pdf_ocr_chunk_index_and_retrieve(
             search_mode="vector",
             final_top_k=20,
             similarity_threshold=-1.0,
+            use_reranker=False,
         )
         assert file_id in _result_file_ids(results)

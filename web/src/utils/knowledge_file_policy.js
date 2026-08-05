@@ -18,7 +18,7 @@ export const getFolderCreateErrorMessage = (error) => {
 }
 
 const STATUS_VIEW = {
-  uploaded: { label: '待解析', tone: 'status-warning', icon: 'clock' },
+  uploaded: { label: '待审核', tone: 'status-warning', icon: 'clock' },
   parsing: { label: '解析中', tone: 'status-info', icon: 'progress' },
   parsed: { label: '待入库', tone: 'status-primary', icon: 'file' },
   cleaning: { label: '清洗中', tone: 'status-info', icon: 'progress' },
@@ -33,7 +33,18 @@ const STATUS_VIEW = {
   done: { label: '已入库', tone: 'status-success', icon: 'success' },
   failed: { label: '入库失败', tone: 'status-error', icon: 'error' },
   processing: { label: '处理中', tone: 'status-info', icon: 'progress' },
-  waiting: { label: '等待中', tone: 'status-warning', icon: 'clock' }
+  waiting: { label: '等待中', tone: 'status-warning', icon: 'clock' },
+  conflict_detecting: { label: '冲突检测中', tone: 'status-info', icon: 'progress' },
+  conflict_clear: { label: '冲突检测通过', tone: 'status-success', icon: 'success' },
+  conflict_review: { label: '待审核冲突', tone: 'status-warning', icon: 'clock' },
+  conflict_inconclusive: { label: '冲突证据不足', tone: 'status-warning', icon: 'clock' },
+  conflict_detection_failed: { label: '冲突检测失败', tone: 'status-error', icon: 'error' },
+  version_task_failed: { label: '版本更新失败', tone: 'status-error', icon: 'error' },
+  validation_processing: { label: '知识变更分析中', tone: 'status-info', icon: 'progress' },
+  validation_review: { label: '待审核知识变更', tone: 'status-warning', icon: 'clock' },
+  validation_accepted: { label: '知识变更已接受', tone: 'status-success', icon: 'success' },
+  validation_failed: { label: '知识变更分析失败', tone: 'status-error', icon: 'error' },
+  validation_rejected: { label: '新版已拒绝', tone: 'status-error', icon: 'error' }
 }
 
 const STATUS_ACTION = {
@@ -124,7 +135,7 @@ const STATUS_SORT_ORDER = {
 }
 
 export const FILE_STATUS_FILTER_OPTIONS = [
-  { label: '待解析', value: 'uploaded' },
+  { label: '待审核', value: 'uploaded' },
   { label: '解析中', value: 'parsing' },
   { label: '待入库', value: 'parsed' },
   { label: '待确认清洗', value: 'waiting_confirmation' },

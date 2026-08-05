@@ -2,9 +2,12 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 from yuxi.repositories import knowledge_chunk_repository as repo_module
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository, SQL_IN_BATCH_SIZE
+from yuxi.storage.postgres.models_knowledge import KnowledgeChunk
 
 
 def _extract_id_batch(statement) -> list[str]:
@@ -20,6 +23,34 @@ def test_iter_batches_limits_sql_in_arguments():
 
     assert [len(batch) for batch in batches] == [SQL_IN_BATCH_SIZE, SQL_IN_BATCH_SIZE, 1]
     assert [item for batch in batches for item in batch] == ids
+
+
+def test_extraction_result_column_writes_none_as_sql_null():
+    implementation = KnowledgeChunk.extraction_result.type.dialect_impl(postgresql.dialect())
+
+    assert implementation.none_as_null is True
+
+
+@pytest.mark.asyncio
+async def test_count_with_extraction_result_excludes_json_null(monkeypatch):
+    captured_conditions = ()
+
+    async def fake_count(_self, kb_id, *conditions):
+        nonlocal captured_conditions
+        assert kb_id == "kb-1"
+        captured_conditions = conditions
+        return 1
+
+    monkeypatch.setattr(KnowledgeChunkRepository, "_count_by_kb_id", fake_count)
+
+    count = await KnowledgeChunkRepository().count_with_extraction_result_by_kb_id("kb-1")
+
+    assert count == 1
+    statement = select(KnowledgeChunk).where(*captured_conditions)
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+    assert "extraction_result IS NOT NULL" in compiled
+    assert "jsonb_typeof" in compiled
+    assert "null" in statement.compile().params.values()
 
 
 @pytest.mark.asyncio

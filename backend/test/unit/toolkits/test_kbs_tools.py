@@ -117,6 +117,9 @@ async def test_query_kb_returns_search_schema_without_sandbox_paths(monkeypatch)
     runtime = SimpleNamespace(context=SimpleNamespace())
     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
 
+    assert result["schema_version"] == 1
+    assert result["status"] == "ok"
+    assert result["reason"] is None
     assert result["kb_id"] == "db-1"
     assert result["results"][0]["id"] == "file-1:1"
     assert result["results"][0]["kb_id"] == "db-1"
@@ -150,6 +153,9 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
 
     assert result == {
+        "schema_version": 1,
+        "status": "ok",
+        "reason": None,
         "kb_id": "db-1",
         "results": [
             {
@@ -165,11 +171,11 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
                 },
             }
         ],
+        "error": None,
     }
 
-
 @pytest.mark.asyncio
-async def test_query_kb_returns_plain_result_without_path_injection(monkeypatch) -> None:
+async def test_query_kb_rejects_non_list_result(monkeypatch) -> None:
     async def _fake_retriever(query_text: str, **kwargs):
         assert query_text == "auth"
         return "Milvus context"
@@ -180,7 +186,61 @@ async def test_query_kb_returns_plain_result_without_path_injection(monkeypatch)
     runtime = SimpleNamespace(context=SimpleNamespace())
     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
 
-    assert result == "Milvus context"
+    assert result["status"] == "error"
+    assert result["reason"] == "invalid_result"
+    assert result["results"] == []
+    assert result["error"]["code"] == "invalid_result"
+
+
+@pytest.mark.asyncio
+async def test_query_kb_returns_insufficient_for_empty_results(monkeypatch) -> None:
+    async def _fake_retriever(query_text: str, **kwargs):
+        return []
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    result = await _run_query_kb(kb_id="db-1", query_text="missing", runtime=SimpleNamespace(context=SimpleNamespace()))
+
+    assert result == {
+        "schema_version": 1,
+        "status": "insufficient",
+        "reason": "no_results",
+        "kb_id": "db-1",
+        "results": [],
+        "error": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_query_kb_returns_insufficient_for_empty_content(monkeypatch) -> None:
+    async def _fake_retriever(query_text: str, **kwargs):
+        return [{"content": "   ", "chunk_id": "chunk-empty"}]
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    result = await _run_query_kb(kb_id="db-1", query_text="missing", runtime=SimpleNamespace(context=SimpleNamespace()))
+
+    assert result["status"] == "insufficient"
+    assert result["reason"] == "empty_content"
+    assert result["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_query_kb_returns_structured_retrieval_error(monkeypatch) -> None:
+    async def _fake_retriever(query_text: str, **kwargs):
+        raise TimeoutError("secret upstream details")
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=SimpleNamespace(context=SimpleNamespace()))
+
+    assert result["status"] == "error"
+    assert result["reason"] == "retrieval_error"
+    assert result["error"]["message"] == "知识库检索服务暂时不可用"
+    assert "secret" not in result["error"]["message"]
 
 
 @pytest.mark.asyncio

@@ -3,18 +3,25 @@ import os
 import textwrap
 import time
 import traceback
-from urllib.parse import quote, unquote
+import uuid
+from datetime import datetime
+from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
-from yuxi.permissions.knowledge import KnowledgePermissionService
+from pydantic import BaseModel, ConfigDict, Field
+from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
+from yuxi.repositories.task_repository import TaskRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
 from yuxi.knowledge.base import FileStatus
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
-from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_TASK_TYPE, MilvusGraphService
+from yuxi.knowledge.graphs.milvus_graph_service import (
+    GRAPH_TASK_TYPE,
+    MilvusGraphService,
+    OntologySwitchRequiresResetError,
+)
 from yuxi.knowledge.parser.unified import (
     Parser,
     ensure_supported_file_extension,
@@ -39,7 +46,7 @@ from yuxi.knowledge.utils.sample_question_utils import (
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
-from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
+from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository, ParentFolderNotFoundError
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from yuxi.services.document_ingestion_service import (
     DocumentIngestionService,
@@ -75,14 +82,19 @@ from yuxi.services.knowledge_conflict_service import (
     KnowledgeConflictService,
     KnowledgeConflictVersionError,
 )
+from yuxi.services.document_version_service import DocumentVersionService
+from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
+from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
+from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
+from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
-from server.utils.auth_middleware import get_admin_user, get_required_user
+from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -124,8 +136,23 @@ class UpdateDatabaseRequest(BaseModel):
     name: str
     description: str
     llm_model_spec: str | None = None
+    category_id: int | None = None
     additional_params: dict | None = None
     share_config: dict | None = None
+
+
+class KnowledgeCategoryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    sort_order: int = 0
+
+
+class KnowledgeCategoryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    sort_order: int | None = None
 
 
 class KnowledgePermissionUpsertRequest(BaseModel):
@@ -164,6 +191,30 @@ class WorkspaceImportRequest(BaseModel):
 class AddUploadedDocumentsRequest(BaseModel):
     items: list[str]
     params: dict | None = None
+
+
+class DocumentVersionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    content_hash: str
+    filename: str
+    original_filename: str | None = None
+    file_size: int | None = None
+    processing_params: dict | None = None
+
+
+class DocumentVersionActivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_current_file_id: str
+    accept_conflicts: bool = False
+
+
+class DocumentVersionRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class PendingIndexDocumentsRequest(BaseModel):
@@ -270,6 +321,25 @@ class KnowledgeConflictBatchResolveItem(KnowledgeConflictResolveRequest):
 
 class KnowledgeConflictBatchResolveRequest(BaseModel):
     items: list[KnowledgeConflictBatchResolveItem] = Field(min_length=1, max_length=200)
+
+
+class GlobalKnowledgeSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+
+async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
+    databases = await knowledge_base.get_databases_by_uid(current_user.uid)
+    context = _user_permission_context(current_user)
+    allowed = []
+    names = {}
+    permission_service = KnowledgePermissionService()
+    for database in databases.get("databases", []):
+        kb_id = database.get("kb_id")
+        if kb_id and await permission_service.has_permission(context, kb_id, "can_view"):
+            allowed.append(kb_id)
+            names[kb_id] = database.get("name") or kb_id
+    return allowed, names
 
 
 media_types = {
@@ -410,7 +480,7 @@ def _request_uses_replace(params: dict) -> bool:
 
 async def _has_running_graph_build_task(kb_id: str) -> bool:
     return (
-        await tasker.find_task_by_payload(
+        await TaskRepository().find_latest_by_payload(
             task_type=GRAPH_TASK_TYPE,
             payload_match={"kb_id": kb_id},
             statuses=ACTIVE_GRAPH_BUILD_STATUSES,
@@ -454,11 +524,72 @@ async def _require_kb_grant_permission(current_user: User, kb_id: str) -> None:
     await _require_kb_permission(current_user, kb_id, "can_grant")
 
 
+def _raise_category_http_error(exc: KnowledgeCategoryError) -> None:
+    detail = {"code": exc.code, "message": exc.message, **exc.details}
+    raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+
+
+@knowledge.get("/categories")
+async def list_knowledge_categories(current_user: User = Depends(get_required_user)):
+    return {
+        "items": await KnowledgeCategoryService().list_categories(include_usage_count=current_user.role == "superadmin")
+    }
+
+
+@knowledge.post("/categories", status_code=status.HTTP_201_CREATED)
+async def create_knowledge_category(
+    request: KnowledgeCategoryCreateRequest,
+    current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        item = await KnowledgeCategoryService().create_category(
+            name=request.name,
+            sort_order=request.sort_order,
+            actor_uid=current_user.uid,
+        )
+        return {"item": item}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
+
+@knowledge.put("/categories/{category_id}")
+async def update_knowledge_category(
+    category_id: int,
+    request: KnowledgeCategoryUpdateRequest,
+    current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        item = await KnowledgeCategoryService().update_category(
+            category_id,
+            name=request.name,
+            sort_order=request.sort_order,
+            actor_uid=current_user.uid,
+        )
+        return {"item": item}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
+
+@knowledge.delete("/categories/{category_id}")
+async def delete_knowledge_category(
+    category_id: int,
+    _current_user: User = Depends(get_superadmin_user),
+):
+    try:
+        await KnowledgeCategoryService().delete_category(category_id)
+        return {"message": "分类已删除"}
+    except KnowledgeCategoryError as exc:
+        _raise_category_http_error(exc)
+
+
 @knowledge.get("/databases")
-async def get_databases(current_user: User = Depends(get_admin_user)):
+async def get_databases(
+    category_id: int | None = Query(default=None),
+    current_user: User = Depends(get_admin_user),
+):
     """获取所有知识库（根据用户权限过滤）"""
     try:
-        return await knowledge_base.get_databases_by_uid(current_user.uid)
+        return await knowledge_base.get_databases_by_uid(current_user.uid, category_id=category_id)
     except Exception as e:
         logger.error(f"获取数据库列表失败 {e}, {traceback.format_exc()}")
         return {"message": f"获取数据库列表失败 {e}", "databases": []}
@@ -514,6 +645,7 @@ async def create_database(
     description: str = Body(...),
     embedding_model_spec: str | None = Body(None),
     kb_type: str = Body("milvus"),
+    category_id: int | None = Body(None),
     additional_params: dict | None = Body(None),
     llm_model_spec: str | None = Body(None),
     share_config: dict | None = Body(None),
@@ -526,6 +658,18 @@ async def create_database(
         f"embedding_model_spec {embedding_model_spec}, share_config {share_config}"
     )
     try:
+        if category_id is None:
+            categories = await KnowledgeCategoryService().list_categories()
+            default = next((item for item in categories if item.get("is_default")), None)
+            if default is None:
+                raise HTTPException(status_code=404, detail="默认知识库分类不存在")
+            category_id = default["id"]
+        else:
+            try:
+                await KnowledgeCategoryService().require_category(category_id)
+            except KnowledgeCategoryError as exc:
+                _raise_category_http_error(exc)
+
         # 先检查名称是否已存在
         if await knowledge_base.database_name_exists(database_name):
             raise HTTPException(
@@ -564,6 +708,7 @@ async def create_database(
             kb_type=kb_type,
             embedding_model_spec=embedding_model_spec,
             llm_model_spec=llm_model_spec,
+            category_id=category_id,
             share_config=share_config,
             created_by=current_user.uid,
             created_by_department_id=current_user.department_id,
@@ -584,10 +729,13 @@ async def create_database(
 
 
 @knowledge.get("/databases/accessible")
-async def get_accessible_databases(current_user: User = Depends(get_required_user)):
+async def get_accessible_databases(
+    category_id: int | None = Query(default=None),
+    current_user: User = Depends(get_required_user),
+):
     """获取当前用户有权访问的知识库列表（用于智能体配置）"""
     try:
-        databases = await knowledge_base.get_databases_by_uid(current_user.uid)
+        databases = await knowledge_base.get_databases_by_uid(current_user.uid, category_id=category_id)
 
         accessible = []
         for db in databases.get("databases", []):
@@ -597,8 +745,12 @@ async def get_accessible_databases(current_user: User = Depends(get_required_use
                     "name": db.get("name", ""),
                     "kb_id": kb_id,
                     "description": db.get("description", ""),
+                    "created_at": db.get("created_at"),
                     "created_by": db.get("created_by"),
                     "kb_type": db.get("kb_type"),
+                    "category_id": db.get("category_id"),
+                    "category": db.get("category"),
+                    "file_count": (db.get("stats") or {}).get("file_count", db.get("row_count", 0)),
                     "can_view": True,
                     "can_manage": bool(kb_id and await _has_kb_permission(current_user, kb_id, "can_manage")),
                     "supports_documents": KnowledgeBaseFactory.get_kb_class(
@@ -606,7 +758,6 @@ async def get_accessible_databases(current_user: User = Depends(get_required_use
                     ).supports_documents,
                 }
             )
-
         return {"databases": accessible}
     except Exception as e:
         logger.error(f"获取可访问知识库列表失败: {e}, {traceback.format_exc()}")
@@ -679,11 +830,21 @@ async def get_mindmap_diff_route(kb_id: str, current_user: User = Depends(get_ad
         raise HTTPException(status_code=500, detail=f"检测思维导图变更失败: {str(e)}")
 
 
+@knowledge.get("/databases/{kb_id}/access")
+async def get_database_access(kb_id: str, current_user: User = Depends(get_required_user)):
+    permissions = await KnowledgePermissionService().effective_permissions(
+        _user_permission_context(current_user), kb_id
+    )
+    if not permissions.can_view:
+        raise HTTPException(status_code=403, detail="知识库权限不足")
+    return {action: bool(getattr(permissions, action)) for action in KNOWLEDGE_PERMISSION_ACTIONS}
+
+
 @knowledge.get("/databases/{kb_id}")
 async def get_database_info(
     kb_id: str,
     include_files: bool = Query(False, description="是否包含全量文件列表，默认关闭以避免大知识库响应过大"),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """获取知识库详细信息"""
     await _require_kb_permission(current_user, kb_id, "can_view")
@@ -694,8 +855,9 @@ async def get_database_info(
 
 
 @knowledge.post("/databases/{kb_id}/stats/repair")
-async def repair_database_stats(kb_id: str, current_user: User = Depends(get_admin_user)):
+async def repair_database_stats(kb_id: str, current_user: User = Depends(get_required_user)):
     """修复知识库历史文件缺失的 Chunk/Token 统计。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     await _ensure_database_supports_documents(kb_id, "统计修复")
     try:
         return await knowledge_base.repair_missing_file_stats(kb_id)
@@ -720,6 +882,14 @@ async def update_database_info(
     await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         update_llm_model_spec = "llm_model_spec" in data.model_fields_set
+        update_category_id = "category_id" in data.model_fields_set
+        if update_category_id:
+            if data.category_id is None:
+                raise HTTPException(status_code=400, detail="category_id 不能为空")
+            try:
+                await KnowledgeCategoryService().require_category(data.category_id)
+            except KnowledgeCategoryError as exc:
+                _raise_category_http_error(exc)
 
         additional_params = data.additional_params
         if additional_params is not None:
@@ -744,6 +914,8 @@ async def update_database_info(
             data.description,
             data.llm_model_spec,
             update_llm_model_spec=update_llm_model_spec,
+            category_id=data.category_id,
+            update_category_id=update_category_id,
             additional_params=additional_params,
             share_config=data.share_config,
             operator_uid=current_user.uid,
@@ -905,7 +1077,7 @@ async def list_entity_link_candidates(
 @knowledge.get("/databases/{kb_id}/graph-build/status")
 async def get_graph_build_status(kb_id: str, current_user: User = Depends(get_admin_user)):
     try:
-        return await MilvusGraphService().get_status(kb_id, tasker=tasker)
+        return await MilvusGraphService().get_status(kb_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -927,6 +1099,8 @@ async def configure_graph_build(
             created_by=current_user.uid,
         )
         return {"message": "图谱抽取配置已锁定", "status": "success", "config": config}
+    except OntologySwitchRequiresResetError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         status_code = 409 if "已锁定" in str(e) else 400
         raise HTTPException(status_code=status_code, detail=str(e))
@@ -956,25 +1130,44 @@ async def index_graph_build(
         if not graph_status.get("locked"):
             raise HTTPException(status_code=400, detail="请先确认并锁定图谱抽取配置")
 
-        async def run_graph_index(context: TaskContext):
-            await context.set_message("任务初始化")
-            await context.set_progress(5.0, "准备构建图谱")
-            result = await service.build_pending_chunks(kb_id, batch_size=batch_size, context=context)
-            await context.set_result(result)
-            await context.set_progress(100.0, f"图谱构建完成，成功 {result['success']} 个，失败 {result['failed']} 个")
-            return result
-
-        task, created = await tasker.enqueue_unique_by_payload(
-            name=f"图谱构建 ({database['name']})",
-            task_type=GRAPH_TASK_TYPE,
-            payload={"kb_id": kb_id, "batch_size": batch_size},
-            coroutine=run_graph_index,
-            payload_match={"kb_id": kb_id},
-            statuses=ACTIVE_GRAPH_BUILD_STATUSES,
+        task_id = uuid.uuid4().hex
+        task_repository = TaskRepository()
+        task_record = await task_repository.create_if_no_active(
+            task_id=task_id,
+            data={
+                "name": f"图谱构建 ({database['name']})",
+                "type": GRAPH_TASK_TYPE,
+                "status": "pending",
+                "progress": 0.0,
+                "message": "任务已排队",
+                "payload": {"kb_id": kb_id, "batch_size": batch_size},
+            },
+            payload_key="kb_id",
+            payload_value=kb_id,
+            active_statuses=ACTIVE_GRAPH_BUILD_STATUSES,
         )
-        if not created:
+        if task_record is None:
             raise HTTPException(status_code=409, detail="该知识库已有正在运行的图谱构建任务")
-        return {"message": "图谱构建任务已提交", "status": "queued", "task_id": task.id}
+        try:
+            queue = await get_arq_pool()
+            await queue.enqueue_job(
+                "process_knowledge_graph_index",
+                task_id,
+                _job_id=f"task:{task_id}",
+            )
+        except Exception as exc:
+            await task_repository.upsert(
+                task_id,
+                {
+                    "status": "failed",
+                    "progress": 100.0,
+                    "message": "图谱构建任务投递失败",
+                    "error": str(exc),
+                    "completed_at": utc_now_naive(),
+                },
+            )
+            raise
+        return {"message": "图谱构建任务已提交", "status": "queued", "task_id": task_id}
     except HTTPException:
         raise
     except ValueError as e:
@@ -1042,6 +1235,52 @@ async def export_database(
 # =============================================================================
 
 
+@knowledge.get("/documents/search")
+async def search_documents_across_knowledge_bases(
+    kb_id: str | None = Query(None),
+    keyword: str | None = Query(None, max_length=200),
+    updated_from: datetime | None = Query(None),
+    updated_to: datetime | None = Query(None),
+    publisher: str | None = Query(None, max_length=64),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_required_user),
+):
+    """Search current document metadata across browsable knowledge bases or one manageable knowledge base."""
+    if kb_id:
+        await _require_kb_permission(current_user, kb_id, "can_manage")
+        await _ensure_database_supports_documents(kb_id, "文档版本目标搜索")
+        kb_ids = [kb_id]
+        kb_names = {kb_id: kb_id}
+    else:
+        kb_ids, kb_names = await _document_browse_kb_ids(current_user)
+    items, total = await KnowledgeFileRepository().search_documents(
+        kb_ids=kb_ids,
+        keyword=keyword,
+        updated_from=updated_from,
+        updated_to=updated_to,
+        created_by=publisher,
+        page=page,
+        page_size=page_size,
+    )
+    for item in items:
+        item["kb_name"] = kb_names.get(item["kb_id"], item["kb_id"])
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@knowledge.get("/documents/hot")
+async def list_hot_documents(
+    limit: int = Query(10, ge=1, le=30),
+    current_user: User = Depends(get_required_user),
+):
+    """List the most-viewed documents available to the current user."""
+    kb_ids, kb_names = await _document_browse_kb_ids(current_user)
+    items = await KnowledgeFileRepository().list_hot_documents(kb_ids=kb_ids, limit=limit)
+    for item in items:
+        item["kb_name"] = kb_names.get(item["kb_id"], item["kb_id"])
+    return {"items": items}
+
+
 @knowledge.get("/databases/{kb_id}/documents")
 async def list_documents(
     kb_id: str,
@@ -1087,6 +1326,268 @@ async def document_file_exists(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"kb_id": kb_id, "filename": normalized_filename, "exists": exists}
+
+
+@knowledge.post("/databases/{kb_id}/documents/{current_file_id}/versions")
+async def create_document_version(
+    kb_id: str,
+    current_file_id: str,
+    request: DocumentVersionCreateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "文档版本更新")
+    if not is_minio_url(request.file_path):
+        raise HTTPException(status_code=400, detail="File source must be a MinIO URL")
+
+    file_id = f"file_{uuid.uuid4().hex[:12]}"
+    service = DocumentVersionService()
+    try:
+        candidate = await service.create_candidate(
+            kb_id=kb_id,
+            current_file_id=current_file_id,
+            uploaded={
+                "file_id": file_id,
+                "filename": request.filename,
+                "original_filename": request.original_filename,
+                "file_type": request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "",
+                "path": request.file_path,
+                "minio_url": request.file_path,
+                "content_hash": request.content_hash,
+                "file_size": request.file_size,
+                "processing_params": request.processing_params or {},
+            },
+            operator_id=current_user.uid,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"SAME_CONTENT", "UPDATE_IN_PROGRESS", "VERSION_CHANGED"}:
+            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        raise HTTPException(status_code=400, detail=code)
+
+    async def run_version_update(context: TaskContext):
+        result = await service.process_candidate(
+            kb_id=kb_id,
+            candidate_file_id=candidate.file_id,
+            operator_id=current_user.uid,
+            context=context,
+        )
+        await context.set_result(result)
+        status_messages = {
+            "review_required": "知识变更需要人工审核，旧版继续生效",
+            "auto_accepted": "知识变更分析通过，新版已生效",
+            "failed": "知识变更分析失败，旧版继续生效",
+        }
+        await context.set_progress(100, status_messages.get(result.get("status"), "版本更新未完成"))
+        return result
+
+    try:
+        database = await knowledge_base.get_database_info(kb_id)
+        task = await tasker.enqueue(
+            name=f"文档版本更新 ({database['name']})",
+            task_type="knowledge_document_version",
+            payload={
+                "kb_id": kb_id,
+                "candidate_file_id": candidate.file_id,
+                "logical_document_id": candidate.logical_document_id,
+            },
+            coroutine=run_version_update,
+        )
+    except Exception as exc:
+        await KnowledgeFileRepository().update_fields(
+            file_id=candidate.file_id,
+            kb_id=kb_id,
+            data={"status": "version_task_failed", "error_message": str(exc), "updated_by": current_user.uid},
+        )
+        raise HTTPException(status_code=500, detail="版本更新任务提交失败，请重新上传")
+    return {
+        "status": "queued",
+        "task_id": task.id,
+        "candidate_file_id": candidate.file_id,
+        "logical_document_id": candidate.logical_document_id,
+        "document_version": candidate.document_version,
+    }
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/versions")
+async def list_document_versions(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    versions = await KnowledgeFileRepository().list_versions(kb_id=kb_id, file_id=file_id)
+    if not versions:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    service = DocumentVersionService()
+    reports = await service.validation_repo.list_by_candidates(
+        kb_id=kb_id,
+        candidate_file_ids=[item.file_id for item in versions],
+    )
+    reports_by_candidate = {item.candidate_file_id: item for item in reports}
+    return {
+        "logical_document_id": versions[0].logical_document_id,
+        "versions": [
+            {
+                "file_id": item.file_id,
+                "document_version": item.document_version,
+                "is_current": item.is_current,
+                "status": item.status,
+                "filename": item.filename,
+                "content_hash": item.content_hash,
+                "supersedes_file_id": item.supersedes_file_id,
+                "created_at": item.created_at,
+                "activated_at": item.activated_at,
+                "error_message": item.error_message,
+                "validation_report": (
+                    {
+                        "report_id": reports_by_candidate[item.file_id].report_id,
+                        "status": reports_by_candidate[item.file_id].status,
+                        "decision": reports_by_candidate[item.file_id].decision,
+                        "new_count": reports_by_candidate[item.file_id].new_count,
+                        "changed_count": reports_by_candidate[item.file_id].changed_count,
+                        "removed_count": reports_by_candidate[item.file_id].removed_count,
+                        "conflict_count": reports_by_candidate[item.file_id].conflict_count,
+                        "inconclusive": reports_by_candidate[item.file_id].inconclusive,
+                    }
+                    if item.file_id in reports_by_candidate
+                    else None
+                ),
+            }
+            for item in versions
+        ],
+    }
+
+
+@knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/validation-report")
+async def get_document_validation_report(
+    kb_id: str,
+    candidate_file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    repository = DocumentVersionService().validation_repo
+    report = await repository.get_by_candidate(kb_id=kb_id, candidate_file_id=candidate_file_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="验证报告不存在")
+    items = await repository.list_items(report_id=report.report_id)
+    return {
+        "report": {
+            "report_id": report.report_id,
+            "kb_id": report.kb_id,
+            "logical_document_id": report.logical_document_id,
+            "old_file_id": report.old_file_id,
+            "old_filename": report.old_filename,
+            "old_document_version": report.old_document_version,
+            "candidate_file_id": report.candidate_file_id,
+            "candidate_filename": report.candidate_filename,
+            "candidate_document_version": report.candidate_document_version,
+            "ontology_registry_id": report.ontology_registry_id,
+            "ontology_version": report.ontology_version,
+            "ontology_digest": report.ontology_digest,
+            "extraction_schema_version": report.extraction_schema_version,
+            "status": report.status,
+            "decision": report.decision,
+            "new_count": report.new_count,
+            "changed_count": report.changed_count,
+            "removed_count": report.removed_count,
+            "conflict_count": report.conflict_count,
+            "inconclusive": report.inconclusive,
+            "summary": report.summary,
+            "failure_message": report.failure_message,
+            "reviewed_by": report.reviewed_by,
+            "reviewed_at": report.reviewed_at,
+            "completed_at": report.completed_at,
+            "published_at": report.published_at,
+            "created_at": report.created_at,
+            "updated_at": report.updated_at,
+        },
+        "items": [
+            {
+                "item_id": item.item_id,
+                "item_index": item.item_index,
+                "change_type": item.change_type,
+                "severity": item.severity,
+                "decision": item.decision,
+                "fact_key": item.fact_key,
+                "relation": item.relation,
+                "old_fact": item.old_fact,
+                "new_fact": item.new_fact,
+                "old_evidence": item.old_evidence,
+                "new_evidence": item.new_evidence,
+                "review_required": item.review_required,
+                "reason": item.reason,
+            }
+            for item in items
+        ],
+    }
+
+
+@knowledge.post("/databases/{kb_id}/validation-reports/{report_id}/reject")
+async def reject_document_validation_report(
+    kb_id: str,
+    report_id: str,
+    request: DocumentVersionRejectRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await DocumentVersionService().reject_candidate(
+            kb_id=kb_id,
+            report_id=report_id,
+            operator_id=current_user.uid,
+            reason=request.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/conflicts")
+async def list_document_conflicts(
+    kb_id: str,
+    candidate_file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    service = DocumentVersionService()
+    conflicts = await service.conflict_repo.list_by_candidate(kb_id=kb_id, new_file_id=candidate_file_id)
+    return {
+        "candidate_file_id": candidate_file_id,
+        "conflicts": [
+            {
+                "conflict_id": item.conflict_id,
+                "conflict_type": item.conflict_type,
+                "conflict_key": item.conflict_key,
+                "old_fact": item.old_fact,
+                "new_fact": item.new_fact,
+                "status": item.status,
+            }
+            for item in conflicts
+        ],
+    }
+
+
+@knowledge.post("/databases/{kb_id}/documents/{candidate_file_id}/activate")
+async def activate_document_version(
+    kb_id: str,
+    candidate_file_id: str,
+    request: DocumentVersionActivateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await DocumentVersionService().activate_candidate(
+            kb_id=kb_id,
+            candidate_file_id=candidate_file_id,
+            expected_current_file_id=request.expected_current_file_id,
+            operator_id=current_user.uid,
+            accept_conflicts=request.accept_conflicts,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"VERSION_CHANGED", "CONFLICT_REVIEW_REQUIRED"}:
+            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        raise HTTPException(status_code=400, detail=code)
 
 
 @knowledge.post("/databases/{kb_id}/documents")
@@ -2285,8 +2786,9 @@ async def _run_index_pending_statuses(
 
 
 @knowledge.post("/databases/{kb_id}/documents/parse")
-async def parse_documents(kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_admin_user)):
+async def parse_documents(kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_required_user)):
     """手动触发文档解析"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     file_ids = _validate_direct_document_action_file_ids(file_ids)
     logger.debug(f"Parse documents for kb_id {kb_id}: {file_ids}")
     await _ensure_database_supports_documents(kb_id, "文档解析")
@@ -2317,8 +2819,9 @@ async def parse_documents(kb_id: str, file_ids: list[str] = Body(...), current_u
 
 
 @knowledge.post("/databases/{kb_id}/documents/parse-pending")
-async def parse_pending_documents(kb_id: str, current_user: User = Depends(get_admin_user)):
+async def parse_pending_documents(kb_id: str, current_user: User = Depends(get_required_user)):
     """按状态手动触发全部待解析文档解析。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     logger.debug(f"Parse pending documents for kb_id {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档解析")
 
@@ -2370,9 +2873,10 @@ async def index_documents(
     kb_id: str,
     file_ids: list[str] = Body(...),
     params: dict | None = Body(None),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """手动触发文档入库（Indexing），支持更新参数"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     file_ids = _validate_direct_document_action_file_ids(file_ids)
     params = params or {}
     logger.debug(f"Index documents for kb_id {kb_id}: {file_ids} {params=}")
@@ -2410,9 +2914,10 @@ async def index_documents(
 async def index_pending_documents(
     kb_id: str,
     payload: PendingIndexDocumentsRequest | None = None,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """按状态手动触发全部待入库文档入库。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     params = payload.params if payload else None
     params = params or {}
     logger.debug(f"Index pending documents for kb_id {kb_id}: {params=}")
@@ -2466,8 +2971,9 @@ async def index_pending_documents(
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}")
-async def get_document_info(kb_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
+async def get_document_info(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """获取文档详细信息（包含基本信息和内容信息）"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
     logger.debug(f"GET document {doc_id} info in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档查看")
 
@@ -2480,8 +2986,9 @@ async def get_document_info(kb_id: str, doc_id: str, current_user: User = Depend
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/basic")
-async def get_document_basic_info(kb_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
+async def get_document_basic_info(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """获取文档基本信息（仅元数据）"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
     logger.debug(f"GET document {doc_id} basic info in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档查看")
 
@@ -2494,8 +3001,9 @@ async def get_document_basic_info(kb_id: str, doc_id: str, current_user: User = 
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/content")
-async def get_document_content(kb_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
+async def get_document_content(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """获取文档内容信息（chunks和lines）"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
     logger.debug(f"GET document {doc_id} content in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档查看")
 
@@ -2509,9 +3017,10 @@ async def get_document_content(kb_id: str, doc_id: str, current_user: User = Dep
 
 @knowledge.delete("/databases/{kb_id}/documents/batch")
 async def batch_delete_documents(
-    kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_admin_user)
+    kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_required_user)
 ):
     """批量删除文档或文件夹"""
+    await _require_kb_permission(current_user, kb_id, "can_delete")
     logger.debug(f"BATCH DELETE documents {file_ids} in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "批量文档删除")
 
@@ -2564,7 +3073,11 @@ async def batch_delete_documents(
 @knowledge.delete("/databases/{kb_id}/documents/{doc_id}")
 async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """删除文档或文件夹"""
-    await _require_kb_permission(current_user, kb_id, "can_manage")
+    if not (
+        await _has_kb_permission(current_user, kb_id, "can_delete")
+        or await _has_kb_permission(current_user, kb_id, "can_manage")
+    ):
+        raise HTTPException(status_code=403, detail="知识库权限不足")
     logger.debug(f"DELETE document {doc_id} info in {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档删除")
     try:
@@ -2593,88 +3106,25 @@ async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/download")
-async def download_document(kb_id: str, doc_id: str, current_user: User = Depends(get_admin_user)):
+async def download_document(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """下载原始文件"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _require_kb_permission(current_user, kb_id, "can_download")
     logger.debug(f"Download document {doc_id} from {kb_id}")
     await _ensure_database_supports_documents(kb_id, "文档下载")
     try:
-        file_info = await knowledge_base.get_file_basic_info(kb_id, doc_id)
-        file_meta = file_info.get("meta", {})
-
-        # 获取文件类型、路径和文件名
-        file_type = file_meta.get("file_type", "file")
-        file_path = file_meta.get("path", "")
-        filename = file_meta.get("filename", "file")
-
-        # URL 类型文件没有原始文件可下载
-        if file_type == "url":
-            raise HTTPException(status_code=400, detail="URL 类型文件不支持下载原始文件")
-        logger.debug("Resolved stored document path")
-        logger.debug(f"Original filename from database: {filename}")
-
-        # 解码URL编码的文件名（如果有的话）
-        try:
-            decoded_filename = unquote(filename, encoding="utf-8")
-            logger.debug(f"Decoded filename: {decoded_filename}")
-        except Exception as e:
-            logger.debug(f"Failed to decode filename {filename}: {e}")
-            decoded_filename = filename  # 如果解码失败，使用原文件名
-
-        _, ext = os.path.splitext(decoded_filename)
-        media_type = media_types.get(ext.lower(), "application/octet-stream")
-
-        if not is_minio_url(file_path):
-            raise HTTPException(status_code=400, detail="文件路径必须是 MinIO URL")
-
-        logger.debug("Downloading stored document from MinIO")
-
-        try:
-            bucket_name, object_name = parse_minio_url(file_path)
-            logger.debug("Parsed stored document location")
-
-            minio_client = get_minio_client()
-
-            # 直接使用解析出的完整对象名称下载
-            minio_response = await minio_client.adownload_response(
-                bucket_name=bucket_name,
-                object_name=object_name,
-            )
-            logger.debug("Successfully downloaded stored document")
-
-        except Exception as e:
-            logger.error("Failed to download MinIO file: {}", sanitize_processing_error(e))
-            raise StorageError("下载文件失败")
-
-        # 创建流式生成器
-        async def minio_stream():
-            try:
-                while True:
-                    chunk = await asyncio.to_thread(minio_response.read, 8192)
-                    if not chunk:
-                        break
-                    yield chunk
-            finally:
-                minio_response.close()
-                minio_response.release_conn()
-
-        response = StreamingResponse(
-            minio_stream(),
-            media_type=media_type,
+        data = await knowledge_base.get_file_download(kb_id=kb_id, file_id=doc_id, variant="original")
+        filename = data["filename"]
+        return StreamingResponse(
+            iter([data["content"]]),
+            media_type=data["media_type"],
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
         )
-        try:
-            decoded_filename.encode("ascii")
-            response.headers["Content-Disposition"] = f'attachment; filename="{decoded_filename}"'
-        except UnicodeEncodeError:
-            encoded_filename = quote(decoded_filename.encode("utf-8"))
-            response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_filename}"
-
-        return response
-
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"下载文件失败: {e}, {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"下载失败: {e}")
+        raise HTTPException(status_code=500, detail=f"下载失败: {e}") from e
 
 
 # =============================================================================
@@ -2684,9 +3134,10 @@ async def download_document(kb_id: str, doc_id: str, current_user: User = Depend
 
 @knowledge.post("/databases/{kb_id}/query")
 async def query_knowledge_base(
-    kb_id: str, query: str = Body(...), meta: dict = Body(...), current_user: User = Depends(get_admin_user)
+    kb_id: str, query: str = Body(...), meta: dict = Body(...), current_user: User = Depends(get_required_user)
 ):
     """查询知识库"""
+    await _require_kb_permission(current_user, kb_id, "can_search")
     logger.debug(f"Query knowledge base {kb_id}: {query}")
     try:
         result = await knowledge_base.aquery(query, kb_id=kb_id, **meta)
@@ -2696,11 +3147,23 @@ async def query_knowledge_base(
         return {"message": f"知识库查询失败: {e}", "status": "failed"}
 
 
+@knowledge.post("/search")
+async def global_knowledge_search(
+    request: GlobalKnowledgeSearchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """Search every knowledge base the current user is allowed to search."""
+    limit = min(max(request.limit, 1), 30)
+    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
+    return {"result": result, "status": "success"}
+
+
 @knowledge.post("/databases/{kb_id}/query-test")
 async def query_test(
-    kb_id: str, query: str = Body(...), meta: dict = Body(...), current_user: User = Depends(get_admin_user)
+    kb_id: str, query: str = Body(...), meta: dict = Body(...), current_user: User = Depends(get_required_user)
 ):
     """测试查询知识库"""
+    await _require_kb_permission(current_user, kb_id, "can_search")
     logger.debug(f"Query test in {kb_id}: {query}")
     try:
         result = await knowledge_base.aquery(query, kb_id=kb_id, **meta)
@@ -2712,9 +3175,10 @@ async def query_test(
 
 @knowledge.put("/databases/{kb_id}/query-params")
 async def update_knowledge_base_query_params(
-    kb_id: str, params: dict = Body(...), current_user: User = Depends(get_admin_user)
+    kb_id: str, params: dict = Body(...), current_user: User = Depends(get_required_user)
 ):
     """更新知识库查询参数配置"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         # 获取知识库实例
         kb_instance = await knowledge_base._get_kb_for_database(kb_id)
@@ -2753,8 +3217,9 @@ async def update_knowledge_base_query_params(
 
 
 @knowledge.get("/databases/{kb_id}/query-params")
-async def get_knowledge_base_query_params(kb_id: str, current_user: User = Depends(get_admin_user)):
+async def get_knowledge_base_query_params(kb_id: str, current_user: User = Depends(get_required_user)):
     """获取知识库类型特定的查询参数"""
+    await _require_kb_permission(current_user, kb_id, "can_search")
     try:
         # 获取知识库实例
         kb_instance = await knowledge_base._get_kb_for_database(kb_id)
@@ -2806,8 +3271,9 @@ async def generate_sample_questions(
 
 
 @knowledge.get("/databases/{kb_id}/sample-questions")
-async def get_sample_questions(kb_id: str, current_user: User = Depends(get_admin_user)):
+async def get_sample_questions(kb_id: str, current_user: User = Depends(get_required_user)):
     """获取知识库的测试问题。"""
+    await _require_kb_permission(current_user, kb_id, "can_search")
     try:
         return await get_database_sample_questions(kb_id)
     except HTTPException:
@@ -2956,7 +3422,7 @@ async def fetch_url(
 @knowledge.post("/files/import-workspace")
 async def import_workspace_files(
     payload: WorkspaceImportRequest,
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_required_user),
 ):
     """将当前用户工作区文件导入 MinIO，返回与普通文件上传一致的预处理结果。"""
     kb_id = payload.kb_id.strip()
@@ -2966,7 +3432,8 @@ async def import_workspace_files(
     if not paths:
         raise HTTPException(status_code=400, detail="请选择至少一个工作区文件")
 
-    await _ensure_database_supports_documents(kb_id, "文档添加/解析/入库")
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    await _ensure_database_supports_documents(kb_id, "文档添加")
 
     bucket_name = MinIOClient.KB_BUCKETS["documents"]
     results = []
@@ -3044,10 +3511,6 @@ async def upload_file(
     if normalized_strategy == "replace":
         await _require_kb_permission(current_user, kb_id, "can_manage")
     await _ensure_database_supports_documents(kb_id, "文档上传")
-
-    logger.debug(f"Received upload file with filename: {file.filename}")
-
-    ext = os.path.splitext(file.filename)[1].lower()
 
     try:
         ensure_supported_file_extension(file.filename)

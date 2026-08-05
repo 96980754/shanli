@@ -50,6 +50,16 @@ def service_for(kb, permissions=None):
     )
 
 
+async def test_admin_has_all_knowledge_permissions():
+    service = service_for(SimpleNamespace(kb_id="kb-1", created_by="owner", share_config=None))
+
+    permissions = await service.effective_permissions({"role": "admin", "uid": "department-admin"}, "kb-1")
+
+    assert permissions.can_download is True
+    assert permissions.can_manage is True
+    assert permissions.can_grant is True
+
+
 async def test_superadmin_has_all_knowledge_permissions():
     service = service_for(SimpleNamespace(kb_id="kb-1", created_by="owner", share_config=None))
 
@@ -93,7 +103,7 @@ async def test_default_is_deny_when_no_grant_matches():
     assert await service.has_permission({"role": "user", "uid": "lisi", "department_id": 10}, "kb-1", "can_view") is False
 
 
-async def test_share_config_remains_view_and_search_compatibility_fallback():
+async def test_share_config_grants_view_search_and_download_by_default():
     service = service_for(
         SimpleNamespace(
             kb_id="kb-1",
@@ -105,4 +115,39 @@ async def test_share_config_remains_view_and_search_compatibility_fallback():
 
     assert await service.has_permission(user, "kb-1", "can_view") is True
     assert await service.has_permission(user, "kb-1", "can_search") is True
+    assert await service.has_permission(user, "kb-1", "can_download") is True
     assert await service.has_permission(user, "kb-1", "can_upload") is False
+
+
+async def test_explicit_view_grant_can_disable_default_download():
+    service = service_for(
+        SimpleNamespace(
+            kb_id="kb-1",
+            created_by="owner",
+            share_config={"access_level": "global", "department_ids": [], "user_uids": []},
+        ),
+        [permission("user", "lisi", can_view=True, can_search=True, can_download=False)],
+    )
+    user = {"role": "user", "uid": "lisi", "department_id": 10}
+
+    assert await service.has_permission(user, "kb-1", "can_view") is True
+    assert await service.has_permission(user, "kb-1", "can_download") is False
+
+
+async def test_share_config_does_not_grant_download_when_database_is_not_visible():
+    service = service_for(
+        SimpleNamespace(
+            kb_id="kb-1",
+            created_by="owner",
+            share_config={"access_level": "department", "department_ids": [20], "user_uids": []},
+        )
+    )
+
+    assert (
+        await service.has_permission(
+            {"role": "user", "uid": "lisi", "department_id": 10},
+            "kb-1",
+            "can_download",
+        )
+        is False
+    )

@@ -228,7 +228,6 @@ class NotionKB(ReadOnlyConnectors):
         }
 
     async def aquery(self, query_text: str, kb_id: str, agent_call: bool = False, **kwargs) -> list[dict]:
-        del agent_call
         try:
             token, data_source_id, notion_version = self._get_connection_config(kb_id)
             query_params = self._get_query_params(kb_id)
@@ -271,6 +270,8 @@ class NotionKB(ReadOnlyConnectors):
             return sorted(results, key=lambda item: item.get("score", 0.0), reverse=True)[:final_top_k]
         except (NotionAPIError, httpx.HTTPError, ValueError) as exc:
             logger.error(f"Notion query failed for kb_id={kb_id}: {exc}, {traceback.format_exc()}")
+            if agent_call:
+                raise
             return []
 
     async def _search_candidate_pages(

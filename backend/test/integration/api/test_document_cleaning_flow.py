@@ -211,6 +211,7 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert original_file_id in _result_file_ids(first_results)
 
@@ -258,6 +259,7 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert original_file_id not in _result_file_ids(before_switch)
 
@@ -287,6 +289,7 @@ async def test_cleaning_preview_edit_confirm_and_safe_reindex(
             search_mode="vector",
             final_top_k=10,
             similarity_threshold=0.5,
+            use_reranker=False,
         )
         assert revised_file_id in _result_file_ids(revised_results)
 

@@ -42,7 +42,13 @@ async def test_ensure_default_agent_creates_description(monkeypatch):
     agent = await repo.ensure_default_agent()
 
     assert agent.description == DEFAULT_AGENT_DESCRIPTION
-    assert agent.config_json == {"context": {}}
+    assert agent.config_json == {
+        "context": {
+            "tools": ["ocr_parse_file"],
+            "mcps": [],
+            "subagents": [GENERAL_PURPOSE_AGENT_SLUG],
+        }
+    }
     assert db.added is agent
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(agent)
@@ -53,6 +59,7 @@ async def test_ensure_default_agent_backfills_missing_description(monkeypatch):
     db = FakeDb()
     repo = AgentRepository(db)
     agent = SimpleNamespace(
+        config_json={"context": {"subagents": [GENERAL_PURPOSE_AGENT_SLUG]}},
         share_config=DEFAULT_SHARE_CONFIG.copy(),
         is_default=True,
         description=None,
@@ -72,6 +79,43 @@ async def test_ensure_default_agent_backfills_missing_description(monkeypatch):
     assert agent.updated_by == "admin"
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(agent)
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_agent_preserves_runtime_resource_config(monkeypatch):
+    db = FakeDb()
+    repo = AgentRepository(db)
+    config_json = {
+        "context": {
+            "tools": ["ask_user_question", "ocr_parse_file"],
+            "mcps": [],
+            "skills": ["knowledge-base"],
+            "subagents": ["web-search"],
+            "model": "provider:model",
+        },
+        "custom": True,
+    }
+    agent = SimpleNamespace(
+        config_json=config_json,
+        share_config=DEFAULT_SHARE_CONFIG.copy(),
+        is_default=True,
+        is_subagent=False,
+        description=DEFAULT_AGENT_DESCRIPTION,
+        updated_by=None,
+        updated_at=None,
+    )
+
+    async def get_by_slug(_slug):
+        return agent
+
+    monkeypatch.setattr(repo, "get_by_slug", get_by_slug)
+
+    result = await repo.ensure_default_agent(created_by="admin")
+
+    assert result is agent
+    assert agent.config_json == config_json
+    db.commit.assert_not_awaited()
+    db.refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio

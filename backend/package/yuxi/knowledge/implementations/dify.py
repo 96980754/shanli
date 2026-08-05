@@ -64,14 +64,16 @@ class DifyKB(ReadOnlyConnectors):
         return params
 
     async def aquery(self, query_text: str, kb_id: str, agent_call: bool = False, **kwargs) -> list[dict]:
-        del agent_call
         metadata = self.databases_meta.get(kb_id, {}).get("metadata", {}) or {}
         api_url = str(metadata.get("dify_api_url") or "").strip()
         token = str(metadata.get("dify_token") or "").strip()
         dataset_id = str(metadata.get("dify_dataset_id") or "").strip()
 
         if not api_url or not token or not dataset_id:
-            logger.error(f"Dify config incomplete for kb_id={kb_id}")
+            error = ValueError(f"Dify config incomplete for kb_id={kb_id}")
+            logger.error(str(error))
+            if agent_call:
+                raise error
             return []
 
         query_params = self._get_query_params(kb_id)
@@ -122,10 +124,14 @@ class DifyKB(ReadOnlyConnectors):
                 logger.error(
                     f"Dify query fallback failed for kb_id={kb_id}: {fallback_error}, {traceback.format_exc()}"
                 )
+                if agent_call:
+                    raise fallback_error from e
                 return []
 
         records = response_json.get("records", []) if isinstance(response_json, dict) else []
         if not isinstance(records, list):
+            if agent_call:
+                raise ValueError("Dify 返回了无效的 records 字段")
             return []
 
         results = []

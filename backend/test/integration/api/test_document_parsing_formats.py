@@ -198,6 +198,7 @@ async def test_stable_formats_parse_chunk_index_and_retrieve_with_source_metadat
             search_mode="vector",
             final_top_k=20,
             similarity_threshold=-1.0,
+            use_reranker=False,
         )
         assert file_id in _result_file_ids(results)
         matching = next(item for item in results if file_id in _result_file_ids([item]))

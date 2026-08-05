@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -19,6 +20,19 @@ class FakePermissionService:
     async def has_permission(self, user, kb_id, action):
         self.calls.append((user, kb_id, action))
         return self.allowed
+
+    async def effective_permissions(self, user, kb_id):
+        self.calls.append((user, kb_id, "effective"))
+        return SimpleNamespace(
+            can_view=self.allowed,
+            can_search=self.allowed,
+            can_upload=self.allowed,
+            can_download=self.allowed,
+            can_delete=self.allowed,
+            can_manage=self.allowed,
+            can_grant=self.allowed,
+            can_export=self.allowed,
+        )
 
 
 class FakePermissionRepository:
@@ -138,6 +152,33 @@ async def test_delete_database_permission_requires_grant_and_deletes(monkeypatch
     assert result == {"message": "permission deleted"}
 
 
+async def test_get_database_access_returns_effective_permissions(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+
+    result = await knowledge_router.get_database_access("kb-1", current_user=user(uid="viewer", role="user"))
+
+    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "effective")]
+    assert result == {
+        "can_view": True,
+        "can_search": True,
+        "can_upload": True,
+        "can_download": True,
+        "can_delete": True,
+        "can_manage": True,
+        "can_grant": True,
+        "can_export": True,
+    }
+
+
+async def test_get_database_access_rejects_user_without_view_permission(monkeypatch):
+    install_fakes(monkeypatch, allowed=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.get_database_access("kb-1", current_user=user(uid="viewer", role="user"))
+
+    assert exc_info.value.status_code == 403
+
+
 async def test_get_database_info_requires_view_permission(monkeypatch):
     service, _repository = install_fakes(monkeypatch, allowed=False)
 
@@ -167,6 +208,134 @@ async def test_list_documents_requires_view_permission(monkeypatch):
 
     assert exc_info.value.status_code == 403
     assert service.calls == [({"uid": "viewer", "role": "admin", "department_id": 1}, "kb-1", "can_view")]
+
+
+async def test_download_document_requires_view_and_download_permissions(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    get_file_download = AsyncMock(
+        return_value={"filename": "demo.txt", "content": b"demo", "media_type": "text/plain"}
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_download", get_file_download)
+
+    response = await knowledge_router.download_document(
+        "kb-1",
+        "file-1",
+        current_user=user(uid="viewer", role="user"),
+    )
+
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_download"),
+    ]
+    get_file_download.assert_awaited_once_with(kb_id="kb-1", file_id="file-1", variant="original")
+    assert response.media_type == "text/plain"
+
+
+async def test_download_document_rejects_download_only_permission(monkeypatch):
+    class DownloadOnlyPermissionService:
+        async def has_permission(self, user, kb_id, action):
+            return action == "can_download"
+
+    get_file_download = AsyncMock()
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", DownloadOnlyPermissionService)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_download", get_file_download)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.download_document(
+            "kb-1",
+            "file-1",
+            current_user=user(uid="viewer", role="user"),
+        )
+
+    assert exc_info.value.status_code == 403
+    get_file_download.assert_not_awaited()
+
+
+async def test_scoped_document_search_requires_manage_permission(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.search_documents_across_knowledge_bases(
+            kb_id="kb-1",
+            keyword="spec",
+            updated_from=None,
+            updated_to=None,
+            publisher=None,
+            page=1,
+            page_size=30,
+            current_user=user(uid="uploader", role="user"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert service.calls == [({"uid": "uploader", "role": "user", "department_id": 1}, "kb-1", "can_manage")]
+
+
+async def test_scoped_document_search_only_queries_requested_database(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    search = AsyncMock(return_value=([{"file_id": "file-1", "kb_id": "kb-1"}], 1))
+    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(search_documents=search))
+
+    result = await knowledge_router.search_documents_across_knowledge_bases(
+        kb_id="kb-1",
+        keyword="spec",
+        updated_from=None,
+        updated_to=None,
+        publisher="owner",
+        page=2,
+        page_size=20,
+        current_user=user(uid="manager", role="user"),
+    )
+
+    search.assert_awaited_once_with(
+        kb_ids=["kb-1"],
+        keyword="spec",
+        updated_from=None,
+        updated_to=None,
+        created_by="owner",
+        page=2,
+        page_size=20,
+    )
+    assert service.calls == [({"uid": "manager", "role": "user", "department_id": 1}, "kb-1", "can_manage")]
+    assert result == {
+        "items": [{"file_id": "file-1", "kb_id": "kb-1", "kb_name": "kb-1"}],
+        "total": 1,
+        "page": 2,
+        "page_size": 20,
+    }
+
+
+async def test_unscoped_document_search_keeps_browsable_database_scope(monkeypatch):
+    monkeypatch.setattr(
+        knowledge_router,
+        "_document_browse_kb_ids",
+        AsyncMock(return_value=(["kb-1", "kb-2"], {"kb-1": "One", "kb-2": "Two"})),
+    )
+    search = AsyncMock(return_value=([{"file_id": "file-2", "kb_id": "kb-2"}], 1))
+    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(search_documents=search))
+
+    result = await knowledge_router.search_documents_across_knowledge_bases(
+        kb_id=None,
+        keyword="guide",
+        updated_from=None,
+        updated_to=None,
+        publisher=None,
+        page=1,
+        page_size=30,
+        current_user=user(uid="viewer", role="user"),
+    )
+
+    search.assert_awaited_once_with(
+        kb_ids=["kb-1", "kb-2"],
+        keyword="guide",
+        updated_from=None,
+        updated_to=None,
+        created_by=None,
+        page=1,
+        page_size=30,
+    )
+    assert result["items"][0]["kb_name"] == "Two"
 
 
 async def test_add_uploaded_documents_requires_upload_permission(monkeypatch):

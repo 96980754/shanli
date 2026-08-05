@@ -115,6 +115,7 @@
                             刷新
                           </a-button>
                           <a-button
+                            v-if="canNavigateToConfigPage(value.kind)"
                             type="link"
                             size="small"
                             @click="navigateToConfigPage(value.kind)"
@@ -289,6 +290,7 @@
               刷新
             </a-button>
             <a-button
+              v-if="canNavigateToConfigPage(currentConfigKind)"
               type="text"
               size="small"
               @click="navigateToConfigPage(currentConfigKind)"
@@ -482,6 +484,8 @@ const isToolsKind = (kind) => {
   return isToolResourceKind(kind)
 }
 
+const canNavigateToConfigPage = (kind) => ['knowledges', 'skills', 'subagents'].includes(kind)
+
 // 强制刷新对应配置项的选项列表
 const refreshConfigOptions = async () => {
   if (isReadOnlyConfig.value || !selectedAgentId.value) return
@@ -504,12 +508,6 @@ const navigateToConfigPage = (kind) => {
     switch (kind) {
       case 'knowledges':
         router.push({ path: '/extensions', query: { tab: 'knowledge' } })
-        break
-      case 'tools':
-        router.push({ path: '/extensions', query: { tab: 'tools' } })
-        break
-      case 'mcps':
-        router.push({ path: '/extensions', query: { tab: 'mcp' } })
         break
       case 'skills':
         router.push({ path: '/extensions', query: { tab: 'skills' } })

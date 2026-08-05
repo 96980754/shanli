@@ -36,6 +36,19 @@ class FakeTaskContext:
         return None
 
 
+def user(uid: str):
+    return SimpleNamespace(uid=uid, role="admin", department_id=1)
+
+
+@pytest.fixture(autouse=True)
+def allow_knowledge_permissions(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, _user, _kb_id, _action):
+            return True
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+
+
 async def test_upload_file_does_not_expose_legacy_allow_jsonl_query():
     assert "allow_jsonl" not in signature(knowledge_router.upload_file).parameters
 
@@ -60,7 +73,7 @@ async def test_document_file_exists_returns_boolean_for_relative_path(monkeypatc
     result = await knowledge_router.document_file_exists(
         "kb_1",
         filename=" google_drive/shared_drives/engineering/playbook.txt ",
-        current_user=SimpleNamespace(uid="user_1"),
+        current_user=user("user_1"),
     )
 
     assert result == {
@@ -76,7 +89,7 @@ async def test_document_file_exists_returns_boolean_for_relative_path(monkeypatc
 
 async def test_document_file_exists_route_accepts_filename_with_slashes(monkeypatch):
     async def fake_admin_user():
-        return SimpleNamespace(uid="user_1")
+        return user("user_1")
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
@@ -125,7 +138,7 @@ async def test_document_file_exists_rejects_blank_filename(monkeypatch):
         await knowledge_router.document_file_exists(
             "kb_1",
             filename="   ",
-            current_user=SimpleNamespace(uid="user_1"),
+            current_user=user("user_1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -304,15 +317,15 @@ async def test_upload_replace_requires_upload_and_manage_permissions_before_read
 async def test_delete_document_requires_manage_permission_before_read(monkeypatch):
     calls = {"permissions": [], "read": 0}
 
-    async def deny_manage(_user, kb_id: str, action: str) -> None:
+    async def deny_manage(_user, kb_id: str, action: str) -> bool:
         calls["permissions"].append((kb_id, action))
-        raise HTTPException(status_code=403, detail="知识库权限不足")
+        return False
 
     async def fake_get_file_basic_info(*_args, **_kwargs):
         calls["read"] += 1
         return {"meta": {}}
 
-    monkeypatch.setattr(knowledge_router, "_require_kb_permission", deny_manage)
+    monkeypatch.setattr(knowledge_router, "_has_kb_permission", deny_manage)
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_basic_info", fake_get_file_basic_info)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -323,7 +336,7 @@ async def test_delete_document_requires_manage_permission_before_read(monkeypatc
         )
 
     assert exc_info.value.status_code == 403
-    assert calls == {"permissions": [("kb_1", "can_manage")], "read": 0}
+    assert calls == {"permissions": [("kb_1", "can_delete"), ("kb_1", "can_manage")], "read": 0}
 
 
 async def test_upload_skip_returns_structured_success_without_storage_write(monkeypatch):
@@ -367,7 +380,7 @@ async def test_markdown_endpoint_rejects_oversized_file(monkeypatch):
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"123456"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.mark_it_down(upload, current_user=SimpleNamespace(uid="user_1"))
+        await knowledge_router.mark_it_down(upload, current_user=user("user_1"))
 
     assert exc_info.value.status_code == 400
     assert "100 MB" in exc_info.value.detail
@@ -403,7 +416,7 @@ async def test_index_documents_uses_uid_for_operator(monkeypatch):
         "kb_1",
         ["file_1"],
         params={},
-        current_user=SimpleNamespace(id="numeric-id", uid="uid-user"),
+        current_user=SimpleNamespace(id="numeric-id", **vars(user("uid-user"))),
     )
 
     assert result["status"] == "queued"
@@ -417,7 +430,7 @@ async def test_parse_documents_rejects_oversized_direct_batch():
         await knowledge_router.parse_documents(
             "kb_1",
             file_ids,
-            current_user=SimpleNamespace(uid="uid-user"),
+            current_user=user("uid-user"),
         )
 
     assert exc_info.value.status_code == 400
@@ -466,7 +479,7 @@ async def test_parse_pending_documents_enqueues_status_scoped_task(monkeypatch):
 
     result = await knowledge_router.parse_pending_documents(
         "kb_1",
-        current_user=SimpleNamespace(uid="uid-user"),
+        current_user=user("uid-user"),
     )
 
     assert result["status"] == "queued"
@@ -542,7 +555,7 @@ async def test_index_pending_documents_uses_pending_statuses_and_params(monkeypa
     result = await knowledge_router.index_pending_documents(
         "kb_1",
         payload=knowledge_router.PendingIndexDocumentsRequest(params=params),
-        current_user=SimpleNamespace(uid="uid-user"),
+        current_user=user("uid-user"),
     )
 
     assert result["status"] == "queued"
@@ -623,8 +636,8 @@ async def test_add_documents_defaults_to_auto_index_and_returns_one_final_result
     result = await knowledge_router.add_documents(
         "kb_1",
         [item],
-        params={"content_type": "file", "content_hashes": {item: "hash_1"}},
         current_user=SimpleNamespace(uid="uid-user"),
+        params={"content_type": "file", "auto_index": True, "content_hashes": {item: "hash_1"}},
     )
 
     assert result["status"] == "queued"
@@ -847,7 +860,7 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
         "kb_1",
         [item],
         params={"content_type": "file", "auto_index": True, "content_hashes": {item: "hash_1"}},
-        current_user=SimpleNamespace(uid="uid-user"),
+        current_user=user("uid-user"),
     )
 
     assert result["status"] == "queued"
@@ -870,7 +883,7 @@ async def test_add_uploaded_documents_rejects_empty_items(monkeypatch):
         await knowledge_router.add_uploaded_documents(
             "kb_1",
             knowledge_router.AddUploadedDocumentsRequest(items=[], params={}),
-            current_user=SimpleNamespace(uid="uid-user"),
+            current_user=user("uid-user"),
         )
 
     assert exc_info.value.status_code == 400
@@ -930,7 +943,7 @@ async def test_add_uploaded_documents_rejects_non_minio_url(monkeypatch):
                 items=["https://example.com/demo.txt"],
                 params={"content_hashes": {"https://example.com/demo.txt": "hash_1"}},
             ),
-            current_user=SimpleNamespace(uid="uid-user"),
+            current_user=user("uid-user"),
         )
 
     assert exc_info.value.status_code == 400
@@ -968,7 +981,6 @@ async def test_add_uploaded_documents_does_not_require_client_content_hash(monke
         knowledge_router.AddUploadedDocumentsRequest(items=[item], params={}),
         current_user=SimpleNamespace(uid="uid-user"),
     )
-
     assert result["status"] == "success"
     assert captured["item"] == item
     assert "content_hash" not in captured["params"]
@@ -998,6 +1010,77 @@ async def test_add_uploaded_documents_failure_does_not_echo_staged_url(monkeypat
     assert "item" not in result["failed_items"][0]
     assert staged_url not in str(result)
     assert "private-minio" not in result["failed_items"][0]["error"]
+
+
+async def test_download_document_uses_shared_original_file_reader(monkeypatch):
+    captured = {}
+
+    async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
+        captured["ensure"] = (kb_id, operation)
+
+    async def fake_get_file_download(kb_id: str, file_id: str, variant: str):
+        captured["download"] = (kb_id, file_id, variant)
+        return {
+            "filename": "1.png",
+            "content": b"image-content",
+            "media_type": "image/png",
+        }
+
+    monkeypatch.setattr(
+        knowledge_router,
+        "_ensure_database_supports_documents",
+        fake_ensure_database_supports_documents,
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "get_file_download", fake_get_file_download)
+
+    response = await knowledge_router.download_document(
+        "kb_1",
+        "file_1",
+        current_user=user("admin-user"),
+    )
+
+    assert response.media_type == "image/png"
+    assert response.headers["content-disposition"] == "attachment; filename*=UTF-8''1.png"
+    assert captured == {
+        "ensure": ("kb_1", "文档下载"),
+        "download": ("kb_1", "file_1", "original"),
+    }
+
+
+async def test_create_folder_passes_parent_to_knowledge_base(monkeypatch):
+    captured = {}
+
+    async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
+        captured["ensure"] = (kb_id, operation)
+
+    async def fake_create_folder(
+        kb_id: str,
+        folder_name: str,
+        parent_id: str | None,
+        created_by: str | None = None,
+    ):
+        captured["create"] = (kb_id, folder_name, parent_id, created_by)
+        return {"file_id": "folder-1", "filename": folder_name, "parent_id": parent_id}
+
+    monkeypatch.setattr(
+        knowledge_router,
+        "_ensure_database_supports_documents",
+        fake_ensure_database_supports_documents,
+    )
+    monkeypatch.setattr(knowledge_router.knowledge_base, "create_folder", fake_create_folder)
+
+    result = await knowledge_router.create_folder(
+        "kb_1",
+        folder_name="图片",
+        parent_id="folder-parent",
+        current_user=user("admin-user"),
+    )
+
+    assert result["file_id"] == "folder-1"
+    assert captured == {
+        "ensure": ("kb_1", "文件夹创建"),
+        "create": ("kb_1", "图片", "folder-parent", "admin-user"),
+    }
 
 
 async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
@@ -1040,7 +1123,7 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
                 "source_paths": {item: "docs/demo.txt"},
             },
         ),
-        current_user=SimpleNamespace(uid="uid-user"),
+        current_user=user("uid-user"),
     )
 
     assert result["status"] == "success"

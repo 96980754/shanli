@@ -87,10 +87,12 @@ class SkillRepository:
         *,
         version: str,
         content_hash: str,
+        enabled: bool,
         updated_by: str | None,
     ) -> Skill:
         item.version = version
         item.content_hash = content_hash
+        item.enabled = enabled
         item.source_type = "builtin"
         item.share_config = {"access_level": "global", "department_ids": [], "user_uids": []}
         item.updated_by = updated_by

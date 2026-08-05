@@ -22,14 +22,30 @@
             <span class="file-name">{{ fileGroup.filename }}</span>
             <span class="chunk-count">{{ fileGroup.chunks.length }} chunks</span>
           </div>
-          <button
-            v-if="fileGroup.kb_id && fileGroup.file_id"
-            class="view-file-btn"
-            @click.stop="openFileDetail(fileGroup)"
-            title="查看文件"
-          >
-            <Eye :size="14" />
-          </button>
+          <div v-if="fileGroup.kb_id && fileGroup.file_id" class="file-actions">
+            <button
+              class="file-action-btn"
+              @click.stop="openFileDetail(fileGroup)"
+              title="查看文件"
+            >
+              <Eye :size="14" />
+              <span>查看</span>
+            </button>
+            <button
+              class="file-action-btn download-btn"
+              :disabled="downloadingFileKey === getFileKey(fileGroup)"
+              @click.stop="downloadOriginal(fileGroup)"
+              title="下载原文"
+            >
+              <LoaderCircle
+                v-if="downloadingFileKey === getFileKey(fileGroup)"
+                :size="14"
+                class="loading-icon"
+              />
+              <Download v-else :size="14" />
+              <span>下载原文</span>
+            </button>
+          </div>
         </div>
 
         <div v-if="expandedFiles.has(fileGroup.filename)" class="chunks-container">
@@ -79,7 +95,9 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { FileText, ChevronRight, ChevronDown, Eye } from 'lucide-vue-next'
+import { message } from 'ant-design-vue'
+import { FileText, ChevronRight, ChevronDown, Download, Eye, LoaderCircle } from 'lucide-vue-next'
+import { documentApi } from '@/apis/knowledge_api'
 import KbChunkDetailModal from './KbChunkDetailModal.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 
@@ -105,6 +123,7 @@ const selectedChunkIndex = ref(null)
 const fileDetailOpen = ref(false)
 const fileDetailKbId = ref('')
 const fileDetailFileId = ref('')
+const downloadingFileKey = ref('')
 
 const resolveChunks = (input) => {
   if (Array.isArray(input)) return input
@@ -210,6 +229,49 @@ const openFileDetail = (fileGroup) => {
   fileDetailFileId.value = fileGroup.file_id || ''
   fileDetailOpen.value = Boolean(fileDetailKbId.value && fileDetailFileId.value)
 }
+
+const getFileKey = (fileGroup) => `${fileGroup.kb_id}::${fileGroup.file_id}`
+
+const getDownloadFilename = (response, fallback) => {
+  const contentDisposition = response.headers.get('content-disposition')
+  if (!contentDisposition) return fallback
+
+  const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encodedMatch) {
+    try {
+      return decodeURIComponent(encodedMatch[1])
+    } catch {
+      return fallback
+    }
+  }
+
+  const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i)
+  return filenameMatch?.[1]?.replace(/['"]/g, '') || fallback
+}
+
+const downloadOriginal = async (fileGroup) => {
+  const fileKey = getFileKey(fileGroup)
+  downloadingFileKey.value = fileKey
+  try {
+    const response = await documentApi.downloadDocument(fileGroup.kb_id, fileGroup.file_id)
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = getDownloadFilename(response, fileGroup.filename || 'document')
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    message.success('原文下载成功')
+  } catch (error) {
+    console.error('下载知识库原文失败:', error)
+    message.error(error?.message || '原文下载失败')
+  } finally {
+    downloadingFileKey.value = ''
+  }
+}
 </script>
 
 <style scoped lang="less">
@@ -284,23 +346,53 @@ const openFileDetail = (fileGroup) => {
         }
       }
 
-      .view-file-btn {
+      .file-actions {
         flex-shrink: 0;
         display: flex;
         align-items: center;
-        justify-content: center;
-        width: 24px;
-        height: 24px;
-        border: none;
-        background: transparent;
-        border-radius: 4px;
+        gap: 4px;
+      }
+
+      .file-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--gray-150);
+        background: var(--gray-0);
+        border-radius: 5px;
         cursor: pointer;
-        color: var(--gray-500);
+        color: var(--gray-700);
+        font-size: 12px;
+        white-space: nowrap;
         transition: all 0.15s;
 
-        &:hover {
-          background: var(--gray-100);
-          color: var(--gray-700);
+        &:hover:not(:disabled) {
+          border-color: var(--gray-300);
+          background: var(--gray-25);
+          color: var(--gray-900);
+        }
+
+        &:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+
+        &.download-btn {
+          color: var(--color-primary-700);
+          border-color: var(--color-primary-100);
+          background: var(--color-primary-50);
+
+          &:hover:not(:disabled) {
+            color: var(--color-primary-900);
+            border-color: var(--color-primary-500);
+            background: var(--color-primary-100);
+          }
+        }
+
+        .loading-icon {
+          animation: spin 1s linear infinite;
         }
       }
     }
@@ -377,6 +469,12 @@ const openFileDetail = (fileGroup) => {
     font-size: 12px;
     border: 1px dashed var(--gray-200);
     border-radius: 8px;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

@@ -1,0 +1,65 @@
+properties:
+  Hardware:
+    screen_size:
+      type: float
+      unit: inch
+    screen_type:
+      type: string
+    resolution:
+      type: string
+      unit: pixel
+    battery_capacity:
+      type: int
+      unit: mAh
+    weight:
+      type: float
+      unit: g
+    dimensions:
+      type: string
+    ip_rating:
+      type: string
+    frequency:
+      type: string
+      unit: MHz/GHz
+  Performance:
+    max_users:
+      type: int
+    concurrent_calls:
+      type: int
+    latency:
+      type: string
+      unit: ms
+    battery_life:
+      type: string
+  Network:
+    wifi:
+      type: string
+    bluetooth:
+      type: string
+    gnss:
+      type: string
+  Document:
+    document_type:
+      type: string
+  SellingPoint:
+    category:
+      type: string
+  Positioning:
+    market_level:
+      type: string
+    industry_position:
+      type: string
+    deployment_position:
+      type: string
+  Roadmap:
+    name:
+      type: string
+    status:
+      type: string
+    planned_date:
+      type: string
+    release_date:
+      type: string
+  CompatibleTarget:
+    target_type:
+      type: string

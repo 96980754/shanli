@@ -6,11 +6,10 @@ import {
   ClipboardList,
   LibraryBig,
   Box,
-  FolderKanban,
   PanelLeftClose,
   PanelLeftOpen,
   MessageCirclePlus,
-  Search
+  CircleHelp
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -114,26 +113,21 @@ const mainList = computed(() => {
   ]
 
   items.push({
-    name: '工作区',
-    path: '/workspace',
-    icon: FolderKanban,
-    activeIcon: FolderKanban
-  })
-
-  items.push({
-    name: '智能体扩展',
+    name: userStore.isAdmin ? '智能体扩展' : '知识库',
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,
     activeIcon: LibraryBig
   })
 
-  items.push({
-    name: '智能体管理',
-    path: '/model-manage',
-    icon: Box,
-    activeIcon: Box
-  })
+  if (userStore.isAdmin) {
+    items.push({
+      name: '智能体管理',
+      path: '/model-manage',
+      icon: Box,
+      activeIcon: Box
+    })
+  }
 
   if (userStore.isSuperAdmin) {
     items.push({
@@ -141,6 +135,12 @@ const mainList = computed(() => {
       path: '/dashboard',
       icon: BarChart3,
       activeIcon: BarChart3
+    })
+    items.push({
+      name: '知识缺口',
+      path: '/knowledge-gaps',
+      icon: CircleHelp,
+      activeIcon: CircleHelp
     })
   }
 
@@ -256,7 +256,7 @@ provide('settingsModal', {
   <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <div class="header">
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="!sidebarCollapsed" to="/" class="brand-link">
+        <router-link v-if="!sidebarCollapsed" to="/agent" class="brand-link">
           <img :src="infoStore.organization.avatar" class="brand-avatar" />
           <span class="brand-name">{{ organizationName }}</span>
         </router-link>
@@ -270,6 +270,7 @@ provide('settingsModal', {
           <img :src="infoStore.organization.avatar" class="brand-avatar brand-avatar-image" />
           <PanelLeftOpen class="brand-expand-icon" size="20" />
         </button>
+
         <button
           v-if="!sidebarCollapsed"
           type="button"
@@ -301,19 +302,6 @@ provide('settingsModal', {
           </a-tooltip>
           <span class="nav-text">{{ primaryNavItem.name }}</span>
         </RouterLink>
-
-        <button
-          type="button"
-          class="nav-item"
-          :class="{ active: conversationSearchOpen }"
-          @click.stop="openConversationSearch"
-        >
-          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>搜索对话</template>
-            <Search class="icon" size="18" />
-          </a-tooltip>
-          <span class="nav-text">搜索对话</span>
-        </button>
 
         <RouterLink
           v-for="(item, index) in secondaryNavItems"
@@ -349,6 +337,7 @@ provide('settingsModal', {
           @rename-chat="handleRenameChat"
           @toggle-pin="handleTogglePinChat"
           @load-more-chats="() => chatThreadsStore.loadMoreThreads()"
+          @search="openConversationSearch"
         />
       </div>
       <div class="foo">

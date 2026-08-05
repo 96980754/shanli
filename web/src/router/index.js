@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '@/layouts/AppLayout.vue'
-import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useUserStore } from '@/stores/user'
 import { useAgentStore } from '@/stores/agent'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
@@ -10,16 +9,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'main',
-      component: BlankLayout,
-      children: [
-        {
-          path: '',
-          name: 'Home',
-          component: () => import('../views/HomeView.vue'),
-          meta: { keepAlive: true, requiresAuth: false }
-        }
-      ]
+      redirect: '/login'
     },
     {
       path: '/login',
@@ -67,7 +57,7 @@ const router = createRouter({
           path: '',
           name: 'WorkspaceComp',
           component: () => import('../views/WorkspaceView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { keepAlive: true, requiresAuth: true, requiresWorkspaceAccess: true }
         }
       ]
     },
@@ -80,6 +70,19 @@ const router = createRouter({
           path: '',
           name: 'DashboardComp',
           component: () => import('../views/DashboardView.vue'),
+          meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
+        }
+      ]
+    },
+    {
+      path: '/knowledge-gaps',
+      name: 'knowledge-gaps',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'KnowledgeGapsComp',
+          component: () => import('../views/KnowledgeGapsView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
         }
       ]
@@ -117,18 +120,7 @@ const router = createRouter({
               component: () => import('../views/DataBaseInfoView.vue'),
               meta: {
                 keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
-              }
-            },
-            {
-              path: 'mcp/:slug',
-              name: 'ExtensionMcpDetail',
-              component: () => import('../components/extensions/McpDetailView.vue'),
-              meta: {
-                keepAlive: false,
-                requiresAuth: true,
-                requiresAdmin: true
+                requiresAuth: true
               }
             },
             {
@@ -137,7 +129,8 @@ const router = createRouter({
               component: () => import('../components/extensions/SkillDetailView.vue'),
               meta: {
                 keepAlive: false,
-                requiresAuth: true
+                requiresAuth: true,
+                requiresAdmin: true
               }
             }
           ]
@@ -159,6 +152,7 @@ router.beforeEach(async (to) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
   const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
   const requiresSuperAdmin = to.matched.some((record) => record.meta.requiresSuperAdmin)
+  const requiresWorkspaceAccess = to.matched.some((record) => record.meta.requiresWorkspaceAccess)
 
   const userStore = useUserStore()
 
@@ -214,9 +208,15 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 如果用户已登录但访问登录页，按 redirect 参数跳转
+  // 工作区已从产品入口关闭
+  if (requiresWorkspaceAccess) {
+    return '/agent'
+  }
+
+  // 如果用户已登录但访问登录页，优先返回指定页面，否则进入对话页
   if (to.path === '/login' && isLoggedIn) {
-    return sanitizeRedirect(to.query.redirect)
+    const redirect = sanitizeRedirect(to.query.redirect)
+    return redirect === '/' ? '/agent' : redirect
   }
 
   // 其他情况正常导航

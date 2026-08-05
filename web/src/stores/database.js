@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { parseToShanghai } from '@/utils/time'
 import { canSelectFile, isProcessingFile } from '@/utils/knowledge_file_policy'
+import { resolveDocumentParentId } from '@/utils/documentFileNavigation'
 
 export const useDatabaseStore = defineStore('database', () => {
   const router = useRouter()
@@ -82,12 +83,12 @@ export const useDatabaseStore = defineStore('database', () => {
 
   // Actions
   // 管理员获取所有知识库，普通用户获取有权限访问的知识库
-  async function loadDatabases() {
+  async function loadDatabases(categoryId = null) {
     state.listLoading = true
     try {
       const data = userStore.isAdmin
-        ? await databaseApi.getDatabases()
-        : await databaseApi.getAccessibleDatabases()
+        ? await databaseApi.getDatabases(categoryId)
+        : await databaseApi.getAccessibleDatabases(categoryId)
       const list = data?.databases || []
       databases.value = list.sort((a, b) => {
         const timeA = parseToShanghai(a.created_at)
@@ -117,6 +118,11 @@ export const useDatabaseStore = defineStore('database', () => {
 
     if (!formData.kb_type) {
       message.error('请选择知识库类型')
+      return false
+    }
+
+    if (!formData.category_id) {
+      message.error('请选择内容分类')
       return false
     }
 
@@ -341,7 +347,11 @@ export const useDatabaseStore = defineStore('database', () => {
 
     const nextStatus = options.status ?? fileBrowser.status
     const nextRecursive = options.recursive ?? nextStatus !== 'all'
-    const nextParentId = nextRecursive ? null : (options.parentId ?? fileBrowser.parentId)
+    const nextParentId = resolveDocumentParentId(
+      options.parentId,
+      fileBrowser.parentId,
+      nextRecursive
+    )
     const nextPathPrefix = nextRecursive ? '' : (options.pathPrefix ?? fileBrowser.pathPrefix)
     const nextPage = Number(options.page ?? fileBrowser.page) || 1
     const nextPageSize = Number(options.pageSize ?? fileBrowser.pageSize) || 100
@@ -458,6 +468,32 @@ export const useDatabaseStore = defineStore('database', () => {
     })
   }
 
+  async function addUploadedFiles({ items, params, parentId }) {
+    if (items.length === 0) {
+      message.error('请先上传文件')
+      return false
+    }
+
+    state.chunkLoading = true
+    try {
+      const requestParams = { ...params, content_type: 'file' }
+      if (parentId) requestParams.parent_id = parentId
+      const data = await documentApi.addUploadedDocuments(kbId.value, items, requestParams)
+      if (data.status === 'success' || data.status === 'partial_failed') {
+        message.success(data.message || '文件已上传，等待管理员处理')
+        await delayedRefresh()
+        return true
+      }
+      message.error(data.message || '文件添加失败')
+      return false
+    } catch (error) {
+      console.error(error)
+      message.error(error.message || '文件添加失败')
+      return false
+    } finally {
+      state.chunkLoading = false
+    }
+  }
   async function addFiles({ items, contentType, params, parentId, databaseId }) {
     if (items.length === 0) {
       message.error(contentType === 'file' ? '请先上传文件' : '请输入有效的网页链接')
@@ -766,6 +802,7 @@ export const useDatabaseStore = defineStore('database', () => {
     handleDeleteFile,
     handleBatchDelete,
     addFiles,
+    addUploadedFiles,
     parseFiles,
     parsePendingFiles,
     indexFiles,

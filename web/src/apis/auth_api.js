@@ -2,7 +2,7 @@
  * 认证相关 API
  */
 
-import { apiAdminGet, apiGet, apiPost } from './base'
+import { apiAdminGet, apiAdminPost, apiGet, apiPost } from './base'
 
 async function parseErrorDetail(response, fallbackMessage) {
   const contentType = response.headers.get('content-type') || ''
@@ -90,11 +90,40 @@ async function approveCLIAuthSession(userCode) {
   return apiPost(`/api/auth/cli/sessions/${encoded}/approve`, {})
 }
 
+async function downloadUserImportTemplate() {
+  const response = await apiAdminGet('/api/auth/users/import-template', {}, 'blob')
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  const filename = encodedName ? decodeURIComponent(encodedName) : '用户导入模板.xlsx'
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function previewUserImport(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return apiAdminPost('/api/auth/users/import-preview', formData)
+}
+
+async function importUsers(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return apiAdminPost('/api/auth/users/import', formData)
+}
+
 export const authApi = {
   getOIDCConfig,
   getOIDCLoginUrl,
   getUserAccessOptions,
   exchangeOIDCCode,
   getCLIAuthSession,
-  approveCLIAuthSession
+  approveCLIAuthSession,
+  downloadUserImportTemplate,
+  previewUserImport,
+  importUsers
 }

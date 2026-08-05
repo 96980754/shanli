@@ -1,0 +1,53 @@
+{
+  "registry_id": "tongyong",
+  "version": "1.0.0",
+  "name": "通用",
+  "status": "active",
+  "entities": {
+    "effect": {
+      "description": "效果",
+      "examples": []
+    },
+    "feature": {
+      "description": "产品功能",
+      "examples": []
+    },
+    "product": {
+      "description": "产品名",
+      "examples": []
+    },
+    "technology": {
+      "description": "技术名",
+      "examples": []
+    }
+  },
+  "relations": {
+    "has_effect": {
+      "description": "产品实现了某种效果",
+      "source": [
+        "product"
+      ],
+      "target": [
+        "effect"
+      ]
+    },
+    "has_feature": {
+      "description": "产品拥有某种功能",
+      "source": [
+        "product"
+      ],
+      "target": [
+        "feature"
+      ]
+    },
+    "has_tech": {
+      "description": "产品使用某种技术",
+      "source": [
+        "product"
+      ],
+      "target": [
+        "technology"
+      ]
+    }
+  }
+}

@@ -11,6 +11,7 @@ from yuxi.storage.postgres.models_knowledge import (
     KnowledgeGraphEntityMention,
     KnowledgeGraphTriple,
     KnowledgeGraphTripleMention,
+    KnowledgeFile,
 )
 
 
@@ -22,6 +23,26 @@ class KnowledgeGraphRepository:
             )
             triple_count = await session.scalar(
                 select(func.count()).select_from(KnowledgeGraphTriple).where(KnowledgeGraphTriple.kb_id == kb_id)
+            )
+            return int(entity_count or 0), int(triple_count or 0)
+
+    async def count_by_current_kb_id(self, kb_id: str) -> tuple[int, int]:
+        async with pg_manager.get_async_session_context() as session:
+            entity_count = await session.scalar(
+                select(func.count(func.distinct(KnowledgeGraphEntity.entity_id)))
+                .join(
+                    KnowledgeGraphEntityMention, KnowledgeGraphEntityMention.entity_id == KnowledgeGraphEntity.entity_id
+                )
+                .join(KnowledgeFile, KnowledgeFile.file_id == KnowledgeGraphEntityMention.file_id)
+                .where(KnowledgeGraphEntity.kb_id == kb_id, KnowledgeFile.is_current.is_(True))
+            )
+            triple_count = await session.scalar(
+                select(func.count(func.distinct(KnowledgeGraphTriple.triple_id)))
+                .join(
+                    KnowledgeGraphTripleMention, KnowledgeGraphTripleMention.triple_id == KnowledgeGraphTriple.triple_id
+                )
+                .join(KnowledgeFile, KnowledgeFile.file_id == KnowledgeGraphTripleMention.file_id)
+                .where(KnowledgeGraphTriple.kb_id == kb_id, KnowledgeFile.is_current.is_(True))
             )
             return int(entity_count or 0), int(triple_count or 0)
 
