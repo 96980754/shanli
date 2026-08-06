@@ -49,10 +49,12 @@
                       kind="agent"
                       :size="24"
                       shape="rounded"
-                      :alt="`${agent.label}图标`"
+                      :alt="$t('agent.iconAlt', { name: agent.label })"
                     />
                     <span class="config-dropdown-item-label">{{ agent.label }}</span>
-                    <span v-if="agent.isBuiltin" class="config-dropdown-item-badge">内置</span>
+                    <span v-if="agent.isBuiltin" class="config-dropdown-item-badge">{{
+                      $t('agent.builtin')
+                    }}</span>
                     <Check
                       v-if="agent.value === selectedAgentId"
                       :size="14"
@@ -61,7 +63,7 @@
                   </button>
 
                   <div v-if="hasActiveThread" class="config-dropdown-hint">
-                    当前对话已绑定智能体，新对话可切换。
+                    {{ $t('agent.threadBoundHint') }}
                   </div>
 
                   <div class="config-dropdown-divider"></div>
@@ -72,7 +74,7 @@
                     @click="openAgentManagement"
                   >
                     <Settings2 :size="15" class="config-dropdown-item-icon" />
-                    <span class="config-dropdown-item-label">管理智能体</span>
+                    <span class="config-dropdown-item-label">{{ $t('agent.manage') }}</span>
                   </button>
                 </div>
               </template>
@@ -91,6 +93,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { Settings2, ChevronDown, Check } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
@@ -110,6 +113,7 @@ const agentEditModalRef = ref(null)
 
 // Stores
 const agentStore = useAgentStore()
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -222,8 +226,8 @@ const currentAgentOption = computed(() =>
 )
 
 const currentAgentLabel = computed(() => {
-  if (isLoadingConfig.value) return '加载中...'
-  return currentAgentOption.value?.label || '智能体'
+  if (isLoadingConfig.value) return t('common.loading')
+  return currentAgentOption.value?.label || t('agent.defaultLabel')
 })
 
 const agentDropdownOpen = ref(false)
@@ -243,7 +247,7 @@ const loadAgentBackends = async () => {
 const handleAgentSwitch = async (agentId, hasActiveThread) => {
   if (!agentId || agentId === selectedAgentId.value) return
   if (hasActiveThread) {
-    message.info('当前对话已绑定智能体，请新建对话后切换')
+    message.info(t('agent.errors.threadBound'))
     return
   }
   try {
@@ -251,7 +255,7 @@ const handleAgentSwitch = async (agentId, hasActiveThread) => {
     agentDropdownOpen.value = false
   } catch (error) {
     console.error('切换智能体出错:', error)
-    message.error('切换智能体失败')
+    message.error(t('agent.errors.switchFailed'))
   }
 }
 
@@ -272,7 +276,7 @@ const openAgentManagement = async () => {
     await loadAgentBackends()
     await agentEditModalRef.value?.openEdit(selectedAgentId.value)
   } catch (error) {
-    message.error(error.message || '打开智能体配置失败')
+    message.error(error.message || t('agent.errors.openConfigFailed'))
   }
 }
 </script>

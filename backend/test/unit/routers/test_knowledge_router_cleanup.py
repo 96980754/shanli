@@ -141,7 +141,7 @@ async def test_upload_file_rejects_jsonl_uploads():
     upload = UploadFile(filename="dataset.jsonl", file=BytesIO(b'{"query":"hello"}\n'))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id=None, current_user=user("user_1"))
+        await knowledge_router.upload_file(upload, kb_id=None, duplicate_strategy="prompt", current_user=user("user_1"))
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Unsupported file type: .jsonl"
@@ -162,7 +162,7 @@ async def test_upload_file_rejects_oversized_file(monkeypatch):
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"123456"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="kb_1", current_user=user("user_1"))
+        await knowledge_router.upload_file(upload, kb_id="kb_1", duplicate_strategy="prompt", current_user=user("user_1"))
 
     assert exc_info.value.status_code == 400
     assert "100 MB" in exc_info.value.detail
@@ -193,7 +193,7 @@ async def test_upload_file_invalid_kb_fails_before_read_or_minio(monkeypatch):
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="missing", current_user=user("user_1"))
+        await knowledge_router.upload_file(upload, kb_id="missing", duplicate_strategy="prompt", current_user=user("user_1"))
 
     assert exc_info.value.status_code == 404
     assert calls == {"read": 0, "upload": 0}
@@ -224,7 +224,7 @@ async def test_upload_file_read_only_kb_fails_before_read_or_minio(monkeypatch):
     upload = UploadFile(filename="demo.txt", file=BytesIO(b"demo"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.upload_file(upload, kb_id="readonly", current_user=user("user_1"))
+        await knowledge_router.upload_file(upload, kb_id="readonly", duplicate_strategy="prompt", current_user=user("user_1"))
 
     assert exc_info.value.status_code == 400
     assert calls == {"read": 0, "upload": 0}
@@ -239,6 +239,223 @@ async def test_markdown_endpoint_rejects_oversized_file(monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert "100 MB" in exc_info.value.detail
+
+
+async def test_save_edited_document_serializes_and_replaces(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            assert action == "can_manage"
+            return True
+
+    captured = {}
+
+    def fake_serialize(content_type, payload):
+        captured["content_type"] = content_type
+        return b"docx-bytes"
+
+    async def fake_replace(kb_id, doc_id, content_bytes, filename, operator_id=None, params=None):
+        captured["doc_id"] = doc_id
+        captured["bytes"] = content_bytes
+        captured["filename"] = filename
+        return "file_new"
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+    monkeypatch.setattr(knowledge_router, "serialize_edited_content", fake_serialize)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "replace_document_content", fake_replace)
+
+    result = await knowledge_router.save_edited_document(
+        "kb-1",
+        "file_old",
+        knowledge_router.SaveEditedDocumentRequest(
+            content_type="docx",
+            blocks=[{"kind": "para", "text": "编辑后"}],
+            filename="edited.docx",
+        ),
+        current_user=user("user-1"),
+    )
+
+    assert captured["doc_id"] == "file_old"
+    assert captured["bytes"] == b"docx-bytes"
+    assert captured["filename"] == "edited.docx"
+    assert result == {"message": "文档已更新并重新入库", "file_id": "file_new"}
+
+
+async def test_save_edited_document_rejects_bad_type(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            return True
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.save_edited_document(
+            "kb-1",
+            "file_old",
+            knowledge_router.SaveEditedDocumentRequest(
+                content_type="pdf",
+                blocks=[],
+                filename="x.pdf",
+            ),
+            current_user=user("user-1"),
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+async def test_office_extract_route_uses_file_path(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            assert action == "can_view"
+            return True
+
+    captured = {}
+
+    async def fake_extract(kb_id, file_path, filename):
+        captured["file_path"] = file_path
+        captured["filename"] = filename
+        return {"type": "docx", "blocks": [{"kind": "para", "text": "x"}]}
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+    monkeypatch.setattr(knowledge_router, "extract_office_content", fake_extract)
+
+    result = await knowledge_router.extract_office_content_upload(
+        "kb-1",
+        knowledge_router.OfficeExtractRequest(file_path="minio://kb/x.docx", filename="x.docx"),
+        current_user=user("user-1"),
+    )
+
+    assert captured["file_path"] == "minio://kb/x.docx"
+    assert result["type"] == "docx"
+
+
+async def test_office_writeback_uploads_and_returns_file_path(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            assert action == "can_upload"
+            return True
+
+    captured = {}
+
+    def fake_serialize(content_type, payload):
+        captured["content_type"] = content_type
+        return b"docx-bytes"
+
+    async def fake_upload(kb_id, content_bytes, filename):
+        captured["bytes"] = content_bytes
+        return "minio://kb/new.docx"
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+    monkeypatch.setattr(knowledge_router, "serialize_edited_content", fake_serialize)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "upload_office_bytes", fake_upload)
+
+    result = await knowledge_router.office_writeback(
+        "kb-1",
+        knowledge_router.OfficeWritebackRequest(
+            content_type="docx",
+            blocks=[{"kind": "para", "text": "编辑后"}],
+            filename="x.docx",
+        ),
+        current_user=user("user-1"),
+    )
+
+    assert captured["bytes"] == b"docx-bytes"
+    assert result["file_path"] == "minio://kb/new.docx"
+    assert result["content_hash"]
+
+
+async def test_clean_document_route_requires_manage_and_returns_cleaned(monkeypatch):
+    async def fake_clean(raw: str) -> dict:
+        return {"cleaned_markdown": "# 清洗结果", "warnings": []}
+
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            assert action == "can_manage"
+            return True
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+    monkeypatch.setattr(knowledge_router, "clean_document_markdown", fake_clean)
+
+    result = await knowledge_router.clean_document_markdown_route(
+        "kb-1",
+        knowledge_router.DocumentCleanRequest(markdown="混乱文本", filename="demo.txt"),
+        current_user=user("user-1"),
+    )
+
+    assert result == {
+        "cleaned_markdown": "# 清洗结果",
+        "filename": "demo.txt",
+        "warnings": [],
+    }
+
+
+async def test_clean_document_batch_route_parallel_with_failure_isolation(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            assert action == "can_manage"
+            return True
+
+    async def fake_clean_file(kb_id, file_path, filename=None):
+        if file_path == "bad":
+            raise RuntimeError("boom")
+        return {"cleaned_markdown": f"cleaned:{file_path}", "warnings": []}
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+    monkeypatch.setattr(knowledge_router, "clean_document_file", fake_clean_file)
+
+    result = await knowledge_router.clean_document_batch_route(
+        "kb-1",
+        knowledge_router.DocumentCleanBatchRequest(
+            items=[
+                knowledge_router.DocumentCleanBatchItem(file_path="a", filename="a.txt"),
+                knowledge_router.DocumentCleanBatchItem(file_path="bad", filename="bad.txt"),
+                knowledge_router.DocumentCleanBatchItem(file_path="c", filename="c.txt"),
+            ]
+        ),
+        current_user=user("user-1"),
+    )
+
+    assert result["results"][0]["cleaned_markdown"] == "cleaned:a"
+    assert result["results"][0]["error"] is None
+    assert result["results"][1]["file_path"] == "bad"
+    assert result["results"][1]["cleaned_markdown"] == ""
+    assert result["results"][1]["error"] is not None
+    assert result["results"][2]["cleaned_markdown"] == "cleaned:c"
+
+
+async def test_clean_document_batch_route_rejects_without_permission(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            return action != "can_manage"
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.clean_document_batch_route(
+            "kb-1",
+            knowledge_router.DocumentCleanBatchRequest(
+                items=[knowledge_router.DocumentCleanBatchItem(file_path="a")]
+            ),
+            current_user=user("user-1"),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_clean_document_route_rejects_without_manage_permission(monkeypatch):
+    class FakePermissionService:
+        async def has_permission(self, user, kb_id, action):
+            return action != "can_manage"
+
+    monkeypatch.setattr(knowledge_router, "KnowledgePermissionService", FakePermissionService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.clean_document_markdown_route(
+            "kb-1",
+            knowledge_router.DocumentCleanRequest(markdown="x", filename=None),
+            current_user=user("user-1"),
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 async def test_index_documents_uses_uid_for_operator(monkeypatch):
@@ -439,8 +656,13 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
     async def fake_get_database_info(kb_id: str) -> dict:
         return {"name": "测试知识库"}
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
-        return {"file_id": "file_1", "status": "indexing"}
+    async def fake_create_uploaded_document(self, *, kb_id, item, params, operator_id):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded"},
+            existing_file_id=None,
+            cleanup_pending=False,
+        )
 
     async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
         return {"file_id": file_id, "status": "parsed"}
@@ -461,7 +683,10 @@ async def test_add_documents_auto_index_returns_one_final_result_per_item(monkey
         fake_ensure_database_supports_documents,
     )
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        "yuxi.services.document_ingestion_service.DocumentIngestionService.create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
@@ -491,8 +716,13 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
     async def fake_get_database_info(kb_id: str) -> dict:
         return {"name": "测试知识库"}
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
-        return {"file_id": "file_1", "status": "indexing"}
+    async def fake_create_uploaded_document(self, *, kb_id, item, params, operator_id):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded"},
+            existing_file_id=None,
+            cleanup_pending=False,
+        )
 
     async def fake_parse_file(kb_id: str, file_id: str, operator_id: str | None = None):
         return {"file_id": file_id, "status": "parsed", "error": None}
@@ -513,7 +743,10 @@ async def test_add_documents_auto_index_treats_error_none_as_success(monkeypatch
         fake_ensure_database_supports_documents,
     )
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        "yuxi.services.document_ingestion_service.DocumentIngestionService.create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse_file)
     monkeypatch.setattr(knowledge_router.knowledge_base, "update_file_params", fake_update_file_params)
     monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index_file)
@@ -577,27 +810,39 @@ async def test_add_uploaded_documents_rejects_non_minio_url(monkeypatch):
     assert exc_info.value.detail == "File source must be a MinIO URL"
 
 
-async def test_add_uploaded_documents_rejects_missing_content_hash(monkeypatch):
+async def test_add_uploaded_documents_allows_missing_content_hash(monkeypatch):
+    """缺 content_hash 不再报错：由 create_uploaded_document 服务端重算可信哈希（PR12 吸收）。"""
     item = "minio://knowledgebases/kb_1/upload/demo.txt"
 
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
+
+    async def fake_create_uploaded_document(self, *, kb_id, item, params, operator_id):
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded"},
+            existing_file_id=None,
+            cleanup_pending=False,
+        )
 
     monkeypatch.setattr(
         knowledge_router,
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
+    monkeypatch.setattr(
+        "yuxi.services.document_ingestion_service.DocumentIngestionService.create_uploaded_document",
+        fake_create_uploaded_document,
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        await knowledge_router.add_uploaded_documents(
-            "kb_1",
-            knowledge_router.AddUploadedDocumentsRequest(items=[item], params={}),
-            current_user=user("uid-user"),
-        )
+    result = await knowledge_router.add_uploaded_documents(
+        "kb_1",
+        knowledge_router.AddUploadedDocumentsRequest(items=[item], params={}),
+        current_user=user("uid-user"),
+    )
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == f"Missing content_hash for file: {item}"
+    assert result["status"] == "success"
+    assert result["added"] == 1
 
 
 async def test_download_document_uses_shared_original_file_reader(monkeypatch):
@@ -673,12 +918,17 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
     async def fake_ensure_database_supports_documents(kb_id: str, operation: str) -> None:
         return None
 
-    async def fake_add_file_record(kb_id: str, item_path: str, params: dict, operator_id: str | None = None):
+    async def fake_create_uploaded_document(self, *, kb_id, item, params, operator_id):
         captured["kb_id"] = kb_id
-        captured["item"] = item_path
+        captured["item"] = item
         captured["params"] = params
         captured["operator_id"] = operator_id
-        return {"file_id": "file_1", "status": "uploaded", "filename": "demo.txt"}
+        return SimpleNamespace(
+            action="created",
+            file_meta={"file_id": "file_1", "status": "uploaded", "filename": "demo.txt"},
+            existing_file_id=None,
+            cleanup_pending=False,
+        )
 
     async def fail_enqueue(*_args, **_kwargs):
         raise AssertionError("documents/add must not enqueue tasker work")
@@ -688,7 +938,10 @@ async def test_add_uploaded_documents_creates_records_without_task(monkeypatch):
         "_ensure_database_supports_documents",
         fake_ensure_database_supports_documents,
     )
-    monkeypatch.setattr(knowledge_router.knowledge_base, "add_file_record", fake_add_file_record)
+    monkeypatch.setattr(
+        "yuxi.services.document_ingestion_service.DocumentIngestionService.create_uploaded_document",
+        fake_create_uploaded_document,
+    )
     monkeypatch.setattr(knowledge_router.tasker, "enqueue", fail_enqueue)
 
     result = await knowledge_router.add_uploaded_documents(

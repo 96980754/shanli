@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed, provide, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
   BarChart3,
@@ -9,7 +10,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageCirclePlus,
-  CircleHelp
+  CircleHelp,
+  Search,
+  FolderOpen
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -22,12 +25,15 @@ import { useTaskerStore } from '@/stores/tasker'
 import { useUserStore } from '@/stores/user'
 import { storeToRefs } from 'pinia'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
+import LanguageToggle from '@/components/LanguageToggle.vue'
 import DebugComponent from '@/components/DebugComponent.vue'
 import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
+import GlobalKnowledgeSearchModal from '@/components/GlobalKnowledgeSearchModal.vue'
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 const agentStore = useAgentStore()
 const chatThreadsStore = useChatThreadsStore()
@@ -49,6 +55,7 @@ const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
+const globalKnowledgeSearchOpen = ref(false)
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -96,14 +103,14 @@ const activeConversationThreadId = computed(() => {
   return route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || 'AI知识库'
+  return infoStore.organization.name || infoStore.branding.name || t('common.appName')
 })
 
 // 下面是导航菜单部分，添加智能体项
 const mainList = computed(() => {
   const items = [
     {
-      name: '创建新对话',
+      name: t('nav.newChat'),
       path: '/agent',
       icon: MessageCirclePlus,
       activeIcon: MessageCirclePlus,
@@ -113,16 +120,27 @@ const mainList = computed(() => {
   ]
 
   items.push({
-    name: userStore.isAdmin ? '智能体扩展' : '知识库',
+    name: userStore.isAdmin ? t('nav.extensions') : t('nav.knowledgeBase'),
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,
     activeIcon: LibraryBig
   })
 
+  // 知识库浏览（全库搜索 + 热门文档 + 分类目录），仅管理员可见
   if (userStore.isAdmin) {
     items.push({
-      name: '智能体管理',
+      name: t('nav.knowledgeBrowser'),
+      path: '/knowledge-browser',
+      activePaths: ['/knowledge-browser'],
+      icon: FolderOpen,
+      activeIcon: FolderOpen
+    })
+  }
+
+  if (userStore.isAdmin) {
+    items.push({
+      name: t('nav.agentManage'),
       path: '/model-manage',
       icon: Box,
       activeIcon: Box
@@ -131,13 +149,13 @@ const mainList = computed(() => {
 
   if (userStore.isSuperAdmin) {
     items.push({
-      name: '数据总览',
+      name: t('nav.dashboard'),
       path: '/dashboard',
       icon: BarChart3,
       activeIcon: BarChart3
     })
     items.push({
-      name: '知识缺口',
+      name: t('nav.knowledgeGaps'),
       path: '/knowledge-gaps',
       icon: CircleHelp,
       activeIcon: CircleHelp
@@ -168,6 +186,10 @@ const toggleSidebar = () => {
 
 const openConversationSearch = () => {
   conversationSearchOpen.value = true
+}
+
+const openGlobalKnowledgeSearch = () => {
+  globalKnowledgeSearchOpen.value = true
 }
 
 const initAgentNavigation = async () => {
@@ -264,7 +286,7 @@ provide('settingsModal', {
           v-else
           type="button"
           class="brand-link brand-expand-button"
-          aria-label="展开侧边栏"
+          :aria-label="$t('layout.expandSidebar')"
           @click="setSidebarCollapsed(false)"
         >
           <img :src="infoStore.organization.avatar" class="brand-avatar brand-avatar-image" />
@@ -275,13 +297,27 @@ provide('settingsModal', {
           v-if="!sidebarCollapsed"
           type="button"
           class="sidebar-toggle"
-          aria-label="折叠侧边栏"
+          :aria-label="$t('layout.collapseSidebar')"
           @click="toggleSidebar"
         >
           <PanelLeftClose size="18" />
         </button>
       </div>
       <div class="nav">
+        <!-- 全库搜索入口（仅管理员可见） -->
+        <button
+          v-if="userStore.isAdmin"
+          type="button"
+          class="nav-item"
+          :class="{ active: globalKnowledgeSearchOpen }"
+          @click.stop="openGlobalKnowledgeSearch"
+        >
+          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
+            <template #title>{{ $t('common.appName') }} · 全库搜索</template>
+            <Search class="icon" size="18" />
+          </a-tooltip>
+          <span class="nav-text">{{ $t('layout.globalSearch') }}</span>
+        </button>
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
@@ -341,16 +377,20 @@ provide('settingsModal', {
         />
       </div>
       <div class="foo">
+        <!-- 语言切换 -->
+        <div class="nav-item user-info" @click.stop>
+          <LanguageToggle />
+        </div>
         <!-- 用户信息组件 -->
         <div class="nav-item user-info" @click.stop>
           <UserInfoComponent :show-role="!sidebarCollapsed">
             <template v-if="userStore.isAdmin" #actions>
-              <a-tooltip placement="top" title="任务中心">
+              <a-tooltip placement="top" :title="$t('layout.taskCenter')">
                 <button
                   class="user-task-center"
                   :class="{ active: isDrawerOpen }"
                   type="button"
-                  aria-label="任务中心"
+                  :aria-label="$t('layout.taskCenter')"
                   @click.stop="taskerStore.openDrawer()"
                 >
                   <a-badge
@@ -382,11 +422,13 @@ provide('settingsModal', {
       @create-thread="handleCreateConversationFromSearch"
       @thread-found="handleSearchThreadFound"
     />
+    <!-- 全库搜索弹窗（仅管理员） -->
+    <GlobalKnowledgeSearchModal v-if="userStore.isAdmin" v-model:open="globalKnowledgeSearchOpen" />
 
     <!-- Debug Modal -->
     <a-modal
       v-model:open="showDebugModal"
-      title="调试面板"
+      :title="$t('layout.debugPanel')"
       width="90%"
       :footer="null"
       @cancel="handleDebugModalClose"

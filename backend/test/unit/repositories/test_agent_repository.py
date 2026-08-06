@@ -44,7 +44,7 @@ async def test_ensure_default_agent_creates_description(monkeypatch):
     assert agent.description == DEFAULT_AGENT_DESCRIPTION
     assert agent.config_json == {
         "context": {
-            "tools": ["ocr_parse_file"],
+            "tools": ["ocr_parse_file", "ask_user_question"],
             "mcps": [],
             "subagents": [GENERAL_PURPOSE_AGENT_SLUG],
         }

@@ -57,7 +57,17 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         // detail 可能是字符串，也可能是结构化对象（如 { error, message }），后者需取出可读文案，
         // 否则直接拼接会得到 "[object Object]"。
         const detail = errorData.detail
-        if (detail && typeof detail === 'object') {
+        if (Array.isArray(detail)) {
+          // FastAPI 422：detail 是字段错误数组，拼出可读信息便于定位
+          errorMessage = detail
+            .map((item) => {
+              const loc = Array.isArray(item?.loc) ? item.loc.join('.') : ''
+              const msg = item?.msg || ''
+              return loc && msg ? `${loc}: ${msg}` : msg
+            })
+            .filter(Boolean)
+            .join('; ')
+        } else if (detail && typeof detail === 'object') {
           errorMessage = detail.message || detail.error || errorMessage
         } else {
           errorMessage = detail || errorData.message || errorMessage

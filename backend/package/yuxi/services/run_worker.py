@@ -7,6 +7,8 @@ import json
 import time
 from dataclasses import dataclass, field
 
+from arq import cron
+from arq.worker import func
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
@@ -16,6 +18,15 @@ from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentR
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
 from yuxi.services.graph_build_worker import process_knowledge_graph_index
 from yuxi.services.input_message_service import restore_chat_input_message
+from yuxi.services.document_ingestion_service import (
+    REPLACEMENT_CLEANUP_MAX_TRIES,
+    DocumentIngestionService,
+    process_document_replacement_cleanup,
+)
+from yuxi.services.knowledge_conflict_publish_service import (
+    process_knowledge_conflict_publish,
+    recover_knowledge_conflict_publish_tasks,
+)
 from yuxi.services.run_queue_service import (
     append_run_stream_event,
     clear_cancel_signal,
@@ -548,6 +559,22 @@ async def _load_input_message(message_id: int | None) -> Message | None:
         return result.scalar_one_or_none()
 
 
+async def recover_document_replacement_cleanups(ctx):
+    """Cron：恢复因 worker 崩溃/重启而中断的替换版本清理任务。"""
+    from yuxi.storage.redis import get_arq_redis_settings
+
+    try:
+        redis_settings = get_arq_redis_settings()
+    except Exception:
+        redis_settings = None
+    if redis_settings is None:
+        return
+    try:
+        await DocumentIngestionService().recover_pending_replacement_cleanups(queue=ctx.get("redis"))
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Failed to recover replacement cleanups: {exc}")
+
+
 async def _worker_startup(ctx):
     del ctx
     pg_manager.initialize()
@@ -558,6 +585,16 @@ async def _worker_startup(ctx):
     async with pg_manager.get_async_session_context() as session:
         await init_builtin_skills(session)
     sys_config.start_runtime_sync()
+    # 启动时恢复一次中断的替换清理任务
+    try:
+        await DocumentIngestionService().recover_pending_replacement_cleanups(queue=None)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Failed to recover replacement cleanups on startup: {exc}")
+    # 启动时恢复一次中断的知识冲突发布任务
+    try:
+        await recover_knowledge_conflict_publish_tasks({"redis": None})
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Failed to recover conflict publish tasks on startup: {exc}")
 
 
 async def _worker_shutdown(ctx):
@@ -568,7 +605,16 @@ async def _worker_shutdown(ctx):
 
 
 class WorkerSettings:
-    functions = [process_agent_run, process_knowledge_graph_index]
+    functions = [
+        process_agent_run,
+        process_knowledge_graph_index,
+        func(process_document_replacement_cleanup, max_tries=REPLACEMENT_CLEANUP_MAX_TRIES),
+        process_knowledge_conflict_publish,
+    ]
+    cron_jobs = [
+        cron(recover_document_replacement_cleanups, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}, unique=True),
+        cron(recover_knowledge_conflict_publish_tasks, minute=set(range(60)), unique=True),
+    ]
     max_tries = 2
     retry_jobs = True
     job_timeout = 3600

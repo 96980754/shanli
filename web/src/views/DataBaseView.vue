@@ -2,29 +2,32 @@
   <div class="database-container layout-container">
     <PageHeader
       v-if="!props.embedded"
-      title="知识库"
+      :title="$t('db.title')"
       :active-key="knowledgeActiveView"
       :tabs="knowledgeViewItems"
       :loading="dbState.listLoading"
       :show-border="true"
-      aria-label="知识库视图切换"
+      :aria-label="$t('db.viewSwitchLabel')"
     />
 
-    <PageShoulder v-model:search="searchQuery" search-placeholder="搜索知识库...">
+    <PageShoulder
+      v-model:search="searchQuery"
+      :search-placeholder="$t('db.searchPlaceholder')"
+    >
       <template #filters>
         <a-select
           v-model:value="categoryFilter"
           style="width: 140px"
-          placeholder="全部分类"
+          :placeholder="$t('db.allCategories')"
           allow-clear
         >
-          <a-select-option :value="null">全部分类</a-select-option>
+          <a-select-option :value="null">{{ $t('db.allCategories') }}</a-select-option>
           <a-select-option v-for="category in categories" :key="category.id" :value="category.id">
             {{ category.name }}
           </a-select-option>
         </a-select>
         <a-button v-if="userStore.isSuperAdmin" @click="categoryModalOpen = true">
-          分类管理
+          {{ $t('db.manageCategories') }}
         </a-button>
       </template>
       <template #actions>
@@ -35,14 +38,14 @@
           :disabled="!kbTypes.length"
           @click="state.openNewDatabaseModel = true"
         >
-          <Plus :size="16" /> 新建知识库
+          <Plus :size="16" /> {{ $t('db.newDatabase') }}
         </a-button>
       </template>
     </PageShoulder>
 
     <a-modal
       :open="state.openNewDatabaseModel"
-      title="新建知识库"
+      :title="$t('db.modalTitle')"
       :confirm-loading="dbState.creating"
       @ok="handleCreateDatabase"
       @cancel="cancelCreateDatabase"
@@ -53,7 +56,7 @@
       <div class="new-database-form">
         <!-- 知识库类型选择 -->
         <div class="form-section">
-          <h3 class="section-title">知识库类型<span class="required-mark">*</span></h3>
+          <h3 class="section-title">{{ $t('db.section.type') }}<span class="required-mark">*</span></h3>
           <div class="kb-type-cards">
             <div
               v-for="(typeInfo, typeKey) in orderedKbTypes"
@@ -73,32 +76,32 @@
         </div>
 
         <div class="form-section">
-          <h3 class="section-title">内容分类<span class="required-mark">*</span></h3>
+          <h3 class="section-title">{{ $t('db.section.category') }}<span class="required-mark">*</span></h3>
           <a-select
             v-model:value="newDatabase.category_id"
             :options="categoryOptions"
-            placeholder="请选择内容分类"
+            :placeholder="$t('db.placeholder.category')"
           />
         </div>
 
         <div class="form-section">
-          <h3 class="section-title">知识库名称<span class="required-mark">*</span></h3>
-          <a-input v-model:value="newDatabase.name" placeholder="新建知识库名称" />
+          <h3 class="section-title">{{ $t('db.section.name') }}<span class="required-mark">*</span></h3>
+          <a-input v-model:value="newDatabase.name" :placeholder="$t('db.placeholder.name')" />
         </div>
 
         <div v-if="selectedKbTypeInfo?.requires_embedding_model" class="form-grid two-columns">
           <div class="form-section compact-section">
-            <h3 class="section-title">嵌入模型</h3>
+            <h3 class="section-title">{{ $t('db.section.embedding') }}</h3>
             <EmbeddingModelSelector
               v-model:value="newDatabase.embedding_model_spec"
               class="full-width"
-              placeholder="请选择嵌入模型"
+              :placeholder="$t('db.placeholder.embedding')"
             />
           </div>
 
           <div class="form-section compact-section">
             <div class="chunk-preset-title-row">
-              <h3 class="section-title">分块策略</h3>
+              <h3 class="section-title">{{ $t('db.section.chunkPreset') }}</h3>
               <a-tooltip :title="selectedPresetDescription">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
@@ -155,21 +158,21 @@
         </div>
 
         <div class="form-section">
-          <h3 class="section-title">知识库描述</h3>
+          <h3 class="section-title">{{ $t('db.section.description') }}</h3>
           <p class="field-hint description-hint">
-            在智能体流程中，这里的描述会作为工具的描述。智能体会根据知识库的标题和描述来选择合适的工具。所以这里描述的越详细，智能体越容易选择到合适的工具。
+            {{ $t('db.section.typeDesc') }}
           </p>
           <AiTextarea
             v-model="newDatabase.description"
             :name="newDatabase.name"
-            placeholder="新建知识库描述"
+            :placeholder="$t('db.section.description')"
             :auto-size="{ minRows: 3, maxRows: 10 }"
           />
         </div>
 
         <!-- 共享配置 -->
         <div class="form-section compact-section">
-          <h3 class="section-title">共享设置</h3>
+          <h3 class="section-title">{{ $t('db.section.sharing') }}</h3>
           <ShareConfigForm
             ref="shareConfigFormRef"
             v-model="shareConfig"
@@ -178,14 +181,14 @@
         </div>
       </div>
       <template #footer>
-        <a-button key="back" @click="cancelCreateDatabase">取消</a-button>
+        <a-button key="back" @click="cancelCreateDatabase">{{ $t('common.cancel') }}</a-button>
         <a-button
           key="submit"
           type="primary"
           :loading="dbState.creating"
           :disabled="!selectedKbTypeInfo"
           @click="handleCreateDatabase"
-          >创建</a-button
+          >{{ $t('common.create') }}</a-button
         >
       </template>
     </a-modal>
@@ -199,18 +202,14 @@
     <!-- 加载状态 -->
     <div v-if="dbState.listLoading" class="loading-container">
       <a-spin size="large" />
-      <p>正在加载知识库...</p>
+      <p>{{ $t('db.loading') }}</p>
     </div>
 
     <!-- 空状态显示 -->
     <ResourceEmptyState
       v-else-if="!databases || databases.length === 0"
-      title="暂无知识库"
-      :description="
-        userStore.isAdmin
-          ? '创建知识库后，可以上传文件并配置检索、图谱能力。'
-          : '管理员授权后，可在这里查看和维护知识库。'
-      "
+      :title="$t('db.empty.title')"
+      :description="userStore.isAdmin ? $t('db.empty.admin') : $t('db.empty.user')"
       :icon="getKbTypeIcon('milvus')"
     >
       <template #actions>
@@ -225,7 +224,7 @@
           <template #icon>
             <Plus :size="16" />
           </template>
-          创建知识库
+          {{ $t('db.create') }}
         </a-button>
       </template>
     </ResourceEmptyState>
@@ -237,7 +236,7 @@
         :key="database.kb_id"
         :title="database.name"
         :subtitle="cardSubtitle(database)"
-        :description="database.description || '暂无描述'"
+        :description="database.description || $t('db.noDescription')"
         :tags="cardTags(database)"
         @click="navigateToDatabase(database)"
       >
@@ -249,20 +248,20 @@
             <a-menu-item key="copy">
               <span class="lucide-menu-item">
                 <Copy :size="15" />
-                <span>复制 ID</span>
+                <span>{{ $t('db.menu.copyId') }}</span>
               </span>
             </a-menu-item>
             <a-menu-item key="edit">
               <span class="lucide-menu-item">
                 <Pencil :size="15" />
-                <span>编辑知识库</span>
+                <span>{{ $t('db.menu.edit') }}</span>
               </span>
             </a-menu-item>
             <a-menu-divider />
             <a-menu-item key="delete" danger>
               <span class="lucide-menu-item">
                 <Trash2 :size="15" />
-                <span>删除知识库</span>
+                <span>{{ $t('db.menu.delete') }}</span>
               </span>
             </a-menu-item>
           </a-menu>
@@ -274,6 +273,7 @@
 
 <script setup>
 import { ref, onMounted, reactive, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useConfigStore } from '@/stores/config'
@@ -299,6 +299,7 @@ import { DEFAULT_CHUNK_PRESET_ID } from '@/utils/chunkUtils'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const configStore = useConfigStore()
 const databaseStore = useDatabaseStore()
 const userStore = useUserStore()
@@ -318,7 +319,7 @@ const { databases, state: dbState } = storeToRefs(databaseStore)
 
 const knowledgeActiveView = 'documents'
 const knowledgeViewItems = [
-  { key: 'documents', label: '文档知识库', path: '/extensions?tab=knowledge' }
+  { key: 'documents', label: t('db.tabs.documents'), path: '/extensions?tab=knowledge' }
 ]
 
 const kbTypes = computed(() => Object.keys(orderedKbTypes.value))
@@ -415,7 +416,7 @@ const loadCategories = async () => {
     await databaseStore.loadDatabases(categoryFilter.value)
   } catch (error) {
     console.error('加载内容分类失败:', error)
-    message.error('加载内容分类失败，请稍后重试')
+    message.error(t('db.messages.loadCategoriesFailed'))
   }
 }
 
@@ -431,7 +432,7 @@ const loadSupportedKbTypes = async () => {
     supportedKbTypes.value = {}
     newDatabase.kb_type = ''
     resetCreateParamValues()
-    message.error('加载知识库类型失败，请稍后重试')
+    message.error(t('db.messages.loadTypesFailed'))
   }
 }
 
@@ -459,24 +460,24 @@ const formatCreatedTime = (createdAt) => {
   const diffInDays = today.diff(createdDay, 'day')
 
   if (diffInDays === 0) {
-    return '今天创建'
+    return t('db.time.today')
   }
   if (diffInDays === 1) {
-    return '昨天创建'
+    return t('db.time.yesterday')
   }
   if (diffInDays < 7) {
-    return `${diffInDays} 天前创建`
+    return t('db.time.days', { n: diffInDays })
   }
   if (diffInDays < 30) {
     const weeks = Math.floor(diffInDays / 7)
-    return `${weeks} 周前创建`
+    return t('db.time.weeks', { n: weeks })
   }
   if (diffInDays < 365) {
     const months = Math.floor(diffInDays / 30)
-    return `${months} 个月前创建`
+    return t('db.time.months', { n: months })
   }
   const years = Math.floor(diffInDays / 365)
-  return `${years} 年前创建`
+  return t('db.time.years', { n: years })
 }
 
 // 处理知识库类型改变
@@ -529,11 +530,11 @@ const buildRequestData = () => {
 // 创建按钮处理
 const handleCreateDatabase = async () => {
   if (!selectedKbTypeInfo.value) {
-    message.error('知识库类型加载失败，无法创建知识库')
+    message.error(t('db.messages.typesLoadFailed'))
     return
   }
   if (!newDatabase.category_id) {
-    message.error('请选择内容分类')
+    message.error(t('db.messages.selectCategory'))
     return
   }
 
@@ -541,7 +542,7 @@ const handleCreateDatabase = async () => {
     if (!field.required) continue
     const value = newDatabase.additional_params[field.key]
     if (value === undefined || value === null || (typeof value === 'string' && !value.trim())) {
-      message.error(`请填写${field.label || field.key}`)
+      message.error(t('db.messages.fieldRequired'))
       return
     }
   }
@@ -572,7 +573,7 @@ const cardSubtitle = (database) => {
   if (!kbUtils.isReadOnlyDatabase(database)) {
     const fileCount = database.file_count ?? database.row_count
     if (fileCount !== undefined && fileCount !== null) {
-      parts.push(`${fileCount} 文件`)
+      parts.push(t('db.time.files', { n: fileCount }))
     }
   }
   return parts.join(' · ')
@@ -598,23 +599,23 @@ const copyDatabaseId = async (database) => {
     document.execCommand('copy')
     document.body.removeChild(textArea)
   }
-  message.success('知识库 ID 已复制')
+  message.success(t('db.messages.copied'))
 }
 
 const deleteDatabase = (database) => {
   Modal.confirm({
-    title: '删除知识库',
-    content: `确定要删除知识库“${database.name}”吗？此操作不可撤销。`,
-    okText: '删除',
+    title: t('db.deleteConfirm.title'),
+    content: t('db.deleteConfirm.content', { name: database.name }),
+    okText: t('db.deleteConfirm.ok'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       try {
         await databaseApi.deleteDatabase(database.kb_id)
-        message.success('知识库已删除')
+        message.success(t('db.messages.deleted'))
         await databaseStore.loadDatabases()
       } catch (error) {
-        message.error(error.message || '删除失败')
+        message.error(error.message || t('db.messages.deleteFailed'))
         throw error
       }
     }

@@ -1,4 +1,5 @@
 import hashlib
+import re
 import time
 
 from yuxi import config
@@ -12,7 +13,41 @@ _DROPPED_PROCESSING_PARAM_KEYS = {
     "content_hashes",
     "file_sizes",
     "enable_ocr",
+    # 重复检测/入库策略参数（PR12 吸收）
+    "content_hash",
+    "file_size",
+    "duplicate_strategy",
+    "duplicate_strategies",
+    "replace_file_id",
+    "replace_file_ids",
+    "source_path",
+    "source_paths",
 }
+
+
+def sanitize_processing_error(error: BaseException | str, *, max_length: int = 500) -> str:
+    """Remove storage locations and multiline traceback fragments from user-visible errors."""
+    message = " ".join(str(error).split()) or "Document processing failed"
+    message = re.sub(
+        r"\b[a-z][a-z0-9+.-]*://\S+",
+        "[service location]",
+        message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(
+        r"(?i)\b(api[_-]?key|token|password)\b\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        message,
+    )
+    message = re.sub(
+        r"(?<![\w.-])(?:[\w.-]+/)+(?:upload|parsed|preview|kb-images)/\S+",
+        "[storage location]",
+        message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(r"\b[A-Za-z]:[\\/][^\s]+", "[local path]", message)
+    message = re.sub(r"(?<![\w.-])/(?:[^\s/]+/)+[^\s]+", "[local path]", message)
+    return message[:max_length]
 
 
 def sanitize_processing_params(params: dict | None) -> dict | None:

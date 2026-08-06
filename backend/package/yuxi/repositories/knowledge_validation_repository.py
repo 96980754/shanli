@@ -47,6 +47,8 @@ class KnowledgeValidationRepository:
                 candidate_file_id=candidate_file_id,
             )
             session.add(report)
+            # 先 flush 确保 report 行已插入，避免后续 items 插入时外键引用不存在的 report_id
+            await session.flush()
         else:
             await session.execute(
                 delete(KnowledgeValidationItem).where(KnowledgeValidationItem.report_id == report.report_id)
@@ -119,6 +121,8 @@ class KnowledgeValidationRepository:
                 candidate_file_id=candidate_file_id,
             )
             session.add(report)
+            # 先 flush 确保 report 行已插入，避免后续 items 插入时外键引用不存在的 report_id
+            await session.flush()
         else:
             await session.execute(
                 delete(KnowledgeValidationItem).where(KnowledgeValidationItem.report_id == report.report_id)

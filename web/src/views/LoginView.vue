@@ -5,11 +5,11 @@
       <div class="alert-content">
         <exclamation-circle-icon class="alert-icon" size="20" />
         <div class="alert-text">
-          <div class="alert-title">服务端连接失败</div>
+          <div class="alert-title">{{ $t('login.serverErrorTitle') }}</div>
           <div class="alert-message">{{ serverError }}</div>
         </div>
         <a-button type="link" size="small" @click="checkServerHealth" :loading="healthChecking">
-          重试
+          {{ $t('common.retry') }}
         </a-button>
       </div>
     </div>
@@ -25,6 +25,9 @@
             <span class="brand-main">{{ brandName }}</span>
           </h1>
         </div>
+        <div class="navbar-actions">
+          <LanguageToggle />
+        </div>
       </div>
     </nav>
 
@@ -33,7 +36,7 @@
       <div class="login-card">
         <!-- 左侧图片 -->
         <div class="card-side is-image">
-          <img :src="loginBgImage" alt="登录背景" class="login-bg-image" />
+          <img :src="loginBgImage" :alt="$t('login.welcome')" class="login-bg-image" />
         </div>
 
         <!-- 右侧表单 -->
@@ -41,8 +44,8 @@
           <div class="form-wrapper">
             <header class="form-header">
               <!-- 如果是在初始化，显示特定标题 -->
-              <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
-              <p v-else class="welcome-text">欢迎登录</p>
+              <h2 v-if="isFirstRun" class="init-title">{{ $t('login.initTitle') }}</h2>
+              <p v-else class="welcome-text">{{ $t('login.welcome') }}</p>
             </header>
 
             <div class="login-content" :class="{ 'is-initializing': isFirstRun }">
@@ -50,67 +53,41 @@
               <div v-if="isFirstRun" class="login-form login-form--init">
                 <a-form :model="adminForm" @finish="handleInitialize" layout="vertical">
                   <a-form-item
-                    label="UID"
+                    :label="$t('login.label.uid')"
                     name="uid"
-                    :rules="[
-                      { required: true, message: '请输入UID' },
-                      {
-                        pattern: /^[a-zA-Z0-9_]+$/,
-                        message: 'UID只能包含字母、数字和下划线'
-                      },
-                      {
-                        min: 3,
-                        max: 20,
-                        message: 'UID长度必须在3-20个字符之间'
-                      }
-                    ]"
+                    :rules="uidRules"
                   >
                     <a-input
                       v-model:value="adminForm.uid"
-                      placeholder="请输入UID（3-20个字符）"
+                      :placeholder="$t('login.placeholder.uid')"
                       :maxlength="20"
                     />
                   </a-form-item>
 
                   <a-form-item
-                    label="手机号（可选）"
+                    :label="$t('login.label.phone')"
                     name="phone_number"
-                    :rules="[
-                      {
-                        validator: async (rule, value) => {
-                          if (!value || value.trim() === '') {
-                            return // 空值允许
-                          }
-                          const phoneRegex = /^1[3-9]\d{9}$/
-                          if (!phoneRegex.test(value)) {
-                            throw new Error('请输入正确的手机号格式')
-                          }
-                        }
-                      }
-                    ]"
+                    :rules="phoneRules"
                   >
                     <a-input
                       v-model:value="adminForm.phone_number"
-                      placeholder="可用于登录，可不填写"
+                      :placeholder="$t('login.placeholder.phone')"
                       :max-length="11"
                     />
                   </a-form-item>
 
                   <a-form-item
-                    label="密码"
+                    :label="$t('login.label.password')"
                     name="password"
-                    :rules="[{ required: true, message: '请输入密码' }]"
+                    :rules="passwordRules"
                   >
                     <a-input-password v-model:value="adminForm.password" prefix-icon="lock" />
                   </a-form-item>
 
                   <a-form-item
-                    label="确认密码"
+                    :label="$t('login.label.confirmPassword')"
                     name="confirmPassword"
-                    :rules="[
-                      { required: true, message: '请确认密码' },
-                      { validator: validateConfirmPassword }
-                    ]"
+                    :rules="confirmPasswordRules"
                   >
                     <a-input-password
                       v-model:value="adminForm.confirmPassword"
@@ -121,14 +98,14 @@
                   <a-form-item v-if="showAgreementConsent" class="agreement-form-item">
                     <div class="agreement-row">
                       <a-checkbox v-model:checked="agreementAccepted">
-                        登录即代表同意
+                        {{ $t('login.agreement.consent') }}
                         <a
                           class="agreement-link"
                           :href="userAgreementUrl"
                           target="_blank"
                           rel="noopener noreferrer"
                           @click.stop
-                          >《用户协议》</a
+                          >{{ $t('login.agreement.user') }}</a
                         >
                         <a
                           class="agreement-link"
@@ -136,7 +113,7 @@
                           target="_blank"
                           rel="noopener noreferrer"
                           @click.stop
-                          >《隐私协议》</a
+                          >{{ $t('login.agreement.privacy') }}</a
                         >
                       </a-checkbox>
                     </div>
@@ -144,7 +121,7 @@
 
                   <a-form-item>
                     <a-button type="primary" html-type="submit" :loading="loading" block
-                      >创建管理员账户</a-button
+                      >{{ $t('login.initSubmit') }}</a-button
                     >
                   </a-form-item>
                 </a-form>
@@ -154,11 +131,11 @@
               <div v-else class="login-form">
                 <a-form :model="loginForm" @finish="handleLogin" layout="vertical">
                   <a-form-item
-                    label="登录账号"
+                    :label="$t('login.label.uid')"
                     name="loginId"
-                    :rules="[{ required: true, message: '请输入UID或手机号' }]"
+                    :rules="loginIdRules"
                   >
-                    <a-input v-model:value="loginForm.loginId" placeholder="UID或手机号">
+                    <a-input v-model:value="loginForm.loginId" :placeholder="$t('login.placeholder.loginId')">
                       <template #prefix>
                         <user-icon size="18" />
                       </template>
@@ -166,9 +143,9 @@
                   </a-form-item>
 
                   <a-form-item
-                    label="密码"
+                    :label="$t('login.label.password')"
                     name="password"
-                    :rules="[{ required: true, message: '请输入密码' }]"
+                    :rules="passwordRules"
                   >
                     <a-input-password v-model:value="loginForm.password">
                       <template #prefix>
@@ -180,14 +157,14 @@
                   <a-form-item v-if="showAgreementConsent" class="agreement-form-item">
                     <div class="agreement-row">
                       <a-checkbox v-model:checked="agreementAccepted">
-                        登录即代表同意
+                        {{ $t('login.agreement.consent') }}
                         <a
                           class="agreement-link"
                           :href="userAgreementUrl"
                           target="_blank"
                           rel="noopener noreferrer"
                           @click.stop
-                          >《用户协议》</a
+                          >{{ $t('login.agreement.user') }}</a
                         >
                         <a
                           class="agreement-link"
@@ -195,7 +172,7 @@
                           target="_blank"
                           rel="noopener noreferrer"
                           @click.stop
-                          >《隐私协议》</a
+                          >{{ $t('login.agreement.privacy') }}</a
                         >
                       </a-checkbox>
                     </div>
@@ -210,8 +187,8 @@
                       block
                       size="large"
                     >
-                      <span v-if="isLocked">账户已锁定 {{ formatTime(lockRemainingTime) }}</span>
-                      <span v-else>登录</span>
+                      <span v-if="isLocked">{{ $t('login.locked', { time: formatTime(lockRemainingTime) }) }}</span>
+                      <span v-else>{{ $t('login.submit') }}</span>
                     </a-button>
                   </a-form-item>
                 </a-form>
@@ -219,7 +196,7 @@
                 <!-- OIDC 登录选项  -->
                 <div v-if="oidcChecking || oidcEnabled" class="third-party-login">
                   <div class="divider">
-                    <span>或使用以下方式登录</span>
+                    <span>{{ $t('login.oidc.or') }}</span>
                   </div>
                   <div class="login-icons">
                     <!-- 检查中显示骨架屏 -->
@@ -238,7 +215,7 @@
                       <template #icon>
                         <key-icon size="18" />
                       </template>
-                      {{ oidcButtonText }}
+                      {{ oidcButtonText || $t('login.oidc.button') }}
                     </a-button>
                   </div>
                 </div>
@@ -265,6 +242,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
@@ -279,9 +257,11 @@ import {
   AlertCircle as ExclamationCircleIcon
 } from 'lucide-vue-next'
 import { tryAutoStartOIDC, sanitizeRedirect } from '@/utils/oidcAutoStart'
+import LanguageToggle from '@/components/LanguageToggle.vue'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const agentStore = useAgentStore()
@@ -329,7 +309,7 @@ const healthChecking = ref(false)
 const oidcEnabled = ref(false)
 const oidcLoading = ref(false)
 const oidcChecking = ref(true)
-const oidcButtonText = ref('OIDC 登录')
+const oidcButtonText = ref('')
 
 // 登录锁定相关状态
 const isLocked = ref(false)
@@ -378,32 +358,66 @@ const startLockCountdown = (remainingSeconds) => {
   }, 1000)
 }
 
+// 校验规则（随语言响应式）
+const uidRules = computed(() => [
+  { required: true, message: t('login.validation.uidRequired') },
+  { pattern: /^[a-zA-Z0-9_]+$/, message: t('login.validation.uidPattern') },
+  { min: 3, max: 20, message: t('login.validation.uidLength') }
+])
+
+const passwordRules = computed(() => [
+  { required: true, message: t('login.validation.passwordRequired') }
+])
+
+const loginIdRules = computed(() => [
+  { required: true, message: t('login.validation.uidRequired') }
+])
+
+const phoneRules = computed(() => [
+  {
+    validator: async (rule, value) => {
+      if (!value || value.trim() === '') {
+        return // 空值允许
+      }
+      const phoneRegex = /^1[3-9]\d{9}$/
+      if (!phoneRegex.test(value)) {
+        throw new Error(t('login.validation.phoneInvalid'))
+      }
+    }
+  }
+])
+
+const confirmPasswordRules = computed(() => [
+  { required: true, message: t('login.validation.confirmRequired') },
+  { validator: validateConfirmPassword }
+])
+
 // 格式化时间显示
 const formatTime = (seconds) => {
   if (seconds < 60) {
-    return `${seconds}秒`
+    return t('login.lock.seconds', { s: seconds })
   } else if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
-    return `${minutes}分${remainingSeconds}秒`
+    return t('login.lock.minutes', { m: minutes, s: remainingSeconds })
   } else if (seconds < 86400) {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}小时${minutes}分钟`
+    return t('login.lock.hours', { h: hours, m: minutes })
   } else {
     const days = Math.floor(seconds / 86400)
     const hours = Math.floor((seconds % 86400) / 3600)
-    return `${days}天${hours}小时`
+    return t('login.lock.days', { d: days, h: hours })
   }
 }
 
 // 密码确认验证
 const validateConfirmPassword = async (rule, value) => {
   if (value === '') {
-    throw new Error('请确认密码')
+    throw new Error(t('login.validation.confirmRequired'))
   }
   if (value !== adminForm.password) {
-    throw new Error('两次输入的密码不一致')
+    throw new Error(t('login.validation.passwordMismatch'))
   }
 }
 
@@ -412,8 +426,7 @@ const ensureAgreementAccepted = () => {
     return true
   }
 
-  const warningMessage = '请先阅读并同意《用户协议》《隐私协议》'
-  message.warning(warningMessage)
+  message.warning(t('login.agreement.notAccepted'))
   return false
 }
 
@@ -421,7 +434,7 @@ const ensureAgreementAccepted = () => {
 const handleLogin = async () => {
   // 如果当前被锁定，不允许登录
   if (isLocked.value) {
-    message.warning(`账户被锁定，请等待 ${formatTime(lockRemainingTime.value)}`)
+    message.warning(t('login.errors.lockedMessage'))
     return
   }
 
@@ -439,7 +452,7 @@ const handleLogin = async () => {
       password: loginForm.password
     })
 
-    message.success('登录成功')
+    message.success(t('login.success'))
 
     // 获取重定向路径
     const redirectPath = sessionStorage.getItem('redirect') || '/'
@@ -483,12 +496,12 @@ const handleLogin = async () => {
 
       if (remainingTime > 0) {
         startLockCountdown(remainingTime)
-        errorMessage.value = `由于多次登录失败，账户已被锁定 ${formatTime(remainingTime)}`
+        errorMessage.value = t('login.locked', { time: formatTime(remainingTime) })
       } else {
-        errorMessage.value = error.message || '账户被锁定，请稍后再试'
+        errorMessage.value = error.message || t('login.errors.lockedMessage')
       }
     } else {
-      errorMessage.value = error.message || '登录失败，请检查用户名和密码'
+      errorMessage.value = error.message || t('login.errors.badCredentials')
     }
   } finally {
     loading.value = false
@@ -516,11 +529,11 @@ const handleOIDCLogin = async () => {
       // 跳转到 OIDC Provider
       window.location.href = response.login_url
     } else {
-      errorMessage.value = '获取 OIDC 登录地址失败'
+      errorMessage.value = t('login.errors.oidcUrl')
     }
   } catch (error) {
     console.error('OIDC 登录失败:', error)
-    errorMessage.value = error.message || 'OIDC 登录失败，请重试'
+    errorMessage.value = error.message || t('login.errors.oidcFailed')
   } finally {
     oidcLoading.value = false
   }
@@ -556,7 +569,7 @@ const handleInitialize = async () => {
     errorMessage.value = ''
 
     if (adminForm.password !== adminForm.confirmPassword) {
-      errorMessage.value = '两次输入的密码不一致'
+      errorMessage.value = t('login.validation.passwordMismatch')
       return
     }
 
@@ -566,11 +579,11 @@ const handleInitialize = async () => {
       phone_number: adminForm.phone_number || null // 空字符串转为null
     })
 
-    message.success('管理员账户创建成功')
+    message.success(t('login.initSubmit'))
     router.push('/')
   } catch (error) {
     console.error('初始化失败:', error)
-    errorMessage.value = error.message || '初始化失败，请重试'
+    errorMessage.value = error.message || t('login.errors.initFailed')
   } finally {
     loading.value = false
   }
@@ -584,7 +597,7 @@ const checkFirstRunStatus = async () => {
     isFirstRun.value = isFirst
   } catch (error) {
     console.error('检查首次运行状态失败:', error)
-    errorMessage.value = '系统出错，请稍后重试'
+    errorMessage.value = t('login.errors.systemError')
   } finally {
     loading.value = false
   }
@@ -599,12 +612,12 @@ const checkServerHealth = async () => {
       serverStatus.value = 'ok'
     } else {
       serverStatus.value = 'error'
-      serverError.value = response.message || '服务端状态异常'
+      serverError.value = response.message || t('login.errors.serverAbnormal')
     }
   } catch (error) {
     console.error('检查服务器健康状态失败:', error)
     serverStatus.value = 'error'
-    serverError.value = error.message || '无法连接到服务端，请检查网络连接'
+    serverError.value = error.message || t('login.errors.cannotConnect')
   } finally {
     healthChecking.value = false
   }
@@ -685,6 +698,10 @@ onUnmounted(() => {
       display: flex;
       align-items: center;
       gap: 12px;
+    }
+    .navbar-actions {
+      display: flex;
+      align-items: center;
     }
   }
 }

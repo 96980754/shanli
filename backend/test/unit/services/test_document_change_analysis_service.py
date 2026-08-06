@@ -182,6 +182,47 @@ def test_missing_v1_evidence_is_inconclusive():
     assert "evidence" in result["summary"]["message"]
 
 
+def test_normalized_evidence_is_valid_instead_of_inconclusive():
+    from yuxi.knowledge.graphs.graph_utils import locate_evidence_quote
+
+    # docx 表格 markdown：带 ** 加粗与 NBSP；quote 是 LLM 润色后的文本
+    def chunk(file_id: str, target: str, cell: str) -> dict:
+        content = f"| **{cell}** | 有效传输距离 800米\xa0（空旷） |"
+        quote = f"{cell} 有效传输距离 800米（空旷）"
+        start, end = locate_evidence_quote(content, quote)
+        assert start is not None and end > start
+        return {
+            "file_id": file_id,
+            "chunk_id": f"{file_id}-0",
+            "chunk_index": 0,
+            "content": content,
+            "extraction_result": {
+                "metadata": {"schema_version": 2},
+                "relations": [
+                    {
+                        "source": {"text": "产品", "label": "Product"},
+                        "target": {"text": target, "label": "Feature"},
+                        "text": quote,
+                        "label": "SUPPORTS",
+                        "polarity": "positive",
+                        "assertion_kind": "fact",
+                        "evidence": {"quote": quote, "start_char": start, "end_char": end},
+                    }
+                ],
+            },
+        }
+
+    old = chunk("old", "AI双麦降噪", "AI双麦降噪")
+    new = chunk("new", "AI双麦降噪2", "AI双麦降噪2")
+
+    result = analyze_document_changes([old], [new], _ontology())
+
+    # 证据通过归一化校验，不应再触发 inconclusive
+    assert result["status"] == "auto_accepted"
+    assert result["summary"]["inconclusive"] is False
+    assert all(occurrence["valid"] for occurrence in result["items"][0]["new_evidence"])
+
+
 def test_duplicate_assertions_become_one_item_with_all_evidence():
     old = _chunk(
         "old",
@@ -203,3 +244,46 @@ def test_duplicate_assertions_become_one_item_with_all_evidence():
     assert result["summary"]["new_count"] == 1
     assert len(result["items"]) == 1
     assert [value["chunk_index"] for value in result["items"][0]["new_evidence"]] == [0, 1]
+
+
+def test_same_subject_keyed_slot_whitespace_drift_is_changed_not_new():
+    # 复现回归：旧版实体名"极峰·信使 （SM-990X）"与新版"极峰·信使（SM-990X）"
+    # 仅括号前多一个空格。若不归一化空白，_entity_key 判为不同实体，
+    # 同一 keyed 槽位的取值变化会误判为"新增"（旧值被隐藏、无法对照）。
+    old = _chunk(
+        "old",
+        "极峰·信使 （SM-990X）电池容量 3800mAh。",
+        [
+            {
+                "source": "极峰·信使 （SM-990X）",
+                "target": "电池容量: 3800mAh",
+                "label": "HAS_SPEC",
+                "quote": "极峰·信使 （SM-990X）电池容量 3800mAh。",
+            }
+        ],
+    )
+    new = _chunk(
+        "new",
+        "极峰·信使（SM-990X）电池容量 1200mAh。",
+        [
+            {
+                "source": "极峰·信使（SM-990X）",
+                "target": "电池容量: 1200mAh",
+                "label": "HAS_SPEC",
+                "quote": "极峰·信使（SM-990X）电池容量 1200mAh。",
+            }
+        ],
+    )
+
+    result = analyze_document_changes([old], [new], _ontology())
+
+    assert result["status"] == "auto_accepted"
+    assert result["summary"]["changed_count"] == 1
+    assert result["summary"]["new_count"] == 0
+    item = result["items"][0]
+    assert item["change_type"] == "changed"
+    # normalized_value 经 normalize_entity_name 统一小写
+    assert item["old_fact"]["normalized_value"] == "3800mah"
+    assert item["new_fact"]["normalized_value"] == "1200mah"
+    # 展示用 target.text 保留原始大小写
+    assert item["old_fact"]["target"]["text"] == "电池容量: 3800mAh"

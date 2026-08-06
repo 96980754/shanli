@@ -17,6 +17,8 @@ from yuxi.knowledge.graphs.graph_utils import (
     cypher_merge_chunk,
     cypher_merge_entity_mention,
     cypher_merge_relation,
+    merge_entity_names,
+    merge_generic_into_unique_model,
     normalize_entity_name,
 )
 from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorStore
@@ -211,7 +213,12 @@ class MilvusGraphService:
         return config
 
     async def extract_file_chunks(self, kb_id: str, file_id: str, *, context=None) -> list[dict[str, Any]]:
-        """抽取指定文件的结构化事实，但不发布到 Neo4j 或图向量库。"""
+        """抽取指定文件的结构化事实，但不发布到 Neo4j 或图向量库。
+
+        跨 chunk 合并实体：收集全文所有抽取结果，按强归一化+相似度把同一实体
+        的不同叫法合并为 canonical 名，并回写各 chunk 缓存，避免同一产品
+        因 chunk 上下文差异被抽成多个节点。
+        """
         kb = await self._get_milvus_kb(kb_id)
         config = self._get_locked_config(kb.additional_params or {})
         extractor = GraphExtractorFactory.create(
@@ -219,11 +226,19 @@ class MilvusGraphService:
             self._runtime_extractor_options(config),
         )
         chunks = await self.chunk_repo.list_by_file_id(file_id)
+        document_entities = []
+        if any(not chunk.extraction_result for chunk in chunks):
+            document_entities = await self._extract_document_entities(extractor, file_id, chunks=chunks)
         results: list[dict[str, Any]] = []
         for index, chunk in enumerate(chunks, start=1):
             if context is not None:
                 await context.raise_if_cancelled()
-            extraction_result = await self._get_chunk_extraction_result(kb_id, chunk, extractor)
+            extraction_result = await self._get_chunk_extraction_result(
+                kb_id,
+                chunk,
+                extractor,
+                document_entities=document_entities,
+            )
             results.append(
                 {
                     "file_id": chunk.file_id,
@@ -235,7 +250,65 @@ class MilvusGraphService:
             )
             if context is not None:
                 await context.set_progress(index / max(len(chunks), 1) * 100.0)
+
+        # 跨 chunk 实体合并：收集全部实体名，聚类为 canonical，回写结果与缓存
+        await self._merge_entities_across_chunks(kb_id, chunks, results)
         return results
+
+    async def _merge_entities_across_chunks(
+        self,
+        kb_id: str,
+        chunks: list[Any],
+        results: list[dict[str, Any]],
+    ) -> None:
+        """跨 chunk 合并同一实体的不同叫法，改写结果并回写 chunk 缓存。"""
+        # 1. 收集全文所有实体名（按 label 分组，避免不同类型实体误并）
+        entity_names_by_label: dict[str, list[str]] = {}
+        for result in results:
+            entities = (result.get("extraction_result") or {}).get("entities") or []
+            for entity in entities:
+                text = str((entity or {}).get("text") or "").strip()
+                label = str((entity or {}).get("label") or "Entity").strip()
+                if text:
+                    entity_names_by_label.setdefault(label, []).append(text)
+
+        # 2. 每组聚类出 {原text: canonical}
+        canonical_by_text: dict[str, str] = {}
+        for label, names in entity_names_by_label.items():
+            if len(names) < 2:
+                continue
+            canonical_by_text.update(merge_entity_names(names))
+            # 泛称归并到唯一型号（如 Product 组里 "对讲机" 归并到唯一型号 "F10定位对讲一体机"）
+            canonical_by_text.update(merge_generic_into_unique_model(names))
+
+        if not canonical_by_text:
+            return
+
+        # 3. 改写每个 chunk 的实体与关系端点 text，并回写缓存
+        chunks_by_id = {chunk.chunk_id: chunk for chunk in chunks}
+        for result in results:
+            extraction_result = result.get("extraction_result") or {}
+            changed = False
+            entities = extraction_result.get("entities") or []
+            for entity in entities:
+                text = str((entity or {}).get("text") or "")
+                canonical = canonical_by_text.get(text)
+                if canonical and canonical != text:
+                    entity["text"] = canonical
+                    changed = True
+            relations = extraction_result.get("relations") or []
+            for relation in relations:
+                for endpoint_name in ("source", "target"):
+                    endpoint = relation.get(endpoint_name) or {}
+                    text = str(endpoint.get("text") or "")
+                    canonical = canonical_by_text.get(text)
+                    if canonical and canonical != text:
+                        endpoint["text"] = canonical
+                        changed = True
+            if changed:
+                chunk = chunks_by_id.get(result.get("chunk_id"))
+                if chunk is not None:
+                    await self.chunk_repo.update_extraction_result(result.get("chunk_id"), extraction_result)
 
     async def publish_file_graph(self, kb_id: str, file_id: str, *, context=None) -> dict[str, Any]:
         """发布指定文件的图谱投影，支持尚未成为当前版本的候选文件。"""
@@ -250,10 +323,41 @@ class MilvusGraphService:
             raise ValueError("候选版本没有可发布的文档分块")
 
         try:
+            # 第一阶段：抽取全部 chunk 并做跨 chunk 实体消歧（合并同一实体的不同叫法）
+            document_entities = []
+            if any(not chunk.extraction_result for chunk in chunks):
+                document_entities = await self._extract_document_entities(extractor, file_id, chunks=chunks)
+            results: list[dict[str, Any]] = []
+            for chunk in chunks:
+                if context is not None:
+                    await context.raise_if_cancelled()
+                extraction_result = await self._get_chunk_extraction_result(
+                    kb_id,
+                    chunk,
+                    extractor,
+                    document_entities=document_entities,
+                )
+                results.append(
+                    {
+                        "file_id": chunk.file_id,
+                        "chunk_id": chunk.chunk_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "extraction_result": extraction_result,
+                    }
+                )
+            await self._merge_entities_across_chunks(kb_id, chunks, results)
+
+            # 第二阶段：逐 chunk 写图（读缓存已为 canonical 名，entity_id 统一）
             for index, chunk in enumerate(chunks, start=1):
                 if context is not None:
                     await context.raise_if_cancelled()
-                extraction_result = await self._get_chunk_extraction_result(kb_id, chunk, extractor)
+                extraction_result = await self._get_chunk_extraction_result(
+                    kb_id,
+                    chunk,
+                    extractor,
+                    document_entities=document_entities,
+                )
                 entities, triples = await asyncio.to_thread(
                     self.write_chunk_graph,
                     kb_id,
@@ -307,6 +411,11 @@ class MilvusGraphService:
             if not unprocessed:
                 break
 
+            # 本批涉及文件各自扫描一次文档级主实体；全部 chunk 已有抽取缓存的文件跳过
+            document_entities_by_file: dict[str, list[dict[str, str]]] = {}
+            for file_id in {c.file_id for c in unprocessed if not c.extraction_result}:
+                document_entities_by_file[file_id] = await self._extract_document_entities(extractor, file_id)
+
             queue: asyncio.Queue[Any] = asyncio.Queue()
             for chunk in unprocessed:
                 queue.put_nowait(chunk)
@@ -321,7 +430,12 @@ class MilvusGraphService:
                     except asyncio.QueueEmpty:
                         return
                     try:
-                        extraction_result = await self._get_chunk_extraction_result(kb_id, chunk, extractor)
+                        extraction_result = await self._get_chunk_extraction_result(
+                            kb_id,
+                            chunk,
+                            extractor,
+                            document_entities=document_entities_by_file.get(chunk.file_id),
+                        )
                         async with write_lock:
                             entities, triples = await asyncio.to_thread(
                                 self.write_chunk_graph,
@@ -394,7 +508,39 @@ class MilvusGraphService:
         options.pop("prompt", None)
         return options
 
-    async def _get_chunk_extraction_result(self, kb_id: str, chunk, extractor: GraphExtractor) -> dict[str, Any]:
+    async def _extract_document_entities(
+        self,
+        extractor: GraphExtractor,
+        file_id: str,
+        *,
+        chunks: list[Any] | None = None,
+    ) -> list[dict[str, str]]:
+        """扫描整篇文档，识别文档级主实体（领域无关）。
+
+        失败时降级为不带文档级上下文的抽取，不阻塞图谱构建。
+        """
+        extract_document_entities = getattr(extractor, "extract_document_entities", None)
+        if extract_document_entities is None:
+            return []
+        try:
+            if chunks is None:
+                chunks = await self.chunk_repo.list_by_file_id(file_id)
+            document_text = "\n\n".join(chunk.content or "" for chunk in chunks)
+            if not document_text.strip():
+                return []
+            return await extract_document_entities(document_text)
+        except Exception as exc:
+            logger.warning(f"文档级主实体扫描失败 file_id={file_id}, error_type={exc.__class__.__name__}")
+            return []
+
+    async def _get_chunk_extraction_result(
+        self,
+        kb_id: str,
+        chunk,
+        extractor: GraphExtractor,
+        *,
+        document_entities: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
         if chunk.extraction_result:
             try:
                 return extractor.normalize_result(chunk.extraction_result)
@@ -402,8 +548,7 @@ class MilvusGraphService:
                 raise
             except (TypeError, ValueError) as exc:
                 logger.warning(
-                    f"Chunk 抽取缓存无效，清理后重新抽取 chunk_id={chunk.chunk_id}, "
-                    f"error_type={exc.__class__.__name__}"
+                    f"Chunk 抽取缓存无效，清理后重新抽取 chunk_id={chunk.chunk_id}, error_type={exc.__class__.__name__}"
                 )
                 await self.chunk_repo.clear_extraction_result(chunk.chunk_id)
                 chunk.extraction_result = None
@@ -415,6 +560,7 @@ class MilvusGraphService:
                 "chunk_id": chunk.chunk_id,
                 "file_id": chunk.file_id,
                 "chunk_index": chunk.chunk_index,
+                "document_entities": document_entities or [],
             },
         )
         normalized_result = extractor.normalize_result(extraction_result)

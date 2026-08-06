@@ -233,8 +233,8 @@ async def test_resolve_configured_runtime_tools_registers_skill_gated_tools():
 
 
 @pytest.mark.asyncio
-async def test_resolve_runtime_tools_gates_ask_user_question_off_by_default(monkeypatch):
-    """开关默认关闭时，即使 context.tools 保留 ask_user_question 也不挂载给模型。"""
+async def test_resolve_runtime_tools_skips_ask_user_question_not_in_tools(monkeypatch):
+    """tools 列表未包含 ask_user_question 时，不挂载给模型（纯列表控制）。"""
     fake_instances = [
         SimpleNamespace(name="ask_user_question"),
         SimpleNamespace(name="ocr_parse_file"),
@@ -244,7 +244,7 @@ async def test_resolve_runtime_tools_gates_ask_user_question_off_by_default(monk
         lambda category=None: fake_instances,
     )
     context = SimpleNamespace(
-        tools=["ask_user_question", "ocr_parse_file"],
+        tools=["ocr_parse_file"],
         mcps=None,
         _readable_skills=[],
         _runtime_skill_dependency_map={},
@@ -258,8 +258,8 @@ async def test_resolve_runtime_tools_gates_ask_user_question_off_by_default(monk
 
 
 @pytest.mark.asyncio
-async def test_resolve_runtime_tools_enables_ask_user_question_when_switch_on(monkeypatch):
-    """开关开启时挂载 ask_user_question，即使它不在 context.tools 列表。"""
+async def test_resolve_runtime_tools_loads_ask_user_question_from_tools(monkeypatch):
+    """tools 列表包含 ask_user_question 时，作为普通工具挂载给模型。"""
     fake_instances = [
         SimpleNamespace(name="ask_user_question"),
         SimpleNamespace(name="ocr_parse_file"),
@@ -269,9 +269,8 @@ async def test_resolve_runtime_tools_enables_ask_user_question_when_switch_on(mo
         lambda category=None: fake_instances,
     )
     context = SimpleNamespace(
-        tools=["ocr_parse_file"],
+        tools=["ocr_parse_file", "ask_user_question"],
         mcps=None,
-        ask_user_question_enabled=True,
         _readable_skills=[],
         _runtime_skill_dependency_map={},
     )

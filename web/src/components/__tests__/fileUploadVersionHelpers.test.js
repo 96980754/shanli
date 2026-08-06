@@ -15,6 +15,30 @@ const run = () => {
   assert.equal(noMatch.action, 'add')
   assert.equal(noMatch.currentFileId, undefined)
 
+  // 去版本号前缀匹配的版本候选：上传 sglang-v1.1 时匹配 sglang-v1.0
+  const prefixMatch = buildVersionCandidate(
+    upload,
+    { version_candidate_files: [{ file_id: 'file-v1', filename: 'sglang-v1.0.docx' }] },
+    true
+  )
+  assert.equal(prefixMatch.action, 'version')
+  assert.equal(prefixMatch.currentFileId, 'file-v1')
+  assert.equal(prefixMatch.selectedFile.filename, 'sglang-v1.0.docx')
+
+  // 同名优先：version_candidate_files 与 same_name_files 都有时，精确同名在前且不重复
+  const mixedMatch = buildVersionCandidate(
+    upload,
+    {
+      same_name_files: [{ file_id: 'file-same', filename: upload.name }],
+      version_candidate_files: [{ file_id: 'file-v1', filename: 'sglang-v1.0.docx' }]
+    },
+    true
+  )
+  assert.equal(mixedMatch.action, 'version')
+  // 多个候选时不自动预选（用户选择目标）
+  assert.equal(mixedMatch.currentFileId, undefined)
+  assert.equal(mixedMatch.sameNameFiles.length, 2)
+
   const singleMatch = buildVersionCandidate(
     upload,
     { same_name_files: [{ file_id: 'file-same', filename: upload.name }] },

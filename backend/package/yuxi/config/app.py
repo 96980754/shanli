@@ -62,6 +62,40 @@ class Config(BaseModel):
     )
     default_ocr_engine: str = Field(default=DEFAULT_OCR_ENGINE, description="默认 OCR 解析引擎")
 
+    # 文档清洗链路（PR12 吸收）
+    document_cleaning_auto_confirm: bool = Field(
+        default=True,
+        description="文档规则清洗后是否默认自动确认并入库",
+    )
+    document_ai_cleaning_enabled: bool = Field(default=False, description="是否启用可选 AI 文档清洗")
+    document_ai_cleaning_model: str | None = Field(default=None, description="AI 文档清洗模型 spec")
+    document_ai_cleaning_temperature: float = Field(default=0.0, description="AI 文档清洗温度")
+    document_ai_cleaning_timeout_seconds: int = Field(default=60, description="AI 文档清洗单块超时秒数")
+    document_ai_cleaning_chunk_chars: int = Field(default=12000, description="AI 文档清洗单块最大字符数")
+    document_cleaning_max_chars: int = Field(default=2_000_000, description="文档清洗草稿最大字符数")
+    # 文档信息增强（PR12 吸收）
+    document_enrichment_auto_generate: bool = Field(default=False, description="文档确认入库后是否自动生成信息增强")
+    document_enrichment_model: str | None = Field(default=None, description="文档信息增强模型 spec")
+    document_enrichment_temperature: float = Field(default=0.0, description="文档信息增强模型温度")
+    document_enrichment_timeout_seconds: int = Field(default=60, description="文档信息增强单次模型调用超时秒数")
+    document_enrichment_chunk_chars: int = Field(default=12000, description="文档信息增强单块最大字符数")
+    document_enrichment_output_attempts: int = Field(default=2, description="文档信息增强结构化输出最大尝试次数")
+    document_enrichment_summary_max_chars: int = Field(default=1000, description="文档摘要最大字符数")
+    document_enrichment_keyword_limit: int = Field(default=12, description="文档关键词最大数量")
+    document_enrichment_tag_limit: int = Field(default=8, description="文档标签最大数量")
+    document_enrichment_max_chars: int = Field(default=2_000_000, description="文档信息增强正文最大字符数")
+    # 文档 QA 知识对（PR12 吸收）
+    document_qa_auto_generate: bool = Field(default=False, description="文档确认入库后是否自动生成 QA 草稿")
+    document_qa_model: str | None = Field(default=None, description="文档 QA 生成模型 spec")
+    document_qa_temperature: float = Field(default=0.0, description="文档 QA 生成温度")
+    document_qa_timeout_seconds: int = Field(default=60, description="文档 QA 单次模型调用超时秒数")
+    document_qa_output_attempts: int = Field(default=2, description="文档 QA 结构化输出最大尝试次数")
+    document_qa_max_pairs_per_document: int = Field(default=20, description="单文档最大 QA 数量")
+    document_qa_max_pairs_per_chunk: int = Field(default=3, description="单 chunk 最大 QA 数量")
+    document_qa_question_max_chars: int = Field(default=300, description="QA 问题最大字符数")
+    document_qa_answer_max_chars: int = Field(default=2000, description="QA 答案最大字符数")
+    document_qa_batch_size: int = Field(default=20, description="文档 QA 批量生成大小")
+
     sandbox_provider: str = Field(default="provisioner", description="沙箱提供者")
     sandbox_provisioner_url: str = Field(default="http://sandbox-provisioner:8002", description="沙箱服务地址")
     sandbox_virtual_path_prefix: str = Field(default="/home/gem/user-data", description="沙箱用户目录前缀")

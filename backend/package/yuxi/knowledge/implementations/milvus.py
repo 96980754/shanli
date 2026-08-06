@@ -25,7 +25,7 @@ from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
 from yuxi.knowledge.parser.unified import Parser
-from yuxi.knowledge.utils.kb_utils import resolve_processing_params
+from yuxi.knowledge.utils.kb_utils import resolve_processing_params, sanitize_processing_error
 from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.knowledge_chunk_repository import KnowledgeChunkRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
@@ -504,6 +504,52 @@ class MilvusKB(KnowledgeBase):
         method = model.batch_encode if sync else model.abatch_encode
         return partial(method, batch_size=batch_size)
 
+    @staticmethod
+    def _escape_milvus_string_literal(value: str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+    async def upsert_confirmed_qa(
+        self,
+        *,
+        kb_id: str,
+        qa_id: str,
+        file_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        """Upsert one confirmed QA projection into the existing document collection."""
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        vector_id = f"qa:{qa_id}"
+        escaped_id = self._escape_milvus_string_literal(vector_id)
+        await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
+        content = f"问题：{question}\n答案：{answer}"
+        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_function = self._get_embedding_function(embedding_model_spec)
+        embeddings = await embedding_function([content])
+        collection.insert(
+            [
+                [vector_id],
+                [content],
+                [vector_id],
+                [file_id],
+                [-1],
+                embeddings,
+            ]
+        )
+        await asyncio.to_thread(collection.flush)
+
+    async def delete_confirmed_qa(self, kb_id: str, qa_id: str) -> None:
+        """Delete one QA projection without touching document chunks."""
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        vector_id = f"qa:{qa_id}"
+        escaped_id = self._escape_milvus_string_literal(vector_id)
+        await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
+        await asyncio.to_thread(collection.flush)
+
     async def _get_milvus_collection(self, kb_id: str):
         """获取或创建 Milvus 集合"""
         if kb_id in self.collections:
@@ -780,6 +826,25 @@ class MilvusKB(KnowledgeBase):
             )
 
             await self.refresh_database_stats(kb_id)
+
+            # 替换版本链：replacement 候选索引完成后激活新版本，切换 is_active/is_current
+            replacement_target_file_id = file_meta.get("replacement_target_file_id")
+            if replacement_target_file_id:
+                from yuxi.services.document_ingestion_service import DocumentIngestionService
+
+                await KnowledgeFileRepository().update_fields(
+                    file_id=file_id,
+                    kb_id=kb_id,
+                    data={"processing_stage": "switching_version", "processing_progress": 92},
+                )
+                # 旧版仍 active 可检索；激活失败会让正常补偿删除新向量
+                await self.refresh_database_stats(kb_id)
+                await DocumentIngestionService().activate_replacement(
+                    kb_id=kb_id,
+                    new_file_id=file_id,
+                    old_file_id=replacement_target_file_id,
+                )
+
             return result
 
         except Exception as e:
@@ -1147,7 +1212,7 @@ class MilvusKB(KnowledgeBase):
             graph_max_nodes = max(int(query_params.get("graph_max_nodes", 10000)), 1)
 
             vector_store = await _run_milvus_query_io(MilvusGraphVectorStore)
-            entity_hits, triple_hits = await asyncio.gather(
+            entity_hits, triple_hits, assertion_hits = await asyncio.gather(
                 vector_store.search_entities(
                     kb_id=kb_id,
                     query_text=query_text,
@@ -1160,10 +1225,21 @@ class MilvusKB(KnowledgeBase):
                     embedding_model_spec=embedding_model_spec,
                     top_k=triple_top_k,
                 ),
+                vector_store.search_reviewed_assertions(
+                    kb_id=kb_id,
+                    query_text=query_text,
+                    embedding_model_spec=embedding_model_spec,
+                    top_k=graph_top_k,
+                ),
             )
+            # 已审核并发布的断言（知识冲突裁决结果）优先返回
+            assertion_chunks = await self._build_reviewed_assertion_chunks(kb_id, assertion_hits)
+            if not entity_hits and not triple_hits and assertion_chunks:
+                return assertion_chunks
+
             seed_weights = await self._build_graph_seed_weights(kb_id, base_chunks, entity_hits, triple_hits)
-            if not seed_weights:
-                return []
+            if not seed_weights and assertion_chunks:
+                return assertion_chunks
 
             graph_service = MilvusGraphService()
             graph_scores = await graph_service.query_and_rank_chunks_by_ppr(
@@ -1173,18 +1249,56 @@ class MilvusKB(KnowledgeBase):
                 top_k=graph_top_k,
                 damping=float(query_params.get("ppr_damping", 0.85)),
             )
-            if not graph_scores:
-                return []
+            if not graph_scores and assertion_chunks:
+                return assertion_chunks
 
             chunks = await KnowledgeChunkRepository().list_by_chunk_ids([chunk_id for chunk_id, _ in graph_scores])
             score_by_chunk_id = dict(graph_scores)
-            return [
+            chunk_results = [
                 self._build_chunk_from_record(chunk, score_by_chunk_id[chunk.chunk_id], score_field="graph_score")
                 for chunk in chunks
             ]
+            return assertion_chunks + chunk_results
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Graph retrieval failed for {kb_id}: {exc}")
             return []
+
+    async def _build_reviewed_assertion_chunks(self, kb_id: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from yuxi.repositories.knowledge_publish_repository import KnowledgePublishRepository
+
+        assertion_ids = [str(hit.get("id") or "") for hit in hits if hit.get("id")]
+        records = await KnowledgePublishRepository().list_published_assertions(
+            kb_id=kb_id,
+            assertion_ids=assertion_ids,
+        )
+        record_by_id = {record.assertion_id: record for record in records}
+        results = []
+        for hit in hits:
+            assertion_id = str(hit.get("id") or "")
+            record = record_by_id.get(assertion_id)
+            if record is None:
+                continue
+            value = record.normalized_value if record.normalized_value is not None else record.raw_value
+            content = f"{record.entity_name} {record.predicate}: {value}"
+            results.append(
+                {
+                    "content": content,
+                    "metadata": {
+                        "source": "未知来源",
+                        "chunk_id": f"assertion:{assertion_id}",
+                        "file_id": record.file_id,
+                        "assertion_id": assertion_id,
+                        "resolution_id": hit.get("resolution_id"),
+                        "entity_id": record.linked_entity_id,
+                        "predicate": record.predicate,
+                        "source_chunk_id": record.chunk_id,
+                        "evidence": record.evidence,
+                    },
+                    "score": float(hit.get("score") or 0.0),
+                    "graph_score": float(hit.get("score") or 0.0),
+                }
+            )
+        return results
 
     async def _build_graph_seed_weights(
         self,
@@ -1284,6 +1398,28 @@ class MilvusKB(KnowledgeBase):
         except Exception as exc:
             warnings.append(f"图谱投影清理失败: {exc}")
         return warnings
+
+    async def delete_file_vectors_strict(self, kb_id: str, file_id: str) -> None:
+        """Delete online projections while preserving historical PostgreSQL chunks and file artifacts."""
+        chunk_repo = KnowledgeChunkRepository()
+        if await chunk_repo.count_graph_indexed_by_file_id(file_id):
+            from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+
+            try:
+                await MilvusGraphService().delete_file_graph(kb_id, file_id)
+            except Exception as error:
+                logger.error(
+                    "Failed to delete graph data for file {}: {}",
+                    file_id,
+                    sanitize_processing_error(error),
+                )
+
+        collection = await self._get_milvus_collection(kb_id)
+        if collection is None:
+            raise ValueError(f"Milvus collection is unavailable for {kb_id}")
+        await self._delete_file_chunks_from_milvus(collection, file_id)
+        await asyncio.to_thread(collection.flush)
+        await self.refresh_database_stats(kb_id)
 
     async def delete_file_chunks_only(self, kb_id: str, file_id: str) -> None:
         """仅删除文件的chunks数据，保留元数据（用于更新操作）"""

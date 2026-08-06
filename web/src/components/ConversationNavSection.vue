@@ -4,10 +4,10 @@
       <div class="history-header">
         <button type="button" class="history-search" @click="$emit('search')">
           <Search :size="14" />
-          <span>搜索</span>
+          <span>{{ $t('conversation.search') }}</span>
         </button>
         <div class="history-label" @click="listCollapsed = !listCollapsed">
-          <span>最近</span>
+          <span>{{ $t('conversation.recent') }}</span>
           <ChevronDown :size="14" class="collapse-icon" :class="{ collapsed: listCollapsed }" />
         </div>
       </div>
@@ -22,7 +22,7 @@
             @click="$emit('select-chat', chat.id)"
             @click.middle="$emit('delete-chat', chat.id)"
           >
-            <span class="conversation-title">{{ chat.title || '新的对话' }}</span>
+            <span class="conversation-title">{{ chat.title || $t('conversation.newChat') }}</span>
             <span class="actions-mask"></span>
             <span class="conversation-actions" @click.stop>
               <a-dropdown :trigger="['click']">
@@ -33,21 +33,21 @@
                       :icon="h(chat.is_pinned ? PinOff : Pin, { size: 14 })"
                       @click.stop="$emit('toggle-pin', chat.id)"
                     >
-                      {{ chat.is_pinned ? '取消置顶' : '置顶' }}
+                      {{ chat.is_pinned ? $t('conversation.unpin') : $t('conversation.pin') }}
                     </a-menu-item>
                     <a-menu-item
                       key="rename"
                       :icon="h(SquarePen, { size: 14 })"
                       @click.stop="renameChat(chat.id)"
                     >
-                      重命名
+                      {{ $t('conversation.rename') }}
                     </a-menu-item>
                     <a-menu-item
                       key="delete"
                       :icon="h(Trash2, { size: 14 })"
                       @click.stop="$emit('delete-chat', chat.id)"
                     >
-                      删除
+                      {{ $t('conversation.delete') }}
                     </a-menu-item>
                   </a-menu>
                 </template>
@@ -61,7 +61,7 @@
             </span>
           </div>
         </template>
-        <div v-else-if="!collapsed" class="empty-list">暂无对话历史</div>
+        <div v-else-if="!collapsed" class="empty-list">{{ $t('conversation.empty') }}</div>
         <div v-if="hasMoreChats && !collapsed" class="load-more-wrapper">
           <a-button
             type="text"
@@ -69,7 +69,7 @@
             :loading="isLoadingMore"
             @click="$emit('load-more-chats')"
           >
-            {{ isLoadingMore ? '加载中...' : '加载更多' }}
+            {{ isLoadingMore ? $t('common.loading') : $t('conversation.loadMore') }}
           </a-button>
         </div>
       </div>
@@ -79,6 +79,7 @@
 
 <script setup>
 import { computed, h, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { ChevronDown, MoreVertical, Pin, PinOff, Search, SquarePen, Trash2 } from 'lucide-vue-next'
 import { parseToShanghai } from '@/utils/time'
@@ -120,6 +121,7 @@ const emit = defineEmits([
 ])
 
 const listCollapsed = ref(false)
+const { t } = useI18n()
 
 const sortedChats = computed(() => {
   return [...props.chatsList].sort((a, b) => {
@@ -139,7 +141,7 @@ const renameChat = async (chatId) => {
 
   let newTitle = chat.title || ''
   Modal.confirm({
-    title: '重命名对话',
+    title: t('conversation.modal.rename'),
     content: h('div', { style: { marginTop: '12px' } }, [
       h('input', {
         value: newTitle,
@@ -155,11 +157,11 @@ const renameChat = async (chatId) => {
         }
       })
     ]),
-    okText: '确认',
-    cancelText: '取消',
+    okText: t('conversation.modal.confirm'),
+    cancelText: t('conversation.modal.cancel'),
     onOk: () => {
       if (!newTitle.trim()) {
-        message.warning('标题不能为空')
+        message.warning(t('conversation.modal.emptyTitle'))
         return Promise.reject()
       }
       emit('rename-chat', { chatId, title: newTitle })

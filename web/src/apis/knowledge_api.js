@@ -95,6 +95,46 @@ export const databaseApi = {
   },
 
   /**
+   * AI 清洗排版：将排版混乱的文档重排版为结构清晰的规范 markdown
+   * @param {string} kbId - 知识库 ID
+   * @param {string} markdown - 原始 markdown（与 filePath 二选一）
+   * @param {string} filename - 原文件名
+   * @param {string} filePath - 已上传文件的 MinIO URL（与 markdown 二选一）
+   * @returns {Promise} - { cleaned_markdown, filename }
+   */
+  cleanDocument: async (kbId, markdown = null, filename = null, filePath = null) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/clean`, {
+      markdown,
+      filename,
+      file_path: filePath
+    })
+  },
+
+  /**
+   * 批量 AI 清洗排版：对多个已上传文档并发重排版为规范 markdown
+   * @param {string} kbId - 知识库 ID
+   * @param {Array<{file_path: string, filename: string|null}>} items - 已上传文件项
+   * @returns {Promise} - { results: [{file_path, cleaned_markdown, error}] }
+   */
+  cleanDocuments: async (kbId, items = []) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/clean-batch`, { items })
+  },
+
+  /**
+   * 清洗写回原格式：将清洗后的 markdown 按 filename 后缀写回 docx/xlsx 并上传
+   * @param {string} kbId - 知识库 ID
+   * @param {string} cleanedMarkdown - 清洗后（可能经用户编辑）的 markdown
+   * @param {string} filename - 原文件名，后缀决定写回 docx/xlsx
+   * @returns {Promise} - { file_path, content_hash, size }
+   */
+  cleanWriteback: async (kbId, { cleaned_markdown, filename } = {}) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/clean-writeback`, {
+      cleaned_markdown,
+      filename
+    })
+  },
+
+  /**
    * 获取当前用户有权访问的知识库列表（用于智能体配置）
    * @returns {Promise} - 可访问的知识库列表
    */
@@ -205,7 +245,7 @@ export const documentApi = {
    * @returns {Promise} - 添加结果
    */
   addDocuments: async (kbId, items, params = {}) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents`, {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents`, {
       items,
       params
     })
@@ -277,6 +317,48 @@ export const documentApi = {
    */
   getDocumentContent: async (kbId, docId) => {
     return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}/content`)
+  },
+
+  /**
+   * 获取 Word/Excel 的可编辑结构化内容
+   * @param {string} kbId - 知识库ID
+   * @param {string} docId - 文档ID
+   * @returns {Promise} - { type: 'docx'|'xlsx', blocks|sheets }
+   */
+  getOfficeContent: async (kbId, docId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${docId}/office-content`)
+  },
+
+  /**
+   * 保存编辑后的 Word/Excel 并重新入库（删旧版）
+   * @param {string} kbId - 知识库ID
+   * @param {string} docId - 文档ID
+   * @param {Object} data - { content_type, blocks|sheets, filename }
+   * @returns {Promise} - { message, file_id }
+   */
+  saveEditedDocument: async (kbId, docId, data) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/${docId}/save-edited`, data)
+  },
+
+  /**
+   * 从已上传的 MinIO file_path 提取 Word/Excel 可编辑结构（未入库）
+   * @param {string} kbId - 知识库ID
+   * @param {string} filePath - MinIO URL
+   * @param {string} filename - 文件名
+   * @returns {Promise} - { type: 'docx'|'xlsx', blocks|sheets }
+   */
+  getOfficeContentByPath: async (kbId, filePath, filename = '') => {
+    return apiPost(`/api/knowledge/databases/${kbId}/office-extract`, { file_path: filePath, filename })
+  },
+
+  /**
+   * 将编辑后的 Word/Excel 内容写回 .docx/.xlsx 并上传 MinIO
+   * @param {string} kbId - 知识库ID
+   * @param {Object} data - { content_type, blocks|sheets, filename }
+   * @returns {Promise} - { file_path, content_hash, size }
+   */
+  officeWriteback: async (kbId, data) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/office-writeback`, data)
   },
 
   /**
@@ -363,7 +445,162 @@ export const documentApi = {
     return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/index-pending`, {
       params
     })
-  }
+  },
+  retryReplacementCleanup: async (kbId, fileId) => {
+    return apiPost(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`,
+      {}
+    )
+  },
+  getCleaningPreview: async (kbId, fileId) => {
+    return apiAdminGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning`)
+  },
+  saveCleaningDraft: async (kbId, fileId, content, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/draft`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, version })
+      },
+      true,
+      'json'
+    )
+  },
+  regenerateCleaningDraft: async (kbId, fileId, version, useAi = null) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/regenerate`, {
+      version,
+      use_ai: useAi
+    })
+  },
+  confirmCleaningDraft: async (kbId, fileId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/confirm`, {
+      version
+    })
+  },
+  cancelCleaningDraft: async (kbId, fileId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/cleaning/cancel`, {
+      version
+    })
+  },
+  getEnrichment: async (kbId, fileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment`)
+  },
+  generateEnrichment: async (kbId, fileId, components, overwriteManual = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/generate`, {
+      components,
+      overwrite_manual: overwriteManual
+    })
+  },
+  batchGenerateEnrichment: async (kbId, fileIds, components, overwriteManual = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/enrichment/generate`, {
+      file_ids: fileIds,
+      components,
+      overwrite_manual: overwriteManual
+    })
+  },
+  updateSummary: async (kbId, fileId, text, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/summary`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, version })
+      },
+      true,
+      'json'
+    )
+  },
+  updateKeywords: async (kbId, fileId, values, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/keywords`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values, version })
+      },
+      true,
+      'json'
+    )
+  },
+  updateTags: async (kbId, fileId, values, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/enrichment/tags`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values, version })
+      },
+      true,
+      'json'
+    )
+  },
+  getDocumentQAs: async (kbId, fileId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa`)
+  },
+  getDocumentQA: async (kbId, fileId, qaId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}`)
+  },
+  generateDocumentQAs: async (kbId, fileId, sourceChunkIds = [], replaceGenerated = false) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/generate`, {
+      source_chunk_ids: sourceChunkIds,
+      replace_generated: replaceGenerated
+    })
+  },
+  getDocumentQAGenerationTask: async (kbId, fileId, taskId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/tasks/${taskId}`)
+  },
+  batchGenerateDocumentQAs: async (
+    kbId,
+    fileIds,
+    sourceChunkIds = [],
+    replaceGenerated = false
+  ) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/qa/generate`, {
+      file_ids: fileIds,
+      source_chunk_ids: sourceChunkIds,
+      replace_generated: replaceGenerated
+    })
+  },
+  createDocumentQA: async (kbId, fileId, payload) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa`, payload)
+  },
+  updateDocumentQA: async (kbId, fileId, qaId, payload) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      },
+      true,
+      'json'
+    )
+  },
+  confirmDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}/confirm`, {
+      version
+    })
+  },
+  batchConfirmDocumentQAs: async (kbId, fileId, items) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/confirm`, {
+      items
+    })
+  },
+  rejectDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}/reject`, {
+      version
+    })
+  },
+  deleteDocumentQA: async (kbId, fileId, qaId, version) => {
+    return apiRequest(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/qa/${qaId}?version=${encodeURIComponent(version)}`,
+      { method: 'DELETE' },
+      true,
+      'json'
+    )
+  },
+
 }
 
 // =============================================================================
@@ -429,6 +666,10 @@ export const mindmapApi = {
 // =============================================================================
 
 export const queryApi = {
+  globalSearch: async (query, limit = 10) => {
+    return apiPost('/api/knowledge/search', { query, limit })
+  },
+
   /**
    * 查询知识库
    * @param {string} kbId - 知识库ID
@@ -498,6 +739,17 @@ export const queryApi = {
   }
 }
 
+export const documentBrowseApi = {
+  search: async (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiGet(`/api/knowledge/documents/search?${query}`)
+  },
+  hot: async (limit = 10) => apiGet(`/api/knowledge/documents/hot?limit=${limit}`)
+}
+
 // =============================================================================
 // === 文件管理分组 ===
 // =============================================================================
@@ -535,13 +787,29 @@ export const fileApi = {
    * @param {string} kbId - 知识库ID（可选）
    * @returns {Promise} - 上传结果
    */
-  uploadFile: async (file, kbId = null) => {
+  uploadFile: async (file, kbId = null, options = {}) => {
     const formData = new FormData()
     formData.append('file', file)
 
-    const url = kbId ? `/api/knowledge/files/upload?kb_id=${kbId}` : '/api/knowledge/files/upload'
+    const query = new URLSearchParams()
+    if (kbId) query.set('kb_id', kbId)
+    if (options.parentId) query.set('parent_id', options.parentId)
+    query.set('duplicate_strategy', options.duplicateStrategy || 'prompt')
+    if (options.replaceFileId) query.set('replace_file_id', options.replaceFileId)
+    const qs = query.toString()
+    const url = qs ? `/api/knowledge/files/upload?${qs}` : '/api/knowledge/files/upload'
 
     return apiPost(url, formData)
+  },
+
+  /**
+   * 重试替换版本清理任务
+   * @param {string} kbId - 知识库 ID
+   * @param {string} fileId - 文件 ID
+   * @returns {Promise} - 重试结果
+   */
+  retryReplacementCleanup: async (kbId, fileId) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`, {})
   },
 
   /**
@@ -681,5 +949,30 @@ export const evaluationApi = {
 
   deleteRun: async (kbId, runId) => {
     return apiAdminDelete(`/api/evaluation/databases/${kbId}/runs/${runId}`)
+  }
+}
+
+export const knowledgeConflictApi = {
+  list: async (kbId, status = '') => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    return apiGet(`/api/knowledge/databases/${kbId}/conflicts${query}`)
+  },
+  get: async (kbId, conflictId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}`)
+  },
+  evaluate: async (kbId, assertion) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/assertions/evaluate`, assertion)
+  },
+  resolve: async (kbId, conflictId, resolution) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}/resolve`, resolution)
+  },
+  retryPublish: async (kbId, conflictId) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/${conflictId}/publish/retry`, {})
+  },
+  batchResolve: async (kbId, items) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/conflicts/batch-resolve`, { items })
+  },
+  listEntityLinkCandidates: async (kbId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/entity-link-candidates`)
   }
 }

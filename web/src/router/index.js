@@ -88,6 +88,18 @@ const router = createRouter({
       ]
     },
     {
+      path: '/knowledge-browser',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'KnowledgeBrowser',
+          component: () => import('../views/KnowledgeBrowserView.vue'),
+          meta: { keepAlive: false, requiresAuth: true }
+        }
+      ]
+    },
+    {
       path: '/model-manage',
       name: 'model-manage',
       component: AppLayout,
@@ -208,8 +220,8 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 工作区已从产品入口关闭
-  if (requiresWorkspaceAccess) {
+  // 工作区已从产品入口关闭：仅管理员可访问，普通用户重定向到对话页
+  if (requiresWorkspaceAccess && !isAdmin) {
     return '/agent'
   }
 

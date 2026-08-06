@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from yuxi.knowledge.graphs.graph_utils import normalize_entity_name
+from yuxi.knowledge.graphs.graph_utils import locate_evidence_quote, normalize_entity_name
 from yuxi.knowledge.graphs.ontology.registry import OntologySpec
 
 _KEY_VALUE_RE = re.compile(r"^\s*([^:：=]+?)\s*[:：=]\s*(.+?)\s*$")
@@ -296,13 +296,15 @@ def _evidence_snapshot(chunk: dict[str, Any], evidence: dict[str, Any]) -> dict[
     quote = str(evidence.get("quote") or "")
     start = evidence.get("start_char")
     end = evidence.get("end_char")
+    located = locate_evidence_quote(content, quote) if quote else None
     valid = (
         isinstance(start, int)
         and not isinstance(start, bool)
         and isinstance(end, int)
         and not isinstance(end, bool)
-        and 0 <= start < end <= len(content)
-        and content[start:end] == quote
+        and located is not None
+        and start == located[0]
+        and end == located[1]
     )
     return {
         "file_id": chunk.get("file_id"),
@@ -316,7 +318,10 @@ def _evidence_snapshot(chunk: dict[str, Any], evidence: dict[str, Any]) -> dict[
 
 
 def _entity_key(entity: dict[str, Any]) -> str:
-    text = normalize_entity_name(str(entity.get("text") or ""))
+    # 实体名归一化去掉全部空白：同一产品在不同版本抽取时可能因括号前空格、
+    # 全角空格等细微差异被判为不同实体，导致新旧版所有 keyed 槽位无法配对，
+    # 本应判"变更"的规格全部误判为"新增"（旧值被隐藏）。
+    text = re.sub(r"\s+", "", normalize_entity_name(str(entity.get("text") or "")))
     label = str(entity.get("label") or "Entity").strip().casefold()
     return f"{label}:{text}" if text else ""
 

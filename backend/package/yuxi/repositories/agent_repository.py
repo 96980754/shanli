@@ -24,7 +24,7 @@ GENERAL_PURPOSE_AGENT_DESCRIPTION = (
     "面向没有专用角色约束的一般任务，使用默认运行配置独立完成分析、整理、写作或文件处理。"
 )
 DEFAULT_AGENT_CONTEXT = {
-    "tools": ["ocr_parse_file"],
+    "tools": ["ocr_parse_file", "ask_user_question"],
     "mcps": [],
     "subagents": [GENERAL_PURPOSE_AGENT_SLUG],
 }

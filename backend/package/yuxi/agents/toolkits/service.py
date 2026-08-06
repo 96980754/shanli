@@ -101,13 +101,6 @@ async def resolve_configured_runtime_tools(context) -> list[Any]:
     selected_tool_names: set[str] = set()
     buildin_tools = {tool.name: tool for tool in get_tool_instances_by_category("buildin")}
 
-    # “向用户提问”由 ask_user_question_enabled 开关独立控制（默认关闭），
-    # 不再受 context.tools 列表影响：开关关闭时即使列表保留该名称也不会挂载。
-    ask_user_question_tool = buildin_tools.pop("ask_user_question", None)
-    if ask_user_question_tool is not None and getattr(context, "ask_user_question_enabled", False):
-        selected_tools.append(ask_user_question_tool)
-        selected_tool_names.add("ask_user_question")
-
     for tool_name in getattr(context, "tools", None) or []:
         if not isinstance(tool_name, str) or tool_name in selected_tool_names:
             continue
