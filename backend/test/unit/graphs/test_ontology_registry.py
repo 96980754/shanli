@@ -206,6 +206,44 @@ def test_compile_prompt_is_compact_and_strict():
     assert json.dumps({"registry_id": "test"}) not in prompt
 
 
+def test_compile_prompt_appends_keyed_value_format_constraint():
+    ontology = _build_ontology(
+        {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "name": "Product Ontology",
+            "status": "active",
+            "entities": {
+                "Product": {"description": "可独立销售产品", "examples": []},
+                "Specification": {"description": "结构化规格参数", "examples": []},
+            },
+            "relations": {
+                "HAS_SPEC": {"source": "Product", "target": "Specification"},
+            },
+            "conflict_detection": {
+                "single_valued_relations": [],
+                "keyed_value_relations": ["HAS_SPEC"],
+            },
+        },
+        entity_aliases={},
+        relation_aliases={},
+        properties={},
+        expected_registry_id="test",
+    )
+
+    prompt = compile_ontology_prompt(ontology)
+
+    assert "keyed value 关系格式约束" in prompt
+    assert 'HAS_SPEC 的 target 必须是严格的"参数名: 参数值"格式' in prompt
+    assert "严禁使用空格、逗号或其他分隔符" in prompt
+
+
+def test_compile_prompt_skips_keyed_constraint_without_rules():
+    prompt = compile_ontology_prompt(_product_ontology())
+
+    assert "keyed value 关系格式约束" not in prompt
+
+
 def test_alias_normalization_and_result_validation():
     ontology = _product_ontology()
     result = {
@@ -407,24 +445,41 @@ def test_validation_rejects_unknown_type_property_and_wrong_direction():
             ontology,
         )
 
-    with pytest.raises(ValueError, match="不允许 source 类型"):
-        validate_ontology_result(
+    # 方向不匹配的关系被丢弃而非废掉整个结果（健壮性处理）
+    result = {
+        "entities": [
+            {"text": "蓝牙", "label": "Feature", "attributes": []},
+            {"text": "F10", "label": "Product", "attributes": []},
+        ],
+        "relations": [
             {
-                "entities": [
-                    {"text": "蓝牙", "label": "Feature", "attributes": []},
-                    {"text": "F10", "label": "Product", "attributes": []},
-                ],
-                "relations": [
-                    {
-                        "source": {"text": "蓝牙", "label": "Feature", "attributes": []},
-                        "target": {"text": "F10", "label": "Product", "attributes": []},
-                        "text": "错误方向",
-                        "label": "SUPPORTS",
-                    }
-                ],
-            },
-            ontology,
-        )
+                "source": {"text": "蓝牙", "label": "Feature", "attributes": []},
+                "target": {"text": "F10", "label": "Product", "attributes": []},
+                "text": "错误方向",
+                "label": "SUPPORTS",
+            }
+        ],
+    }
+    validate_ontology_result(result, ontology)
+    assert result["relations"] == []
+
+    # drop_invalid_relations=False 时保持严格的抛错行为
+    strict_result = {
+        "entities": [
+            {"text": "蓝牙", "label": "Feature", "attributes": []},
+            {"text": "F10", "label": "Product", "attributes": []},
+        ],
+        "relations": [
+            {
+                "source": {"text": "蓝牙", "label": "Feature", "attributes": []},
+                "target": {"text": "F10", "label": "Product", "attributes": []},
+                "text": "错误方向",
+                "label": "SUPPORTS",
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="不允许 source 类型"):
+        validate_ontology_result(strict_result, ontology, drop_invalid_relations=False)
 
 
 def _bundle_zip(

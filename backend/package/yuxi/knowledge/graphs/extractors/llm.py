@@ -6,9 +6,8 @@ from typing import Any
 import httpx
 import json_repair
 
-from yuxi.utils import logger
-
 from yuxi.knowledge.graphs.extractors.base import normalize_extraction_result
+from yuxi.knowledge.graphs.graph_utils import locate_evidence_quote
 from yuxi.knowledge.graphs.ontology import (
     compile_ontology_prompt,
     load_ontology,
@@ -19,6 +18,7 @@ from yuxi.knowledge.graphs.ontology import (
     validate_ontology_result,
 )
 from yuxi.models.chat import select_model
+from yuxi.utils import logger
 
 from .base import GraphExtractor
 
@@ -51,10 +51,29 @@ SCHEMA_INSTRUCTION = """抽取 Schema 约束：
 {schema}
 """
 
+# 领域无关的文档级主实体扫描：不预设领域，LLM 依据文档内容自行判断
+# 文档围绕哪些核心实体展开（产品、人物、项目、概念等均可）。
+DOCUMENT_ENTITY_EXTRACTION_PROMPT = """请通读以下文档，识别这份文档主要围绕哪些核心实体展开讨论。
+这些实体可以是产品、设备型号、人物、组织、项目、概念、地区等任何类型，不依赖预设领域。
+
+返回严格 JSON，不要输出解释：
+{
+  "main_entities": [
+    {"name": "实体的规范全名", "label": "实体类型", "reason": "一句话说明该实体为何是文档主实体"}
+  ]
+}
+
+要求：
+- 只列出文档真正围绕其展开讨论的核心实体，通常 1~5 个；仅顺带提及的不要列出。
+- 每个实体只列一次，name 使用文档中最正式、最完整的叫法。
+- label 使用通用实体类型（如 Product、Person、Organization、Project、Concept）。
+"""
+
 DEFAULT_CONCURRENCY_COUNT = 5
 MAX_CONCURRENCY_COUNT = 20
 MODEL_TIMEOUT_SECONDS = 180.0
 MODEL_MAX_ATTEMPTS = 3
+MAX_DOCUMENT_SCAN_CHARS = 20000
 
 
 class OntologyIdentityMismatchError(ValueError):
@@ -93,30 +112,60 @@ class LLMGraphExtractor(GraphExtractor):
 
     async def extract(self, text: str, *, chunk_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         self.validate_options()
+        chunk_id = str((chunk_metadata or {}).get("chunk_id") or "unknown")
+        document_entities = (chunk_metadata or {}).get("document_entities") or []
+        messages = self._build_messages(text, document_entities=document_entities)
+        response = await self._call_model_with_retry(
+            messages,
+            label=f"图谱模型调用失败 chunk_id={chunk_id}",
+        )
+        result = json_repair.loads(response.content if response else "")
+        return self._enrich_evidence(result, text)
+
+    async def extract_document_entities(self, text: str) -> list[dict[str, str]]:
+        """LLM 扫描整篇文档，识别文档级主实体（领域无关）。
+
+        Ontology 模式下仅保留 label 属于 Ontology 实体类型的主实体，
+        避免注入与 Ontology 无关的实体名导致分块抽取校验失败。
+        """
+        self.validate_options()
+        document_text = (text or "")[:MAX_DOCUMENT_SCAN_CHARS]
+        if not document_text.strip():
+            return []
+        response = await self._call_model_with_retry(
+            self._build_document_scan_messages(document_text),
+            label="文档级主实体扫描",
+        )
+        result = json_repair.loads(response.content if response else "")
+        return self._normalize_document_entities(result)
+
+    async def _call_model_with_retry(self, messages: list[dict[str, str]], *, label: str) -> Any:
+        """带指数退避重试的模型调用，供分块抽取与文档级主实体扫描复用。"""
         model = select_model(
             model_spec=self.options["model_spec"],
             timeout=MODEL_TIMEOUT_SECONDS,
             model_params=self.options.get("model_params") or {},
         )
-        chunk_id = str((chunk_metadata or {}).get("chunk_id") or "unknown")
         for attempt in range(1, MODEL_MAX_ATTEMPTS + 1):
             try:
-                response = await model.call(self._build_messages(text), stream=False)
-                result = json_repair.loads(response.content if response else "")
-                return self._enrich_evidence(result, text)
+                return await model.call(messages, stream=False)
             except Exception as exc:
                 if attempt == MODEL_MAX_ATTEMPTS or not _is_retryable_model_error(exc):
                     raise
                 delay = 2 ** (attempt - 1)
                 logger.warning(
-                    f"图谱模型调用失败，准备重试 chunk_id={chunk_id}, "
-                    f"attempt={attempt}/{MODEL_MAX_ATTEMPTS}, delay={delay}s, "
+                    f"{label}, attempt={attempt}/{MODEL_MAX_ATTEMPTS}, delay={delay}s, "
                     f"error_type={_root_cause(exc).__class__.__name__}"
                 )
                 await asyncio.sleep(delay)
-        raise RuntimeError("图谱模型调用重试状态异常")
+        raise RuntimeError("模型调用重试状态异常")
 
     def normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        # 先做 ontology 别名归一化，再做实体去重：
+        # 同一实体在文档里可能被 LLM 抽成不同叫法（如"对讲机"与"Motorola 对讲机"），
+        # 若先去重（key 基于原始 text）会生成多个节点，别名归一需在去重前执行。
+        if self.ontology is not None:
+            normalize_ontology_aliases(result, self.ontology)
         normalized = normalize_extraction_result(result, self.extractor_type)
         if self.ontology is None:
             return normalized
@@ -165,9 +214,9 @@ class LLMGraphExtractor(GraphExtractor):
             if not isinstance(evidence, dict):
                 continue
             quote = str(evidence.get("quote") or "").strip()
-            start_char = source_text.find(quote) if quote else -1
-            evidence["start_char"] = start_char if start_char >= 0 else None
-            evidence["end_char"] = start_char + len(quote) if start_char >= 0 else None
+            located = locate_evidence_quote(source_text, quote) if quote else None
+            evidence["start_char"] = located[0] if located else None
+            evidence["end_char"] = located[1] if located else None
         return result
 
     def ontology_summary(self) -> dict[str, Any] | None:
@@ -200,11 +249,66 @@ class LLMGraphExtractor(GraphExtractor):
             raise ValueError("Ontology 没有可用实体类型，请配置领域 Ontology 扩展")
         self.ontology_prompt = compile_ontology_prompt(self.ontology)
 
-    def _build_messages(self, text: str) -> list[dict[str, str]]:
+    def _build_messages(
+        self,
+        text: str,
+        *,
+        document_entities: list[dict[str, str]] | None = None,
+    ) -> list[dict[str, str]]:
+        content = f"文本：\n{text}"
+        document_context = self._build_document_context_section(document_entities)
+        if document_context:
+            content = f"{document_context}\n\n{content}"
         return [
             {"role": "system", "content": self._build_system_prompt()},
-            {"role": "user", "content": f"文本：\n{text}"},
+            {"role": "user", "content": content},
         ]
+
+    def _build_document_scan_messages(self, text: str) -> list[dict[str, str]]:
+        system_prompt = DOCUMENT_ENTITY_EXTRACTION_PROMPT
+        if self.ontology is not None:
+            allowed_labels = "、".join(self.ontology.entities)
+            system_prompt = (
+                f"{system_prompt}\n本知识库已配置 Ontology，实体类型 label 必须从以下类型中选择：{allowed_labels}。"
+            )
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"文档内容（若超长仅展示开头部分）：\n{text}"},
+        ]
+
+    def _normalize_document_entities(self, result: Any) -> list[dict[str, str]]:
+        if not isinstance(result, dict):
+            raise ValueError("文档级主实体扫描结果必须是对象")
+        main_entities = result.get("main_entities")
+        if not isinstance(main_entities, list):
+            raise ValueError("main_entities 必须是数组")
+
+        allowed_labels = set(self.ontology.entities) if self.ontology is not None else None
+        normalized: list[dict[str, str]] = []
+        seen_names: set[str] = set()
+        for item in main_entities:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if not name or name in seen_names:
+                continue
+            label = str(item.get("label") or "").strip() or None
+            if allowed_labels is not None and (label is None or label not in allowed_labels):
+                continue
+            seen_names.add(name)
+            normalized.append({"name": name, "label": label})
+        return normalized
+
+    @staticmethod
+    def _build_document_context_section(document_entities: list[dict[str, str]] | None) -> str:
+        names = [item["name"] for item in document_entities or [] if isinstance(item, dict) and item.get("name")]
+        if not names:
+            return ""
+        lines = "\n".join(f"- {name}" for name in names)
+        return (
+            "文档级主实体（这份文档主要讨论的对象；抽取时若某个实体与下列主实体是同一对象，"
+            f"请统一使用下列规范名，而不是局部叫法）：\n{lines}"
+        )
 
     def _build_system_prompt(self) -> str:
         if self.ontology is not None:

@@ -137,11 +137,13 @@ async def test_read_office_pdf_preview_converts_and_caches_pdf(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_non_docx_pptx_office_files_do_not_get_pdf_preview(tmp_path, monkeypatch) -> None:
+async def test_non_supported_office_files_do_not_get_pdf_preview(tmp_path, monkeypatch) -> None:
+    """老格式 .doc 不在 office→PDF 预览范围内，仍返回 unsupported。"""
     kb = make_kb(tmp_path)
-    kb.test_file_meta["filename"] = "demo.xlsx"
+    kb.test_file_meta["filename"] = "demo.doc"
+    kb.test_file_meta["path"] = "minio://knowledgebases/db1/upload/demo.doc"
     minio_client = FakeMinioClient()
-    minio_client.objects[("knowledgebases", "db1/upload/demo.docx")] = b"PK\x03\x04excel"
+    minio_client.objects[("knowledgebases", "db1/upload/demo.doc")] = b"MZ\x90\x00excel"
     monkeypatch.setattr("yuxi.storage.minio.get_minio_client", lambda: minio_client)
 
     entry = kb._knowledge_file_entry("db1", "file1", kb.test_file_meta)
@@ -149,6 +151,7 @@ async def test_non_docx_pptx_office_files_do_not_get_pdf_preview(tmp_path, monke
 
     assert entry["has_original_file"] is True
     assert entry["has_parsed_markdown"] is True
+    # .doc 老格式不在 office 预览范围，返回 unsupported
     assert response["preview_type"] == "unsupported"
     assert response["supported"] is False
 

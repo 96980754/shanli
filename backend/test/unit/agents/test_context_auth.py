@@ -39,16 +39,8 @@ def test_get_configurable_items_filters_admin_fields_for_user():
     assert "max_execution_steps" not in items
 
 
-def test_get_configurable_items_exposes_ask_user_question_enabled_default_off():
-    items = BaseContext.get_configurable_items()
-
-    item = items["ask_user_question_enabled"]
-    assert item["default"] is False
-    assert item["name"] == "向用户提问"
-
-
 @pytest.mark.asyncio
-async def test_resolve_agent_resource_options_excludes_ask_user_question(monkeypatch):
+async def test_resolve_agent_resource_options_includes_ask_user_question(monkeypatch):
     monkeypatch.setitem(
         sys.modules,
         "yuxi.agents.toolkits.service",
@@ -62,7 +54,7 @@ async def test_resolve_agent_resource_options_excludes_ask_user_question(monkeyp
 
     options = await context_module.resolve_agent_resource_options({"tools"}, db=object(), user=object())
 
-    assert [option["key"] for option in options["tools"]] == ["tavily_search"]
+    assert [option["key"] for option in options["tools"]] == ["ask_user_question", "tavily_search"]
 
 
 def test_get_configurable_items_allows_admin_and_superadmin_fields():

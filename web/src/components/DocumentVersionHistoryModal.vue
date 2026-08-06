@@ -24,7 +24,11 @@
                     <a-tag color="red">删除 {{ item.validation_report.removed_count }}</a-tag>
                     <a-tag color="red">冲突 {{ item.validation_report.conflict_count }}</a-tag>
                   </template>
-                  <span v-if="item.error_message" class="version-status-message" :title="item.error_message">
+                  <span
+                    v-if="item.error_message"
+                    class="version-status-message"
+                    :title="item.error_message"
+                  >
                     {{ item.error_message }}
                   </span>
                   <span>{{ formatTime(item.activated_at || item.created_at) }}</span>
@@ -61,20 +65,29 @@
             <strong>{{ item.relation || item.fact_key }}</strong>
           </div>
           <p class="report-reason">{{ item.reason }}</p>
+          <div class="report-value-compare">
+            <span class="value-label">旧值</span>
+            <code>{{ getSideValue(item, 'old') }}</code>
+            <span class="value-arrow">→</span>
+            <span class="value-label">新值</span>
+            <code>{{ getSideValue(item, 'new') }}</code>
+          </div>
           <div class="report-evidence-columns">
             <section>
               <span>旧版证据</span>
-              <pre>{{ getEvidenceQuote(item.old_evidence) }}</pre>
+              <pre>{{ getEvidenceQuote(item.old_evidence, item.change_type, 'old') }}</pre>
             </section>
             <section>
               <span>新版证据</span>
-              <pre>{{ getEvidenceQuote(item.new_evidence) }}</pre>
+              <pre>{{ getEvidenceQuote(item.new_evidence, item.change_type, 'new') }}</pre>
             </section>
           </div>
         </div>
         <div v-if="canReviewValidationReport(report, canManage)" class="report-actions">
           <a-button danger :loading="decisionLoading" @click="rejectReport">拒绝新版</a-button>
-          <a-button type="primary" :loading="decisionLoading" @click="acceptReport">接受并启用新版</a-button>
+          <a-button type="primary" :loading="decisionLoading" @click="acceptReport"
+            >接受并启用新版</a-button
+          >
         </div>
       </template>
     </a-spin>
@@ -90,7 +103,8 @@ import { getFileStatusView } from '@/utils/knowledge_file_policy'
 import {
   canReviewValidationReport,
   getChangeTypeView,
-  getEvidenceQuote
+  getEvidenceQuote,
+  getSideValue
 } from './documentVersionReportHelpers'
 
 const props = defineProps({
@@ -148,10 +162,14 @@ const acceptReport = async () => {
   if (!reviewedVersion.value?.supersedes_file_id) return
   decisionLoading.value = true
   try {
-    const response = await documentApi.activateDocumentVersion(props.kbId, reviewedVersion.value.file_id, {
-      expected_current_file_id: reviewedVersion.value.supersedes_file_id,
-      accept_conflicts: true
-    })
+    const response = await documentApi.activateDocumentVersion(
+      props.kbId,
+      reviewedVersion.value.file_id,
+      {
+        expected_current_file_id: reviewedVersion.value.supersedes_file_id,
+        accept_conflicts: true
+      }
+    )
     if (response?.cleanup_warnings?.length) {
       message.warning(`新版已生效，但旧版索引清理存在告警：${response.cleanup_warnings.join('；')}`)
     } else {
@@ -232,6 +250,36 @@ watch(
 .report-reason {
   margin: 8px 0;
   color: var(--color-text-secondary);
+}
+
+.report-value-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--gray-200);
+  border-radius: 6px;
+
+  .value-label {
+    flex: none;
+    color: var(--color-text-secondary);
+  }
+
+  code {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 4px 8px;
+    overflow-wrap: anywhere;
+    background: var(--gray-50);
+    border-radius: 4px;
+  }
+
+  .value-arrow {
+    flex: none;
+    color: var(--color-text-secondary);
+  }
 }
 
 .report-evidence-columns {

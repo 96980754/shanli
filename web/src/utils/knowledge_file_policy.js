@@ -1,6 +1,7 @@
 export const FILE_ACTIONS = {
   PARSE: 'parse',
-  INDEX: 'index'
+  INDEX: 'index',
+  REPLACEMENT_CLEANUP: 'replacement_cleanup'
 }
 
 const STATUS_VIEW = {
@@ -25,15 +26,25 @@ const STATUS_VIEW = {
   validation_review: { label: '待审核知识变更', tone: 'status-warning', icon: 'clock' },
   validation_accepted: { label: '知识变更已接受', tone: 'status-success', icon: 'success' },
   validation_failed: { label: '知识变更分析失败', tone: 'status-error', icon: 'error' },
-  validation_rejected: { label: '新版已拒绝', tone: 'status-error', icon: 'error' }
+  validation_rejected: { label: '新版已拒绝', tone: 'status-error', icon: 'error' },
+  error_replacement_cleanup: { label: '重试版本清理', tone: 'status-error', icon: 'error' }
 }
 
 const STATUS_ACTION = {
   uploaded: { type: FILE_ACTIONS.PARSE, label: '解析文件' },
   error_parsing: { type: FILE_ACTIONS.PARSE, label: '重试解析' },
   parsed: { type: FILE_ACTIONS.INDEX, label: '入库' },
-  error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' }
+  error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' },
+  error_replacement_cleanup: { type: FILE_ACTIONS.REPLACEMENT_CLEANUP, label: '重试版本清理' }
 }
+
+const PROCESSING_STAGE_LABELS = {
+  replacement_preparing: '准备新版本',
+  switching_version: '切换版本',
+  replacement_cleanup: '清理旧版本'
+}
+
+const VERSION_MAINTENANCE_STAGES = new Set(['switching_version', 'replacement_cleanup'])
 
 const PARSED_PREVIEW_STATUSES = new Set(['done', 'parsed', 'indexed', 'error_indexing'])
 const SOURCE_ONLY_PREVIEW_STATUSES = new Set(['uploaded', 'error_parsing'])
@@ -42,8 +53,8 @@ const DELETE_BLOCKED_STATUSES = new Set(['processing', 'parsing', 'indexing'])
 const PROCESSING_STATUSES = new Set(['processing', 'waiting', 'parsing', 'indexing'])
 const INDEXABLE_STATUSES = new Set(['parsed', 'error_indexing', 'done', 'indexed'])
 const PARSEABLE_STATUSES = new Set(['uploaded', 'error_parsing'])
-const DOWNLOADABLE_STATUSES = new Set(['done', 'indexed', 'parsed', 'error_indexing'])
-const CHUNK_PREVIEW_STATUSES = new Set(['done', 'indexed'])
+const DOWNLOADABLE_STATUSES = new Set(['done', 'indexed', 'parsed', 'error_indexing', 'error_replacement_cleanup'])
+const CHUNK_PREVIEW_STATUSES = new Set(['done', 'indexed', 'error_replacement_cleanup'])
 const STATUS_SORT_ORDER = {
   done: 1,
   indexed: 1,
@@ -55,7 +66,8 @@ const STATUS_SORT_ORDER = {
   parsed: 3,
   failed: 4,
   error_indexing: 4,
-  error_parsing: 4
+  error_parsing: 4,
+  error_replacement_cleanup: 4
 }
 
 export const FILE_STATUS_FILTER_OPTIONS = [
@@ -95,11 +107,23 @@ export const canDownloadFile = (record) =>
 
 export const canSelectFile = (record, locked = false) =>
   Boolean(
-    record && !record.is_folder && !locked && !TABLE_SELECTION_BLOCKED_STATUSES.has(record.status)
+    record &&
+    !record.is_folder &&
+    !locked &&
+    !TABLE_SELECTION_BLOCKED_STATUSES.has(record.status) &&
+    !VERSION_MAINTENANCE_STAGES.has(record.processing_stage)
   )
 
 export const canDeleteFile = (record, locked = false) =>
-  Boolean(record && !record.is_folder && !locked && !DELETE_BLOCKED_STATUSES.has(record.status))
+  Boolean(
+    record &&
+    !record.is_folder &&
+    !locked &&
+    !DELETE_BLOCKED_STATUSES.has(record.status) &&
+    !VERSION_MAINTENANCE_STAGES.has(record.processing_stage)
+  )
+
+export const getProcessingStageLabel = (stage) => PROCESSING_STAGE_LABELS[stage] || stage || ''
 
 export const isProcessingFile = (record) =>
   Boolean(record && PROCESSING_STATUSES.has(record.status))

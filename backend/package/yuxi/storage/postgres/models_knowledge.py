@@ -4,6 +4,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -129,6 +130,10 @@ class KnowledgeFile(Base):
             postgresql_where=text("is_current IS TRUE AND is_folder IS NOT TRUE"),
             sqlite_where=text("is_current IS TRUE AND is_folder IS NOT TRUE"),
         ),
+        CheckConstraint(
+            "processing_progress >= 0 AND processing_progress <= 100",
+            name="ck_knowledge_files_processing_progress",
+        ),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -160,33 +165,201 @@ class KnowledgeFile(Base):
     updated_by = Column(String(64))
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    # 重复检测/替换版本链相关（PR12 吸收）
+    normalized_name = Column(String(512))
+    processing_stage = Column(String(64))
+    processing_progress = Column(Integer, nullable=False, default=0)
+    processing_task_id = Column(String(64))
+    processing_task_attempt = Column(Integer, nullable=False, default=0)
+    processing_task_updated_at = Column(DateTime(timezone=True))
+    processing_task_lease_expires_at = Column(DateTime(timezone=True))
+    replacement_target_file_id = Column(String(64), index=True)
+    previous_version_id = Column(String(64), index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    superseded_at = Column(DateTime(timezone=True))
+    # 清洗链路（PR12 吸收）
+    parse_metadata = Column(JSON_VALUE)
+    original_markdown_file = Column(String(1024))
+    cleaning_draft_file = Column(String(1024))
+    cleaning_metadata = Column(JSON_VALUE)
+    cleaning_version = Column(Integer, nullable=False, default=0)
+    confirmed_at = Column(DateTime(timezone=True))
+    confirmed_by = Column(String(64))
+    # 信息增强（PR12 吸收）
+    enrichment_data = Column(JSON_VALUE)
+    enrichment_status = Column(String(32), index=True)
+    enrichment_version = Column(Integer, nullable=False, default=0)
+    enrichment_content_hash = Column(String(64))
+    enrichment_generated_at = Column(DateTime(timezone=True))
+    enrichment_error = Column(Text)
+    enrichment_possibly_outdated = Column(Boolean, nullable=False, default=False)
 
 
-class KnowledgeConflict(Base):
-    """同一逻辑文档相邻版本之间的结构化知识冲突。"""
-
-    __tablename__ = "knowledge_conflicts"
+class KnowledgeAssertion(Base):
+    """A version-bound candidate or reviewed business assertion."""
+    __tablename__ = "knowledge_assertions"
     __table_args__ = (
-        UniqueConstraint("new_file_id", "conflict_type", "conflict_key", name="uq_knowledge_conflicts_candidate"),
-        Index("ix_knowledge_conflicts_kb_id", "kb_id"),
-        Index("ix_knowledge_conflicts_logical_document_id", "logical_document_id"),
-        Index("ix_knowledge_conflicts_new_file_id", "new_file_id"),
+        UniqueConstraint("assertion_id", name="uq_knowledge_assertions_assertion_id"),
+        Index("ix_knowledge_assertions_kb_entity", "kb_id", "linked_entity_id"),
+        Index("ix_knowledge_assertions_file_chunk", "file_id", "chunk_id"),
+        Index("ix_knowledge_assertions_status", "status"),
     )
-
     id = Column(Integer, primary_key=True, autoincrement=True)
-    conflict_id = Column(String(64), unique=True, nullable=False, index=True)
+    assertion_id = Column(String(64), nullable=False)
     kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
-    logical_document_id = Column(String(64), nullable=False)
-    old_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"))
-    new_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"), nullable=False)
-    conflict_type = Column(String(64), nullable=False)
-    conflict_key = Column(String(512), nullable=False)
-    old_fact = Column(JSON_VALUE, nullable=False)
-    new_fact = Column(JSON_VALUE, nullable=False)
-    status = Column(String(32), nullable=False, default="open", index=True)
+    entity_type = Column(String(128), nullable=False)
+    entity_name = Column(String(512), nullable=False)
+    linked_entity_id = Column(
+        String(64),
+        ForeignKey("knowledge_graph_entities.entity_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    predicate = Column(String(128), nullable=False)
+    raw_value = Column(JSON_VALUE, nullable=False)
+    normalized_value = Column(JSON_VALUE)
+    value_type = Column(String(32), nullable=False)
+    unit = Column(String(32))
+    valid_from = Column(DateTime(timezone=True))
+    valid_to = Column(DateTime(timezone=True))
+    product_version = Column(String(128))
+    file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"), nullable=False)
+    chunk_id = Column(String(128), ForeignKey("knowledge_chunks.chunk_id", ondelete="CASCADE"), nullable=False)
+    evidence = Column(Text, nullable=False)
+    cleaning_version = Column(Integer, nullable=False)
+    content_hash = Column(String(128), nullable=False)
+    extraction_method = Column(String(64), nullable=False)
+    confidence = Column(Float)
+    status = Column(String(32), nullable=False, default="candidate")
+    source = Column(String(32), nullable=False, default="generated")
+    published_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+class EntityLinkCandidate(Base):
+    """A deterministic entity-link candidate for one assertion."""
+    __tablename__ = "entity_link_candidates"
+    __table_args__ = (
+        UniqueConstraint("link_id", name="uq_entity_link_candidates_link_id"),
+        Index("ix_entity_link_candidates_assertion_id", "assertion_id"),
+        Index("ix_entity_link_candidates_kb_id", "kb_id"),
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    link_id = Column(String(64), nullable=False)
+    assertion_id = Column(
+        String(64),
+        ForeignKey("knowledge_assertions.assertion_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    candidate_name = Column(String(512), nullable=False)
+    normalized_name = Column(String(512), nullable=False)
+    target_entity_id = Column(
+        String(64),
+        ForeignKey("knowledge_graph_entities.entity_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_entity_name = Column(String(512))
+    matching_rules = Column(JSON_VALUE, nullable=False)
+    similarity = Column(Float)
+    aliases = Column(JSON_VALUE)
+    status = Column(String(32), nullable=False)
     resolved_by = Column(String(64))
     resolved_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+class KnowledgeConflict(Base):
+    """Unified review record for document-version conflicts and reviewed assertions."""
+    __tablename__ = "knowledge_conflicts"
+    __table_args__ = (
+        UniqueConstraint("conflict_id", name="uq_knowledge_conflicts_conflict_id"),
+        UniqueConstraint("incoming_assertion_id", name="uq_knowledge_conflicts_incoming_assertion"),
+        UniqueConstraint("new_file_id", "conflict_type", "conflict_key", name="uq_knowledge_conflicts_candidate"),
+        Index("ix_knowledge_conflicts_kb_id", "kb_id"),
+        Index("ix_knowledge_conflicts_kb_status", "kb_id", "status"),
+        Index("ix_knowledge_conflicts_logical_document_id", "logical_document_id"),
+        Index("ix_knowledge_conflicts_new_file_id", "new_file_id"),
+        Index("ix_knowledge_conflicts_entity_predicate", "entity_id", "predicate"),
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conflict_id = Column(String(64), unique=True, nullable=False, index=True)
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    logical_document_id = Column(String(64))
+    old_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"))
+    new_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"))
+    conflict_type = Column(String(64), nullable=False)
+    conflict_key = Column(String(512))
+    old_fact = Column(JSON_VALUE)
+    new_fact = Column(JSON_VALUE)
+    entity_id = Column(
+        String(64),
+        ForeignKey("knowledge_graph_entities.entity_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    predicate = Column(String(128))
+    existing_assertion_ids = Column(JSON_VALUE)
+    incoming_assertion_id = Column(
+        String(64),
+        ForeignKey("knowledge_assertions.assertion_id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    classification = Column(String(32))
+    existing_value = Column(JSON_VALUE)
+    incoming_value = Column(JSON_VALUE)
+    normalized_existing_value = Column(JSON_VALUE)
+    normalized_incoming_value = Column(JSON_VALUE)
+    detection_rules = Column(JSON_VALUE)
+    severity = Column(String(16))
+    requires_review = Column(Boolean, nullable=False, default=True)
+    status = Column(String(32), nullable=False, default="pending")
+    resolution = Column(String(64))
+    resolution_reason = Column(Text)
+    resolved_by = Column(String(64))
+    resolved_at = Column(DateTime(timezone=True))
+    publish_status = Column(String(32), nullable=False, default="not_requested")
+    publish_error = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    version = Column(Integer, nullable=False, default=1)
+class KnowledgeConflictPublishTask(Base):
+    """Durable outbox task for publishing one reviewed assertion version."""
+    __tablename__ = "knowledge_conflict_publish_tasks"
+    __table_args__ = (
+        UniqueConstraint("task_id", name="uq_knowledge_conflict_publish_tasks_task_id"),
+        UniqueConstraint(
+            "conflict_id",
+            "expected_version",
+            name="uq_knowledge_conflict_publish_tasks_conflict_version",
+        ),
+        Index("ix_knowledge_conflict_publish_tasks_status_retry", "status", "next_attempt_at"),
+        Index("ix_knowledge_conflict_publish_tasks_kb_id", "kb_id"),
+    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False)
+    conflict_id = Column(
+        String(64),
+        ForeignKey("knowledge_conflicts.conflict_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assertion_id = Column(
+        String(64),
+        ForeignKey("knowledge_assertions.assertion_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    resolution_id = Column(String(64), nullable=False)
+    entity_id = Column(String(64), nullable=True)
+    expected_version = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False, default="pending")
+    neo4j_status = Column(String(32), nullable=False, default="pending")
+    vector_status = Column(String(32), nullable=False, default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=5)
+    error_code = Column(String(64))
+    last_error = Column(Text)
+    next_attempt_at = Column(DateTime(timezone=True))
+    lease_expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    completed_at = Column(DateTime(timezone=True))
 
 
 class KnowledgeValidationReport(Base):
@@ -474,4 +647,50 @@ class EvaluationRunItem(Base):
     generated_answer = Column(Text)
     retrieved_chunks = Column(JSON_VALUE)
     metrics = Column(JSON_VALUE)
+    created_at = Column(DateTime(timezone=True), default=utc_now_naive)
+
+
+class DocumentQAPair(Base):
+    """Document-bound QA draft and confirmed answer."""
+
+    __tablename__ = "document_qa_pairs"
+    __table_args__ = (
+        UniqueConstraint("qa_id", name="uq_document_qa_pairs_qa_id"),
+        UniqueConstraint(
+            "file_id",
+            "content_hash",
+            "question_hash",
+            name="uq_document_qa_pairs_file_content_question",
+        ),
+        Index("ix_document_qa_pairs_kb_id", "kb_id"),
+        Index("ix_document_qa_pairs_file_id", "file_id"),
+        Index("ix_document_qa_pairs_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    qa_id = Column(String(64), nullable=False)
+    kb_id = Column(String(80), ForeignKey("knowledge_bases.kb_id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="CASCADE"), nullable=False)
+    question = Column(Text, nullable=False)
+    question_hash = Column(String(64), nullable=False)
+    answer = Column(Text, nullable=False)
+    source_chunk_ids = Column(JSON_VALUE, nullable=False)
+    evidence = Column(JSON_VALUE, nullable=False)
+    source = Column(String(32), nullable=False, default="generated")
+    status = Column(String(32), nullable=False, default="draft")
+    sync_status = Column(String(32), nullable=False, default="pending")
+    sync_error = Column(Text)
+    version = Column(Integer, nullable=False, default=1)
+    cleaning_version = Column(Integer, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    model_name = Column(String(512))
+    model_version = Column(String(64))
+    generated_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+    updated_by = Column(String(64))
+    confirmed_at = Column(DateTime(timezone=True))
+    confirmed_by = Column(String(64))
+    possibly_outdated = Column(Boolean, nullable=False, default=False)
+    deleted_by_user = Column(Boolean, nullable=False, default=False)
+    error = Column(Text)
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from yuxi.knowledge.graphs.extractors import (
     GraphExtractorFactory,
     LLMGraphExtractor,
@@ -39,6 +38,40 @@ def _raw_graph_edge(edge_id: str, source_id: str, target_id: str) -> dict:
         "target_id": target_id,
         "properties": {},
     }
+
+
+def test_locate_evidence_quote_exact_then_normalized_fallback():
+    from yuxi.knowledge.graphs.graph_utils import locate_evidence_quote
+
+    source = "| **AI双麦降噪** | 有效传输距离 800米\xa0（空旷） |"
+    # 精确匹配：原文连续子串
+    exact_quote = "有效传输距离 800米\xa0（空旷）"
+    expected = (source.index(exact_quote), source.index(exact_quote) + len(exact_quote))
+    assert locate_evidence_quote(source, exact_quote) == expected
+    # 精确匹配失败，归一化匹配：剥离 ** 与 NBSP 后仍能定位
+    located = locate_evidence_quote(source, "AI双麦降噪 有效传输距离 800米（空旷）")
+    assert located is not None and located[1] > located[0]
+    # 完全无关的 quote 无法定位
+    assert locate_evidence_quote(source, "完全不存在的证据句") is None
+    # 空 quote 返回 None
+    assert locate_evidence_quote(source, "") is None
+
+
+def test_llm_graph_extractor_enrich_evidence_falls_back_to_normalized_match():
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+    # docx 表格 markdown：带 ** 加粗与 NBSP；LLM 的 quote 被"润色"（剥粗体、NBSP 转空格）
+    source_text = "| **AI双麦降噪** | 即使你在瀑布旁呼喊，有效传输距离 800米\xa0（空旷） |"
+    result = extractor._enrich_evidence(
+        {"relations": [{"evidence": {"quote": "AI双麦降噪 即使你在瀑布旁呼喊，有效传输距离 800米（空旷）"}}]},
+        source_text,
+    )
+
+    evidence = result["relations"][0]["evidence"]
+    assert evidence["start_char"] is not None
+    assert evidence["end_char"] is not None
+    assert evidence["end_char"] > evidence["start_char"]
+    # quote 保留 LLM 原始输出，仅位置归一化
+    assert evidence["quote"] == "AI双麦降噪 即使你在瀑布旁呼喊，有效传输距离 800米（空旷）"
 
 
 def test_normalize_extraction_result_defaults_and_validates_refs():
@@ -707,6 +740,7 @@ async def test_milvus_graph_service_reextracts_invalid_cached_result():
         "chunk_id": "chunk_1",
         "file_id": "file_1",
         "chunk_index": 0,
+        "document_entities": [],
     }
     chunk_repo.update_extraction_result.assert_awaited_once_with("chunk_1", result)
     assert extractor.normalize_result.call_count == 2
@@ -949,3 +983,415 @@ async def test_milvus_graph_service_get_stats_empty_kb_id():
     service = MilvusGraphService()
     result = await service.get_stats(kb_id=None)
     assert result == {"total_nodes": 0, "total_edges": 0, "entity_types": []}
+
+
+def test_normalize_entity_name_strong_strips_symbols_and_suffixes():
+    from yuxi.knowledge.graphs.graph_utils import normalize_entity_name_strong
+
+    assert normalize_entity_name_strong("IP68") == "ip68"
+    assert normalize_entity_name_strong("IP-68") == "ip68"
+    assert normalize_entity_name_strong("RTK") == "rtk"
+    assert normalize_entity_name_strong("RTK定位") == "rtk"
+    assert normalize_entity_name_strong("F10定位对讲一体机") == "f10"
+    assert normalize_entity_name_strong("F10") == "f10"
+    assert normalize_entity_name_strong("POCSTARS定位平台") == "pocstars"
+    # 无后缀的普通名保留
+    assert normalize_entity_name_strong("蓝牙") == "蓝牙".casefold()
+
+
+def test_merge_entity_names_clusters_same_entity_variants():
+    from yuxi.knowledge.graphs.graph_utils import merge_entity_names
+
+    mapping = merge_entity_names(["F10定位对讲一体机", "F10", "IP68", "IP-68", "RTK", "RTK定位"])
+    assert mapping["F10定位对讲一体机"] == "F10"
+    assert mapping["F10"] == "F10"
+    assert mapping["IP-68"] == "IP68"
+    assert mapping["RTK定位"] == "RTK"
+    # 独立实体不误并
+    assert mapping["RTK"] == "RTK"
+
+
+@pytest.mark.asyncio
+async def test_merge_entities_across_chunks_unifies_entity_variants():
+    from types import SimpleNamespace as SN
+    from unittest.mock import AsyncMock
+
+    from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
+
+    # 两个 chunk：同一实体叫法不同（F10 与 F10定位对讲一体机），关系端点同步
+    results = [
+        {
+            "file_id": "file_1",
+            "chunk_id": "chunk_1",
+            "chunk_index": 0,
+            "content": "A",
+            "extraction_result": {
+                "entities": [{"text": "F10", "label": "Product", "attributes": []}],
+                "relations": [
+                    {
+                        "source": {"text": "F10", "label": "Product", "attributes": []},
+                        "target": {"text": "UWB定位", "label": "Technology", "attributes": []},
+                        "text": "r",
+                        "label": "SUPPORTS",
+                        "polarity": "positive",
+                        "assertion_kind": "fact",
+                    }
+                ],
+                "metadata": {},
+            },
+        },
+        {
+            "file_id": "file_1",
+            "chunk_id": "chunk_2",
+            "chunk_index": 1,
+            "content": "B",
+            "extraction_result": {
+                "entities": [{"text": "F10定位对讲一体机", "label": "Product", "attributes": []}],
+                "relations": [],
+                "metadata": {},
+            },
+        },
+    ]
+    chunks = [
+        SN(chunk_id="chunk_1"),
+        SN(chunk_id="chunk_2"),
+    ]
+    chunk_repo = SN(update_extraction_result=AsyncMock())
+    service = MilvusGraphService(chunk_repo=chunk_repo)
+
+    await service._merge_entities_across_chunks("kb_1", chunks, results)
+
+    # chunk_2 的实体被改为 canonical（最短名 F10）
+    assert results[1]["extraction_result"]["entities"][0]["text"] == "F10"
+    # chunk_1 的关系端点 source 已统一为 F10
+    assert results[0]["extraction_result"]["relations"][0]["source"]["text"] == "F10"
+    # 缓存已回写（chunk_2 因实体改名被更新）
+    chunk_repo.update_extraction_result.assert_awaited()
+
+
+# ─── 文档级主实体（领域无关）扫描与注入 ──────────────────────────────
+
+
+def _locked_graph_kb():
+    return SimpleNamespace(
+        kb_type="milvus",
+        embedding_model_spec="test-embedding",
+        additional_params={
+            "graph_build_config": {
+                "locked": True,
+                "extractor_type": "llm",
+                "extractor_options": {"model_spec": "test/model"},
+            }
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_extract_document_entities_parses_and_dedupes(monkeypatch):
+    model = SimpleNamespace(
+        call=AsyncMock(
+            return_value=SimpleNamespace(
+                content=(
+                    '{"main_entities": ['
+                    '{"name": "F10定位对讲一体机", "label": "Product"},'
+                    '{"name": "F10定位对讲一体机", "label": "Product"},'
+                    '{"name": "  ", "label": "Product"},'
+                    '{"name": "张三", "label": "Person"}'
+                    "]}"
+                )
+            )
+        )
+    )
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.select_model", lambda **_kwargs: model)
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    entities = await extractor.extract_document_entities("文档全文内容")
+
+    assert entities == [
+        {"name": "F10定位对讲一体机", "label": "Product"},
+        {"name": "张三", "label": "Person"},
+    ]
+    user_message = model.call.await_args.args[0][1]["content"]
+    assert "文档全文内容" in user_message
+
+
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_extract_document_entities_respects_ontology_labels(monkeypatch):
+    from yuxi.knowledge.graphs.ontology.registry import _build_ontology
+
+    ontology = _build_ontology(
+        {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "name": "Test",
+            "status": "active",
+            "entities": {
+                "Product": {"description": "产品", "examples": []},
+                "Person": {"description": "人物", "examples": []},
+            },
+            "relations": {},
+        },
+        entity_aliases={"Product": {"MCSTARS": ["MCX系统"]}},
+        relation_aliases={},
+        properties={},
+        expected_registry_id="test",
+    )
+    entry = SimpleNamespace(
+        registry_id="test",
+        version="1.0.0",
+        digest="test-digest",
+        public_dict=lambda: {
+            "registry_id": "test",
+            "version": "1.0.0",
+            "digest": "test-digest",
+            "name": "Test",
+            "status": "active",
+            "source": "uploaded",
+        },
+    )
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.resolve_ontology_registry",
+        lambda _registry_id, _version, _digest: entry,
+    )
+    monkeypatch.setattr(
+        "yuxi.knowledge.graphs.extractors.llm.load_ontology",
+        lambda _registry_id, _version, _digest: ontology,
+    )
+    model = SimpleNamespace(
+        call=AsyncMock(
+            return_value=SimpleNamespace(
+                content=(
+                    '{"main_entities": ['
+                    '{"name": "F10定位对讲一体机", "label": "Product"},'
+                    '{"name": "张三", "label": "Person"},'
+                    '{"name": "通信协议", "label": "Concept"}'
+                    "]}"
+                )
+            )
+        )
+    )
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.select_model", lambda **_kwargs: model)
+    extractor = LLMGraphExtractor(
+        {
+            "model_spec": "test/model",
+            "ontology_registry_id": "test",
+            "ontology_version": "1.0.0",
+        }
+    )
+
+    entities = await extractor.extract_document_entities("文档全文内容")
+
+    # 不在 Ontology 实体类型内的 Concept 被过滤，避免注入后分块抽取校验失败
+    assert entities == [
+        {"name": "F10定位对讲一体机", "label": "Product"},
+        {"name": "张三", "label": "Person"},
+    ]
+    system_message = model.call.await_args.args[0][0]["content"]
+    assert "必须从以下类型中选择：Product、Person" in system_message
+
+
+def test_llm_graph_extractor_injects_document_context_into_messages():
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    messages = extractor._build_messages(
+        "设备支持组呼",
+        document_entities=[{"name": "F10定位对讲一体机", "label": "Product"}],
+    )
+    assert messages[1]["content"].startswith("文档级主实体")
+    assert "F10定位对讲一体机" in messages[1]["content"]
+    assert "文本：\n设备支持组呼" in messages[1]["content"]
+
+    plain_messages = extractor._build_messages("设备支持组呼")
+    assert plain_messages[1]["content"] == "文本：\n设备支持组呼"
+
+
+@pytest.mark.asyncio
+async def test_llm_graph_extractor_extract_threads_document_entities(monkeypatch):
+    model = SimpleNamespace(call=AsyncMock(return_value=SimpleNamespace(content='{"entities": [], "relations": []}')))
+    monkeypatch.setattr("yuxi.knowledge.graphs.extractors.llm.select_model", lambda **_kwargs: model)
+    extractor = LLMGraphExtractor({"model_spec": "test/model"})
+
+    await extractor.extract(
+        "设备支持组呼",
+        chunk_metadata={
+            "chunk_id": "chunk_1",
+            "document_entities": [{"name": "F10定位对讲一体机", "label": "Product"}],
+        },
+    )
+
+    user_message = model.call.await_args.args[0][1]["content"]
+    assert "文档级主实体" in user_message
+    assert "F10定位对讲一体机" in user_message
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_extract_file_chunks_threads_document_entities(monkeypatch):
+    kb = _locked_graph_kb()
+    kb_repo = SimpleNamespace(get_by_kb_id=AsyncMock(return_value=kb))
+    chunks = [
+        SimpleNamespace(
+            chunk_id="chunk_1",
+            file_id="file_1",
+            chunk_index=0,
+            content="F10 支持组呼",
+            extraction_result=None,
+        ),
+        SimpleNamespace(
+            chunk_id="chunk_2",
+            file_id="file_1",
+            chunk_index=1,
+            content="F10 支持定位",
+            extraction_result=None,
+        ),
+    ]
+    chunk_repo = SimpleNamespace(
+        list_by_file_id=AsyncMock(return_value=chunks),
+        update_extraction_result=AsyncMock(),
+    )
+    extractor = SimpleNamespace(
+        extract_document_entities=AsyncMock(return_value=[{"name": "F10定位对讲一体机", "label": "Product"}]),
+        extract=AsyncMock(return_value={"entities": [], "relations": [], "metadata": {}}),
+        normalize_result=MagicMock(side_effect=lambda result: result),
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", MagicMock(return_value=extractor))
+    service = MilvusGraphService(kb_repo=kb_repo, chunk_repo=chunk_repo)
+
+    results = await service.extract_file_chunks("kb_test", "file_1")
+
+    # 整篇文档按 chunk 顺序拼接后扫描一次
+    extractor.extract_document_entities.assert_awaited_once_with("F10 支持组呼\n\nF10 支持定位")
+    # 文档级主实体经 chunk_metadata 透传到每个分块抽取
+    assert len(results) == 2
+    for call_args in extractor.extract.await_args_list:
+        assert call_args.kwargs["chunk_metadata"]["document_entities"] == [
+            {"name": "F10定位对讲一体机", "label": "Product"}
+        ]
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_document_scan_failure_degrades_gracefully(monkeypatch):
+    kb = _locked_graph_kb()
+    kb_repo = SimpleNamespace(get_by_kb_id=AsyncMock(return_value=kb))
+    chunks = [
+        SimpleNamespace(
+            chunk_id="chunk_1",
+            file_id="file_1",
+            chunk_index=0,
+            content="F10 支持组呼",
+            extraction_result=None,
+        )
+    ]
+    chunk_repo = SimpleNamespace(
+        list_by_file_id=AsyncMock(return_value=chunks),
+        update_extraction_result=AsyncMock(),
+    )
+    extractor = SimpleNamespace(
+        extract_document_entities=AsyncMock(side_effect=ValueError("模型不可用")),
+        extract=AsyncMock(return_value={"entities": [], "relations": [], "metadata": {}}),
+        normalize_result=MagicMock(side_effect=lambda result: result),
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", MagicMock(return_value=extractor))
+    service = MilvusGraphService(kb_repo=kb_repo, chunk_repo=chunk_repo)
+
+    results = await service.extract_file_chunks("kb_test", "file_1")
+
+    # 扫描失败降级为不带文档级上下文，不阻塞抽取
+    assert len(results) == 1
+    extractor.extract.assert_awaited_once()
+    assert extractor.extract.await_args.kwargs["chunk_metadata"]["document_entities"] == []
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_extract_file_chunks_skips_scan_when_all_cached(monkeypatch):
+    kb = _locked_graph_kb()
+    kb_repo = SimpleNamespace(get_by_kb_id=AsyncMock(return_value=kb))
+    chunks = [
+        SimpleNamespace(
+            chunk_id="chunk_1",
+            file_id="file_1",
+            chunk_index=0,
+            content="F10 支持组呼",
+            extraction_result={"entities": [], "relations": []},
+        )
+    ]
+    chunk_repo = SimpleNamespace(
+        list_by_file_id=AsyncMock(return_value=chunks),
+        update_extraction_result=AsyncMock(),
+    )
+    extractor = SimpleNamespace(
+        extract_document_entities=AsyncMock(),
+        extract=AsyncMock(),
+        normalize_result=MagicMock(side_effect=lambda result: result),
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", MagicMock(return_value=extractor))
+    service = MilvusGraphService(kb_repo=kb_repo, chunk_repo=chunk_repo)
+
+    results = await service.extract_file_chunks("kb_test", "file_1")
+
+    # 全部 chunk 已有抽取缓存时跳过文档扫描，也不重复抽取
+    assert len(results) == 1
+    extractor.extract_document_entities.assert_not_awaited()
+    extractor.extract.assert_not_awaited()
+    chunk_repo.update_extraction_result.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_milvus_graph_service_build_pending_chunks_threads_document_entities(monkeypatch):
+    kb = _locked_graph_kb()
+    kb_repo = SimpleNamespace(get_by_kb_id=AsyncMock(return_value=kb))
+    chunks = [
+        SimpleNamespace(
+            chunk_id="chunk_1",
+            file_id="file_1",
+            chunk_index=0,
+            content="F10 支持组呼",
+            extraction_result=None,
+        ),
+        SimpleNamespace(
+            chunk_id="chunk_2",
+            file_id="file_1",
+            chunk_index=1,
+            content="F10 支持定位",
+            extraction_result=None,
+        ),
+    ]
+    pending_calls = 0
+
+    async def list_pending(*_args, **_kwargs):
+        nonlocal pending_calls
+        pending_calls += 1
+        return chunks if pending_calls == 1 else []
+
+    chunk_repo = SimpleNamespace(
+        count_graph_pending_by_kb_id=AsyncMock(return_value=2),
+        list_graph_pending_by_kb_id=list_pending,
+        list_by_file_id=AsyncMock(return_value=chunks),
+        update_extraction_result=AsyncMock(),
+        mark_graph_indexed=AsyncMock(),
+    )
+    graph_repo = SimpleNamespace(upsert_chunk_graph=AsyncMock())
+    graph_vector_store = SimpleNamespace(insert_missing_graph_records=AsyncMock())
+    extractor = SimpleNamespace(
+        extract_document_entities=AsyncMock(return_value=[{"name": "F10定位对讲一体机", "label": "Product"}]),
+        extract=AsyncMock(return_value={"entities": [], "relations": [], "metadata": {}}),
+        normalize_result=MagicMock(side_effect=lambda result: result),
+    )
+    monkeypatch.setattr(GraphExtractorFactory, "create", MagicMock(return_value=extractor))
+    service = MilvusGraphService(
+        kb_repo=kb_repo,
+        chunk_repo=chunk_repo,
+        graph_repo=graph_repo,
+        graph_vector_store=graph_vector_store,
+    )
+    service.write_chunk_graph = MagicMock(return_value=([], []))
+
+    result = await service.build_pending_chunks("kb_test", batch_size=10)
+
+    # 同文件只扫描一次，且每个 chunk 抽取都携带文档级主实体
+    assert result["success"] == 2
+    extractor.extract_document_entities.assert_awaited_once_with("F10 支持组呼\n\nF10 支持定位")
+    for call_args in extractor.extract.await_args_list:
+        assert call_args.kwargs["chunk_metadata"]["document_entities"] == [
+            {"name": "F10定位对讲一体机", "label": "Product"}
+        ]
+    chunk_repo.mark_graph_indexed.assert_awaited()

@@ -40,6 +40,34 @@
       @changed="handleRefresh"
     />
 
+    <DocumentCleaningModal
+      v-model:open="cleaningModalVisible"
+      :kb-id="store.kbId"
+      :file-id="cleaningFileId"
+      :can-manage="props.canManage"
+      @changed="handleRefresh"
+    />
+    <DocumentEnrichmentModal
+      v-model:open="enrichmentModalVisible"
+      :kb-id="store.kbId"
+      :file-id="enrichmentFileId"
+      :can-manage="props.canManage"
+      @changed="handleRefresh"
+    />
+    <DocumentQAModal
+      v-model:open="qaModalVisible"
+      :kb-id="store.kbId"
+      :file-id="qaFileId"
+      :can-manage="props.canManage"
+      @changed="handleRefresh"
+    />
+    <KnowledgeConflictModal
+      v-model:open="conflictModalVisible"
+      :kb-id="store.kbId"
+      :can-manage="props.canManage"
+      @changed="handleRefresh"
+    />
+
     <!-- 新建文件夹模态框 -->
     <a-modal
       v-model:open="createFolderModalVisible"
@@ -346,6 +374,24 @@
                     版本历史
                   </a-button>
 
+                  <!-- 清洗预览 / 信息增强 / QA 知识对（PR12 吸收） -->
+                  <a-button v-if="props.canManage" type="text" block @click="openCleaningPreview(row)">
+                    <template #icon><Sparkles :size="14" /></template>
+                    清洗预览
+                  </a-button>
+                  <a-button v-if="props.canManage" type="text" block @click="openEnrichment(row)">
+                    <template #icon><FileText :size="14" /></template>
+                    信息增强
+                  </a-button>
+                  <a-button v-if="props.canManage" type="text" block @click="openDocumentQA(row)">
+                    <template #icon><HelpCircle :size="14" /></template>
+                    QA 知识对
+                  </a-button>
+                  <a-button v-if="props.canManage" type="text" block @click="conflictModalVisible = true">
+                    <template #icon><AlertTriangle :size="14" /></template>
+                    冲突审核
+                  </a-button>
+
                   <a-button
                     v-if="props.canDelete"
                     type="text"
@@ -406,7 +452,10 @@ import {
   Database,
   Filter,
   MoreHorizontal,
-  History
+  History,
+  Sparkles,
+  HelpCircle,
+  AlertTriangle
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -424,6 +473,33 @@ const openVersionHistory = (record) => {
   closePopover(record.file_id)
   versionFileId.value = record.file_id
   versionModalVisible.value = true
+}
+
+// 清洗预览 / 信息增强 / QA 知识对（PR12 吸收）
+const cleaningModalVisible = ref(false)
+const cleaningFileId = ref('')
+const enrichmentModalVisible = ref(false)
+const enrichmentFileId = ref('')
+const qaModalVisible = ref(false)
+const qaFileId = ref('')
+const conflictModalVisible = ref(false)
+
+const openCleaningPreview = (record) => {
+  closePopover(record.file_id)
+  cleaningFileId.value = record.file_id
+  cleaningModalVisible.value = true
+}
+
+const openEnrichment = (record) => {
+  closePopover(record.file_id)
+  enrichmentFileId.value = record.file_id
+  enrichmentModalVisible.value = true
+}
+
+const openDocumentQA = (record) => {
+  closePopover(record.file_id)
+  qaFileId.value = record.file_id
+  qaModalVisible.value = true
 }
 
 const applyFilters = async (overrides = {}) => {
@@ -924,6 +1000,11 @@ const handleStatusAction = async (record) => {
 
   if (action?.type === FILE_ACTIONS.INDEX) {
     await handleIndexFile(record)
+    return
+  }
+
+  if (action?.type === FILE_ACTIONS.REPLACEMENT_CLEANUP) {
+    await documentApi.retryReplacementCleanup(store.kbId, record.file_id)
   }
 }
 
@@ -1045,6 +1126,10 @@ import { parseToShanghai } from '@/utils/time'
 import { buildChunkParamsPayload, isPlainObject } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import DocumentVersionHistoryModal from '@/components/DocumentVersionHistoryModal.vue'
+import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
+import DocumentEnrichmentModal from '@/components/DocumentEnrichmentModal.vue'
+import DocumentQAModal from '@/components/DocumentQAModal.vue'
+import KnowledgeConflictModal from '@/components/KnowledgeConflictModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 </script>

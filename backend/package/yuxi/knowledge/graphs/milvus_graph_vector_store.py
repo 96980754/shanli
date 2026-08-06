@@ -320,3 +320,133 @@ class MilvusGraphVectorStore:
             batch = ids[start : start + 1000]
             quoted_ids = ", ".join(f'"{item}"' for item in batch)
             collection.delete(expr=f"id in [{quoted_ids}]")
+
+    async def upsert_reviewed_assertion(
+        self,
+        *,
+        kb_id: str,
+        embedding_model_spec: str,
+        record: dict[str, Any],
+        superseded_assertion_ids: list[str],
+    ) -> None:
+        embedding_info = model_cache.get_model_info(embedding_model_spec)
+        if not embedding_info or embedding_info.model_type != "embedding":
+            raise ValueError("Graph vector embedding model is unavailable")
+        collection = self._get_or_create_assertion_collection(kb_id, embedding_info)
+        embed = self._get_embedding_function(embedding_model_spec)
+        embeddings = await embed([record["content"]])
+        if superseded_assertion_ids:
+            await asyncio.to_thread(self._delete_ids, collection.name, superseded_assertion_ids)
+        await asyncio.to_thread(self._upsert_assertion, collection, record, embeddings[0])
+        await asyncio.to_thread(collection.flush)
+
+    async def search_reviewed_assertions(
+        self,
+        *,
+        kb_id: str,
+        query_text: str,
+        embedding_model_spec: str,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        collection_name = self._assertion_collection_name(kb_id)
+        has_collection = await _run_milvus_query_io(
+            utility.has_collection, collection_name, using=self.connection_alias
+        )
+        if not has_collection or top_k <= 0:
+            return []
+        embed = self._get_embedding_function(embedding_model_spec)
+        query_embedding = await embed([query_text])
+        return await _run_milvus_query_io(
+            self._search_graph_collection_sync,
+            collection_name,
+            query_embedding,
+            top_k,
+            [
+                "id",
+                "content",
+                "kb_id",
+                "entity_id",
+                "resolution_id",
+                "version",
+                "is_active",
+                "publish_status",
+                "updated_at",
+                "file_id",
+                "chunk_id",
+                "predicate",
+            ],
+            'is_active == true and publish_status == "succeeded"',
+        )
+
+    async def delete_reviewed_assertions(
+        self,
+        kb_id: str,
+        assertion_ids: list[str],
+        *,
+        max_version: int | None = None,
+    ) -> None:
+        if not assertion_ids:
+            return
+        collection_name = self._assertion_collection_name(kb_id)
+        if max_version is None:
+            await asyncio.to_thread(self._delete_ids, collection_name, assertion_ids)
+        else:
+            await asyncio.to_thread(self._delete_ids_before_version, collection_name, assertion_ids, max_version)
+
+    def _get_or_create_assertion_collection(self, kb_id: str, embedding_info: Any) -> Collection:
+        fields = [
+            FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
+            FieldSchema(
+                name="content",
+                dtype=DataType.VARCHAR,
+                max_length=65535,
+                enable_analyzer=True,
+                analyzer_params=CONTENT_ANALYZER_PARAMS,
+            ),
+            FieldSchema(name="kb_id", dtype=DataType.VARCHAR, max_length=80),
+            FieldSchema(name="entity_id", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="resolution_id", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="version", dtype=DataType.INT64),
+            FieldSchema(name="is_active", dtype=DataType.BOOL),
+            FieldSchema(name="publish_status", dtype=DataType.VARCHAR, max_length=32),
+            FieldSchema(name="updated_at", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="file_id", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=128),
+            FieldSchema(name="predicate", dtype=DataType.VARCHAR, max_length=128),
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_info.dimension or 1024),
+            FieldSchema(name=CONTENT_SPARSE_FIELD, dtype=DataType.SPARSE_FLOAT_VECTOR),
+        ]
+        return self._get_or_create_collection(self._assertion_collection_name(kb_id), fields, embedding_info)
+
+    @staticmethod
+    def _assertion_collection_name(kb_id: str) -> str:
+        return f"graph_assertions_{hashstr(kb_id, 20)}"
+
+    def _upsert_assertion(self, collection: Collection, record: dict[str, Any], embedding: list[float]) -> None:
+        collection.upsert(
+            [
+                [record["assertion_id"]],
+                [record["content"]],
+                [record["kb_id"]],
+                [record.get("entity_id") or ""],
+                [record["resolution_id"]],
+                [int(record["version"])],
+                [True],
+                ["succeeded"],
+                [record["updated_at"]],
+                [record["file_id"]],
+                [record["chunk_id"]],
+                [record["predicate"]],
+                [embedding],
+            ]
+        )
+
+    def _delete_ids_before_version(self, collection_name: str, ids: list[str], max_version: int) -> None:
+        if not utility.has_collection(collection_name, using=self.connection_alias):
+            return
+        collection = Collection(name=collection_name, using=self.connection_alias)
+        for start in range(0, len(ids), 1000):
+            batch = ids[start : start + 1000]
+            quoted_ids = ", ".join(f'"{item}"' for item in batch)
+            collection.delete(expr=f"id in [{quoted_ids}] and version <= {int(max_version)}")
+        collection.flush()

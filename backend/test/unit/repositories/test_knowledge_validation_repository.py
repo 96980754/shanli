@@ -70,7 +70,8 @@ async def test_replace_for_candidate_persists_ordered_evidence_snapshot():
     assert items[0].change_type == "removed"
     assert items[0].new_fact["evidence"]["quote"] == "不再支持离线模式"
     assert session.added == [report, items[0]]
-    session.flush.assert_awaited_once()
+    # 先 flush report（确保 items 外键可用），再 flush 整体
+    assert session.flush.await_count == 2
 
 
 @pytest.mark.asyncio

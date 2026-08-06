@@ -24,25 +24,25 @@
             type="button"
             class="agent-nav-btn agent-state-btn state-entry-btn"
             :class="{ active: statePanelOpen }"
-            title="查看状态"
+            :title="$t('chat.header.viewStatus')"
             :aria-expanded="statePanelOpen"
             aria-controls="agent-state-panel"
             @click.stop="toggleStatePanel"
           >
             <LayoutList size="16" class="nav-btn-icon" />
-            <span class="hide-text">状态</span>
+            <span class="hide-text">{{ $t('chat.header.status') }}</span>
           </button>
           <button
             v-if="showFileEntry && !isFilePanelOpen"
             type="button"
             class="agent-nav-btn agent-state-btn file-entry-btn"
-            title="查看文件"
+            :title="$t('chat.header.viewFiles')"
             :aria-expanded="isFilePanelOpen"
             aria-controls="agent-file-panel"
             @click.stop="toggleAgentPanel"
           >
             <FolderKanban size="16" class="nav-btn-icon" />
-            <span class="hide-text">文件</span>
+            <span class="hide-text">{{ $t('chat.header.files') }}</span>
           </button>
           <slot
             name="header-right"
@@ -135,7 +135,7 @@
               <!-- 加载状态：加载消息 -->
               <div v-if="isLoadingMessages" class="chat-loading">
                 <div class="loading-spinner"></div>
-                <span>正在加载消息...</span>
+                <span>{{ $t('chat.loadingMessages') }}</span>
               </div>
 
               <!-- 打招呼区域 - 在输入框上方 -->
@@ -575,6 +575,7 @@ import {
   onActivated,
   onDeactivated
 } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { ChevronDown, FolderKanban, LayoutList, RefreshCw } from 'lucide-vue-next'
 import { formatFileSize } from '@/utils/file_utils'
@@ -627,6 +628,7 @@ const props = defineProps({
 const emit = defineEmits(['thread-change'])
 
 // ==================== STORE MANAGEMENT ====================
+const { t } = useI18n()
 const agentStore = useAgentStore()
 const chatThreadsStore = useChatThreadsStore()
 const chatUIStore = useChatUIStore()
@@ -639,17 +641,9 @@ const { threads, currentThreadId, currentThread } = storeToRefs(chatThreadsStore
 const userInput = ref('')
 const sendCooldownActive = ref(false)
 let sendCooldownTimer = null
-// 预设的打招呼文本
-const greetingMessages = [
-  '👋 您好，有什么可以帮您？',
-  '👋 你好！有什么想聊的吗？',
-  '👋 嘿，有什么我可以帮助你的？',
-  '👋 欢迎！今天想讨论什么话题？',
-  '👋 你好呀，随时为你服务！'
-]
-
-// 随机选择一个打招呼文本
-const randomGreeting = greetingMessages[Math.floor(Math.random() * greetingMessages.length)]
+// 随机选择一个打招呼索引（保持稳定，随语言响应式重渲染）
+const greetingIndex = ref(Math.floor(Math.random() * 5))
+const randomGreeting = computed(() => t(`chat.greeting.${greetingIndex.value}`))
 
 // 业务状态（保留在组件本地）
 const chatState = reactive({
@@ -1773,30 +1767,30 @@ const isReplyLoading = computed(() => {
   const threadState = currentThreadState.value
   return Boolean(threadState?.replyLoadingVisible)
 })
-const TOOL_STATUS_TEXT = {
-  query_kb: '正在查询知识库...',
-  list_kbs: '正在获取知识库列表...',
-  find_kb_document: '正在查找相关文档...',
-  open_kb_document: '正在读取相关文档...',
-  get_mindmap: '正在获取知识导图...',
-  search_file: '正在搜索文件...',
-  ocr_parse_file: '正在解析文件...',
-  web_search: '正在搜索网页...',
-  subagent_status: '正在处理子任务...'
-}
+const TOOL_STATUS_TEXT = computed(() => ({
+  query_kb: t('chat.toolStatus.query_kb'),
+  list_kbs: t('chat.toolStatus.list_kbs'),
+  find_kb_document: t('chat.toolStatus.find_kb_document'),
+  open_kb_document: t('chat.toolStatus.open_kb_document'),
+  get_mindmap: t('chat.toolStatus.get_mindmap'),
+  search_file: t('chat.toolStatus.search_file'),
+  ocr_parse_file: t('chat.toolStatus.ocr_parse_file'),
+  web_search: t('chat.toolStatus.web_search'),
+  subagent_status: t('chat.toolStatus.subagent_status')
+}))
 
 const replyLoadingText = computed(() => {
   const threadState = currentThreadState.value
-  if (!threadState) return '正在生成回复...'
-  if (threadState.contextCompressing) return '正在压缩上下文...'
+  if (!threadState) return t('chat.reply.generating')
+  if (threadState.contextCompressing) return t('chat.reply.compressing')
   if (threadState.generationPhase === 'tool' && threadState.activeToolName) {
     return (
-      TOOL_STATUS_TEXT[threadState.activeToolName] ||
-      `正在调用 ${threadState.activeToolName}...`
+      TOOL_STATUS_TEXT.value[threadState.activeToolName] ||
+      t('chat.toolStatus.default', { name: threadState.activeToolName })
     )
   }
-  if (threadState.generationPhase === 'finalizing') return '正在整理答案...'
-  return '正在生成回复...'
+  if (threadState.generationPhase === 'finalizing') return t('chat.reply.finalizing')
+  return t('chat.reply.generating')
 })
 const isSendButtonDisabled = computed(() => {
   return (

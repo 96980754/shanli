@@ -26,6 +26,12 @@ from yuxi.knowledge.graphs.milvus_graph_service import (
 from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
+from yuxi.knowledge.utils.office_content import extract_office_content
+from yuxi.knowledge.utils.office_writer import (
+    markdown_to_blocks,
+    markdown_to_sheets,
+    serialize_edited_content,
+)
 from yuxi.knowledge.utils.mindmap_utils import (
     batch_remove_files_from_mindmap,
     generate_database_mindmap,
@@ -34,6 +40,33 @@ from yuxi.knowledge.utils.mindmap_utils import (
     get_mindmap_databases_overview,
     get_mindmap_diff,
     remove_file_from_mindmap,
+)
+from yuxi.knowledge.utils.document_cleaner import clean_document_file, clean_document_markdown
+from yuxi.services.document_cleaning_service import (
+    CleaningVersionConflict,
+    DocumentCleaningError,
+    DocumentCleaningNotFound,
+    DocumentCleaningService,
+)
+from yuxi.services.document_enrichment_service import (
+    DocumentEnrichmentError,
+    DocumentEnrichmentService,
+    EnrichmentNotFound,
+    EnrichmentVersionConflict,
+    enqueue_document_enrichment,
+)
+from yuxi.services.document_qa_service import (
+    DocumentQAError,
+    DocumentQAService,
+    QANotFound,
+    QAVersionConflict,
+    enqueue_document_qa_generation,
+)
+from yuxi.services.knowledge_conflict_service import (
+    KnowledgeConflictError,
+    KnowledgeConflictNotFound,
+    KnowledgeConflictService,
+    KnowledgeConflictVersionError,
 )
 from yuxi.knowledge.utils.sample_question_utils import (
     generate_database_sample_questions,
@@ -125,6 +158,148 @@ class WorkspaceImportRequest(BaseModel):
 class AddUploadedDocumentsRequest(BaseModel):
     items: list[str]
     params: dict | None = None
+
+
+class DocumentCleanRequest(BaseModel):
+    markdown: str | None = None
+    file_path: str | None = None
+    filename: str | None = None
+
+
+class DocumentCleanBatchItem(BaseModel):
+    file_path: str
+    filename: str | None = None
+
+
+class DocumentCleanBatchRequest(BaseModel):
+    items: list[DocumentCleanBatchItem]
+
+
+class CleanWritebackRequest(BaseModel):
+    """清洗后写回原格式：cleaned_markdown 按 filename 后缀写回 docx/xlsx 并上传。"""
+    cleaned_markdown: str
+    filename: str
+
+
+class CleaningDraftUpdateRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=2_000_000)
+    version: int = Field(ge=0)
+
+
+class CleaningVersionRequest(BaseModel):
+    version: int = Field(ge=0)
+
+
+class CleaningRegenerateRequest(BaseModel):
+    version: int = Field(ge=0)
+    use_ai: bool | None = None
+
+
+class EnrichmentGenerateRequest(BaseModel):
+    components: list[str] = Field(default_factory=lambda: ["summary", "keywords", "tags"])
+    overwrite_manual: bool = False
+
+
+class EnrichmentSummaryUpdateRequest(BaseModel):
+    version: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class EnrichmentListUpdateRequest(BaseModel):
+    version: int = Field(ge=0)
+    values: list[str] = Field(max_length=50)
+
+
+class EnrichmentBatchGenerateRequest(EnrichmentGenerateRequest):
+    file_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class QAGenerateRequest(BaseModel):
+    source_chunk_ids: list[str] = Field(default_factory=list, max_length=500)
+    replace_generated: bool = False
+
+
+class QABatchGenerateRequest(QAGenerateRequest):
+    file_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class QAEvidenceItem(BaseModel):
+    chunk_id: str = Field(min_length=1, max_length=128)
+    text: str = Field(min_length=1, max_length=5000)
+
+
+class QAWriteRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+    answer: str = Field(min_length=1, max_length=2000)
+    source_chunk_ids: list[str] = Field(min_length=1, max_length=100)
+    evidence: list[QAEvidenceItem] = Field(min_length=1, max_length=100)
+    version: int | None = Field(default=None, ge=1)
+
+
+class QAVersionRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+class QABatchConfirmItem(BaseModel):
+    qa_id: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+
+
+class QABatchConfirmRequest(BaseModel):
+    items: list[QABatchConfirmItem] = Field(min_length=1, max_length=500)
+
+
+class KnowledgeAssertionEvaluateRequest(BaseModel):
+    entity_type: str = Field(min_length=1, max_length=128)
+    entity_name: str = Field(min_length=1, max_length=512)
+    linked_entity_id: str | None = Field(default=None, max_length=64)
+    predicate: str = Field(min_length=1, max_length=128)
+    raw_value: str | int | float | list[str] | list[int] | list[float]
+    value_type: str = Field(min_length=1, max_length=32)
+    unit: str | None = Field(default=None, max_length=32)
+    valid_from: str | None = None
+    valid_to: str | None = None
+    product_version: str | None = Field(default=None, max_length=128)
+    file_id: str = Field(min_length=1, max_length=64)
+    chunk_id: str = Field(min_length=1, max_length=128)
+    evidence: str = Field(min_length=1, max_length=5000)
+    extraction_method: str = Field(default="manual", min_length=1, max_length=64)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    link_hints: dict = Field(default_factory=dict)
+
+
+class KnowledgeConflictResolveRequest(BaseModel):
+    resolution: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+    reason: str | None = Field(default=None, max_length=2000)
+    target_entity_id: str | None = Field(default=None, max_length=64)
+
+
+class KnowledgeConflictBatchResolveItem(KnowledgeConflictResolveRequest):
+    conflict_id: str = Field(min_length=1, max_length=64)
+
+
+class KnowledgeConflictBatchResolveRequest(BaseModel):
+    items: list[KnowledgeConflictBatchResolveItem] = Field(min_length=1, max_length=200)
+
+
+class SaveEditedDocumentRequest(BaseModel):
+    content_type: str  # 'docx' | 'xlsx'
+    blocks: list[dict] | None = None   # docx 编辑结果
+    sheets: list[dict] | None = None   # xlsx 编辑结果
+    filename: str | None = None
+
+
+class OfficeExtractRequest(BaseModel):
+    file_path: str
+    filename: str = ""
+
+
+class OfficeWritebackRequest(BaseModel):
+    content_type: str  # 'docx' | 'xlsx'
+    blocks: list[dict] | None = None
+    sheets: list[dict] | None = None
+    filename: str
 
 
 class DocumentVersionCreateRequest(BaseModel):
@@ -271,11 +446,7 @@ def _validate_uploaded_document_items(items: list[str], params: dict) -> None:
         if not is_minio_url(item):
             raise HTTPException(status_code=400, detail="File source must be a MinIO URL")
 
-        has_content_hash = isinstance(content_hashes, dict) and bool(content_hashes.get(item))
-        preprocessed = preprocessed_map.get(item) if isinstance(preprocessed_map, dict) else None
-        has_preprocessed_hash = isinstance(preprocessed, dict) and bool(preprocessed.get("content_hash"))
-        if not has_content_hash and not has_preprocessed_hash:
-            raise HTTPException(status_code=400, detail=f"Missing content_hash for file: {item}")
+        # content_hash 不再强制必填：由 create_uploaded_document 服务端重算可信哈希（PR12 吸收）
 
 
 def _params_for_uploaded_document_item(item: str, params: dict) -> dict:
@@ -284,7 +455,31 @@ def _params_for_uploaded_document_item(item: str, params: dict) -> dict:
     item_params.pop("source_paths", None)
     if isinstance(source_paths, dict) and source_paths.get(item):
         item_params["source_path"] = source_paths[item]
+
+    duplicate_strategies = params.get("duplicate_strategies")
+    item_params.pop("duplicate_strategies", None)
+    if isinstance(duplicate_strategies, dict) and duplicate_strategies.get(item):
+        item_params["duplicate_strategy"] = duplicate_strategies[item]
+
+    replace_file_ids = params.get("replace_file_ids")
+    item_params.pop("replace_file_ids", None)
+    if isinstance(replace_file_ids, dict) and replace_file_ids.get(item):
+        item_params["replace_file_id"] = replace_file_ids[item]
+
+    parent_ids = params.get("parent_ids")
+    item_params.pop("parent_ids", None)
+    if isinstance(parent_ids, dict) and parent_ids.get(item):
+        item_params["parent_id"] = parent_ids[item]
+
     return item_params
+
+
+def _request_uses_replace(params: dict) -> bool:
+    replace_file_ids = params.get("replace_file_ids")
+    if isinstance(replace_file_ids, dict) and any(replace_file_ids.values()):
+        return True
+    replace_file_id = params.get("replace_file_id")
+    return isinstance(replace_file_id, str) and bool(replace_file_id)
 
 
 async def _has_running_graph_build_task(kb_id: str) -> bool:
@@ -323,6 +518,63 @@ async def _require_kb_permission(current_user: User, kb_id: str, action: str) ->
     allowed = await KnowledgePermissionService().has_permission(_user_permission_context(current_user), kb_id, action)
     if not allowed:
         raise HTTPException(status_code=403, detail="知识库权限不足")
+
+
+async def _has_kb_permission(current_user: User, kb_id: str, action: str) -> bool:
+    allowed = await KnowledgePermissionService().has_permission(_user_permission_context(current_user), kb_id, action)
+    return bool(allowed)
+
+
+def _raise_cleaning_http_error(error: Exception) -> None:
+    if isinstance(error, DocumentCleaningNotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, CleaningVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentCleaningError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if isinstance(error, HTTPException):
+        raise
+    logger.error(f"文档清洗操作失败: {error}, {traceback.format_exc()}")
+    raise HTTPException(status_code=500, detail="文档清洗操作失败") from error
+
+
+def _raise_enrichment_http_error(error: Exception) -> None:
+    if isinstance(error, EnrichmentNotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, EnrichmentVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentEnrichmentError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if isinstance(error, HTTPException):
+        raise
+    logger.error("Document enrichment operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="文档信息增强操作失败") from error
+
+
+def _raise_qa_http_error(error: Exception) -> None:
+    if isinstance(error, QANotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, QAVersionConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, DocumentQAError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if isinstance(error, HTTPException):
+        raise
+    logger.error("Document QA operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="文档 QA 操作失败") from error
+
+
+def _raise_knowledge_conflict_http_error(error: Exception) -> None:
+    if isinstance(error, KnowledgeConflictNotFound):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, KnowledgeConflictVersionError):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, KnowledgeConflictError):
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if isinstance(error, HTTPException):
+        raise
+    logger.error("Knowledge conflict operation failed: {}", sanitize_processing_error(error))
+    raise HTTPException(status_code=500, detail="知识冲突操作失败") from error
 
 
 async def _require_kb_grant_permission(current_user: User, kb_id: str) -> None:
@@ -1304,17 +1556,73 @@ async def add_documents(
                 await context.set_progress(progress, f"[1/3] 添加记录 {idx}/{total}")
 
                 try:
-                    file_meta = await knowledge_base.add_file_record(
-                        kb_id, item, params=params, operator_id=current_user.uid
+                    from yuxi.services.document_ingestion_service import (
+                        DocumentIngestionService,
+                        DuplicateConflictError,
+                        DuplicateStrategyError,
+                        InvalidReplacementTargetError,
+                        ReplacementInProgressError,
                     )
+
+                    item_params = _params_for_uploaded_document_item(item, params)
+                    creation = await DocumentIngestionService().create_uploaded_document(
+                        kb_id=kb_id,
+                        item=item,
+                        params=item_params,
+                        operator_id=current_user.uid,
+                    )
+                    if creation.action == "skipped":
+                        processed_items[idx - 1] = {
+                            "item": item,
+                            "status": "skipped",
+                            "action": "skipped",
+                            "existing_file_id": creation.existing_file_id,
+                        }
+                        continue
+                    file_meta = creation.file_meta or {}
                     added_files.append(
                         {
                             "index": idx - 1,
                             "item": item,
                             "file_id": file_meta["file_id"],
                             "file_meta": file_meta,
+                            "requires_index": bool(file_meta.get("replacement_target_file_id")),
                         }
                     )
+                    if creation.action == "existing":
+                        processed_items[idx - 1] = {**file_meta, "action": "existing"}
+                except DuplicateConflictError as add_error:
+                    logger.error(f"重复冲突 {item}: {add_error}")
+                    processed_items[idx - 1] = {
+                        "item": item,
+                        "status": "failed",
+                        "error": str(add_error),
+                        "error_type": "duplicate_conflict",
+                        "detail": add_error.detail,
+                    }
+                except ReplacementInProgressError as add_error:
+                    processed_items[idx - 1] = {
+                        "item": item,
+                        "status": "failed",
+                        "error": str(add_error),
+                        "error_type": "replacement_in_progress",
+                        "detail": add_error.detail,
+                    }
+                except InvalidReplacementTargetError as add_error:
+                    processed_items[idx - 1] = {
+                        "item": item,
+                        "status": "failed",
+                        "error": str(add_error),
+                        "error_type": "invalid_replacement_target",
+                        "detail": add_error.detail,
+                    }
+                except DuplicateStrategyError as add_error:
+                    processed_items[idx - 1] = {
+                        "item": item,
+                        "status": "failed",
+                        "error": str(add_error),
+                        "error_type": "invalid_duplicate_strategy",
+                    }
                 except Exception as add_error:
                     logger.error(f"添加文件记录失败 {item}: {add_error}")
                     error_type = "timeout" if isinstance(add_error, TimeoutError) else "add_failed"
@@ -1353,9 +1661,14 @@ async def add_documents(
                         "error_type": error_type,
                     }
 
-            if auto_index:
+            if auto_index or any(record.get("requires_index") for record in added_files):
                 await context.set_message("第三阶段：自动入库")
-                parsed_files = [record for record in added_files if record["file_meta"].get("status") == "parsed"]
+                parsed_files = [
+                    record
+                    for record in added_files
+                    if record["file_meta"].get("status") == "parsed"
+                    and (auto_index or record.get("requires_index"))
+                ]
                 total_parsed = len(parsed_files)
 
                 for idx, record in enumerate(parsed_files, 1):
@@ -1466,12 +1779,34 @@ async def add_uploaded_documents(
     failed_items: list[dict] = []
     for index, item in enumerate(payload.items):
         try:
-            file_meta = await knowledge_base.add_file_record(
-                kb_id,
-                item,
+            from yuxi.services.document_ingestion_service import (
+                DocumentIngestionService,
+                DuplicateConflictError,
+                DuplicateStrategyError,
+                InvalidReplacementTargetError,
+                ReplacementInProgressError,
+            )
+            from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
+
+            creation = await DocumentIngestionService().create_uploaded_document(
+                kb_id=kb_id,
+                item=item,
                 params=_params_for_uploaded_document_item(item, params),
                 operator_id=current_user.uid,
             )
+            if creation.action == "skipped":
+                failed_items.append(
+                    {
+                        "index": index,
+                        "item": item,
+                        "status": "skipped",
+                        "error": "已存在相同内容文件，跳过上传",
+                        "error_type": "duplicate_conflict",
+                        "existing_file_id": creation.existing_file_id,
+                    }
+                )
+                continue
+            file_meta = creation.file_meta or {}
             added_items.append(
                 {
                     "index": index,
@@ -1479,6 +1814,60 @@ async def add_uploaded_documents(
                     "file_id": file_meta["file_id"],
                     "status": file_meta.get("status"),
                     "file_meta": file_meta,
+                }
+            )
+        except DuplicateConflictError as add_error:  # noqa: BLE001
+            logger.error(f"重复冲突 {item}: {add_error}")
+            failed_items.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "duplicate_conflict",
+                    "detail": add_error.detail,
+                }
+            )
+        except ReplacementInProgressError as add_error:  # noqa: BLE001
+            failed_items.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "replacement_in_progress",
+                    "detail": add_error.detail,
+                }
+            )
+        except InvalidReplacementTargetError as add_error:  # noqa: BLE001
+            failed_items.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "invalid_replacement_target",
+                    "detail": add_error.detail,
+                }
+            )
+        except DuplicateStrategyError as add_error:  # noqa: BLE001
+            failed_items.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "invalid_duplicate_strategy",
+                }
+            )
+        except ParentFolderNotFoundError as add_error:  # noqa: BLE001
+            failed_items.append(
+                {
+                    "index": index,
+                    "item": item,
+                    "status": "failed",
+                    "error": str(add_error),
+                    "error_type": "parent_folder_not_found",
                 }
             )
         except Exception as add_error:  # noqa: BLE001
@@ -1969,6 +2358,109 @@ async def get_document_content(kb_id: str, doc_id: str, current_user: User = Dep
         return {"message": "Failed to get file content", "status": "failed"}
 
 
+@knowledge.post("/databases/{kb_id}/office-extract")
+async def extract_office_content_upload(
+    kb_id: str,
+    request: OfficeExtractRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """从已上传的 MinIO file_path 提取 Word/Excel 可编辑结构（未入库文件）。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    try:
+        content = await extract_office_content(kb_id, request.file_path, request.filename)
+        return content
+    except Exception as e:
+        logger.error(f"提取上传 Office 内容失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="提取 Office 内容失败") from e
+
+
+@knowledge.post("/databases/{kb_id}/office-writeback")
+async def office_writeback(
+    kb_id: str,
+    request: OfficeWritebackRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """将编辑后的 Word/Excel 内容写回 .docx/.xlsx 并上传 MinIO，返回新 file_path。"""
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    try:
+        new_bytes = serialize_edited_content(request.content_type, request.model_dump())
+        if not new_bytes:
+            raise HTTPException(status_code=400, detail="编辑内容为空")
+        file_path = await knowledge_base.upload_office_bytes(kb_id, new_bytes, request.filename)
+        import hashlib
+
+        return {
+            "file_path": file_path,
+            "content_hash": hashlib.sha256(new_bytes).hexdigest(),
+            "size": len(new_bytes),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Office 写回失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Office 写回失败") from e
+
+
+@knowledge.get("/databases/{kb_id}/documents/{doc_id}/office-content")
+async def get_office_content(
+    kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)
+):
+    """获取 Word/Excel 的可编辑结构化内容（docx→blocks, xlsx→sheets）。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    try:
+        file_info = await knowledge_base.get_file_info(kb_id, doc_id)
+        meta = file_info.get("meta") or file_info
+        file_path = meta.get("minio_url") or meta.get("path")
+        filename = meta.get("filename") or ""
+        if not file_path:
+            raise HTTPException(status_code=404, detail="文档文件不存在")
+        content = await extract_office_content(kb_id, file_path, filename)
+        return content
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"提取 Office 内容失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="提取 Office 内容失败") from e
+
+
+@knowledge.post("/databases/{kb_id}/documents/{doc_id}/save-edited")
+async def save_edited_document(
+    kb_id: str,
+    doc_id: str,
+    request: SaveEditedDocumentRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """将编辑后的 Word/Excel 写回 docx/xlsx 文件并重新入库（删除旧版）。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        content_type = request.content_type
+        if content_type not in {"docx", "xlsx"}:
+            raise HTTPException(status_code=400, detail="content_type 必须为 docx 或 xlsx")
+
+        new_bytes = serialize_edited_content(content_type, request.model_dump())
+        if not new_bytes:
+            raise HTTPException(status_code=400, detail="编辑内容为空")
+
+        filename = request.filename or (f"edited.{content_type}")
+        file_id = await knowledge_base.replace_document_content(
+            kb_id,
+            doc_id,
+            new_bytes,
+            filename,
+            operator_id=current_user.uid,
+        )
+        return {"message": "文档已更新并重新入库", "file_id": file_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存编辑后文档失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="保存编辑后文档失败") from e
+
+
 @knowledge.delete("/databases/{kb_id}/documents/batch")
 async def batch_delete_documents(
     kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_required_user)
@@ -2418,6 +2910,9 @@ async def import_workspace_files(
 async def upload_file(
     file: UploadFile = File(...),
     kb_id: str | None = Query(None),
+    parent_id: str | None = Query(None),
+    duplicate_strategy: str = Query("prompt"),
+    replace_file_id: str | None = Query(None),
     current_user: User = Depends(get_required_user),
 ):
     """上传文件"""
@@ -2439,6 +2934,10 @@ async def upload_file(
     # 直接使用原始文件名（小写）
     filename = f"{basename}{ext}".lower()
 
+    normalized_strategy = duplicate_strategy.strip().lower()
+    if normalized_strategy == "replace":
+        await _require_kb_permission(current_user, kb_id, "can_manage")
+
     try:
         file_bytes = await read_upload_with_limit(
             file,
@@ -2450,12 +2949,46 @@ async def upload_file(
 
     content_hash = await calculate_content_hash(file_bytes)
 
-    file_exists = await knowledge_base.file_existed_in_db(kb_id, content_hash)
-    if file_exists:
-        raise HTTPException(
-            status_code=409,
-            detail="数据库中已经存在了相同内容文件，File with the same content already exists in this database",
-        )
+    # 重复检测策略（PR12 吸收）：prompt/skip/replace/keep_both
+    from yuxi.services.document_ingestion_service import (
+        DuplicateConflictError,
+        DuplicateStrategyError,
+        DocumentIngestionService,
+        InvalidReplacementTargetError,
+        ReplacementInProgressError,
+    )
+    from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
+
+    if kb_id:
+        try:
+            decision = await DocumentIngestionService().check_upload_conflict(
+                kb_id=kb_id,
+                parent_id=parent_id,
+                filename=filename,
+                content_hash=content_hash,
+                file_size=len(file_bytes),
+                duplicate_strategy=normalized_strategy,
+                replace_file_id=replace_file_id,
+            )
+        except DuplicateConflictError as conflict_error:
+            raise HTTPException(status_code=409, detail=conflict_error.detail) from conflict_error
+        except ReplacementInProgressError as progress_error:
+            raise HTTPException(status_code=409, detail=progress_error.detail) from progress_error
+        except InvalidReplacementTargetError as target_error:
+            raise HTTPException(status_code=409, detail=target_error.detail) from target_error
+        except ParentFolderNotFoundError as folder_error:
+            raise HTTPException(status_code=404, detail=str(folder_error)) from folder_error
+        except DuplicateStrategyError as strategy_error:
+            raise HTTPException(status_code=400, detail=str(strategy_error)) from strategy_error
+
+        if decision.action == "skipped":
+            return {
+                "message": "Upload skipped because a conflicting document already exists",
+                "uploaded": False,
+                "action": "skipped",
+                "existing_file_id": decision.existing_file_id,
+                "kb_id": kb_id,
+            }
 
     # 直接上传到MinIO，添加时间戳区分版本
     timestamp = int(time.time() * 1000)
@@ -2472,6 +3005,9 @@ async def upload_file(
     same_name_files = await knowledge_base.get_same_name_files(kb_id, filename)
     has_same_name = len(same_name_files) > 0
 
+    # 自动预判版本候选：按去版本号基础名匹配同文档其他版本（如 sglang-v1.1 -> sglang-v1.0）
+    version_candidate_files = await knowledge_base.get_version_candidate_files(kb_id, filename)
+
     return {
         "message": "File successfully uploaded",
         "file_path": minio_url,  # MinIO路径作为主要路径
@@ -2486,6 +3022,12 @@ async def upload_file(
         "bucket_name": bucket_name,  # MinIO存储桶名称
         "same_name_files": same_name_files,  # 同名文件列表
         "has_same_name": has_same_name,  # 是否包含同名文件标志
+        "version_candidate_files": version_candidate_files,  # 版本候选文件（去版本号匹配）
+        "uploaded": True,
+        "action": "uploaded",
+        "parent_id": parent_id,
+        "duplicate_strategy": normalized_strategy,
+        "replace_file_id": replace_file_id,
     }
 
 
@@ -2493,6 +3035,237 @@ async def upload_file(
 async def get_supported_file_types(current_user: User = Depends(get_required_user)):
     """获取当前支持的文件类型"""
     return {"message": "success", "file_types": sorted(SUPPORTED_FILE_EXTENSIONS)}
+
+
+@knowledge.post("/databases/{kb_id}/documents/clean")
+async def clean_document_markdown_route(
+    kb_id: str,
+    request: DocumentCleanRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """调用 AI 将排版混乱的原始文档重排版为结构清晰的规范 markdown。
+
+    支持两种输入：request.file_path（已上传文件的 MinIO URL，服务端读取解析）或
+    request.markdown（直接提供原始文本）。
+    """
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        if request.file_path:
+            result = await clean_document_file(kb_id, request.file_path, request.filename)
+        else:
+            result = await clean_document_markdown(request.markdown)
+        return {
+            "cleaned_markdown": result["cleaned_markdown"],
+            "filename": request.filename,
+            "warnings": result.get("warnings", []),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error(f"文档清洗失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="文档清洗失败，请稍后重试") from e
+
+
+@knowledge.post("/databases/{kb_id}/documents/clean-batch")
+async def clean_document_batch_route(
+    kb_id: str,
+    request: DocumentCleanBatchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """批量调用 AI 清洗排版：对多个已上传文档并发重排版为规范 markdown。
+
+    单个文件失败不阻断其他文件，结果按 items 顺序返回并携带 error 字段。
+    """
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        results = await asyncio.gather(
+            *(clean_document_file(kb_id, item.file_path, item.filename) for item in request.items),
+            return_exceptions=True,
+        )
+        return {
+            "results": [
+                {
+                    "file_path": item.file_path,
+                    "cleaned_markdown": result["cleaned_markdown"] if isinstance(result, dict) else "",
+                    "warnings": result.get("warnings", []) if isinstance(result, dict) else [],
+                    "error": None if isinstance(result, dict) else "文档清洗失败，请稍后重试",
+                }
+                for item, result in zip(request.items, results)
+            ]
+        }
+    except Exception as e:
+        logger.error(f"批量文档清洗失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="批量文档清洗失败，请稍后重试") from e
+
+
+@knowledge.post("/databases/{kb_id}/clean-writeback")
+async def clean_writeback_route(
+    kb_id: str,
+    request: CleanWritebackRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """将清洗后的 markdown 写回原格式（docx/xlsx）并上传 MinIO，返回新 file_path。
+
+    按 filename 后缀决定写回格式：.xlsx → write_xlsx(markdown_to_sheets)，
+    其他（.docx/.md 等）→ write_docx(markdown_to_blocks)。用于"AI 清洗排版"
+    勾选后保留原格式入库，避免统一输出 _cleaned.md。
+    """
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        suffix = os.path.splitext(request.filename or "")[1].lower()
+        if suffix == ".xlsx":
+            new_bytes = serialize_edited_content(
+                "xlsx", {"sheets": markdown_to_sheets(request.cleaned_markdown)}
+            )
+        else:
+            new_bytes = serialize_edited_content(
+                "docx", {"blocks": markdown_to_blocks(request.cleaned_markdown)}
+            )
+        if not new_bytes:
+            raise HTTPException(status_code=400, detail="清洗后内容为空")
+        file_path = await knowledge_base.upload_office_bytes(kb_id, new_bytes, request.filename)
+        import hashlib
+
+        return {
+            "file_path": file_path,
+            "content_hash": hashlib.sha256(new_bytes).hexdigest(),
+            "size": len(new_bytes),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"清洗写回原格式失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="清洗写回原格式失败") from e
+
+
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/cleaning")
+async def get_document_cleaning_preview(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文档清洗预览")
+    try:
+        payload = await DocumentCleaningService().get_preview(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/cleaning/draft")
+async def update_document_cleaning_draft(
+    kb_id: str,
+    file_id: str,
+    request: CleaningDraftUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "保存文档清洗草稿")
+    try:
+        payload = await DocumentCleaningService().save_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            content=request.content,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/regenerate")
+async def regenerate_document_cleaning_draft(
+    kb_id: str,
+    file_id: str,
+    request: CleaningRegenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "重新生成文档清洗草稿")
+    service = DocumentCleaningService()
+    try:
+        record = await service.file_repository.get_by_file_id(file_id)
+        if record is None or record.kb_id != kb_id:
+            raise DocumentCleaningError("文档不存在")
+        if int(record.cleaning_version or 0) != max(0, request.version):
+            raise CleaningVersionConflict("清洗草稿版本已变化，请刷新后重试")
+        payload = await service.generate_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            auto_confirm=False,
+            use_ai=request.use_ai,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/confirm")
+async def confirm_document_cleaning(
+    kb_id: str,
+    file_id: str,
+    request: CleaningVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "确认文档清洗结果")
+    try:
+        return await DocumentCleaningService().confirm(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/cleaning/cancel")
+async def cancel_document_cleaning(
+    kb_id: str,
+    file_id: str,
+    request: CleaningVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "取消文档清洗草稿")
+    try:
+        payload = await DocumentCleaningService().cancel_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+        payload["readonly"] = False
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_cleaning_http_error(error)
+
+
+@knowledge.post("/databases/{kb_id}/documents/{doc_id}/replacement-cleanup/retry")
+async def retry_replacement_cleanup(
+    kb_id: str,
+    doc_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """手动重试替换版本清理任务（replacement-cleanup 失败时）。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    from yuxi.services.document_ingestion_service import DocumentIngestionService
+
+    await DocumentIngestionService().enqueue_replacement_cleanup(
+        kb_id=kb_id,
+        file_id=doc_id,
+        force_reclaim=True,
+    )
+    return {"message": "替换清理任务已重新提交", "status": "queued"}
 
 
 @knowledge.post("/files/markdown")
@@ -2623,3 +3396,456 @@ async def generate_description(
     except Exception as e:
         logger.error(f"生成描述失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"生成描述失败: {e}")
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/enrichment")
+async def get_document_enrichment(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档信息增强")
+    try:
+        payload = await DocumentEnrichmentService().get(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/enrichment/generate")
+async def generate_document_enrichment(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "生成文档信息增强")
+    try:
+        task_id, created = await enqueue_document_enrichment(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            components=set(request.components),
+            overwrite_manual=request.overwrite_manual,
+        )
+        return {
+            "status": "queued",
+            "task_id": task_id,
+            "created": created,
+        }
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/summary")
+async def update_document_summary(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentSummaryUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档摘要")
+    try:
+        return await DocumentEnrichmentService().update_summary(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            text=request.text,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/keywords")
+async def update_document_keywords(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentListUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档关键词")
+    try:
+        return await DocumentEnrichmentService().update_keywords(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            values=request.values,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/tags")
+async def update_document_tags(
+    kb_id: str,
+    file_id: str,
+    request: EnrichmentListUpdateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档标签")
+    try:
+        return await DocumentEnrichmentService().update_tags(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            values=request.values,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_enrichment_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/enrichment/generate")
+async def batch_generate_document_enrichment(
+    kb_id: str,
+    request: EnrichmentBatchGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量生成文档信息增强")
+    queued: list[dict] = []
+    failed: list[dict] = []
+    for file_id in dict.fromkeys(request.file_ids):
+        try:
+            task_id, created = await enqueue_document_enrichment(
+                kb_id=kb_id,
+                file_id=file_id,
+                operator_id=current_user.uid,
+                components=set(request.components),
+                overwrite_manual=request.overwrite_manual,
+            )
+            queued.append({"file_id": file_id, "task_id": task_id, "created": created})
+        except Exception as error:  # noqa: BLE001
+            failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
+    return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa")
+async def list_document_qa(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA")
+    try:
+        payload = await DocumentQAService().list(kb_id=kb_id, file_id=file_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def get_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA")
+    try:
+        payload = await DocumentQAService().get(kb_id=kb_id, file_id=file_id, qa_id=qa_id)
+        payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+        return payload
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/generate")
+async def generate_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QAGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "生成文档 QA")
+    try:
+        task_id, created = await enqueue_document_qa_generation(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            selected_chunk_ids=request.source_chunk_ids or None,
+            replace_generated=request.replace_generated,
+        )
+        return {"status": "queued", "task_id": task_id, "created": created}
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/tasks/{task_id}")
+async def get_document_qa_generation_task(
+    kb_id: str,
+    file_id: str,
+    task_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "查看文档 QA 生成状态")
+    task = await tasker.get_task(task_id)
+    if (
+        task is None
+        or task.get("type") != "document_qa_generation"
+        or task.get("payload", {}).get("kb_id") != kb_id
+        or task.get("payload", {}).get("file_id") != file_id
+    ):
+        raise HTTPException(status_code=404, detail="QA 生成任务不存在")
+    return {
+        "task_id": task_id,
+        "status": task.get("status"),
+        "progress": task.get("progress"),
+        "message": task.get("message"),
+        "error": sanitize_processing_error(task["error"]) if task.get("error") else None,
+    }
+@knowledge.post("/databases/{kb_id}/documents/qa/generate")
+async def batch_generate_document_qa(
+    kb_id: str,
+    request: QABatchGenerateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量生成文档 QA")
+    queued: list[dict] = []
+    failed: list[dict] = []
+    for file_id in dict.fromkeys(request.file_ids):
+        try:
+            task_id, created = await enqueue_document_qa_generation(
+                kb_id=kb_id,
+                file_id=file_id,
+                operator_id=current_user.uid,
+                selected_chunk_ids=request.source_chunk_ids or None,
+                replace_generated=request.replace_generated,
+            )
+            queued.append({"file_id": file_id, "task_id": task_id, "created": created})
+        except Exception as error:  # noqa: BLE001
+            failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
+    return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa")
+async def create_manual_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QAWriteRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "新建文档 QA")
+    try:
+        return await DocumentQAService().create_manual(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+            question=request.question,
+            answer=request.answer,
+            source_chunk_ids=request.source_chunk_ids,
+            evidence=[item.model_dump() for item in request.evidence],
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.put("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def update_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAWriteRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "编辑文档 QA")
+    if request.version is None:
+        raise HTTPException(status_code=422, detail="更新 QA 必须提供 version")
+    try:
+        return await DocumentQAService().update(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+            question=request.question,
+            answer=request.answer,
+            source_chunk_ids=request.source_chunk_ids,
+            evidence=[item.model_dump() for item in request.evidence],
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/confirm")
+async def confirm_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "确认文档 QA")
+    try:
+        return await DocumentQAService().confirm(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/confirm")
+async def batch_confirm_document_qa(
+    kb_id: str,
+    file_id: str,
+    request: QABatchConfirmRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "批量确认文档 QA")
+    service = DocumentQAService()
+    confirmed: list[dict] = []
+    failed: list[dict] = []
+    for item in request.items:
+        try:
+            confirmed.append(
+                await service.confirm(
+                    kb_id=kb_id,
+                    file_id=file_id,
+                    qa_id=item.qa_id,
+                    operator_id=current_user.uid,
+                    expected_version=item.version,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            failed.append({"qa_id": item.qa_id, "error": sanitize_processing_error(error)})
+    return {"confirmed": confirmed, "failed": failed}
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/reject")
+async def reject_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    request: QAVersionRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "拒绝文档 QA")
+    try:
+        return await DocumentQAService().reject_or_delete(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=request.version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.delete("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
+async def delete_document_qa(
+    kb_id: str,
+    file_id: str,
+    qa_id: str,
+    version: int = Query(..., ge=1),
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "删除文档 QA 草稿")
+    try:
+        return await DocumentQAService().delete_draft(
+            kb_id=kb_id,
+            file_id=file_id,
+            qa_id=qa_id,
+            operator_id=current_user.uid,
+            expected_version=version,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_qa_http_error(error)
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")
+async def retry_replacement_cleanup(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """重新提交已完成版本切换但清理失败的替换任务。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "替换清理重试")
+    service = DocumentIngestionService()
+    record = await service.file_repository.get_by_file_id(file_id)
+    if record is None or record.kb_id != kb_id:
+        raise HTTPException(status_code=404, detail="文档不存在")
+@knowledge.get("/databases/{kb_id}/conflicts")
+async def list_knowledge_conflicts(
+    kb_id: str,
+    status: str | None = Query(default=None),
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    payload = await KnowledgeConflictService().list_conflicts(kb_id=kb_id, status=status)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload
+@knowledge.get("/databases/{kb_id}/conflicts/{conflict_id}")
+async def get_knowledge_conflict(
+    kb_id: str,
+    conflict_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    try:
+        payload = await KnowledgeConflictService().get_conflict(kb_id=kb_id, conflict_id=conflict_id)
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload
+@knowledge.post("/databases/{kb_id}/assertions/evaluate")
+async def evaluate_knowledge_assertion(
+    kb_id: str,
+    request: KnowledgeAssertionEvaluateRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().evaluate(
+            kb_id=kb_id,
+            payload=request.model_dump(),
+            operator_id=current_user.uid,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+@knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/resolve")
+async def resolve_knowledge_conflict(
+    kb_id: str,
+    conflict_id: str,
+    request: KnowledgeConflictResolveRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().resolve(
+            kb_id=kb_id,
+            conflict_id=conflict_id,
+            resolution=request.resolution,
+            expected_version=request.version,
+            reason=request.reason,
+            operator_id=current_user.uid,
+            target_entity_id=request.target_entity_id,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+@knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/publish/retry")
+async def retry_knowledge_conflict_publish(
+    kb_id: str,
+    conflict_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().retry_publish(kb_id=kb_id, conflict_id=conflict_id)
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+@knowledge.post("/databases/{kb_id}/conflicts/batch-resolve")
+async def batch_resolve_knowledge_conflicts(
+    kb_id: str,
+    request: KnowledgeConflictBatchResolveRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        return await KnowledgeConflictService().batch_resolve(
+            kb_id=kb_id,
+            items=[item.model_dump() for item in request.items],
+            operator_id=current_user.uid,
+        )
+    except KnowledgeConflictError as error:
+        _raise_knowledge_conflict_http_error(error)
+@knowledge.get("/databases/{kb_id}/entity-link-candidates")
+async def list_entity_link_candidates(
+    kb_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    payload = await KnowledgeConflictService().list_entity_link_candidates(kb_id=kb_id)
+    payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
+    return payload

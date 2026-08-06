@@ -38,6 +38,7 @@
         </div>
         <div v-if="!props.deferProcessing" class="auto-index-toggle">
           <a-checkbox v-model:checked="autoIndex">上传后自动入库</a-checkbox>
+          <a-checkbox v-if="!HIDE_CLEAN" v-model:checked="enableClean" class="clean-toggle">AI 清洗排版</a-checkbox>
         </div>
       </div>
 
@@ -258,6 +259,102 @@
         </div>
       </div>
 
+      <!-- AI 清洗排版预览 -->
+      <div v-if="!HIDE_CLEAN && enableClean && uploadMode === 'file' && uploadedCleanFiles.length > 0 && !hasPendingUploads" class="clean-preview-panel">
+        <div class="clean-preview-header">
+          <Sparkles :size="15" />
+          <span class="clean-preview-title">AI 清洗排版</span>
+          <span class="clean-preview-sub">对上传的文档自动重排版为结构清晰的规范文本</span>
+          <a-button size="small" class="clean-regenerate-btn" :loading="cleanAllLoading" @click="runCleanAll">
+            <RefreshCw :size="13" />
+            全部清洗
+          </a-button>
+        </div>
+
+        <div v-for="file in uploadedCleanFiles" :key="file.uid" class="clean-file-card">
+          <div class="clean-file-head">
+            <span class="clean-file-name" :title="file.name || file.response?.filename">
+              {{ file.name || file.response?.filename || '文档' }}
+            </span>
+            <span class="clean-file-status" :class="getFileCleanState(file)?.status">
+              {{ cleanStatusLabel(getFileCleanState(file)?.status) }}
+            </span>
+            <a-button
+              v-if="getFileCleanState(file)?.status === 'idle' || getFileCleanState(file)?.status === 'error'"
+              size="small"
+              class="clean-file-action"
+              @click="runCleanForFile(file)"
+            >
+              <Sparkles :size="13" />
+              清洗
+            </a-button>
+            <a-button
+              v-else
+              size="small"
+              class="clean-file-action"
+              :loading="getFileCleanState(file)?.status === 'loading'"
+              @click="runCleanForFile(file)"
+            >
+              <RefreshCw :size="13" />
+              重新生成
+            </a-button>
+          </div>
+
+          <div v-if="getFileCleanState(file)?.status === 'loading'" class="clean-loading">
+            <a-spin size="small" />
+            <span>AI 正在清洗排版...</span>
+          </div>
+
+          <div v-else-if="getFileCleanState(file)?.status === 'error'" class="clean-error">
+            <span>{{ getFileCleanState(file)?.error }}</span>
+          </div>
+
+          <div v-else-if="getFileCleanState(file)?.cleanedMarkdown" class="clean-preview-body">
+            <div class="clean-preview-tabs">
+              <a-radio-group v-model:value="getFileCleanState(file).viewMode" size="small">
+                <a-radio-button value="edit">编辑</a-radio-button>
+                <a-radio-button value="preview">预览</a-radio-button>
+              </a-radio-group>
+            </div>
+            <a-textarea
+              v-if="getFileCleanState(file)?.viewMode === 'edit'"
+              v-model:value="getFileCleanState(file).cleanedMarkdown"
+              class="clean-edit-area"
+              :rows="12"
+            />
+            <MarkdownPreview
+              v-else
+              :content="getFileCleanState(file)?.cleanedMarkdown"
+              class="clean-preview-render"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Word/Excel 编辑面板（勾选"AI 清洗排版"时 docx 走清洗隐藏，xlsx 仍走编辑显示） -->
+      <div
+        v-if="(!enableClean || hasXlsxFiles) && uploadedOfficeFiles.length > 0 && !hasPendingUploads"
+        class="clean-preview-panel"
+      >
+        <div class="clean-preview-header">
+          <FileText :size="15" />
+          <span class="clean-preview-title">Word / Excel 编辑</span>
+          <span class="clean-preview-sub">上传后可直接编辑文字/单元格，确认后以原格式入库</span>
+        </div>
+        <div v-for="file in uploadedOfficeFiles" :key="file.uid" class="clean-file-card">
+          <div class="clean-file-head">
+            <span class="clean-file-name" :title="file.name">{{ file.name }}</span>
+            <span class="clean-file-status" :class="getOfficeEditState(file)?.edited ? 'done' : 'idle'">
+              {{ getOfficeEditState(file)?.edited ? '已编辑' : '待编辑' }}
+            </span>
+            <a-button size="small" class="clean-file-action" @click="openOfficeEdit(file)">
+              <Edit3 :size="13" />
+              编辑
+            </a-button>
+          </div>
+        </div>
+      </div>
+
       <!-- 工作区文件选择区域 -->
       <div class="workspace-area" v-if="uploadMode === 'workspace'">
         <div class="workspace-toolbar">
@@ -459,6 +556,38 @@
         </div>
       </div>
     </div>
+
+    <OfficeEditModal
+      v-model:visible="officeEditVisible"
+      :kb-id="kbId"
+      :file-path="officeEditTarget?.response?.file_path || ''"
+      :filename="officeEditTarget?.name || ''"
+      @writeback="handleOfficeWriteback"
+    />
+
+    <!-- 重复冲突弹窗（PR12 吸收） -->
+    <a-modal
+      :open="duplicateConflictOpen"
+      :title="duplicateConflictIsExact ? '重复文件' : '同名文件冲突'"
+      :closable="false"
+      :mask-closable="false"
+      :footer="null"
+      width="520px"
+    >
+      <div v-if="duplicateConflictCurrent" class="duplicate-conflict-body">
+        <p class="duplicate-conflict-message">
+          {{ getDuplicateConflictMessage(duplicateConflictCurrent) }}
+        </p>
+        <div v-if="duplicateConflictIsExact" class="duplicate-conflict-actions">
+          <a-button key="skip" @click="skipDuplicate">知道了，跳过</a-button>
+        </div>
+        <div v-else class="duplicate-conflict-actions">
+          <a-button key="keep-both" @click="keepBothDuplicate">保留两份</a-button>
+          <a-button key="replace" type="primary" @click="confirmReplacement">替换现有文件</a-button>
+          <a-button key="cancel" @click="cancelDuplicateConflict">取消</a-button>
+        </div>
+      </div>
+    </a-modal>
   </a-modal>
 </template>
 
@@ -469,7 +598,7 @@ import { useUserStore } from '@/stores/user'
 import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
 import { ocrApi } from '@/apis/system_api'
-import { fileApi, documentApi } from '@/apis/knowledge_api'
+import { fileApi, documentApi, databaseApi } from '@/apis/knowledge_api'
 import { getWorkspaceTree } from '@/apis/workspace_api'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import {
@@ -485,9 +614,15 @@ import {
   Link,
   X,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sparkles,
+  RefreshCw,
+  FileText,
+  Edit3
 } from 'lucide-vue-next'
 import { buildChunkParamsPayload } from '@/utils/chunkUtils'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import OfficeEditModal from '@/components/OfficeEditModal.vue'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import DocumentSearchModal from '@/components/DocumentSearchModal.vue'
@@ -497,6 +632,14 @@ import {
   pruneVersionCandidates,
   selectVersionTarget
 } from '@/components/fileUploadVersionHelpers'
+import {
+  DUPLICATE_STRATEGIES,
+  buildDuplicateResolution,
+  buildKnowledgeUploadUrl,
+  getDuplicateConflictDetail,
+  getDuplicateConflictMessage,
+  getSafeUploadErrorMessage
+} from '@/utils/document_duplicate_policy'
 
 const props = defineProps({
   visible: {
@@ -802,6 +945,15 @@ watch(fileList, (newFileList) => {
   uploadTaskStatus.value = nextStatus
   uploadTaskProgress.value = nextProgress
   versionCandidates.value = pruneVersionCandidates(versionCandidates.value, newFileList)
+
+  // 清洗状态按文件 uid 隔离：文件被移除时同步清理对应清洗状态，避免残留旧结果
+  const nextCleanStates = new Map()
+  for (const [uid, state] of cleanStates.value) {
+    if (validUidSet.has(uid)) {
+      nextCleanStates.set(uid, state)
+    }
+  }
+  cleanStates.value = nextCleanStates
 })
 
 // URL 列表
@@ -817,6 +969,13 @@ const versionCandidates = ref([])
 const documentSearchVisible = ref(false)
 const activeVersionCandidateUid = ref(null)
 const activeVersionCandidate = computed(() => getVersionCandidate(activeVersionCandidateUid.value))
+
+// 重复检测弹窗（PR12 吸收）：上传 409 时收集冲突，让用户选择策略
+const duplicateConflictQueue = ref([])
+const duplicateConflictPending = ref(false)
+const duplicateConflictOpen = ref(false)
+const duplicateConflictCurrent = ref(null)
+const duplicateConflictIsExact = computed(() => duplicateConflictCurrent.value?.conflict_type === 'exact_content')
 
 const updateVersionCandidate = (file, response) => {
   const candidate = buildVersionCandidate(file, response, props.canManage)
@@ -839,6 +998,75 @@ const applyDocumentSelection = (file) => {
 
 const syncSameNameSelection = (candidate) => {
   candidate.selectedFile = candidate.sameNameFiles.find((file) => file.file_id === candidate.currentFileId) || null
+}
+
+// 重复冲突弹窗处理（PR12 吸收）
+const enqueueDuplicateConflict = (detail, task) => {
+  duplicateConflictQueue.value.push({ detail, task })
+  duplicateConflictPending.value = true
+  if (!duplicateConflictOpen.value) {
+    showNextDuplicateConflict()
+  }
+}
+
+const showNextDuplicateConflict = () => {
+  if (duplicateConflictQueue.value.length === 0) {
+    duplicateConflictOpen.value = false
+    duplicateConflictPending.value = false
+    duplicateConflictCurrent.value = null
+    return
+  }
+  duplicateConflictCurrent.value = duplicateConflictQueue.value[0].detail
+  duplicateConflictOpen.value = true
+}
+
+const cancelDuplicateConflict = () => {
+  duplicateConflictQueue.value.shift()
+  if (duplicateConflictQueue.value.length === 0) {
+    duplicateConflictPending.value = false
+  }
+  showNextDuplicateConflict()
+}
+
+const retryDuplicateUpload = (strategy, replaceFileId) => {
+  const entry = duplicateConflictQueue.value.shift()
+  if (!entry) {
+    showNextDuplicateConflict()
+    return
+  }
+  const conflictRetry = {
+    options: entry.task.options,
+    xhr: null,
+    canceled: false,
+    duplicateStrategy: strategy,
+    replaceFileId: replaceFileId || null
+  }
+  uploadQueue.value.push(conflictRetry)
+  processUploadQueue()
+  showNextDuplicateConflict()
+}
+
+const resolveDuplicateConflict = (strategy) => {
+  const detail = duplicateConflictCurrent.value
+  if (!detail) return
+  const resolution = buildDuplicateResolution(detail, strategy)
+  if (!resolution) {
+    cancelDuplicateConflict()
+    return
+  }
+  retryDuplicateUpload(resolution.duplicateStrategy, resolution.replaceFileId)
+}
+
+const confirmReplacement = () => {
+  resolveDuplicateConflict(DUPLICATE_STRATEGIES.REPLACE)
+}
+
+const keepBothDuplicate = () => {
+  resolveDuplicateConflict(DUPLICATE_STRATEGIES.KEEP_BOTH)
+}
+
+const skipDuplicate = () => {
+  resolveDuplicateConflict(DUPLICATE_STRATEGIES.SKIP)
 }
 
 // URL 相关功能
@@ -1021,6 +1249,169 @@ const buildAutoIndexParams = () => {
   return buildChunkParamsPayload(indexParams.value, {
     includeSizeOverlap: true
   })
+}
+
+// AI 清洗排版相关
+// 清洗支持纯文本与 Word/Excel（后端 Docling 解析 + LLM 增强）。HIDE_CLEAN 置为 true 可整体隐藏该功能。
+const HIDE_CLEAN = false
+const enableClean = ref(false)
+
+// 清洗状态按文件 uid 隔离，避免再次上传新文档时残留旧结果。
+// fileCleanState: { status: 'idle'|'loading'|'done'|'error', cleanedMarkdown: '', error: '', viewMode: 'edit' }
+const cleanStates = ref(new Map())
+
+const getFileCleanState = (file) => {
+  if (!file?.uid) return null
+  if (!cleanStates.value.has(file.uid)) {
+    cleanStates.value.set(file.uid, {
+      status: 'idle',
+      cleanedMarkdown: '',
+      error: '',
+      viewMode: 'edit'
+    })
+  }
+  return cleanStates.value.get(file.uid)
+}
+
+const OFFICE_EXTENSIONS = ['.docx', '.xlsx']
+const isOfficeFile = (name) => {
+  const ext = String(name || '').toLowerCase().split('.').pop()
+  return OFFICE_EXTENSIONS.includes(`.${ext}`)
+}
+
+// xlsx 不参与清洗，始终走 Office 编辑
+const isXlsxFile = (name) => {
+  const ext = String(name || '').toLowerCase().split('.').pop()
+  return ext === 'xlsx'
+}
+
+// 已上传完成且可清洗的文件（排除 xlsx，xlsx 不参与清洗）
+const uploadedCleanFiles = computed(() =>
+  fileList.value.filter(
+    (file) => file.status === 'done' && file.response?.file_path && !isXlsxFile(file.name)
+  )
+)
+
+// 已上传完成的 Word/Excel（未勾选清洗或 xlsx 时走 Office 编辑）
+const uploadedOfficeFiles = computed(() =>
+  fileList.value.filter(
+    (file) => file.status === 'done' && file.response?.file_path && isOfficeFile(file.name)
+  )
+)
+
+// 是否包含 xlsx（勾选清洗时 xlsx 仍走 Office 编辑面板）
+const hasXlsxFiles = computed(() => uploadedOfficeFiles.value.some((file) => isXlsxFile(file.name)))
+
+// Office 编辑状态：按文件 uid 记录写回后的 file_path
+const officeEditStates = ref(new Map())
+const getOfficeEditState = (file) => {
+  if (!file?.uid) return null
+  if (!officeEditStates.value.has(file.uid)) {
+    officeEditStates.value.set(file.uid, { filePath: '', contentHash: '', size: 0, edited: false })
+  }
+  return officeEditStates.value.get(file.uid)
+}
+const officeEditTarget = ref(null)   // 当前打开编辑的文件
+const officeEditVisible = ref(false)
+
+// 调用 AI 清洗排版接口，入参为已上传文件的 MinIO URL（file_path），由服务端读取解析后清洗
+const runCleanForFile = async (file) => {
+  const state = getFileCleanState(file)
+  const filePath = file.response?.file_path
+  if (!state || !filePath) {
+    message.error('上传文件信息不完整，请重新上传')
+    return
+  }
+  const fileName = file.name || file.response?.filename || 'document'
+  state.status = 'loading'
+  state.error = ''
+  try {
+    const response = await databaseApi.cleanDocument(kbId.value, null, fileName, filePath)
+    state.cleanedMarkdown = response?.cleaned_markdown || ''
+    state.status = state.cleanedMarkdown ? 'done' : 'error'
+    if (!state.cleanedMarkdown) state.error = '清洗结果为空'
+  } catch (error) {
+    console.error('文档清洗失败:', error)
+    state.status = 'error'
+    state.error = error?.message || '文档清洗失败，请稍后重试'
+  }
+}
+
+// 批量并行清洗全部已上传文件（后端一次并发）
+const runCleanAll = async () => {
+  const files = uploadedCleanFiles.value
+  if (files.length === 0) {
+    message.error('请先上传文件')
+    return
+  }
+  const items = files.map((file) => ({
+    file_path: file.response.file_path,
+    filename: file.name || file.response?.filename || 'document'
+  }))
+  for (const file of files) {
+    const state = getFileCleanState(file)
+    state.status = 'loading'
+    state.error = ''
+  }
+  try {
+    const response = await databaseApi.cleanDocuments(kbId.value, items)
+    const results = response?.results || []
+    results.forEach((result, index) => {
+      const file = files[index]
+      const state = file && getFileCleanState(file)
+      if (!state) return
+      state.cleanedMarkdown = result?.cleaned_markdown || ''
+      state.status = result?.error ? 'error' : state.cleanedMarkdown ? 'done' : 'error'
+      state.error = result?.error || (state.cleanedMarkdown ? '' : '清洗结果为空')
+    })
+  } catch (error) {
+    console.error('批量文档清洗失败:', error)
+    for (const file of files) {
+      const state = getFileCleanState(file)
+      if (state) {
+        state.status = 'error'
+        state.error = error?.message || '文档清洗失败，请稍后重试'
+      }
+    }
+  }
+}
+
+// 清洗后把 cleanedMarkdown 作为 .md 文件上传，返回 file 响应（含 file_path/content_hash）。
+// 文件名用原文件名前缀 + _cleaned，避免固定 cleaned.md 与历史清洗文件同名触发版本候选。
+// 注意 fileApi.uploadFile(file, kbId) 签名：传 File 对象，由 uploadFile 内部构造 FormData。
+const uploadCleanedMarkdown = async (markdown, originalName = '') => {
+  if (!markdown) return null
+  const base = String(originalName || 'document').replace(/\.(md|txt|markdown)$/i, '') || 'document'
+  const cleanName = `${base}_cleaned.md`
+  const blob = new Blob([markdown], { type: 'text/markdown' })
+  const cleanFile = new File([blob], cleanName, { type: 'text/markdown' })
+  return await fileApi.uploadFile(cleanFile, kbId.value)
+}
+
+// Word/Excel 编辑：打开 OfficeEditModal（上传时 filePath 模式）
+const openOfficeEdit = (file) => {
+  officeEditTarget.value = file
+  officeEditVisible.value = true
+}
+
+// OfficeEditModal 写回后的回调：记录新 file_path
+const handleOfficeWriteback = (res) => {
+  const file = officeEditTarget.value
+  if (!file) return
+  const state = getOfficeEditState(file)
+  state.filePath = res?.file_path || ''
+  state.contentHash = res?.content_hash || ''
+  state.size = res?.size || 0
+  state.edited = Boolean(state.filePath)
+}
+
+const cleanAllLoading = computed(() =>
+  uploadedCleanFiles.value.some((file) => getFileCleanState(file)?.status === 'loading')
+)
+
+const cleanStatusLabel = (status) => {
+  const labels = { idle: '待清洗', loading: '清洗中', done: '已清洗', error: '失败' }
+  return labels[status] || status || '待清洗'
 }
 
 const isFolderUpload = ref(false)
@@ -1401,7 +1792,10 @@ const runUploadTask = (task) => {
 
     const xhr = new XMLHttpRequest()
     task.xhr = xhr
-    xhr.open('POST', `/api/knowledge/files/upload?kb_id=${currentKbId}`)
+    xhr.open(
+      'POST',
+      buildKnowledgeUploadUrl(currentKbId, task.duplicateStrategy || DUPLICATE_STRATEGIES.PROMPT, task.replaceFileId, task.parentId)
+    )
 
     const headers = getAuthHeaders()
     for (const [key, value] of Object.entries(headers)) {
@@ -1451,7 +1845,15 @@ const runUploadTask = (task) => {
         errorResp = {}
       }
       file.response = errorResp
-      const error = new Error(errorResp.detail || 'Upload failed')
+      const duplicateDetail = getDuplicateConflictDetail(errorResp)
+      if (xhr.status === 409 && duplicateDetail) {
+        // 重复冲突：进入弹窗让用户选择策略，不算失败
+        enqueueDuplicateConflict(duplicateDetail, task)
+        onError(new Error(getDuplicateConflictMessage(duplicateDetail)), file)
+        reject(new Error(getDuplicateConflictMessage(duplicateDetail)))
+        return
+      }
+      const error = new Error(getSafeUploadErrorMessage(errorResp) || errorResp.detail || 'Upload failed')
       if (fileUid) {
         uploadTaskStatus.value[fileUid] = 'error'
       }
@@ -1715,12 +2117,26 @@ const chunkData = async () => {
     if (!file_path) continue
 
     const versionCandidate = getVersionCandidate(file.uid)
-    if (versionCandidate?.action === 'version') {
+    // 勾选清洗时 docx/文本版本上传走清洗版入库；xlsx 不参与清洗，版本上传照常
+    const xlsxCleanExempt = isXlsxFile(file.name)
+    if (versionCandidate?.action === 'version' && (!enableClean.value || xlsxCleanExempt)) {
       versionUploads.push({ file, candidate: versionCandidate })
     } else {
-      items.push(file_path)
-      if (content_hash) content_hashes[file_path] = content_hash
-      if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
+      // Word/Excel：若已编辑，用写回后的新 file_path 入库（不生成 .md）
+      const officeState = getOfficeEditState(file)
+      const effectivePath = officeState?.edited && officeState.filePath ? officeState.filePath : file_path
+      const effectiveHash = officeState?.edited && officeState.contentHash ? officeState.contentHash : content_hash
+      // 勾选"AI 清洗排版"时原始文件不入库，只入库清洗后的 md，避免产生双份记录；
+      // xlsx 不参与清洗，始终走 Office 编辑路径入库
+      if (!enableClean.value || xlsxCleanExempt) {
+        items.push(effectivePath)
+        if (effectiveHash) content_hashes[effectivePath] = effectiveHash
+        if (officeState?.edited && Number.isFinite(officeState.size)) {
+          file_sizes[effectivePath] = officeState.size
+        } else if (Number.isFinite(file.response?.size)) {
+          file_sizes[effectivePath] = file.response.size
+        }
+      }
     }
 
     // 检查是否需要OCR
@@ -1734,7 +2150,8 @@ const chunkData = async () => {
     }
   }
 
-  if (items.length === 0 && versionUploads.length === 0) {
+  // 勾选清洗时原始文件不入库，需以已上传文件判断是否为空，否则会提前拦截
+  if (items.length === 0 && versionUploads.length === 0 && uploadedCleanFiles.value.length === 0) {
     message.error('请先上传文件')
     return
   }
@@ -1747,7 +2164,64 @@ const chunkData = async () => {
       Object.assign(params, buildAutoIndexParams())
     }
 
+    // AI 清洗排版：office 文件写回原格式（docx/xlsx），文本/md 作为新 .md 文件上传，再走统一入库
+    if (enableClean.value) {
+      // 勾选清洗后原始文件不入库，若存在未清洗完成的文件会直接丢失，需先全部清洗完成
+      const unCleanedFiles = uploadedCleanFiles.value.filter(
+        (file) => getFileCleanState(file)?.status !== 'done' || !getFileCleanState(file)?.cleanedMarkdown
+      )
+      if (unCleanedFiles.length > 0) {
+        message.error('勾选了 AI 清洗排版，请先对全部文件执行清洗（全部清洗或逐个清洗）')
+        return
+      }
+      for (const file of uploadedCleanFiles.value) {
+        const state = getFileCleanState(file)
+        if (!state || state.status !== 'done' || !state.cleanedMarkdown) continue
+        const filename = file.name || file.response?.filename || 'document'
+        let cleanRes
+        if (isOfficeFile(file.name)) {
+          // Word/Excel：清洗后写回原格式入库，保持 .docx/.xlsx
+          cleanRes = await databaseApi.cleanWriteback(kbId.value, {
+            cleaned_markdown: state.cleanedMarkdown,
+            filename
+          })
+        } else {
+          // 文本/md：清洗后作为 .md 文件上传
+          cleanRes = await uploadCleanedMarkdown(state.cleanedMarkdown, filename)
+        }
+        const cleanPath = cleanRes?.file_path
+        const cleanHash = cleanRes?.content_hash
+        if (!cleanPath) {
+          throw new Error('清洗后内容上传失败，请重试')
+        }
+        items.push(cleanPath)
+        if (cleanHash) content_hashes[cleanPath] = cleanHash
+        if (Number.isFinite(cleanRes?.size)) file_sizes[cleanPath] = cleanRes.size
+      }
+      if (items.length > 0) {
+        params.content_hashes = content_hashes
+        params.file_sizes = file_sizes
+      }
+    }
+
+    // 重复检测策略逐文件映射（PR12 吸收）：上传阶段用户选的策略随入库一起提交
     if (items.length > 0) {
+      const duplicate_strategies = {}
+      const replace_file_ids = {}
+      for (const file of fileList.value) {
+        if (file.status !== 'done') continue
+        const file_path = file.response?.file_path
+        if (!file_path) continue
+        if (file.response?.duplicate_strategy) {
+          duplicate_strategies[file_path] = file.response.duplicate_strategy
+        }
+        if (file.response?.replace_file_id) {
+          replace_file_ids[file_path] = file.response.replace_file_id
+        }
+      }
+      if (Object.keys(duplicate_strategies).length > 0) params.duplicate_strategies = duplicate_strategies
+      if (Object.keys(replace_file_ids).length > 0) params.replace_file_ids = replace_file_ids
+
       const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
       const added = await addFiles({
         items,
@@ -1865,6 +2339,7 @@ const chunkData = async () => {
 .auto-index-toggle {
   display: flex;
   align-items: center;
+  gap: 12px;
   padding-right: 4px;
 
   :deep(.ant-checkbox-wrapper) {
@@ -1884,6 +2359,130 @@ const chunkData = async () => {
 
   &:hover {
     color: var(--main-color);
+  }
+}
+
+.clean-preview-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  background: var(--gray-25);
+
+  .clean-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+
+    .clean-preview-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-900);
+    }
+
+    .clean-preview-sub {
+      flex: 1;
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    .clean-regenerate-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+  }
+
+  .clean-loading,
+  .clean-empty,
+  .clean-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: var(--gray-600);
+    font-size: 13px;
+  }
+
+  .clean-error {
+    color: var(--color-error-700);
+  }
+
+  .clean-preview-body {
+    .clean-preview-tabs {
+      margin-bottom: 8px;
+    }
+
+    .clean-edit-area {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .clean-preview-render {
+      max-height: 360px;
+      overflow: auto;
+      padding: 12px;
+      border: 1px solid var(--gray-150);
+      border-radius: 6px;
+      background: var(--gray-0);
+    }
+  }
+
+  .clean-file-card {
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--gray-150);
+    border-radius: 8px;
+    background: var(--gray-0);
+
+    .clean-file-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+
+      .clean-file-name {
+        flex: 1;
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--gray-900);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .clean-file-status {
+        font-size: 12px;
+        padding: 1px 8px;
+        border-radius: 10px;
+
+        &.idle {
+          color: var(--gray-600);
+          background: var(--gray-100);
+        }
+        &.loading {
+          color: var(--color-info-700);
+          background: var(--color-info-50);
+        }
+        &.done {
+          color: var(--color-success-700);
+          background: var(--color-success-50);
+        }
+        &.error {
+          color: var(--color-error-700);
+          background: var(--color-error-50);
+        }
+      }
+
+      .clean-file-action {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+    }
   }
 }
 

@@ -3,14 +3,14 @@
     <!-- 加载中状态 -->
     <div v-if="isLoading" class="loading-container">
       <a-spin size="large" />
-      <p class="loading-text">正在连接服务...</p>
+      <p class="loading-text">{{ $t('home.loading') }}</p>
     </div>
 
     <!-- 错误状态 -->
     <div v-else-if="error" class="error-container">
       <a-result status="error" :title="error.title" :sub-title="error.message">
         <template #extra>
-          <a-button type="primary" @click="retryLoad">重试</a-button>
+          <a-button type="primary" @click="retryLoad">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
     </div>
@@ -66,7 +66,7 @@
             </Transition>
             <div class="hero-actions reveal-up delay-2">
               <button class="button-base primary" @click="goToChat">
-                <span>开始体验</span>
+                <span>{{ $t('home.startExperience') }}</span>
                 <ArrowRight :size="18" />
               </button>
             </div>
@@ -102,7 +102,7 @@
                 <div class="flow-row">
                   <div class="flow-node">
                     <span class="flow-icon"><Workflow :size="22" /></span>
-                    <span class="flow-name">智能体 Harness</span>
+                    <span class="flow-name">{{ $t('home.flow.agent') }}</span>
                   </div>
 
                   <div class="flow-link" aria-hidden="true">
@@ -126,7 +126,7 @@
                       <span class="hub-ring"></span>
                       <Sparkles :size="24" />
                     </span>
-                    <span class="flow-name">RAG 引擎</span>
+                    <span class="flow-name">{{ $t('home.flow.rag') }}</span>
                   </div>
 
                   <div class="flow-link" aria-hidden="true">
@@ -147,11 +147,11 @@
 
                   <div class="flow-node">
                     <span class="flow-icon"><Library :size="22" /></span>
-                    <span class="flow-name">知识库</span>
+                    <span class="flow-name">{{ $t('home.flow.kb') }}</span>
                   </div>
                 </div>
 
-                <p class="flow-caption">智能体发起检索 · 引擎融合向量与图谱 · 召回知识增强生成</p>
+                <p class="flow-caption">{{ $t('home.flow.caption') }}</p>
               </div>
             </div>
           </aside>
@@ -171,6 +171,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
@@ -184,6 +185,7 @@ import {
 } from 'lucide-vue-next'
 
 const router = useRouter()
+const { t } = useI18n()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 
@@ -285,12 +287,12 @@ const checkHealth = async () => {
   try {
     const response = await healthApi.checkHealth()
     if (response.status !== 'ok') {
-      throw new Error('服务不可用')
+      throw new Error(t('home.errors.unavailable'))
     }
   } catch (e) {
     error.value = {
-      title: '服务连接失败',
-      message: '后端服务无法响应，请检查服务是否正常运行'
+      title: t('home.errors.connectionFailed'),
+      message: t('home.errors.backendDown')
     }
     throw e
   }

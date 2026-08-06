@@ -620,6 +620,17 @@ def compile_ontology_prompt(ontology: OntologySpec) -> str:
         "允许实体类型：\n" + ("\n".join(entity_lines) if entity_lines else "- 无"),
         "允许关系及方向：\n" + ("\n".join(relation_lines) if relation_lines else "- 无"),
     ]
+    keyed_relations = {
+        str(value).strip()
+        for value in (ontology.rules.get("conflict_detection") or {}).get("keyed_value_relations", [])
+    }
+    if keyed_relations:
+        keyed_lines = [
+            f'- {name} 的 target 必须是严格的"参数名: 参数值"格式（例如"防护等级: IP67"），'
+            "严禁使用空格、逗号或其他分隔符。"
+            for name in sorted(keyed_relations)
+        ]
+        sections.append("keyed value 关系格式约束：\n" + "\n".join(keyed_lines))
     if entity_alias_lines:
         sections.append("实体标准名与别名：\n" + "\n".join(entity_alias_lines))
     if relation_alias_lines:
@@ -637,7 +648,10 @@ def compile_ontology_prompt(ontology: OntologySpec) -> str:
         "3. attributes[].label 必须使用允许属性的裸 key，例如 screen_size；category 仅用于说明分组，禁止输出 Hardware.screen_size。属性定义了 owners 时只能挂载到允许的实体类型，定义了 enum 时值必须来自枚举。\n"
         "4. 新抽取的证据关联统一使用 SUPPORTED_BY，不要生成历史兼容关系 HAS_EVIDENCE。\n"
         "5. 禁止创建列表之外的实体类型、关系类型或属性。\n"
-        "6. 文本中没有符合 Ontology 的事实时，返回空 entities 和 relations。"
+        "6. 文本中没有符合 Ontology 的事实时，返回空 entities 和 relations。\n"
+        "7. 禁止把口语指代/指示代词（如\"这台\"\"该\"\"此\"\"那\"\"其\"\"本\"等 + 名词）抽为实体；"
+        "实体 text 必须是文本中真实、具体、可独立指称的名称（如具体型号、产品名、技术名），"
+        "指代原文实际所指的具体实体时，直接用该实体的名称，不用指代词。"
     )
     return "\n\n".join(sections)
 
@@ -672,7 +686,19 @@ def normalize_ontology_aliases(result: dict[str, Any], ontology: OntologySpec) -
     return result
 
 
-def validate_ontology_result(result: dict[str, Any], ontology: OntologySpec) -> None:
+def validate_ontology_result(
+    result: dict[str, Any],
+    ontology: OntologySpec,
+    *,
+    drop_invalid_relations: bool = True,
+) -> None:
+    """校验抽取结果符合 Ontology。
+
+    分类处理：
+    - 实体类型/属性/关系类型非法：视为严重错误（可能是模型幻觉），直接抛错。
+    - 单条关系的 source/target 类型不匹配（关系方向标错）：健壮性处理，
+      默认丢弃该条关系而非废掉整个抽取结果；可通过 drop_invalid_relations=False 改回抛错。
+    """
     allowed_entities = set(ontology.entities)
     properties_by_name = {item.name: item for values in ontology.properties.values() for item in values.values()}
 
@@ -690,6 +716,8 @@ def validate_ontology_result(result: dict[str, Any], ontology: OntologySpec) -> 
             _validate_property_value(attribute.get("text"), definition)
 
     forbidden_relations = set(ontology.rules.get("forbidden_relations", []))
+    kept_relations: list[dict[str, Any]] = []
+    dropped_relations: list[str] = []
     for relation in result.get("relations", []):
         label = relation.get("label")
         definition = ontology.relations.get(label)
@@ -699,10 +727,26 @@ def validate_ontology_result(result: dict[str, Any], ontology: OntologySpec) -> 
             raise ValueError(f"Ontology 禁止新抽取关系类型: {label}")
         source_label = (relation.get("source") or {}).get("label")
         target_label = (relation.get("target") or {}).get("label")
-        if not _matches_endpoint(source_label, definition.source):
-            raise ValueError(f"关系 {label} 不允许 source 类型: {source_label}")
-        if not _matches_endpoint(target_label, definition.target):
-            raise ValueError(f"关系 {label} 不允许 target 类型: {target_label}")
+        source_ok = _matches_endpoint(source_label, definition.source)
+        target_ok = _matches_endpoint(target_label, definition.target)
+        if not source_ok or not target_ok:
+            if not drop_invalid_relations:
+                if not source_ok:
+                    raise ValueError(f"关系 {label} 不允许 source 类型: {source_label}")
+                raise ValueError(f"关系 {label} 不允许 target 类型: {target_label}")
+            dropped_relations.append(f"{label}({source_label}->{target_label})")
+            continue
+        kept_relations.append(relation)
+
+    result["relations"] = kept_relations
+    if dropped_relations:
+        from yuxi.utils import logger
+
+        logger.warning(
+            "丢弃 %d 条不符合 Ontology 方向约束的关系: %s",
+            len(dropped_relations),
+            ", ".join(dropped_relations[:10]),
+        )
 
 
 def _entry_from_root(root: Path, source: Literal["builtin", "uploaded"]) -> OntologyRegistryEntry:

@@ -35,7 +35,7 @@
           <a-menu-divider />
           <a-menu-item key="docs" @click="openDocs">
             <template #icon><BookOpen :size="16" /></template>
-            <span class="menu-text">文档中心</span>
+            <span class="menu-text">{{ $t('user.menu.docs') }}</span>
           </a-menu-item>
           <a-menu-item key="theme" @click="toggleTheme">
             <template #icon>
@@ -43,26 +43,26 @@
               <Moon v-else :size="16" />
             </template>
             <span class="menu-text">{{
-              themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'
+              themeStore.isDark ? $t('user.menu.themeLight') : $t('user.menu.themeDark')
             }}</span>
           </a-menu-item>
           <a-menu-divider />
           <a-menu-item v-if="userStore.isSuperAdmin" key="debug" @click="showDebug = true">
             <template #icon><Terminal :size="16" /></template>
-            <span class="menu-text">调试面板（非生产环境）</span>
+            <span class="menu-text">{{ $t('user.menu.debug') }}</span>
           </a-menu-item>
           <a-menu-item key="setting" @click="goToSetting">
             <template #icon><Settings :size="16" /></template>
-            <span class="menu-text">设置</span>
+            <span class="menu-text">{{ $t('user.menu.settings') }}</span>
           </a-menu-item>
           <a-menu-item key="logout" @click="logout">
             <template #icon><LogOut :size="16" /></template>
-            <span class="menu-text">退出登录</span>
+            <span class="menu-text">{{ $t('user.menu.logout') }}</span>
           </a-menu-item>
         </a-menu>
       </template>
     </a-dropdown>
-    <a-button v-else-if="showButton" type="primary" @click="goToLogin"> 登录 </a-button>
+    <a-button v-else-if="showButton" type="primary" @click="goToLogin"> {{ $t('user.menu.login') }} </a-button>
 
     <!-- 调试面板 Modal -->
     <DebugComponent v-model:show="showDebug" />
@@ -71,6 +71,7 @@
 
 <script setup>
 import { computed, ref, inject, useSlots } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import DebugComponent from '@/components/DebugComponent.vue'
@@ -81,6 +82,7 @@ import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
 const slots = useSlots()
@@ -108,20 +110,20 @@ defineProps({
 const userRoleText = computed(() => {
   switch (userStore.userRole) {
     case 'superadmin':
-      return '超级管理员'
+      return t('user.role.superadmin')
     case 'admin':
-      return '管理员'
+      return t('user.role.admin')
     case 'user':
-      return '普通用户'
+      return t('user.role.user')
     default:
-      return '未知角色'
+      return t('user.role.unknown')
   }
 })
 
 // 退出登录
 const logout = () => {
   userStore.logout()
-  message.success('已退出登录')
+  message.success(t('user.loggedOut'))
   // 跳转到首页
   router.push('/login')
 }

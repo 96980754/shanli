@@ -197,6 +197,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { ChevronLeft, ChevronRight, CircleHelp, LibraryBig } from 'lucide-vue-next'
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -238,6 +239,7 @@ const savingPreviewFile = ref(false)
 const loadingDatabases = ref(false)
 const databases = ref([])
 const selectedDatabase = ref(null)
+const route = useRoute()
 const workspaceMainRef = ref(null)
 const workspaceMainWidth = ref(0)
 const createDirectoryModalVisible = ref(false)
@@ -860,6 +862,15 @@ let workspaceResizeObserver = null
 
 onMounted(async () => {
   await Promise.all([loadWorkspaceEntries('/'), loadDatabases()])
+
+  // 支持从知识库浏览页跳转：自动选中 URL 携带的 kb_id 对应的知识库
+  const requestedKbId = route.query.kb_id
+  if (requestedKbId) {
+    const target = databases.value.find((database) => String(database.kb_id) === String(requestedKbId))
+    if (target) {
+      await selectDatabase(target)
+    }
+  }
 
   if (workspaceMainRef.value && typeof ResizeObserver !== 'undefined') {
     workspaceMainWidth.value = workspaceMainRef.value.clientWidth || 0

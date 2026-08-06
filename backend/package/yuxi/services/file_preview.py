@@ -14,7 +14,7 @@ MAX_TEXT_PREVIEW_CHARS = 250_000
 _MARKDOWN_EXTENSIONS = frozenset({".md", ".markdown", ".mdx"})
 _PDF_EXTENSIONS = frozenset({".pdf"})
 _HTML_EXTENSIONS = frozenset({".html", ".htm"})
-_OFFICE_PDF_PREVIEW_EXTENSIONS = frozenset({".docx", ".pptx"})
+_OFFICE_PDF_PREVIEW_EXTENSIONS = frozenset({".docx", ".xlsx", ".pptx"})
 _OFFICE_MEDIA_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",

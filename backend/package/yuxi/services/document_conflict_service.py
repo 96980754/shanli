@@ -129,7 +129,9 @@ def _collect_facts(
 
 
 def _entity_key(entity: dict[str, Any]) -> str:
-    text = str(entity.get("text") or "").strip().casefold()
+    # 与 document_change_analysis_service 一致：实体名去掉全部空白，
+    # 避免同一产品因括号前空格等差异被判为不同实体导致槽位无法配对。
+    text = re.sub(r"\s+", "", str(entity.get("text") or "").casefold())
     label = str(entity.get("label") or "Entity").strip().casefold()
     return f"{label}:{text}" if text else ""
 

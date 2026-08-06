@@ -32,9 +32,15 @@ class FileStatus:
     INDEXING = "indexing"
     INDEXED = "indexed"
     ERROR_INDEXING = "error_indexing"
+    # 清洗链路（PR12 吸收）
+    CLEANING = "cleaning"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    CONFIRMED = "confirmed"
+    ERROR_CLEANING = "error_cleaning"
+    ERROR_REPLACEMENT_CLEANUP = "error_replacement_cleanup"
 
 
-INDEXED_STATS_STATUSES = {FileStatus.INDEXED, "done"}
+INDEXED_STATS_STATUSES = {FileStatus.INDEXED, "done", FileStatus.ERROR_REPLACEMENT_CLEANUP}
 
 
 def _should_repair_file_stats(file_meta: dict) -> bool:
@@ -176,6 +182,14 @@ class KnowledgeBase(ABC):
             "updated_at": utc_isoformat(record.updated_at) if record.updated_at else None,
             "original_filename": record.original_filename,
             "minio_url": record.minio_url,
+            # 重复检测/替换版本链相关（PR12 吸收）
+            "normalized_name": getattr(record, "normalized_name", None),
+            "is_active": getattr(record, "is_active", True),
+            "replacement_target_file_id": getattr(record, "replacement_target_file_id", None),
+            "previous_version_id": getattr(record, "previous_version_id", None),
+            "superseded_at": utc_isoformat(record.superseded_at) if getattr(record, "superseded_at", None) else None,
+            "processing_stage": getattr(record, "processing_stage", None),
+            "processing_progress": int(getattr(record, "processing_progress", 0) or 0),
         }
 
     @staticmethod
@@ -205,6 +219,18 @@ class KnowledgeBase(ABC):
             "error_message": meta.get("error"),
             "created_by": str(meta.get("created_by")) if meta.get("created_by") else None,
             "updated_by": str(meta.get("updated_by")) if meta.get("updated_by") else None,
+            # 重复检测/替换版本链相关（PR12 吸收）
+            "normalized_name": meta.get("normalized_name"),
+            "is_active": meta.get("is_active", True),
+            "replacement_target_file_id": meta.get("replacement_target_file_id"),
+            "previous_version_id": meta.get("previous_version_id"),
+            "superseded_at": meta.get("superseded_at"),
+            "processing_stage": meta.get("processing_stage"),
+            "processing_progress": int(meta.get("processing_progress") or 0),
+            "processing_task_id": meta.get("processing_task_id"),
+            "processing_task_attempt": int(meta.get("processing_task_attempt") or 0),
+            "processing_task_updated_at": meta.get("processing_task_updated_at"),
+            "processing_task_lease_expires_at": meta.get("processing_task_lease_expires_at"),
         }
 
     async def _load_file_meta(self, kb_id: str, file_id: str, *, refresh: bool = False) -> dict:
@@ -331,6 +357,11 @@ class KnowledgeBase(ABC):
             metadata["logical_document_id"] = file_id
             metadata["document_version"] = 1
             metadata["is_current"] = True
+            # 重复检测/替换版本链：新记录默认 active，记录规范化文件名
+            metadata["is_active"] = True
+            from yuxi.repositories.knowledge_file_repository import normalize_document_filename
+
+            metadata["normalized_name"] = normalize_document_filename(metadata.get("filename") or "")
         if operator_id:
             metadata["created_by"] = operator_id
 
@@ -1424,6 +1455,22 @@ class KnowledgeBase(ABC):
             file_id: 文件ID
         """
         pass
+
+    async def upsert_confirmed_qa(
+        self,
+        *,
+        kb_id: str,
+        qa_id: str,
+        file_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        """Project a confirmed QA pair into the knowledge base retrieval backend."""
+        raise NotImplementedError("This knowledge base does not support document QA indexing")
+
+    async def delete_confirmed_qa(self, kb_id: str, qa_id: str) -> None:
+        """Remove a confirmed QA projection without changing document chunks."""
+        raise NotImplementedError("This knowledge base does not support document QA indexing")
 
     @abstractmethod
     async def get_file_basic_info(self, kb_id: str, file_id: str) -> dict:

@@ -6,6 +6,17 @@ from typing import Any
 
 from yuxi.knowledge.graphs.graph_utils import normalize_entity_name
 
+# 口语指代/指示代词前缀：这类实体名是 LLM 把指代（"这台对讲机"）当实体，
+# 不应作为独立节点入库。
+_DEICTIC_PREFIXES = ("这台", "该", "此", "那台", "那个", "这个", "这种", "本", "其", "另一台", "上述")
+
+
+def _is_deictic_entity_name(text: str) -> bool:
+    normalized = normalize_entity_name(text)
+    if not normalized:
+        return False
+    return any(normalized.startswith(prefix) for prefix in _DEICTIC_PREFIXES)
+
 
 class GraphExtractor(ABC):
     extractor_type: str
@@ -16,6 +27,13 @@ class GraphExtractor(ABC):
     @abstractmethod
     async def extract(self, text: str, *, chunk_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         pass
+
+    async def extract_document_entities(self, text: str) -> list[dict[str, str]]:
+        """扫描整篇文档，识别文档级主实体（领域无关）。
+
+        返回 [{"name": ..., "label": ...}]；不支持文档级扫描的抽取器返回空列表。
+        """
+        return []
 
     def validate_options(self) -> None:
         return None
@@ -38,6 +56,9 @@ def normalize_extraction_result(result: dict[str, Any], extractor_type: str) -> 
 
     def add_entity(entity: Any, path: str) -> dict[str, Any]:
         normalized_entity = _normalize_entity(entity, path)
+        # 剔除口语指代/指示代词实体（如"这台对讲机"），避免把指代抽成独立节点
+        if _is_deictic_entity_name(normalized_entity["text"]):
+            return None
         key = _entity_key(normalized_entity)
         existing = normalized_entities_by_key.get(key)
         if existing is None:
@@ -71,6 +92,9 @@ def normalize_extraction_result(result: dict[str, Any], extractor_type: str) -> 
             result,
             f"relations[{index}].target",
         )
+        # 任一端点是指代词实体（已被剔除）时，跳过该关系
+        if source is None or target is None:
+            continue
         text = str(relation.get("text") or "").strip()
         if not text:
             raise ValueError("relations[].text 不能为空")

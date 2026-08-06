@@ -457,6 +457,79 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.index_file(kb_id, file_id, operator_id, params=params)
 
+    async def upload_office_bytes(
+        self, kb_id: str, content_bytes: bytes, filename: str
+    ) -> str:
+        """将编辑后的 Word/Excel 字节上传 MinIO，返回 file_path（MinIO URL）。"""
+        import time
+
+        from yuxi.storage.minio import get_minio_client
+
+        minio_client = get_minio_client()
+        bucket_name = minio_client.KB_BUCKETS["documents"]
+        await asyncio.to_thread(minio_client.ensure_bucket_exists, bucket_name)
+
+        base, suffix = filename.rsplit(".", 1) if "." in filename else (filename, "")
+        object_name = f"{kb_id}/upload/{base}_{int(time.time() * 1000)}.{suffix}"
+        upload_result = await minio_client.aupload_file(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=content_bytes,
+        )
+        return upload_result.url
+
+    async def replace_document_content(
+        self,
+        kb_id: str,
+        file_id: str,
+        content_bytes: bytes,
+        filename: str,
+        operator_id: str | None = None,
+        params: dict | None = None,
+    ) -> str:
+        """用编辑后的内容替换文档：写新文件入库，删除旧版。
+
+        流程：新文件上传 MinIO → add_file_record → parse_file → index_file → delete_file(旧版)。
+        返回新 file_id。
+        """
+        import hashlib
+        import time
+
+        from yuxi.storage.minio import get_minio_client
+
+        minio_client = get_minio_client()
+        bucket_name = minio_client.KB_BUCKETS["documents"]
+        await asyncio.to_thread(minio_client.ensure_bucket_exists, bucket_name)
+
+        suffix = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        object_name = f"{kb_id}/upload/{filename.rsplit('.', 1)[0]}_{int(time.time() * 1000)}{suffix}"
+        upload_result = await minio_client.aupload_file(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=content_bytes,
+        )
+        minio_url = upload_result.url
+
+        content_hash = hashlib.sha256(content_bytes).hexdigest()
+        add_params = {
+            "content_hashes": {minio_url: content_hash},
+            "file_sizes": {minio_url: len(content_bytes)},
+        }
+        if params:
+            add_params.update(params)
+
+        meta = await self.add_file_record(kb_id, minio_url, params=add_params, operator_id=operator_id)
+        new_file_id = meta["file_id"]
+
+        # 解析 + 入库（编辑后的 docx/xlsx 走现有链路）
+        await self.parse_file(kb_id, new_file_id, operator_id=operator_id)
+        await self.index_file(kb_id, new_file_id, operator_id=operator_id, params=params)
+
+        # 删除旧版（含 chunk、Milvus 向量）
+        await self.delete_file(kb_id, file_id)
+
+        return new_file_id
+
     async def update_file_params(self, kb_id: str, file_id: str, params: dict, operator_id: str | None = None) -> None:
         """Update file processing params"""
         kb_instance = await self._get_kb_for_database(kb_id)
@@ -773,7 +846,32 @@ class KnowledgeBaseManager:
 
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, filename=filename)
+        records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, parent_id=None, filename=filename)
+        return [
+            {
+                "file_id": record.file_id,
+                "filename": record.filename,
+                "size": int(record.file_size or 0),
+                "created_at": utc_isoformat(record.created_at) if record.created_at else "",
+                "content_hash": record.content_hash or "",
+            }
+            for record in records
+        ]
+
+    async def get_version_candidate_files(self, kb_id: str, filename: str) -> list[dict]:
+        """获取同文档其他版本的候选文件列表（按去版本号基础名匹配）。
+
+        例如上传 sglang-v1.1.docx 时，返回基础名同为 sglang 的 sglang-v1.0.docx，
+        供前端自动预判为"可能是新版本"。结构同 same_name_files。
+        """
+        if not kb_id or not filename:
+            return []
+
+        from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+        records = await KnowledgeFileRepository().list_version_candidate_files(
+            kb_id=kb_id, parent_id=None, filename=filename
+        )
         return [
             {
                 "file_id": record.file_id,
