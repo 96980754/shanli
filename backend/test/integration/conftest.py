@@ -281,9 +281,24 @@ async def knowledge_database(
     unique_id = uuid.uuid4().hex
     timestamp = int(time.time() * 1000000)
     db_name = f"pytest_kb_{timestamp}_{unique_id}"
+    category_name = f"pytest_cat_{timestamp}_{unique_id}"
     kb_id = None
+    category_id = None
 
     try:
+        # create_database 要求 category_id 必填，先建一个测试分类
+        category_response = await test_client.post(
+            "/api/knowledge/categories",
+            json={"name": category_name, "sort_order": 0},
+            headers=admin_headers,
+        )
+        if category_response.status_code == 201:
+            category_id = category_response.json()["item"]["id"]
+        else:
+            pytest.fail(
+                f"Failed to create test category (status={category_response.status_code}): {category_response.text}"
+            )
+
         create_response = await test_client.post(
             "/api/knowledge/databases",
             json={
@@ -291,6 +306,7 @@ async def knowledge_database(
                 "description": "Pytest managed knowledge base",
                 "embedding_model_spec": "siliconflow-cn:Pro/BAAI/bge-m3",
                 "kb_type": "milvus",
+                "category_id": category_id,
                 "additional_params": {},
             },
             headers=admin_headers,
@@ -317,3 +333,12 @@ async def knowledge_database(
                     print(f"Warning: Failed to cleanup knowledge database {kb_id}: {delete_response.text}")
             except Exception as exc:
                 print(f"Warning: Exception during cleanup of {kb_id}: {exc}")
+        if category_id:
+            try:
+                delete_response = await test_client.delete(
+                    f"/api/knowledge/categories/{category_id}", headers=admin_headers
+                )
+                if delete_response.status_code != 200:
+                    print(f"Warning: Failed to cleanup test category {category_id}: {delete_response.text}")
+            except Exception as exc:
+                print(f"Warning: Exception during cleanup of test category {category_id}: {exc}")

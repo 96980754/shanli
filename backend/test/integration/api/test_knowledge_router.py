@@ -720,7 +720,7 @@ async def test_uploaded_file_preview_by_path(test_client, admin_headers, knowled
     assert preview_response.status_code == 200, preview_response.text
     payload = preview_response.json()
     assert payload["supported"] is True
-    assert payload["binary"] is False
+    assert "binary" not in payload, "文本预览走 JSON payload，不应有 binary 字段"
     assert payload["preview_type"] == "text"
     assert payload["content"]
 
