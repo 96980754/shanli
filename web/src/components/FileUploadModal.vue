@@ -203,6 +203,7 @@
           :headers="getAuthHeaders()"
           @change="handleFileUpload"
           @drop="handleDrop"
+          @preview="handlePreviewUploaded"
         >
           <p class="ant-upload-text">点击或将文件拖拽到此处</p>
           <p class="ant-upload-hint">支持类型: {{ uploadHint }}</p>
@@ -565,6 +566,26 @@
       @writeback="handleOfficeWriteback"
     />
 
+    <!-- 上传文件预览弹窗：点击文件名触发（上传后、入库前） -->
+    <a-modal
+      v-model:open="previewVisible"
+      :footer="null"
+      :width="880"
+      :title="previewTarget?.name || ''"
+      destroy-on-close
+    >
+      <AgentFilePreview
+        v-if="previewData"
+        :file="previewData"
+        :file-path="previewTarget?.name || ''"
+        :show-close="true"
+        :show-fullscreen="true"
+        :show-download="false"
+        :full-height="true"
+        @close="previewVisible = false"
+      />
+    </a-modal>
+
     <!-- 重复冲突弹窗（PR12 吸收） -->
     <a-modal
       :open="duplicateConflictOpen"
@@ -599,7 +620,8 @@ import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
 import { ocrApi } from '@/apis/system_api'
 import { fileApi, documentApi, databaseApi } from '@/apis/knowledge_api'
-import { getWorkspaceTree } from '@/apis/workspace_api'
+import { getWorkspaceTree, getUploadedFilePreview } from '@/apis/workspace_api'
+import { normalizePreviewResponse } from '@/utils/file_preview'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import {
   FileUp,
@@ -623,6 +645,7 @@ import {
 import { buildChunkParamsPayload } from '@/utils/chunkUtils'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import OfficeEditModal from '@/components/OfficeEditModal.vue'
+import AgentFilePreview from '@/components/AgentFilePreview.vue'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import DocumentSearchModal from '@/components/DocumentSearchModal.vue'
@@ -1313,6 +1336,26 @@ const getOfficeEditState = (file) => {
 }
 const officeEditTarget = ref(null)   // 当前打开编辑的文件
 const officeEditVisible = ref(false)
+
+// 上传文件预览：点击文件名触发（upload 后尚无 file_id，按 MinIO 路径预览）
+const previewVisible = ref(false)
+const previewTarget = ref(null) // { name }
+const previewData = ref(null) // normalizePreviewResponse 结果
+
+const handlePreviewUploaded = async (file) => {
+  const filePath = file?.response?.file_path
+  const kbIdValue = file?.response?.kb_id
+  if (!filePath || !kbIdValue) return
+  try {
+    previewTarget.value = { name: file.name || file.response?.filename || '文档' }
+    const response = await getUploadedFilePreview(kbIdValue, filePath, file.name)
+    previewData.value = await normalizePreviewResponse(response)
+    previewVisible.value = true
+  } catch (error) {
+    console.error('上传文件预览失败:', error)
+    message.error(`预览失败：${error?.message || '请稍后重试'}`)
+  }
+}
 
 // 调用 AI 清洗排版接口，入参为已上传文件的 MinIO URL（file_path），由服务端读取解析后清洗
 const runCleanForFile = async (file) => {

@@ -11,19 +11,18 @@ export default {
   },
   nav: {
     newChat: '创建新对话',
-    extensions: '智能体扩展',
+    extensions: '知识库与skills',
     knowledgeBase: '知识库',
     agentManage: '智能体管理',
     dashboard: '数据总览',
     knowledgeGaps: '知识缺口',
-    knowledgeBrowser: '知识库浏览'
+    knowledgeBrowser: '全库搜索'
   },
   layout: {
     taskCenter: '任务中心',
     expandSidebar: '展开侧边栏',
     collapseSidebar: '折叠侧边栏',
-    debugPanel: '调试面板',
-    globalSearch: '全库搜索'
+    debugPanel: '调试面板'
   },
   user: {
     menu: {

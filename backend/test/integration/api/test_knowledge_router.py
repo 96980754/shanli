@@ -694,6 +694,47 @@ async def test_markdown_endpoint_parses_uploaded_text_file(test_client, admin_he
     assert payload["markdown_content"].strip()
 
 
+async def test_uploaded_file_preview_by_path(test_client, admin_headers, knowledge_database):
+    """上传后尚无 file_id，按 MinIO 路径即可预览（/files/preview）。"""
+    kb_id = knowledge_database["kb_id"]
+    data_dir = Path(__file__).resolve().parents[2] / "data"
+    test_file = data_dir / "A_Dream_of_Red_Mansions_10hui.txt"
+    assert test_file.exists(), f"测试文件不存在: {test_file}"
+
+    with test_file.open("rb") as f:
+        upload_response = await test_client.post(
+            "/api/knowledge/files/upload",
+            headers=admin_headers,
+            params={"kb_id": kb_id},
+            files={"file": (test_file.name, f, "text/plain")},
+        )
+    assert upload_response.status_code == 200, upload_response.text
+    file_path = upload_response.json()["file_path"]
+
+    # 正常预览：文本文件返回 JSON payload
+    preview_response = await test_client.get(
+        "/api/knowledge/files/preview",
+        headers=admin_headers,
+        params={"kb_id": kb_id, "file_path": file_path, "filename": test_file.name},
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    payload = preview_response.json()
+    assert payload["supported"] is True
+    assert "binary" not in payload, "文本预览走 JSON payload，不应有 binary 字段"
+    assert payload["preview_type"] == "text"
+    assert payload["content"]
+
+    # 越权路径拒绝：parsed 前缀不属于 upload，禁止预览
+    bad_path = file_path.replace(f"{kb_id}/upload/", f"{kb_id}/parsed/")
+    forbidden = await test_client.get(
+        "/api/knowledge/files/preview",
+        headers=admin_headers,
+        params={"kb_id": kb_id, "file_path": bad_path},
+    )
+    assert forbidden.status_code == 400
+    assert "只能预览当前知识库已上传的文件" in forbidden.json()["detail"]
+
+
 async def test_duplicate_database_name(test_client, admin_headers, knowledge_database):
     """测试重复创建同名知识库"""
     db_name = knowledge_database["name"]

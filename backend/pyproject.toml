@@ -74,3 +74,6 @@ test = [
     "pytest-httpx>=0.32.0",
     "pytest-cov>=6.0.0",
 ]
+eval = [
+    "ragas==0.4.3",
+]

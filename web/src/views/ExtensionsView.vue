@@ -3,11 +3,11 @@
     <PageHeader
       v-if="!isDetailPage"
       v-model:active-key="activeTab"
-      :title="userStore.isAdmin ? '智能体扩展' : '知识库'"
+      :title="userStore.isAdmin ? '知识库与skills' : '知识库'"
       :tabs="extensionTabs"
       :loading="activeChildLoading"
       :show-border="true"
-      aria-label="智能体扩展视图切换"
+      aria-label="知识库与skills视图切换"
     />
 
     <div v-if="!isDetailPage" class="extensions-content">

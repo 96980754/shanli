@@ -11,19 +11,18 @@ export default {
   },
   nav: {
     newChat: 'New Chat',
-    extensions: 'Agent Extensions',
+    extensions: 'Knowledge Base & Skills',
     knowledgeBase: 'Knowledge Base',
     agentManage: 'Agent Management',
     dashboard: 'Data Overview',
     knowledgeGaps: 'Knowledge Gaps',
-    knowledgeBrowser: 'Knowledge Browser'
+    knowledgeBrowser: 'Global Search'
   },
   layout: {
     taskCenter: 'Task Center',
     expandSidebar: 'Expand sidebar',
     collapseSidebar: 'Collapse sidebar',
-    debugPanel: 'Debug Panel',
-    globalSearch: 'Global Search'
+    debugPanel: 'Debug Panel'
   },
   user: {
     menu: {
