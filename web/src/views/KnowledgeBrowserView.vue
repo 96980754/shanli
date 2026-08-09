@@ -43,7 +43,7 @@ onMounted(async () => {
 
 <template>
   <div class="knowledge-browser layout-container">
-    <PageHeader title="知识库浏览" subtitle="按分类浏览目录，或搜索全部可访问文档" />
+    <PageHeader title="全库搜索" subtitle="按分类浏览目录，或搜索全部可访问文档" />
     <a-row :gutter="16">
       <a-col :xs="24" :lg="16">
         <a-card title="全知识库文档搜索">

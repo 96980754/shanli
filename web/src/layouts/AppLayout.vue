@@ -11,7 +11,6 @@ import {
   PanelLeftOpen,
   MessageCirclePlus,
   CircleHelp,
-  Search,
   FolderOpen
 } from 'lucide-vue-next'
 
@@ -31,7 +30,6 @@ import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
-import GlobalKnowledgeSearchModal from '@/components/GlobalKnowledgeSearchModal.vue'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -55,7 +53,6 @@ const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
-const globalKnowledgeSearchOpen = ref(false)
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -188,10 +185,6 @@ const openConversationSearch = () => {
   conversationSearchOpen.value = true
 }
 
-const openGlobalKnowledgeSearch = () => {
-  globalKnowledgeSearchOpen.value = true
-}
-
 const initAgentNavigation = async () => {
   try {
     if (!agentStore.isInitialized) {
@@ -304,20 +297,6 @@ provide('settingsModal', {
         </button>
       </div>
       <div class="nav">
-        <!-- 全库搜索入口（仅管理员可见） -->
-        <button
-          v-if="userStore.isAdmin"
-          type="button"
-          class="nav-item"
-          :class="{ active: globalKnowledgeSearchOpen }"
-          @click.stop="openGlobalKnowledgeSearch"
-        >
-          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>{{ $t('common.appName') }} · 全库搜索</template>
-            <Search class="icon" size="18" />
-          </a-tooltip>
-          <span class="nav-text">{{ $t('layout.globalSearch') }}</span>
-        </button>
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
@@ -422,9 +401,6 @@ provide('settingsModal', {
       @create-thread="handleCreateConversationFromSearch"
       @thread-found="handleSearchThreadFound"
     />
-    <!-- 全库搜索弹窗（仅管理员） -->
-    <GlobalKnowledgeSearchModal v-if="userStore.isAdmin" v-model:open="globalKnowledgeSearchOpen" />
-
     <!-- Debug Modal -->
     <a-modal
       v-model:open="showDebugModal"
