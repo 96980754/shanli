@@ -38,6 +38,12 @@ export const getWorkspaceKnowledgeFileContent = (kbId, fileId) => {
   return apiGet(`/api/workspace/knowledge/file?${query}`, {}, true, 'blob')
 }
 
+// 按已上传文件的 MinIO 路径预览（upload 后尚无 file_id / DB 记录时使用）
+export const getUploadedFilePreview = (kbId, filePath, filename) => {
+  const query = buildQuery({ kb_id: kbId, file_path: filePath, filename })
+  return apiGet(`/api/knowledge/files/preview?${query}`, {}, true, 'blob')
+}
+
 export const downloadWorkspaceKnowledgeFile = (kbId, fileId, variant = 'original') => {
   const query = buildQuery({ kb_id: kbId, file_id: fileId, variant })
   return apiGet(`/api/workspace/knowledge/download?${query}`, {}, true, 'blob')

@@ -457,9 +457,7 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.index_file(kb_id, file_id, operator_id, params=params)
 
-    async def upload_office_bytes(
-        self, kb_id: str, content_bytes: bytes, filename: str
-    ) -> str:
+    async def upload_office_bytes(self, kb_id: str, content_bytes: bytes, filename: str) -> str:
         """将编辑后的 Word/Excel 字节上传 MinIO，返回 file_path（MinIO URL）。"""
         import time
 
@@ -814,6 +812,10 @@ class KnowledgeBaseManager:
     async def read_file_preview(self, kb_id: str, file_id: str) -> dict:
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.read_file_preview(kb_id, file_id)
+
+    async def read_uploaded_file_preview(self, kb_id: str, file_path: str, filename: str | None = None) -> dict:
+        kb_instance = await self._get_kb_for_database(kb_id)
+        return await kb_instance.read_uploaded_file_preview(kb_id, file_path, filename)
 
     async def get_file_download(self, kb_id: str, file_id: str, variant: str = "original") -> dict:
         kb_instance = await self._get_kb_for_database(kb_id)

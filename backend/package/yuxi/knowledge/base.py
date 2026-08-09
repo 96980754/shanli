@@ -685,7 +685,35 @@ class KnowledgeBase(ABC):
         file_meta = await self._get_file_meta(kb_id, file_id)
         if file_meta.get("is_folder"):
             raise ValueError("Cannot preview a folder")
+        return await self._render_preview_from_meta(kb_id, file_id, file_meta)
 
+    async def read_uploaded_file_preview(self, kb_id: str, file_path: str, filename: str | None = None) -> dict:
+        """按已上传文件的 MinIO 路径预览（upload 后尚无 file_id / DB 记录时使用）。
+
+        复用 read_file_preview 的渲染逻辑：合成一份仅含 filename/minio_url 的
+        file_meta，用 object_name 的 stem（含时间戳，天然唯一）作为 file_id，
+        仅用于 Office 转 PDF 的缓存对象名。
+        """
+        from pathlib import PurePosixPath
+
+        from yuxi.knowledge.utils import is_minio_url, parse_minio_url
+
+        if not is_minio_url(file_path):
+            raise ValueError("无效的 MinIO 路径")
+        bucket_name, object_name = parse_minio_url(file_path)
+        if not object_name.startswith(f"{kb_id}/upload/"):
+            raise ValueError("只能预览当前知识库已上传的文件")
+
+        display_name = filename or PurePosixPath(object_name).name
+        file_meta = {
+            "filename": display_name,
+            "minio_url": file_path,
+            "is_folder": False,
+        }
+        file_id = PurePosixPath(object_name).stem or display_name
+        return await self._render_preview_from_meta(kb_id, file_id, file_meta)
+
+    async def _render_preview_from_meta(self, kb_id: str, file_id: str, file_meta: dict) -> dict:
         filename = file_meta.get("filename") or file_meta.get("original_filename") or file_id
         response = {
             "source": "knowledge",

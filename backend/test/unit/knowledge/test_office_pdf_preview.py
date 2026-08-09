@@ -172,3 +172,73 @@ async def test_read_file_preview_rejects_large_original_before_download(tmp_path
     assert response["preview_type"] == "unsupported"
     assert response["supported"] is False
     assert response["limit"] == MAX_BINARY_PREVIEW_SIZE_BYTES
+
+
+@pytest.mark.asyncio
+async def test_read_uploaded_file_preview_renders_binary_by_path(tmp_path, monkeypatch) -> None:
+    """上传后尚无 file_id，按 MinIO 路径即可预览 PDF 二进制内容。"""
+    kb = make_kb(tmp_path)
+    minio_client = FakeMinioClient()
+    minio_client.objects[("knowledgebases", "db1/upload/demo.pdf")] = b"%PDF-1.4\nfake"
+    monkeypatch.setattr("yuxi.storage.minio.get_minio_client", lambda: minio_client)
+
+    response = await kb.read_uploaded_file_preview(
+        "db1", "http://localhost:9000/knowledgebases/db1/upload/demo.pdf", "demo.pdf"
+    )
+
+    assert response["preview_type"] == "pdf"
+    assert response["supported"] is True
+    assert response["binary"] is True
+    assert response["content"] == b"%PDF-1.4\nfake"
+    assert response["media_type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_read_uploaded_file_preview_converts_office_and_caches_pdf(tmp_path, monkeypatch) -> None:
+    """Office 文件预览转 PDF，缓存对象名用 upload 对象 stem（含时间戳，天然唯一）。"""
+    kb = make_kb(tmp_path)
+    minio_client = FakeMinioClient()
+    minio_client.objects[("knowledgebases", "db1/upload/demo_123.docx")] = b"office"
+    convert_calls = 0
+
+    async def fake_convert(filename: str, content: bytes) -> bytes:
+        nonlocal convert_calls
+        convert_calls += 1
+        assert filename == "demo.docx"
+        assert content == b"office"
+        return b"%PDF-1.4\nconverted"
+
+    monkeypatch.setattr("yuxi.storage.minio.get_minio_client", lambda: minio_client)
+    monkeypatch.setattr("yuxi.knowledge.base.convert_office_to_pdf", fake_convert)
+
+    response = await kb.read_uploaded_file_preview(
+        "db1", "http://localhost:9000/knowledgebases/db1/upload/demo_123.docx", "demo.docx"
+    )
+
+    assert response["preview_type"] == "pdf"
+    assert response["supported"] is True
+    assert response["binary"] is True
+    assert response["filename"] == "demo.pdf"
+    assert minio_client.objects[("knowledgebases", "db1/preview/demo_123.pdf")] == b"%PDF-1.4\nconverted"
+    assert convert_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_read_uploaded_file_preview_rejects_non_upload_prefix(tmp_path) -> None:
+    kb = make_kb(tmp_path)
+    with pytest.raises(ValueError, match="只能预览当前知识库已上传的文件"):
+        await kb.read_uploaded_file_preview("db1", "http://localhost:9000/knowledgebases/db1/parsed/file1.md")
+
+
+@pytest.mark.asyncio
+async def test_read_uploaded_file_preview_rejects_cross_kb_upload_path(tmp_path) -> None:
+    kb = make_kb(tmp_path)
+    with pytest.raises(ValueError, match="只能预览当前知识库已上传的文件"):
+        await kb.read_uploaded_file_preview("db1", "http://localhost:9000/knowledgebases/db2/upload/x.pdf")
+
+
+@pytest.mark.asyncio
+async def test_read_uploaded_file_preview_rejects_invalid_minio_url(tmp_path) -> None:
+    kb = make_kb(tmp_path)
+    with pytest.raises(ValueError, match="无效的 MinIO 路径"):
+        await kb.read_uploaded_file_preview("db1", "file:///etc/passwd")
