@@ -202,7 +202,7 @@
           </div>
 
           <div
-            v-if="userStore.isAdmin"
+            v-if="kbPermissions.can_search"
             v-show="activeTab === 'query'"
             class="tab-panel query-config-panel"
           >
@@ -211,11 +211,15 @@
                 <QuerySection
                   ref="querySectionRef"
                   :visible="true"
-                  :can-manage="userStore.isAdmin"
+                  :can-manage="kbPermissions.can_manage"
                   @toggle-visible="() => {}"
                 />
               </div>
-              <aside v-if="userStore.isAdmin" class="query-config-pane" aria-label="检索配置">
+              <aside
+                v-if="kbPermissions.can_manage"
+                class="query-config-pane"
+                aria-label="检索配置"
+              >
                 <div class="search-config-wrapper">
                   <div v-if="kbPermissions.can_manage" class="query-config-header">
                     <div>
@@ -483,7 +487,7 @@ const tabs = computed(() => {
   if (isMilvus.value && kbPermissions.can_view) {
     items.push({ key: 'filetable', label: '文件管理', icon: FileText })
   }
-  if (userStore.isAdmin) {
+  if (kbPermissions.can_search) {
     items.push({ key: 'query', label: '检索测试', icon: Search })
   }
   if (isMilvus.value && userStore.isAdmin) {

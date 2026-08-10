@@ -220,6 +220,95 @@ class KnowledgeFileRepository:
                 )
             return list(result.scalars().all())
 
+    async def list_version_chains_for_current_files(
+        self,
+        *,
+        kb_id: str,
+        file_ids: list[str],
+    ) -> dict[str, list[KnowledgeFile]]:
+        """批量读取当前文件及其已生效历史版本，避免来源卡片逐文件查询。"""
+        normalized_ids = list(dict.fromkeys(file_id for file_id in file_ids if file_id))
+        if not normalized_ids:
+            return {}
+
+        async with pg_manager.get_async_session_context() as session:
+            current_result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.file_id.in_(normalized_ids),
+                    KnowledgeFile.is_current.is_(True),
+                    KnowledgeFile.is_active.is_(True),
+                    KnowledgeFile.is_folder.is_(False),
+                )
+            )
+            current_records = list(current_result.scalars().all())
+            chains = {record.file_id: [record] for record in current_records}
+
+            replacement_currents = [record for record in current_records if record.previous_version_id]
+            if replacement_currents:
+                replacement_chain = (
+                    select(
+                        KnowledgeFile.file_id.label("source_file_id"),
+                        KnowledgeFile.previous_version_id.label("file_id"),
+                    )
+                    .where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id.in_([record.file_id for record in replacement_currents]),
+                    )
+                    .cte("knowledge_file_replacement_chain", recursive=True)
+                )
+                replacement_chain = replacement_chain.union_all(
+                    select(
+                        replacement_chain.c.source_file_id,
+                        KnowledgeFile.previous_version_id.label("file_id"),
+                    ).join(
+                        KnowledgeFile,
+                        and_(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == replacement_chain.c.file_id,
+                        ),
+                    )
+                )
+                replacement_result = await session.execute(
+                    select(replacement_chain.c.source_file_id, KnowledgeFile).join(
+                        KnowledgeFile,
+                        and_(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == replacement_chain.c.file_id,
+                        ),
+                    )
+                )
+                for source_file_id, record in replacement_result.all():
+                    chains[str(source_file_id)].append(record)
+
+            logical_currents = [
+                record
+                for record in current_records
+                if not record.previous_version_id and record.logical_document_id
+            ]
+            logical_ids = {record.logical_document_id for record in logical_currents}
+            if logical_ids:
+                logical_result = await session.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.logical_document_id.in_(logical_ids),
+                        KnowledgeFile.activated_at.is_not(None),
+                        KnowledgeFile.is_folder.is_(False),
+                    )
+                )
+                records_by_logical_id: dict[str, list[KnowledgeFile]] = {}
+                for record in logical_result.scalars().all():
+                    records_by_logical_id.setdefault(str(record.logical_document_id), []).append(record)
+                for current in logical_currents:
+                    seen = {record.file_id for record in chains[current.file_id]}
+                    chains[current.file_id].extend(
+                        record
+                        for record in records_by_logical_id.get(str(current.logical_document_id), [])
+                        if record.file_id not in seen
+                    )
+
+            return chains
+
     async def create_candidate_version(
         self,
         *,

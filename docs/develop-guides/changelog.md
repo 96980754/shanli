@@ -15,6 +15,7 @@
 
 ### 开发记录
 
+- 知识库详情的“检索测试”新增回答预览：复用当前知识库真实检索、可选重排与模型配置，展示最终回答、引用来源和可折叠检索详情，并保留纯检索模式；回答来源卡片批量加载当前文件的版本链，对原始对象仍存在的历史版本提供受保护下载入口。历史版本仅作来源补充，不参与检索、重排、模型上下文或回答。
 - 新增整栈停机冷备份脚本 `docker/backup/backup-all.sh`：按需手动执行（需要时 `bash docker/backup/backup-all.sh`），`docker compose stop` 停机后用 postgres:16 容器以 root 只读挂载把整个 `docker/volumes` 打包成 tar.gz，存到宿主独立目录（默认 `/home/hmy/backups`，`BACKUP_DIR` 可调），一次性覆盖 PostgreSQL、Neo4j 图谱、MinIO 文档与 Milvus 向量，保证一致快照；每次执行生成独立 `yuxi-full-YYYYMMDD-HHMM.tar.gz`，不覆盖、不做保留期自动清理，历史备份永久留存。EXIT trap 保证无论成败都把服务栈拉回。停机因 Neo4j Community 版无法在线 dump（`neo4j-admin database dump` 报 "The database is in use"），容器 root 打包绕开 postgres 数据目录 0700/uid999 的宿主读权限。恢复须以同样方式容器 root 解压（`docker run --rm -v "$(pwd)/docker:/dst" -v /home/hmy/backups:/backups:ro postgres:16 tar -xzf /backups/yuxi-full-XXX.tar.gz -C /dst`）——宿主普通用户 tar 解压无法 chown，postgres/neo4j 数据会变成当前用户所有、容器因 0700 权限无法启动；解压到 `docker/` 即还原 `volumes/`。
 - 上传弹窗支持已上传文件预览：上传完成、点击"添加到知识库"之前，点击文件列表项的文件名即可预览（docx/pptx/xlsx 经 LibreOffice 转 PDF、PDF/图片直出、文本/Markdown 源码、不支持类型提示），复用 `AgentFilePreview` 展示组件。因上传阶段尚无 `file_id`/DB 记录，后端新增 `GET /api/knowledge/files/preview`（按已上传文件的 MinIO 路径预览）：`read_file_preview` 主体抽取为 `_render_preview_from_meta`，新增 `read_uploaded_file_preview` 校验路径必须以 `{kb_id}/upload/` 开头（防止越权读同 bucket 其他对象），并用 upload 对象名 stem（含时间戳）作 file_id 供 Office 转 PDF 缓存；前端 `getUploadedFilePreview` 封装 blob 请求，`FileUploadModal` 监听 `@preview` 事件并弹窗展示。
 

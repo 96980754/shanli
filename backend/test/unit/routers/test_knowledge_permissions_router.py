@@ -252,6 +252,86 @@ async def test_download_document_rejects_download_only_permission(monkeypatch):
     get_file_download.assert_not_awaited()
 
 
+async def test_preview_requires_search_permission(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=False)
+    preview = AsyncMock()
+    monkeypatch.setattr(
+        knowledge_router,
+        "KnowledgePreviewService",
+        lambda: SimpleNamespace(preview=preview),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.preview_knowledge_base(
+            "kb-1",
+            knowledge_router.KnowledgePreviewRequest(query="问题"),
+            current_user=user(uid="viewer", role="user"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_search")
+    ]
+    preview.assert_not_awaited()
+
+
+async def test_preview_uses_scoped_service_and_hides_provider_error(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    preview = AsyncMock(side_effect=knowledge_router.KnowledgePreviewModelError("secret"))
+    monkeypatch.setattr(
+        knowledge_router,
+        "KnowledgePreviewService",
+        lambda: SimpleNamespace(preview=preview),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.preview_knowledge_base(
+            "kb-1",
+            knowledge_router.KnowledgePreviewRequest(query=" 问题 ", meta={"search_mode": "hybrid"}),
+            current_user=user(uid="viewer", role="user"),
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "回答模型暂时不可用，请检查知识库模型配置"
+    assert "secret" not in exc_info.value.detail
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_search")
+    ]
+    preview.assert_awaited_once_with(
+        kb_id="kb-1",
+        query="问题",
+        meta={"search_mode": "hybrid"},
+        generate_answer=True,
+    )
+
+
+async def test_source_versions_requires_view_and_download_permissions(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    list_for_current_files = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        knowledge_router,
+        "KnowledgeSourceVersionService",
+        lambda: SimpleNamespace(list_for_current_files=list_for_current_files),
+    )
+
+    result = await knowledge_router.list_source_versions(
+        "kb-1",
+        knowledge_router.SourceVersionBatchRequest(file_ids=["file-1", "file-1"]),
+        current_user=user(uid="viewer", role="user"),
+    )
+
+    assert result == {"items": []}
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_download"),
+    ]
+    list_for_current_files.assert_awaited_once_with(
+        kb_id="kb-1",
+        file_ids=["file-1", "file-1"],
+    )
+
+
 async def test_scoped_document_search_requires_manage_permission(monkeypatch):
     service, _repository = install_fakes(monkeypatch, allowed=False)
 

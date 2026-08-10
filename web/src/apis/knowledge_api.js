@@ -273,6 +273,12 @@ export const documentApi = {
     return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/versions`)
   },
 
+  getSourceVersions: async (kbId, fileIds) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/source-versions`, {
+      file_ids: fileIds
+    })
+  },
+
   getDocumentValidationReport: async (kbId, candidateFileId) => {
     return apiGet(`/api/knowledge/databases/${kbId}/documents/${candidateFileId}/validation-report`)
   },
@@ -348,7 +354,10 @@ export const documentApi = {
    * @returns {Promise} - { type: 'docx'|'xlsx', blocks|sheets }
    */
   getOfficeContentByPath: async (kbId, filePath, filename = '') => {
-    return apiPost(`/api/knowledge/databases/${kbId}/office-extract`, { file_path: filePath, filename })
+    return apiPost(`/api/knowledge/databases/${kbId}/office-extract`, {
+      file_path: filePath,
+      filename
+    })
   },
 
   /**
@@ -599,8 +608,7 @@ export const documentApi = {
       true,
       'json'
     )
-  },
-
+  }
 }
 
 // =============================================================================
@@ -695,6 +703,14 @@ export const queryApi = {
     return apiPost(`/api/knowledge/databases/${kbId}/query-test`, {
       query,
       meta
+    })
+  },
+
+  preview: async (kbId, query, meta = {}, generateAnswer = true) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/preview`, {
+      query,
+      meta,
+      generate_answer: generateAnswer
     })
   },
 
@@ -809,7 +825,10 @@ export const fileApi = {
    * @returns {Promise} - 重试结果
    */
   retryReplacementCleanup: async (kbId, fileId) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`, {})
+    return apiAdminPost(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`,
+      {}
+    )
   },
 
   /**
