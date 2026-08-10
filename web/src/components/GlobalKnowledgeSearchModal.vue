@@ -1,11 +1,14 @@
 <script setup>
 import { ref } from 'vue'
+import { message } from 'ant-design-vue'
 import { queryApi } from '@/apis/knowledge_api'
 
 const open = defineModel('open', { type: Boolean, default: false })
 const query = ref('')
 const results = ref([])
 const loading = ref(false)
+const handoffAvailable = ref(false)
+const searchComplete = ref(true)
 
 const search = async () => {
   if (!query.value.trim()) return
@@ -13,9 +16,18 @@ const search = async () => {
   try {
     const response = await queryApi.globalSearch(query.value)
     results.value = response.result || []
+    handoffAvailable.value = response.handoff_available === true
+    searchComplete.value = response.search_complete !== false
   } finally {
     loading.value = false
   }
+}
+
+const createHandoff = async () => {
+  const handoff = await queryApi.createHandoff(query.value)
+  if (handoff.status === 'notified') message.success('已通知人工处理。')
+  else message.warning('已登记转人工请求，但企业微信通知尚未完成。')
+  handoffAvailable.value = false
 }
 </script>
 
@@ -30,7 +42,8 @@ const search = async () => {
         </a-list-item>
       </template>
     </a-list>
-    <a-empty v-else-if="!loading && query" class="results" description="暂无相关内容" />
+    <a-empty v-else-if="!loading && query" class="results" :description="searchComplete ? '暂无可确认的知识库答案' : '部分知识库检索失败，请稍后重试'" />
+    <a-button v-if="handoffAvailable" class="results" type="primary" @click="createHandoff">转人工处理</a-button>
   </a-modal>
 </template>
 

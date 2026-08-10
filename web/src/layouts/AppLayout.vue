@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, provide, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import {
@@ -11,6 +11,7 @@ import {
   PanelLeftOpen,
   MessageCirclePlus,
   CircleHelp,
+  Search,
   FolderOpen
 } from 'lucide-vue-next'
 
@@ -30,6 +31,7 @@ import TaskCenterDrawer from '@/components/TaskCenterDrawer.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
+import GlobalKnowledgeSearchModal from '@/components/GlobalKnowledgeSearchModal.vue'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -53,6 +55,9 @@ const settingsInitialTab = ref('')
 
 const { sidebarCollapsed } = storeToRefs(chatUIStore)
 const conversationSearchOpen = ref(false)
+const globalKnowledgeSearchOpen = ref(false)
+const mobileSidebarOpen = ref(false)
+const mobileBreakpoint = 768
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
@@ -90,6 +95,12 @@ onMounted(async () => {
   if (userStore.isAdmin) {
     taskerStore.loadTasks()
   }
+
+  window.addEventListener('resize', closeMobileSidebarOnDesktop)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', closeMobileSidebarOnDesktop)
 })
 
 const route = useRoute()
@@ -181,8 +192,21 @@ const toggleSidebar = () => {
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
+const closeMobileSidebar = () => { mobileSidebarOpen.value = false }
+const closeMobileSidebarOnDesktop = () => { if (window.innerWidth > mobileBreakpoint) closeMobileSidebar() }
+const toggleMobileSidebar = () => {
+  if (!mobileSidebarOpen.value) setSidebarCollapsed(false)
+  mobileSidebarOpen.value = !mobileSidebarOpen.value
+}
+
 const openConversationSearch = () => {
   conversationSearchOpen.value = true
+  closeMobileSidebar()
+}
+
+const openGlobalKnowledgeSearch = () => {
+  globalKnowledgeSearchOpen.value = true
+  closeMobileSidebar()
 }
 
 const initAgentNavigation = async () => {
@@ -198,6 +222,7 @@ const initAgentNavigation = async () => {
 
 const handleSelectChat = (threadId) => {
   if (!threadId) return
+  closeMobileSidebar()
   chatThreadsStore.setCurrentThreadId(threadId)
   router.push({ name: 'AgentCompWithThreadId', params: { thread_id: threadId } })
 }
@@ -213,6 +238,7 @@ const handleSearchSelectThread = (thread) => {
 }
 
 const handleCreateConversationFromSearch = () => {
+  closeMobileSidebar()
   chatThreadsStore.setCurrentThreadId(null)
   router.push({ name: 'AgentComp' })
 }
@@ -254,6 +280,7 @@ const handleTogglePinChat = async (threadId) => {
 watch(
   () => [route.path, route.params.thread_id],
   () => {
+    closeMobileSidebar()
     if (!route.path.startsWith('/agent')) return
     const threadId = typeof route.params.thread_id === 'string' ? route.params.thread_id : null
     chatThreadsStore.setCurrentThreadId(threadId)
@@ -268,10 +295,11 @@ provide('settingsModal', {
 </script>
 
 <template>
-  <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+  <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'mobile-sidebar-open': mobileSidebarOpen }">
+    <button v-if="mobileSidebarOpen" type="button" class="mobile-sidebar-backdrop" aria-label="关闭导航菜单" @click="closeMobileSidebar" />
     <div class="header">
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="!sidebarCollapsed" to="/agent" class="brand-link">
+        <router-link v-if="!sidebarCollapsed" to="/agent" class="brand-link" @click="closeMobileSidebar">
           <img :src="infoStore.organization.avatar" class="brand-avatar" />
           <span class="brand-name">{{ organizationName }}</span>
         </router-link>
@@ -297,13 +325,27 @@ provide('settingsModal', {
         </button>
       </div>
       <div class="nav">
+        <!-- 全库搜索入口（仅管理员可见） -->
+        <button
+          v-if="userStore.isAdmin"
+          type="button"
+          class="nav-item"
+          :class="{ active: globalKnowledgeSearchOpen }"
+          @click.stop="openGlobalKnowledgeSearch"
+        >
+          <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
+            <template #title>{{ $t('common.appName') }} · 全库搜索</template>
+            <Search class="icon" size="18" />
+          </a-tooltip>
+          <span class="nav-text">{{ $t('layout.globalSearch') }}</span>
+        </button>
         <RouterLink
           v-if="primaryNavItem"
           :to="primaryNavItem.path"
           class="nav-item"
           :class="{ active: isNavItemActive(primaryNavItem) }"
           :active-class="primaryNavItem.action ? '' : 'active'"
-          @click.stop
+          @click.stop="closeMobileSidebar"
         >
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
             <template #title>{{ primaryNavItem.name }}</template>
@@ -326,7 +368,7 @@ provide('settingsModal', {
           class="nav-item"
           :class="{ active: isNavItemActive(item) }"
           :active-class="item.action ? '' : 'active'"
-          @click.stop
+          @click.stop="closeMobileSidebar"
         >
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
             <template #title>{{ item.name }}</template>
@@ -387,6 +429,9 @@ provide('settingsModal', {
         </div>
       </div>
     </div>
+    <button type="button" class="mobile-sidebar-trigger" :aria-expanded="mobileSidebarOpen" aria-label="打开导航菜单" @click="toggleMobileSidebar">
+      <PanelLeftOpen size="22" />
+    </button>
     <router-view v-slot="{ Component, route }" id="app-router-view">
       <keep-alive v-if="route.meta.keepAlive !== false">
         <component :is="Component" />
@@ -401,6 +446,9 @@ provide('settingsModal', {
       @create-thread="handleCreateConversationFromSearch"
       @thread-found="handleSearchThreadFound"
     />
+    <!-- 全库搜索弹窗（仅管理员） -->
+    <GlobalKnowledgeSearchModal v-if="userStore.isAdmin" v-model:open="globalKnowledgeSearchOpen" />
+
     <!-- Debug Modal -->
     <a-modal
       v-model:open="showDebugModal"
@@ -877,5 +925,34 @@ div.header,
       }
     }
   }
+}
+
+.mobile-sidebar-trigger,
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-layout { min-width: 0; }
+  #app-router-view { width: 100%; min-width: 0; }
+  .header {
+    position: fixed; z-index: 1001; top: 0; bottom: 0; left: 0;
+    width: min(82vw, 320px); flex-basis: min(82vw, 320px); padding: 12px 10px; gap: 14px;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.16); transform: translateX(-105%); transition: transform 0.2s ease;
+  }
+  .mobile-sidebar-open .header { transform: translateX(0); }
+  .app-layout.sidebar-collapsed .header {
+    width: min(82vw, 320px); flex-basis: min(82vw, 320px); padding: 12px 10px;
+    .sidebar-brand { justify-content: space-between; }
+    .brand-expand-button, .sidebar-toggle { display: none; }
+    .nav-item { padding: 0 @sidebar-item-padding-x; .nav-text { max-width: 140px; margin-left: 8px; opacity: 1; pointer-events: auto; } }
+  }
+  .mobile-sidebar-trigger {
+    display: inline-flex; position: fixed; z-index: 1000; top: 10px; left: 10px; align-items: center; justify-content: center;
+    width: 38px; height: 38px; padding: 0; border: 1px solid var(--gray-150); border-radius: 10px;
+    background: var(--gray-0); color: var(--gray-700); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  .mobile-sidebar-open .mobile-sidebar-trigger { display: none; }
+  .mobile-sidebar-backdrop { display: block; position: fixed; z-index: 1000; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(0, 0, 0, 0.42); }
 }
 </style>

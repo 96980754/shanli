@@ -80,6 +80,7 @@ from yuxi.services.knowledge_category_service import KnowledgeCategoryError, Kno
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+from yuxi.services.wecom_handoff_service import KnowledgeHandoffService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
@@ -335,6 +336,10 @@ class PendingIndexDocumentsRequest(BaseModel):
 class GlobalKnowledgeSearchRequest(BaseModel):
     query: str
     limit: int = 10
+
+
+class KnowledgeHandoffRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=10_000)
 
 
 async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
@@ -2595,8 +2600,13 @@ async def global_knowledge_search(
 ):
     """Search every knowledge base the current user is allowed to search."""
     limit = min(max(request.limit, 1), 30)
-    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
-    return {"result": result, "status": "success"}
+    result, search_incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, request.query, limit)
+    return {"result": result, "status": "success", "handoff_available": not result and not search_incomplete, "search_complete": not search_incomplete}
+
+
+@knowledge.post("/handoffs")
+async def create_knowledge_handoff(request: KnowledgeHandoffRequest, current_user: User = Depends(get_required_user)):
+    return await KnowledgeHandoffService().create_and_notify(current_user, request.query)
 
 
 @knowledge.post("/databases/{kb_id}/query-test")

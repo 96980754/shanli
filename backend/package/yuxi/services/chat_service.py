@@ -16,6 +16,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -340,6 +341,40 @@ def _context_compression_payload(payload: Any) -> dict | None:
         return payload
     return None
 
+
+def _tool_output_as_dict(output: Any) -> dict[str, Any] | None:
+    if not isinstance(output, dict): return None
+    content = output.get("content", output)
+    if isinstance(content, dict): return content
+    if not isinstance(content, str): return None
+    try: parsed = json.loads(content)
+    except json.JSONDecodeError: return None
+    return parsed if isinstance(parsed, dict) else None
+
+def _requires_knowledge_preflight(agent_backend_id: str, query: str) -> bool:
+    return agent_backend_id == "ChatbotAgent" and query.strip().lower().strip("，。！？!?、 ") not in {"你好", "您好", "嗨", "hi", "hello", "在吗", "在么"}
+
+@dataclass
+class _KnowledgeEvidenceTracker:
+    started_ids: set[str] = field(default_factory=set)
+    completed_ids: set[str] = field(default_factory=set)
+    has_evidence: bool = False
+    failed: bool = False
+    def observe(self, event: Any) -> None:
+        data = event.get("data") if isinstance(event, dict) else None
+        if not isinstance(data, dict) or str(data.get("tool_name") or data.get("name") or "") != "query_kb": return
+        call_id = str(data.get("tool_call_id") or "")
+        if data.get("event") == "tool-started": self.started_ids.add(call_id or f"started-{len(self.started_ids)}"); return
+        if data.get("event") != "tool-finished": return
+        completed_id = call_id or f"finished-{len(self.completed_ids)}"
+        if completed_id in self.completed_ids: return
+        self.completed_ids.add(completed_id)
+        output = _tool_output_as_dict(data.get("output"))
+        if data.get("error") or output is None or not isinstance(output.get("results"), list): self.failed = True; return
+        self.has_evidence = self.has_evidence or bool(output["results"])
+    @property
+    def should_handoff(self) -> bool:
+        return bool(self.started_ids and self.completed_ids and self.started_ids <= self.completed_ids and not self.has_evidence and not self.failed)
 
 def _stream_event_response(event: dict[str, Any]) -> str:
     if event.get("type") != "message_delta":
@@ -892,6 +927,7 @@ async def stream_agent_chat(
     accumulated_content: list[str] = []
     trace_info: dict[str, Any] = {}
     last_agent_state_signature = ""
+    knowledge_evidence = _KnowledgeEvidenceTracker()
 
     try:
         conv_repo = ConversationRepository(db)
@@ -944,6 +980,19 @@ async def stream_agent_chat(
         await db.commit()
 
         # 先构建 langgraph_config
+        if _requires_knowledge_preflight(agent_item.backend_id, query):
+            try:
+                from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+                results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
+                if not results and not incomplete:
+                    refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
+                    await conv_repo.add_message_by_thread_id(thread_id=thread_id, role="assistant", content=refusal, message_type="text", extra_metadata={"id": message_id, "handoff_available": True}, run_id=meta.get("run_id"), request_id=meta.get("request_id"))
+                    await db.commit()
+                    yield make_chunk(content=refusal, status="loading", stream_event={"type": "message_delta", "message_id": message_id, "content": refusal}, meta=meta)
+                    yield make_chunk(status="knowledge_handoff_available", query=query, meta=meta)
+                    yield make_chunk(status="finished", meta=meta)
+                    return
+            except Exception as exc: logger.exception("Knowledge preflight failed; continuing with assistant: %s", exc)
         langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid}}
 
         # LangGraph 会自动从 checkpointer 恢复 state（包括 uploads）
@@ -973,6 +1022,7 @@ async def stream_agent_chat(
                 continue
 
             if mode == "stream_event":
+                if not payload.get("thread_id") or payload.get("thread_id") == thread_id: knowledge_evidence.observe(payload)
                 yield make_chunk(
                     status="stream_event",
                     event=payload,
@@ -1042,6 +1092,9 @@ async def stream_agent_chat(
             meta["time_cost"] = asyncio.get_event_loop().time() - start_time
             yield make_chunk(status="interrupted", message="检测到敏感内容，已中断输出", meta=meta)
             return
+
+        if knowledge_evidence.should_handoff:
+            yield make_chunk(status="knowledge_handoff_available", query=query, meta=meta)
 
         interrupted = False
         async for chunk in check_and_handle_interrupts(agent, langgraph_config, make_chunk, meta, thread_id, context):
