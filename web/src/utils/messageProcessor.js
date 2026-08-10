@@ -171,7 +171,8 @@ export class MessageProcessor {
 
       for (const toolCall of msg.tool_calls) {
         const toolName = toolCall?.name || toolCall?.function?.name
-        if (toolName !== 'query_kb') continue
+        // query_kb 与 query_kbs 都返回同样的 schema_v1 检索结果，均为知识来源数据
+        if (toolName !== 'query_kb' && toolName !== 'query_kbs') continue
 
         const content = toolCall?.tool_call_result?.content
         const parsed = parseToolResultContent(content)

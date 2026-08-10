@@ -41,9 +41,9 @@ BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
         tool_dependencies=(
             "list_kbs",
             "query_kb",
+            "query_kbs",
             "find_kb_document",
             "open_kb_document",
-            "get_mindmap",
             "search_file",
         ),
         enabled=True,

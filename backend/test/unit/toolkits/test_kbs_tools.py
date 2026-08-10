@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -24,6 +25,10 @@ def _query_kb_callable():
     return _tool_callable(tools.query_kb)
 
 
+def _query_kbs_callable():
+    return _tool_callable(tools.query_kbs)
+
+
 def _find_kb_document_callable():
     return _tool_callable(tools.find_kb_document)
 
@@ -41,6 +46,10 @@ async def _run_tool(callback, **kwargs):
 
 async def _run_query_kb(**kwargs):
     return await _run_tool(_query_kb_callable(), **kwargs)
+
+
+async def _run_query_kbs(**kwargs):
+    return await _run_tool(_query_kbs_callable(), **kwargs)
 
 
 async def _run_find_kb_document(**kwargs):
@@ -174,6 +183,7 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
         "error": None,
     }
 
+
 @pytest.mark.asyncio
 async def test_query_kb_rejects_non_list_result(monkeypatch) -> None:
     async def _fake_retriever(query_text: str, **kwargs):
@@ -269,6 +279,191 @@ async def test_query_kb_maps_full_doc_id_and_chunk_metadata(monkeypatch) -> None
         "content": "auth guide",
         "metadata": {"chunk_index": 3},
     }
+
+
+def _patch_multi_retrievers(monkeypatch, *, retrievers: dict[str, Any], visible: list[dict[str, Any]] | None = None):
+    """注入多库检索器：key 为 kb_id，值为 (metadata_kb_type, callable retriever)。"""
+
+    async def _not_configured(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("knowledge base method is not configured for this test")
+
+    manager = SimpleNamespace(
+        get_retrievers=lambda: {
+            kb_id: {
+                "name": kb_id,
+                "retriever": retriever,
+                "metadata": {"kb_type": kb_type},
+            }
+            for kb_id, (kb_type, retriever) in retrievers.items()
+        },
+        find_file_content=_not_configured,
+        open_file_content=_not_configured,
+    )
+    monkeypatch.setattr(tools, "_get_knowledge_base", lambda: manager)
+    monkeypatch.setattr(tools, "knowledge_base", manager, raising=False)
+
+    if visible is None:
+        visible = [{"kb_id": kid, "name": kid} for kid in retrievers]
+
+    async def _fake_visible_kbs(runtime):
+        del runtime
+        return visible
+
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_merges_multi_kb_results(monkeypatch) -> None:
+    async def _retriever_a(query_text: str, **kwargs):
+        assert query_text == "cert"
+        return [{"content": f"cert-a-{i}", "metadata": {"file_id": f"f-a-{i}", "chunk_id": f"a-{i}"}} for i in range(2)]
+
+    async def _retriever_b(query_text: str, **kwargs):
+        assert query_text == "cert"
+        return [{"content": "cert-b", "metadata": {"file_id": "fb-1", "chunk_id": "b-1"}}]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever_a), "db-2": ("milvus", _retriever_b)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    assert result["status"] == "ok"
+    assert result["schema_version"] == 1
+    # 各库结果均保留来源 kb_id
+    assert [item["kb_id"] for item in result["results"]] == ["db-1", "db-1", "db-2"]
+    assert result["results"][0]["content"] == "cert-a-0"
+    assert result["results"][2]["content"] == "cert-b"
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_runs_retrievers_in_parallel(monkeypatch) -> None:
+    """两个库的检索必须重叠执行：各自等对方进入后才返回，若串行则会死锁超时。"""
+    import asyncio as _asyncio
+
+    entered = 0
+    gate = _asyncio.Event()
+
+    async def _slow_retriever(query_text: str, **kwargs):
+        nonlocal entered
+        entered += 1
+        if entered == 2:
+            gate.set()
+        await _asyncio.wait_for(gate.wait(), timeout=2)
+        return [
+            {
+                "content": f"doc {query_text}",
+                "metadata": {"file_id": f"f-{query_text}", "chunk_id": f"c-{query_text}"},
+            }
+        ]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _slow_retriever), "db-2": ("milvus", _slow_retriever)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    assert result["status"] == "ok"
+    assert len(result["results"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_filters_invisible_kbs(monkeypatch) -> None:
+    async def _retriever(query_text: str, **kwargs):
+        del kwargs
+        return [{"content": f"doc {query_text}", "metadata": {"file_id": "f-1", "chunk_id": "c-1"}}]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever)},
+        visible=[{"kb_id": "db-1", "name": "FAQ"}],
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-9"], query_text="cert", runtime=runtime)
+
+    assert result["status"] == "ok"
+    assert [item["kb_id"] for item in result["results"]] == ["db-1"]
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_insufficient_when_no_visible_kb(monkeypatch) -> None:
+    async def _retriever(query_text: str, **kwargs):
+        return [{"content": "doc", "metadata": {"file_id": "f-1", "chunk_id": "c-1"}}]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever)},
+        visible=[],
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1"], query_text="cert", runtime=runtime)
+
+    assert result["status"] == "error"
+    assert result["reason"] == "knowledge_base_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_insufficient_when_all_kbs_empty(monkeypatch) -> None:
+    async def _retriever(query_text: str, **kwargs):
+        return []
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever), "db-2": ("milvus", _retriever)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="missing", runtime=runtime)
+
+    assert result["status"] == "insufficient"
+    assert result["reason"] == "no_results"
+    assert result["results"] == []
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_single_kb_failure_does_not_block_others(monkeypatch) -> None:
+    async def _ok_retriever(query_text: str, **kwargs):
+        return [{"content": "ok doc", "metadata": {"file_id": "f-1", "chunk_id": "c-1"}}]
+
+    async def _fail_retriever(query_text: str, **kwargs):
+        raise TimeoutError("secret upstream details")
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _fail_retriever), "db-2": ("milvus", _ok_retriever)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    assert result["status"] == "ok"
+    assert [item["kb_id"] for item in result["results"]] == ["db-2"]
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_caps_results_per_kb(monkeypatch) -> None:
+    async def _retriever(query_text: str, **kwargs):
+        del kwargs
+        return [{"content": f"doc-{i}", "metadata": {"file_id": f"f-{i}", "chunk_id": f"c-{i}"}} for i in range(10)]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever), "db-2": ("milvus", _retriever)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    # 每库截取前 5 条，2 库共 10 条
+    assert len(result["results"]) == 10
+    assert [item["content"] for item in result["results"][:5]] == [f"doc-{i}" for i in range(5)]
 
 
 @pytest.mark.asyncio
