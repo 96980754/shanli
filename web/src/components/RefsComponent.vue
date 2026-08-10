@@ -43,9 +43,10 @@
       </span>
 
       <!-- 来源按钮 - 使用 flex-grow 占据剩余空间并右对齐 -->
-      <div v-if="hasSources && showKey('sources')" class="sources-spacer"></div>
+      <!-- 发生过知识检索即显示按钮（拒答时点开为空），纯聊天不显示 -->
+      <div v-if="showSourceButton && showKey('sources')" class="sources-spacer"></div>
       <span
-        v-if="hasSources && showKey('sources')"
+        v-if="showSourceButton && showKey('sources')"
         class="item btn sources-btn"
         :class="{ expanded: isSourcesExpanded }"
         @click="toggleSources"
@@ -129,14 +130,18 @@ const msg = ref(props.message)
 // Sources state
 const isSourcesExpanded = ref(false)
 
+// 最多展示 top5 条知识库来源（已按相关度降序排好）
 const knowledgeChunks = computed(() =>
-  Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []
+  (Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []).slice(0, 5)
 )
 const webSources = computed(() =>
   Array.isArray(props.sources?.webSources) ? props.sources.webSources : []
 )
 
 const hasSources = computed(() => knowledgeChunks.value.length > 0 || webSources.value.length > 0)
+
+// 发生过知识检索（含拒答轮次）即显示来源按钮；纯聊天无来源无活动则不显示
+const showSourceButton = computed(() => hasSources.value || Boolean(props.sources?.knowledgeActivity))
 
 const sourceCount = computed(() => knowledgeChunks.value.length + webSources.value.length)
 

@@ -26,6 +26,15 @@
 #   必须用容器以 root 解压：tar 内 postgres 数据归 postgres(uid999)、neo4j 归 7474。
 #   宿主普通用户 tar 解压无法 chown，数据会变成当前用户所有，postgres/neo4j 容器
 #   将因 0700 权限读不到数据目录而无法启动（与本备份为何用容器打包同理）。
+#
+#   重要：postgres 与 MinIO 曾在 Docker Desktop 下 bind 挂载失效退化为 tmpfs
+#   （宿主目录权限被外部进程改属主后，容器启动时静默回退到内存），此时冷备份 tar
+#   只含宿主 bind 目录的旧数据，live 数据在内存里随时会丢。判断方法：重建容器后
+#   用 docker exec <c> grep <数据路径> /proc/mounts 确认是 ext4 而非 tmpfs。
+#   若遇到此问题，恢复方式是：
+#     1) 先从容器内 pg_dump 导出 live postgres 数据（内存中数据的第一份备份）
+#     2) 重建 postgres/MinIO 容器让 bind 生效（清空宿主目录旧数据再 compose up）
+#     3) pg_restore dump 回 postgres；MinIO 用 mc mirror / S3 API 从导出的对象灌回
 
 set -uo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
