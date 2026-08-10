@@ -1,8 +1,7 @@
-import { Modal, message } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { handleChatError } from '@/utils/errorHandler'
 import { unref } from 'vue'
 import { extractPendingInterrupt } from '@/composables/useApproval'
-import { queryApi } from '@/apis/knowledge_api'
 
 const serializeToolArgs = (args) => {
   if (typeof args === 'string') return args
@@ -26,6 +25,12 @@ const streamEventToMessageChunk = (streamEvent) => {
     }
     if (streamEvent.additional_reasoning_content) {
       chunk.additional_kwargs = { reasoning_content: streamEvent.additional_reasoning_content }
+    }
+    if (streamEvent.handoff_available) {
+      chunk.extra_metadata = {
+        handoff_available: true,
+        ...(streamEvent.handoff_query ? { handoff_query: streamEvent.handoff_query } : {})
+      }
     }
     return chunk
   }
@@ -232,20 +237,6 @@ export function useAgentStreamHandler({
         return processApprovalInStream(chunk, threadId, unref(currentAgentId))
 
       case 'knowledge_handoff_available':
-        Modal.confirm({
-          title: '未找到知识库依据',
-          content: '是否转人工处理？',
-          okText: '转人工',
-          cancelText: '暂不处理',
-          onOk: async () => {
-            const handoff = await queryApi.createHandoff(chunk.query)
-            if (handoff.status === 'notified') {
-              message.success(`已通知${handoff.question_type === 'default' ? '' : `「${handoff.question_type}」`}人工处理。`)
-            } else {
-              message.warning('已登记转人工请求，但企业微信通知尚未完成。')
-            }
-          }
-        })
         return false
 
       case 'agent_state':

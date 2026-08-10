@@ -986,9 +986,9 @@ async def stream_agent_chat(
                 results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
                 if not results and not incomplete:
                     refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
-                    await conv_repo.add_message_by_thread_id(thread_id=thread_id, role="assistant", content=refusal, message_type="text", extra_metadata={"id": message_id, "handoff_available": True}, run_id=meta.get("run_id"), request_id=meta.get("request_id"))
+                    await conv_repo.add_message_by_thread_id(thread_id=thread_id, role="assistant", content=refusal, message_type="text", extra_metadata={"id": message_id, "handoff_available": True, "handoff_query": query}, run_id=meta.get("run_id"), request_id=meta.get("request_id"))
                     await db.commit()
-                    yield make_chunk(content=refusal, status="loading", stream_event={"type": "message_delta", "message_id": message_id, "content": refusal}, meta=meta)
+                    yield make_chunk(content=refusal, status="loading", stream_event={"type": "message_delta", "message_id": message_id, "content": refusal, "handoff_available": True, "handoff_query": query}, meta=meta)
                     yield make_chunk(status="knowledge_handoff_available", query=query, meta=meta)
                     yield make_chunk(status="finished", meta=meta)
                     return
