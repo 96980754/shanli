@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import os
 from datetime import timedelta
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -60,7 +61,11 @@ class KnowledgeHandoffService:
                 uid=user.uid,
                 query=normalized_query,
                 query_hash=query_hash,
-                status="customer_service_ready" if customer_service.is_configured else "customer_service_not_configured",
+                status=(
+                    "customer_service_ready"
+                    if customer_service.is_configured
+                    else "customer_service_not_configured"
+                ),
             )
             session.add(ticket)
             await session.flush()

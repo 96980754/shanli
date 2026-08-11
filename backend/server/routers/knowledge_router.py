@@ -2612,8 +2612,15 @@ async def global_knowledge_search(
 ):
     """Search every knowledge base the current user is allowed to search."""
     limit = min(max(request.limit, 1), 30)
-    result, search_incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, request.query, limit)
-    return {"result": result, "status": "success", "handoff_available": not result and not search_incomplete, "search_complete": not search_incomplete}
+    result, search_incomplete = await GlobalKnowledgeSearchService().search_with_status(
+        current_user, request.query, limit
+    )
+    return {
+        "result": result,
+        "status": "success",
+        "handoff_available": not result and not search_incomplete,
+        "search_complete": not search_incomplete,
+    }
 
 
 @knowledge.post("/handoffs")
