@@ -17,21 +17,8 @@ FEEDBACK_REASON_OPTIONS = {
 FEEDBACK_REASON_SEPARATOR = "\n"
 
 
-def serialize_feedback_reason(reason_code: str | None, reason: str | None) -> str | None:
-    """将结构化点踩原因保存到现有 reason 字段，兼容历史自由文本数据。"""
-    detail = str(reason or "").strip()
-    if not reason_code:
-        return detail or None
-
-    label = FEEDBACK_REASON_OPTIONS.get(reason_code)
-    if not label:
-        raise HTTPException(status_code=422, detail="Invalid feedback reason code")
-
-    return f"{label}{FEEDBACK_REASON_SEPARATOR}{detail}" if detail else label
-
-
 def parse_feedback_reason(reason: str | None) -> dict:
-    """解析反馈原因；历史自由文本保留为未分类详情。"""
+    """解析结构化点踩原因，并兼容历史自由文本反馈。"""
     raw_reason = str(reason or "").strip()
     if not raw_reason:
         return {
@@ -69,16 +56,9 @@ async def submit_message_feedback_view(
     reason: str | None,
     db: AsyncSession,
     current_uid: str,
-    reason_code: str | None = None,
 ) -> dict:
     if rating not in ["like", "dislike"]:
         raise HTTPException(status_code=422, detail="Rating must be 'like' or 'dislike'")
-
-    if rating == "like":
-        reason_code = None
-        stored_reason = None
-    else:
-        stored_reason = serialize_feedback_reason(reason_code, reason)
 
     try:
         message_result = await db.execute(select(Message).filter_by(id=message_id))
@@ -102,7 +82,7 @@ async def submit_message_feedback_view(
             message_id=message_id,
             uid=str(current_uid),
             rating=rating,
-            reason=stored_reason,
+            reason=reason,
         )
 
         db.add(new_feedback)
@@ -121,18 +101,16 @@ async def submit_message_feedback_view(
                 conversation_id=message.conversation_id,
                 uid=str(current_uid),
                 rating=rating,
-                reason=stored_reason,
+                reason=reason,
             )
 
         logger.info(f"User {current_uid} submitted {rating} feedback for message {message_id}")
-        parsed_reason = parse_feedback_reason(new_feedback.reason)
 
         return {
             "id": new_feedback.id,
             "message_id": new_feedback.message_id,
             "rating": new_feedback.rating,
             "reason": new_feedback.reason,
-            **parsed_reason,
             "created_at": new_feedback.created_at.isoformat(),
         }
 
@@ -165,7 +143,6 @@ async def get_message_feedback_view(
                 "id": feedback.id,
                 "rating": feedback.rating,
                 "reason": feedback.reason,
-                **parse_feedback_reason(feedback.reason),
                 "created_at": feedback.created_at.isoformat(),
             },
         }
