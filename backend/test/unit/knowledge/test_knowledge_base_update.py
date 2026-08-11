@@ -206,6 +206,34 @@ async def test_update_database_clears_llm_spec_when_field_is_explicit(tmp_path):
     assert kb.databases_meta["db"]["llm_model_spec"] is None
 
 
+async def test_update_database_keeps_embedding_spec_when_field_is_omitted(tmp_path):
+    kb = make_kb(tmp_path)
+    kb.databases_meta["db"]["embedding_model_spec"] = "siliconflow-cn:BAAI/bge-m3"
+
+    result = kb.update_database("db", "New name", "New description")
+    await asyncio.sleep(0)
+
+    assert result["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+    assert kb.databases_meta["db"]["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+
+
+async def test_update_database_switches_embedding_model_in_memory(tmp_path):
+    kb = make_kb(tmp_path)
+    kb.databases_meta["db"]["embedding_model_spec"] = "siliconflow-cn:BAAI/bge-m3"
+
+    result = kb.update_database(
+        "db",
+        "New name",
+        "New description",
+        embedding_model_spec="local:BAAI/bge-m3",
+        update_embedding_model_spec=True,
+    )
+    await asyncio.sleep(0)
+
+    assert result["embedding_model_spec"] == "local:BAAI/bge-m3"
+    assert kb.databases_meta["db"]["embedding_model_spec"] == "local:BAAI/bge-m3"
+
+
 def test_get_database_info_returns_persisted_content_stats(tmp_path):
     kb = make_kb(tmp_path)
     kb.databases_meta["db"]["metadata"] = {
