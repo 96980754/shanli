@@ -1,4 +1,10 @@
-import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch, apiSuperAdminPut } from './base'
+import {
+  apiAdminGet,
+  apiSuperAdminGet,
+  apiSuperAdminPatch,
+  apiSuperAdminPost,
+  apiSuperAdminPut
+} from './base'
 
 /**
  * Dashboard API模块
@@ -147,5 +153,11 @@ export const dashboardApi = {
   getKnowledgeGap: (gapId) => apiSuperAdminGet(`/api/dashboard/knowledge-gaps/${gapId}`),
 
   updateKnowledgeGap: (gapId, data) =>
-    apiSuperAdminPatch(`/api/dashboard/knowledge-gaps/${gapId}`, data)
+    apiSuperAdminPatch(`/api/dashboard/knowledge-gaps/${gapId}`, data),
+
+  searchKnowledgeGapAnswer: (gapId) =>
+    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/web-search`, {}),
+
+  saveKnowledgeGapQaPair: (gapId, data) =>
+    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/save-qa`, data)
 }
