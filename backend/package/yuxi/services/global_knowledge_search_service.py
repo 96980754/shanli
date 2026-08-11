@@ -17,9 +17,14 @@ class GlobalKnowledgeSearchService:
         self.permission_service = permission_service or KnowledgePermissionService()
 
     async def search(self, user: Any, query: str, limit: int = 10) -> list[dict]:
+        results, _ = await self.search_with_status(user, query, limit)
+        return results
+
+    async def search_with_status(self, user: Any, query: str, limit: int = 10) -> tuple[list[dict], bool]:
+        """Return results and whether any permitted knowledge base could not be searched."""
         query = query.strip()
         if not query:
-            return []
+            return [], False
 
         databases = await knowledge_base.get_databases_by_uid(user.uid)
         candidates = databases.get("databases", [])
@@ -30,21 +35,21 @@ class GlobalKnowledgeSearchService:
             if await self.permission_service.has_permission(context, database["kb_id"], "can_search")
         ]
 
-        async def search_one(database: dict) -> tuple[dict, list[dict]]:
+        async def search_one(database: dict) -> tuple[dict, list[dict], bool]:
             try:
                 results = await knowledge_base.aquery(
                     query,
                     kb_id=database["kb_id"],
                     final_top_k=max(limit, 10),
                 )
-                return database, results or []
+                return database, results or [], False
             except Exception as exc:
                 logger.warning("Global search skipped knowledge base %s: %s", database["kb_id"], exc)
-                return database, []
+                return database, [], True
 
         grouped = await asyncio.gather(*(search_one(database) for database in allowed))
         merged: list[dict] = []
-        for database, results in grouped:
+        for database, results, _ in grouped:
             for rank, result in enumerate(results, start=1):
                 item = dict(result)
                 item["kb_id"] = database["kb_id"]
@@ -55,4 +60,4 @@ class GlobalKnowledgeSearchService:
                 merged.append(item)
 
         merged.sort(key=lambda item: item["global_score"], reverse=True)
-        return merged[:limit]
+        return merged[:limit], any(search_failed for _, _, search_failed in grouped)

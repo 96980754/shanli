@@ -228,4 +228,30 @@ BUILTIN_PROVIDERS: list[dict[str, Any]] = [
         "embedding_models_endpoint": "https://api.siliconflow.com/v1/models?sub_type=embedding",
         "rerank_models_endpoint": "https://api.siliconflow.com/v1/models?sub_type=reranker",
     },
+    {
+        "provider_id": "local",
+        "display_name": "Local Inference (GPU)",
+        "base_url": "http://local-inference:8000/v1",
+        "embedding_base_url": "http://local-inference:8000/v1/embeddings",
+        "rerank_base_url": "http://local-inference:8000/v1/rerank",
+        "api_key_env": "LOCAL_INFERENCE_KEY",
+        "capabilities": ["embedding", "rerank"],
+        "enabled_models": [
+            {
+                "id": "BAAI/bge-m3",
+                "type": "embedding",
+                "display_name": "BAAI/bge-m3",
+                "dimension": 1024,
+                "batch_size": 40,
+                "source": "manual",
+            },
+            {
+                "id": "BAAI/bge-reranker-v2-m3",
+                "type": "rerank",
+                "display_name": "BAAI/bge-reranker-v2-m3",
+                "source": "manual",
+            },
+        ],
+        "is_enabled": False,
+    },
 ]

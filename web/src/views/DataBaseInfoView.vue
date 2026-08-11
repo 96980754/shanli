@@ -292,6 +292,13 @@
           />
         </a-form-item>
 
+        <a-form-item v-if="isMilvus && !isConnector" label="嵌入模型" name="embedding_model_spec">
+          <EmbeddingModelSelector
+            :value="editForm.embedding_model_spec"
+            @update:value="handleEmbeddingModelChange"
+          />
+        </a-form-item>
+
         <a-form-item v-if="!isConnector" label="自动生成问题" name="auto_generate_questions">
           <a-switch
             v-model:checked="editForm.auto_generate_questions"
@@ -414,6 +421,7 @@ import FileUploadModal from '@/components/FileUploadModal.vue'
 import KnowledgeGraphSection from '@/components/KnowledgeGraphSection.vue'
 import QuerySection from '@/components/QuerySection.vue'
 import SearchConfigPanel from '@/components/SearchConfigPanel.vue'
+import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
@@ -770,6 +778,7 @@ const shareConfigFormRef = ref(null)
 const editForm = reactive({
   name: '',
   description: '',
+  embedding_model_spec: '',
   category_id: null,
   auto_generate_questions: false,
   chunk_preset_id: DEFAULT_CHUNK_PRESET_ID,
@@ -861,6 +870,7 @@ const loadCategories = async () => {
 const showEditModal = () => {
   editForm.name = database.value.name || ''
   editForm.description = database.value.description || ''
+  editForm.embedding_model_spec = database.value.embedding_model_spec || ''
   editForm.category_id = database.value.category_id || null
   editForm.auto_generate_questions =
     database.value.additional_params?.auto_generate_questions || false
@@ -873,6 +883,20 @@ const showEditModal = () => {
   editForm.notion_data_source_id = database.value.additional_params?.notion_data_source_id || ''
   editForm.notion_version = database.value.additional_params?.notion_version || '2026-03-11'
   editModalVisible.value = true
+}
+
+const handleEmbeddingModelChange = (spec) => {
+  if (!spec || spec === editForm.embedding_model_spec) return
+  Modal.confirm({
+    title: '切换嵌入模型',
+    content:
+      '切换仅推荐内外同为 BAAI/bge-m3（1024 维、余弦相似度）时执行；若维度与库内向量不一致，向量检索将不可用。',
+    okText: '确认切换',
+    cancelText: '取消',
+    onOk: () => {
+      editForm.embedding_model_spec = spec
+    }
+  })
 }
 
 watch(
@@ -945,6 +969,9 @@ const handleEditSubmit = () => {
         updateData.additional_params = {
           auto_generate_questions: editForm.auto_generate_questions,
           chunk_preset_id: editForm.chunk_preset_id || DEFAULT_CHUNK_PRESET_ID
+        }
+        if (editForm.embedding_model_spec) {
+          updateData.embedding_model_spec = editForm.embedding_model_spec
         }
       }
 

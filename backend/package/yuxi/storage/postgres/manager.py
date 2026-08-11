@@ -896,6 +896,19 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE IF EXISTS mcp_servers ADD COLUMN IF NOT EXISTS env JSONB",
             """
+            CREATE TABLE IF NOT EXISTS knowledge_handoffs (
+                id SERIAL PRIMARY KEY,
+                uid VARCHAR(64) NOT NULL REFERENCES users(uid),
+                query TEXT NOT NULL,
+                query_hash VARCHAR(64) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                notification_error TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                notified_at TIMESTAMPTZ
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_handoffs_uid_query_created ON knowledge_handoffs(uid, query_hash, created_at DESC)",
+            """
             CREATE TABLE IF NOT EXISTS agent_envs (
                 id SERIAL PRIMARY KEY,
                 uid VARCHAR NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
