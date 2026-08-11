@@ -47,7 +47,10 @@
           {{ formatFullDateTime(record.last_seen_at) }}
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-button type="link" @click="openUpdate(record)">处理</a-button>
+          <a-space size="small">
+            <a-button type="link" @click="openWebSearch(record)">联网补答</a-button>
+            <a-button type="link" @click="openUpdate(record)">处理</a-button>
+          </a-space>
         </template>
       </template>
     </a-table>
@@ -66,7 +69,10 @@
         <a-descriptions-item label="最近出现">{{ formatFullDateTime(detail.last_seen_at) }}</a-descriptions-item>
         <a-descriptions-item label="处理备注">{{ detail.resolution_note || '-' }}</a-descriptions-item>
       </a-descriptions>
-      <a-button v-if="detail" type="primary" block class="drawer-action" @click="openUpdate(detail)">更新处理状态</a-button>
+      <a-space v-if="detail" direction="vertical" class="drawer-actions">
+        <a-button type="primary" block @click="openWebSearch(detail)">联网补答并保存问答对</a-button>
+        <a-button block @click="openUpdate(detail)">更新处理状态</a-button>
+      </a-space>
     </a-drawer>
 
     <a-modal v-model:open="updateOpen" title="处理知识缺口" @ok="submitUpdate" :confirm-loading="updating">
@@ -79,12 +85,72 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal
+      v-model:open="webSearchOpen"
+      title="联网补答"
+      width="760px"
+      ok-text="确认并保存问答对"
+      cancel-text="取消"
+      :confirm-loading="savingQa"
+      :ok-button-props="{ disabled: webSearching || !webAnswer.trim() }"
+      @ok="saveWebQa"
+    >
+      <a-alert
+        type="info"
+        show-icon
+        class="web-search-alert"
+        message="联网结果仅供管理员审核"
+        description="候选答案不会自动进入普通问答。请核对来源并编辑确认，保存后同一智能体再次收到相同问题时才会优先使用人工确认答案。"
+      />
+
+      <a-form layout="vertical">
+        <a-form-item label="未覆盖问题">
+          <a-textarea :value="webSearchGap?.question || ''" :rows="2" readonly />
+        </a-form-item>
+
+        <div class="web-search-toolbar">
+          <span class="web-search-agent">Agent：{{ webSearchGap?.agent_slug || '-' }}</span>
+          <a-button :loading="webSearching" @click="runWebSearch">重新联网搜索</a-button>
+        </div>
+
+        <div v-if="webSearching" class="web-search-loading">
+          <a-spin />
+          <span>正在联网检索并生成候选答案...</span>
+        </div>
+
+        <template v-else>
+          <a-form-item label="人工确认答案" required>
+            <a-textarea
+              v-model:value="webAnswer"
+              :rows="8"
+              :maxlength="20000"
+              show-count
+              placeholder="联网结果会作为候选答案填入，请核对来源后编辑确认"
+            />
+          </a-form-item>
+
+          <div class="source-section">
+            <div class="source-title">参考来源</div>
+            <a-empty v-if="webSources.length === 0" :image="simpleImage" description="暂无可展示来源" />
+            <div v-else class="source-list">
+              <div v-for="(source, index) in webSources" :key="`${source.url}-${index}`" class="source-item">
+                <a :href="source.url" target="_blank" rel="noopener noreferrer">
+                  {{ index + 1 }}. {{ source.title || source.url }}
+                </a>
+                <p v-if="source.content">{{ source.content }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { Empty, message } from 'ant-design-vue'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
 
@@ -110,7 +176,7 @@ const columns = [
   { title: '知识库范围', key: 'kb_scope', width: 180 },
   { title: '状态', key: 'status', width: 100 },
   { title: '最近出现', key: 'last_seen_at', width: 170 },
-  { title: '操作', key: 'actions', width: 80, fixed: 'right' }
+  { title: '操作', key: 'actions', width: 150, fixed: 'right' }
 ]
 
 const loading = ref(false)
@@ -125,6 +191,15 @@ const detail = ref(null)
 const updatingId = ref(null)
 const filters = reactive({ query: '', status: '', reason: '' })
 const updateForm = reactive({ status: 'processing', resolution_note: '' })
+
+const webSearchOpen = ref(false)
+const webSearching = ref(false)
+const savingQa = ref(false)
+const webSearchGap = ref(null)
+const webAnswer = ref('')
+const webSources = ref([])
+const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
+
 const pagination = computed(() => ({
   current: page.value,
   pageSize: pageSize.value,
@@ -201,6 +276,57 @@ async function submitUpdate() {
   }
 }
 
+function openWebSearch(record) {
+  webSearchGap.value = { ...record }
+  webAnswer.value = ''
+  webSources.value = []
+  webSearchOpen.value = true
+  runWebSearch()
+}
+
+async function runWebSearch() {
+  if (!webSearchGap.value?.id) return
+  webSearching.value = true
+  try {
+    const response = await dashboardApi.searchKnowledgeGapAnswer(webSearchGap.value.id)
+    webAnswer.value = response.draft_answer || ''
+    webSources.value = Array.isArray(response.sources) ? response.sources : []
+    if (!webAnswer.value) {
+      message.warning('联网检索完成，但未生成候选答案，请结合来源人工填写')
+    }
+  } catch (error) {
+    console.error('联网补答失败', error)
+    message.error(error?.message || '联网补答失败')
+  } finally {
+    webSearching.value = false
+  }
+}
+
+async function saveWebQa() {
+  const answer = webAnswer.value.trim()
+  if (!webSearchGap.value?.id || !answer) {
+    message.warning('请先确认并填写答案')
+    return
+  }
+
+  savingQa.value = true
+  try {
+    const response = await dashboardApi.saveKnowledgeGapQaPair(webSearchGap.value.id, {
+      answer,
+      sources: webSources.value
+    })
+    message.success('已保存人工问答对，知识缺口已标记为已解决')
+    webSearchOpen.value = false
+    if (detail.value?.id === response.gap?.id) detail.value = response.gap
+    await loadGaps()
+  } catch (error) {
+    console.error('保存问答对失败', error)
+    message.error(error?.message || '保存问答对失败')
+  } finally {
+    savingQa.value = false
+  }
+}
+
 onMounted(loadGaps)
 </script>
 
@@ -230,5 +356,55 @@ onMounted(loadGaps)
 .query-input { width: 320px; }
 .filter-select { width: 180px; }
 .question-link { height: auto; padding: 0; text-align: left; white-space: normal; }
-.drawer-action { margin-top: 20px; }
+.drawer-actions { width: 100%; margin-top: 20px; }
+.web-search-alert { margin-bottom: 18px; }
+.web-search-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.web-search-agent { color: var(--gray-600); font-size: 13px; }
+.web-search-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 180px;
+  color: var(--gray-600);
+}
+.source-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--gray-150);
+}
+.source-title {
+  margin-bottom: 10px;
+  color: var(--gray-900);
+  font-weight: 600;
+}
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.source-item {
+  padding: 10px 12px;
+  background: var(--gray-25);
+  border: 1px solid var(--gray-100);
+  border-radius: 6px;
+  a { font-size: 13px; font-weight: 500; }
+  p {
+    margin: 6px 0 0;
+    color: var(--gray-600);
+    font-size: 12px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
 </style>
