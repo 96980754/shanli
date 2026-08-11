@@ -34,17 +34,27 @@
               <div class="username">{{ feedback.username || '未知用户' }}</div>
             </div>
           </div>
-          <a-tag
-            :color="feedback.rating === 'like' ? 'green' : 'red'"
-            class="rating-tag"
-            size="small"
-          >
-            <template #icon>
-              <LikeOutlined v-if="feedback.rating === 'like'" />
-              <DislikeOutlined v-else />
-            </template>
-            {{ feedback.rating === 'like' ? '点赞' : '点踩' }}
-          </a-tag>
+          <div class="card-actions">
+            <a-button
+              v-if="feedback.rating === 'dislike'"
+              type="link"
+              size="small"
+              @click="openTuning(feedback.id)"
+            >
+              调优答案
+            </a-button>
+            <a-tag
+              :color="feedback.rating === 'like' ? 'green' : 'red'"
+              class="rating-tag"
+              size="small"
+            >
+              <template #icon>
+                <LikeOutlined v-if="feedback.rating === 'like'" />
+                <DislikeOutlined v-else />
+              </template>
+              {{ feedback.rating === 'like' ? '点赞' : '点踩' }}
+            </a-tag>
+          </div>
         </div>
 
         <!-- 卡片内容：对话信息、消息内容和反馈原因 -->
@@ -116,6 +126,8 @@
       </div>
     </div>
   </a-modal>
+
+  <FeedbackTuningModal ref="feedbackTuningModal" @saved="loadFeedbacks" />
 </template>
 
 <script setup>
@@ -126,6 +138,7 @@ import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
+import FeedbackTuningModal from '@/components/dashboard/FeedbackTuningModal.vue'
 
 // 常量配置
 const CONFIG = {
@@ -145,6 +158,7 @@ const props = defineProps({
 
 // 模态框状态
 const modalVisible = ref(false)
+const feedbackTuningModal = ref(null)
 
 // 反馈相关数据
 const feedbacks = ref([])
@@ -163,6 +177,10 @@ const expandedStates = ref(new Map())
 const show = () => {
   modalVisible.value = true
   loadFeedbacks()
+}
+
+const openTuning = (feedbackId) => {
+  feedbackTuningModal.value?.show(feedbackId)
 }
 
 // 暴露方法给父组件
@@ -300,6 +318,12 @@ watch(
   border-bottom: 1px solid var(--gray-100);
   background: var(--gray-25);
   border-radius: 8px 8px 0 0;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .user-info {
