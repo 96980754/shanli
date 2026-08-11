@@ -669,6 +669,7 @@ export const queryApi = {
   globalSearch: async (query, limit = 10) => {
     return apiPost('/api/knowledge/search', { query, limit })
   },
+  createHandoff: async (query) => apiPost('/api/knowledge/handoffs', { query }),
 
   /**
    * 查询知识库

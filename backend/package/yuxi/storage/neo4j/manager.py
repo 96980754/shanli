@@ -55,11 +55,22 @@ class Neo4jConnectionManager:
             self.driver = GD.driver(uri, auth=(username, password))
             with self.driver.session() as session:
                 session.run("RETURN 1")
+            self._ensure_indexes()
             self.status = "open"
             logger.info("Successfully connected to Neo4j")
         except Exception as e:
             logger.error(f"Failed to connect to Neo4j: {e}")
             raise
+
+    def _ensure_indexes(self):
+        """补齐图谱查询依赖的索引（幂等，首次连接时执行）。
+
+        `query_seed_subgraph` 用 `seed.entity_id IN $entity_ids` 定位种子节点，
+        `:Entity(entity_id)` 的 RANGE 索引可加速该查找。索引已存在的场景下
+        `IF NOT EXISTS` 为 no-op，不影响启动速度。
+        """
+        with self.driver.session() as session:
+            session.run("CREATE INDEX entity_id_idx IF NOT EXISTS FOR (e:Entity) ON (e.entity_id)")
 
     def _is_connected(self) -> bool:
         if not self.driver:
