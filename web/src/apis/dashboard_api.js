@@ -1,4 +1,4 @@
-import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch } from './base'
+import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch, apiSuperAdminPut } from './base'
 
 /**
  * Dashboard API模块
@@ -58,6 +58,12 @@ export const dashboardApi = {
 
     return apiAdminGet(`/api/dashboard/feedbacks?${queryParams.toString()}`)
   },
+
+  getFeedbackTuningContext: (feedbackId) =>
+    apiSuperAdminGet(`/api/dashboard/feedbacks/${feedbackId}/tuning-context`),
+
+  saveFeedbackQaPair: (feedbackId, data) =>
+    apiSuperAdminPut(`/api/dashboard/feedbacks/${feedbackId}/qa-pair`, data),
 
   // ========== 新增并行API接口 ==========
 
