@@ -24,6 +24,7 @@ from yuxi.services.agent_run_service import (
     get_agent_run_view,
     stream_agent_run_events,
 )
+from yuxi.services.curated_qa_run_service import try_create_curated_qa_run
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.storage.postgres.models_business import User
 
@@ -261,11 +262,25 @@ async def create_agent_run(
     input_message = None
     if payload.resume is None and payload.query:
         input_message = build_chat_input_message(payload.query, payload.image_content)
+
+    meta = dict(payload.meta or {})
+    if input_message is not None and payload.resume is None:
+        curated_run = await try_create_curated_qa_run(
+            input_message=input_message,
+            agent_slug=payload.agent_slug,
+            thread_id=payload.thread_id,
+            meta=meta,
+            current_uid=str(current_user.uid),
+            db=db,
+        )
+        if curated_run is not None:
+            return curated_run
+
     return await create_agent_run_view(
         input_message=input_message,
         agent_slug=payload.agent_slug,
         thread_id=payload.thread_id,
-        meta=dict(payload.meta or {}),
+        meta=meta,
         model_spec=payload.model_spec,
         current_uid=str(current_user.uid),
         db=db,
