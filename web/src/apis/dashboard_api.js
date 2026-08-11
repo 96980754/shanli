@@ -59,6 +59,12 @@ export const dashboardApi = {
     return apiAdminGet(`/api/dashboard/feedbacks?${queryParams.toString()}`)
   },
 
+  /**
+   * 获取反馈汇总和点踩原因分布
+   * @returns {Promise<Object>} - 反馈统计信息
+   */
+  getFeedbackSummary: () => apiAdminGet('/api/dashboard/feedback-summary'),
+
   // ========== 新增并行API接口 ==========
 
   /**
