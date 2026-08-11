@@ -901,6 +901,8 @@ class KnowledgeBaseManager:
         description: str,
         llm_model_spec: str | None = None,
         update_llm_model_spec: bool = False,
+        embedding_model_spec: str | None = None,
+        update_embedding_model_spec: bool = False,
         category_id: int | None = None,
         update_category_id: bool = False,
         additional_params: dict | None = None,
@@ -917,7 +919,10 @@ class KnowledgeBaseManager:
             raise ValueError(f"数据库 {kb_id} 不存在")
 
         kb_instance = await self._get_kb_for_database(kb_id)
-        kb_instance.update_database(kb_id, name, description, llm_model_spec, update_llm_model_spec)
+        kb_instance.update_database(
+            kb_id, name, description, llm_model_spec, update_llm_model_spec,
+            embedding_model_spec, update_embedding_model_spec,
+        )
 
         update_data: dict = {
             "name": name,
@@ -925,6 +930,8 @@ class KnowledgeBaseManager:
         }
         if update_llm_model_spec:
             update_data["llm_model_spec"] = llm_model_spec
+        if update_embedding_model_spec:
+            update_data["embedding_model_spec"] = embedding_model_spec
         if update_category_id:
             if category_id is None:
                 raise ValueError("category_id 不能为空")
