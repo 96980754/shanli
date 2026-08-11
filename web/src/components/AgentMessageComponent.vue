@@ -63,6 +63,11 @@
 
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
 
+      <div v-if="handoffAvailable" class="handoff-action">
+        <a-button class="handoff-button" :loading="handoffSending" @click="createHandoff">转人工</a-button>
+        <span v-if="handoffStatus" class="handoff-status">{{ handoffStatus }}</span>
+      </div>
+
       <!-- 错误提示块 -->
       <div v-if="displayError" class="error-hint">
         <span v-if="getErrorMessage">{{ getErrorMessage }}</span>
@@ -148,6 +153,7 @@
 
 <script setup>
 import { computed, ref, onUnmounted } from 'vue'
+import { message as notification } from 'ant-design-vue'
 import { CaretRightOutlined } from '@ant-design/icons-vue'
 import RefsComponent from '@/components/RefsComponent.vue'
 import { Copy, Check, X } from 'lucide-vue-next'
@@ -162,6 +168,7 @@ import { inferImageMimeTypeFromBase64, normalizeAttachmentPreviews } from '@/uti
 import { buildMentionDisplayLabels } from '@/utils/mention_utils'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import { enrichTaskToolCalls } from '@/components/ToolCallingResult/toolRegistry'
+import { queryApi } from '@/apis/knowledge_api'
 
 const props = defineProps({
   // 消息角色：'user'|'assistant'|'sent'|'received'
@@ -203,6 +210,36 @@ const props = defineProps({
     default: false
   }
 })
+
+const handoffSending = ref(false)
+const handoffStatus = ref('')
+const handoffAvailable = computed(
+  () => props.message.extra_metadata?.handoff_available === true && !handoffStatus.value
+)
+const handoffQuery = computed(
+  () => props.message.extra_metadata?.handoff_query || props.message.content || ''
+)
+
+const createHandoff = async () => {
+  if (!handoffQuery.value.trim()) {
+    notification.error('未获取到原问题，无法转人工')
+    return
+  }
+  handoffSending.value = true
+  try {
+    const result = await queryApi.createHandoff(handoffQuery.value)
+    if (!result.customer_service_url) {
+      throw new Error('企业微信客服入口尚未配置')
+    }
+    handoffStatus.value = '正在打开企业微信客服'
+    notification.success(handoffStatus.value)
+    window.location.assign(result.customer_service_url)
+  } catch (error) {
+    notification.error(error.message || '转人工请求失败，请稍后重试')
+  } finally {
+    handoffSending.value = false
+  }
+}
 
 const emit = defineEmits(['retry', 'retryStoppedMessage', 'openRefs'])
 
@@ -653,6 +690,36 @@ const parsedData = computed(() => {
 
 .message-md {
   margin: 8px 0;
+}
+
+.handoff-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 20px 0 4px;
+}
+
+.handoff-button {
+  min-width: 128px;
+  height: 58px;
+  color: #ff4d4f;
+  border-color: #ff4d4f;
+  background: #fff;
+  box-shadow: none;
+  font-size: 20px;
+
+  &:hover,
+  &:focus {
+    color: #ff7875;
+    border-color: #ff7875;
+    background: #fff1f0;
+  }
+}
+
+.handoff-status {
+  color: var(--gray-600);
+  font-size: 13px;
 }
 
 .message-image-preview-overlay {
