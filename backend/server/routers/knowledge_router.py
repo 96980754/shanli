@@ -16,6 +16,7 @@ from yuxi.repositories.task_repository import TaskRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
+from server.routers.workspace_router import _preview_response
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import (
@@ -3869,3 +3870,19 @@ async def list_entity_link_candidates(
     payload = await KnowledgeConflictService().list_entity_link_candidates(kb_id=kb_id)
     payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
     return payload
+
+
+@knowledge.get("/files/preview")
+async def preview_uploaded_file(
+    kb_id: str = Query(..., description="知识库 ID"),
+    file_path: str = Query(..., description="已上传文件的 MinIO 路径"),
+    filename: str | None = Query(None, description="展示文件名"),
+    current_user: User = Depends(get_required_user),
+):
+    """按已上传文件的 MinIO 路径预览（upload 后尚无 file_id 时使用）。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    try:
+        data = await knowledge_base.read_uploaded_file_preview(kb_id, file_path, filename)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return _preview_response(data)
