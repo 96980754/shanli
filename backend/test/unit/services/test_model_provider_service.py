@@ -187,6 +187,34 @@ def test_builtin_dashscope_provider_includes_default_embedding_and_rerank_models
     assert models["qwen3-rerank"]["type"] == "rerank"
 
 
+def test_builtin_local_provider_exists_disabled_by_default():
+    """local 内置在 BUILTIN_PROVIDERS 但默认禁用，且模型可被规范化。"""
+    provider = next(item for item in BUILTIN_PROVIDERS if item["provider_id"] == "local")
+    models = {model["id"]: model for model in provider["enabled_models"]}
+
+    assert provider["is_enabled"] is False
+    assert provider["capabilities"] == ["embedding", "rerank"]
+    assert provider["base_url"] == "http://local-inference:8000/v1"
+    assert provider["embedding_base_url"] == "http://local-inference:8000/v1/embeddings"
+    assert provider["rerank_base_url"] == "http://local-inference:8000/v1/rerank"
+    assert models["BAAI/bge-m3"]["type"] == "embedding"
+    assert models["BAAI/bge-m3"]["dimension"] == 1024
+    assert models["BAAI/bge-m3"]["batch_size"] == 40
+    assert models["BAAI/bge-reranker-v2-m3"]["type"] == "rerank"
+
+    # 锁死 source=manual：builtin 定义必须能被 ensure 链路规范化，写 "local" 会抛错。
+    normalized = _normalize_payload(
+        {
+            "provider_id": provider["provider_id"],
+            "display_name": provider["display_name"],
+            "base_url": provider["base_url"],
+            "capabilities": provider["capabilities"],
+            "enabled_models": provider["enabled_models"],
+        }
+    )
+    assert all(model["source"] == "manual" for model in normalized["enabled_models"])
+
+
 def testcheck_credential_status_disabled_provider_always_ok():
     """未启用的 provider 无论凭证如何配置，状态始终为 ok。"""
 

@@ -1549,6 +1549,8 @@ class KnowledgeBase(ABC):
         description: str,
         llm_model_spec: str | None = None,
         update_llm_model_spec: bool = False,
+        embedding_model_spec: str | None = None,
+        update_embedding_model_spec: bool = False,
     ) -> dict:
         """
         更新数据库
@@ -1558,6 +1560,9 @@ class KnowledgeBase(ABC):
             name: 新名称
             description: 新描述
             llm_model_spec: LLM 模型 spec（可选）
+            update_llm_model_spec: 是否同步更新 llm_model_spec 到内存 meta
+            embedding_model_spec: 嵌入模型 spec（可选）
+            update_embedding_model_spec: 是否同步更新 embedding_model_spec 到内存 meta
 
         Returns:
             更新后的数据库信息
@@ -1569,6 +1574,8 @@ class KnowledgeBase(ABC):
         self.databases_meta[kb_id]["description"] = description
         if update_llm_model_spec:
             self.databases_meta[kb_id]["llm_model_spec"] = llm_model_spec
+        if update_embedding_model_spec:
+            self.databases_meta[kb_id]["embedding_model_spec"] = embedding_model_spec
 
         return self.get_database_info(kb_id)
 

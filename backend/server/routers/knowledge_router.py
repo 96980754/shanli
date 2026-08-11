@@ -104,6 +104,7 @@ class UpdateDatabaseRequest(BaseModel):
     name: str
     description: str
     llm_model_spec: str | None = None
+    embedding_model_spec: str | None = None
     category_id: int | None = None
     additional_params: dict | None = None
     share_config: dict | None = None
@@ -931,6 +932,13 @@ async def update_database_info(
     await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         update_llm_model_spec = "llm_model_spec" in data.model_fields_set
+        update_embedding_model_spec = "embedding_model_spec" in data.model_fields_set
+        if update_embedding_model_spec:
+            if not data.embedding_model_spec:
+                raise HTTPException(status_code=400, detail="embedding_model_spec 不能为空")
+            info = model_cache.get_model_info(data.embedding_model_spec)
+            if not info or info.model_type != "embedding":
+                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {data.embedding_model_spec}")
         update_category_id = "category_id" in data.model_fields_set
         if update_category_id:
             if data.category_id is None:
@@ -963,6 +971,8 @@ async def update_database_info(
             data.description,
             data.llm_model_spec,
             update_llm_model_spec=update_llm_model_spec,
+            embedding_model_spec=data.embedding_model_spec,
+            update_embedding_model_spec=update_embedding_model_spec,
             category_id=data.category_id,
             update_category_id=update_category_id,
             additional_params=additional_params,
