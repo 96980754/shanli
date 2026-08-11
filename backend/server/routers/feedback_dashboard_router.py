@@ -1,13 +1,13 @@
 """用户反馈统计接口。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.services.feedback_service import FEEDBACK_REASON_OPTIONS, parse_feedback_reason
-from yuxi.storage.postgres.models_business import MessageFeedback, User
+from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback, User
 
 
 feedback_dashboard = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -30,13 +30,22 @@ class FeedbackSummaryResponse(BaseModel):
 
 @feedback_dashboard.get("/feedback-summary", response_model=FeedbackSummaryResponse)
 async def get_feedback_summary(
+    agent_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_superadmin_user),
 ):
     """获取反馈总量、点赞/点踩及点踩原因分布（超级管理员权限）。"""
     del current_user
 
-    result = await db.execute(select(MessageFeedback.rating, MessageFeedback.reason))
+    query = select(MessageFeedback.rating, MessageFeedback.reason)
+    if agent_id:
+        query = (
+            query.join(Message, MessageFeedback.message_id == Message.id)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .filter(Conversation.agent_id == agent_id)
+        )
+
+    result = await db.execute(query)
     rows = result.all()
 
     total_feedbacks = len(rows)
