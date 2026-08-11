@@ -48,6 +48,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--llm", help="生成 LLM spec（默认系统 default_model）")
     parser.add_argument("--embedding-model", help="embedding 模型 spec（默认系统默认 embedding）")
     parser.add_argument("--output", default="testset.jsonl", help="输出 JSONL 路径")
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=16,
+        help="transform 与 QA 合成的并发数（默认 16，与 ragas RunConfig.max_workers 默认一致）",
+    )
     return parser.parse_args()
 
 
@@ -98,6 +104,7 @@ async def run(args: argparse.Namespace) -> int:
             size=args.size,
             judge_llm=judge_llm,
             embedding_model=embedding_model,
+            concurrency=args.concurrency,
         )
         output = write_testset_jsonl(rows, args.output)
         print(f"已生成 {len(rows)} 道测试题 -> {output}")

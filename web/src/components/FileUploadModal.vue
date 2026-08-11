@@ -1349,7 +1349,9 @@ const handlePreviewUploaded = async (file) => {
   try {
     previewTarget.value = { name: file.name || file.response?.filename || '文档' }
     const response = await getUploadedFilePreview(kbIdValue, filePath, file.name)
-    previewData.value = await normalizePreviewResponse(response)
+    previewData.value = await normalizePreviewResponse(response, {
+      filename: file.name || file.response?.filename
+    })
     previewVisible.value = true
   } catch (error) {
     console.error('上传文件预览失败:', error)

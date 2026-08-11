@@ -148,6 +148,54 @@ const run = () => {
   }
   assert.deepEqual(MessageProcessor.extractKnowledgeChunksFromConversation(ignoredConv, databases), [])
 
+  // query_kbs 批量检索：多库结果合并，每条自带来源 kb_id，应与 query_kb 一样进入来源列表
+  const batchConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'query_kbs',
+            tool_call_result: {
+              content: JSON.stringify(
+                queryOutput({
+                  kb_id: 'kb-finance,kb-other',
+                  results: [
+                    queryOutput().results[0],
+                    {
+                      ...queryOutput().results[0],
+                      kb_id: 'kb-other',
+                      file_id: 'f-other',
+                      id: 'c-other',
+                      content: 'D',
+                      metadata: {
+                        source: 'doc-other.pdf',
+                        file_id: 'f-other',
+                        chunk_id: 'c-other',
+                        chunk_index: 1
+                      }
+                    }
+                  ]
+                })
+              )
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const batchChunks = MessageProcessor.extractKnowledgeChunksFromConversation(batchConv, databases)
+
+  assert.equal(batchChunks.length, 2)
+  assert.equal(
+    batchChunks.some((chunk) => chunk.kb_id === 'kb-finance' && chunk.kb_name === '财税库'),
+    true
+  )
+  assert.equal(
+    batchChunks.some((chunk) => chunk.kb_id === 'kb-other' && chunk.kb_name === '其他知识库'),
+    true
+  )
+
   const conversations = MessageProcessor.convertServerHistoryToMessages([
     { type: 'human', content: '请选择语言' },
     { type: 'ai', content: '请选择输出语言' },

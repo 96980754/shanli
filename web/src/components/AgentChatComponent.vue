@@ -1769,6 +1769,7 @@ const isReplyLoading = computed(() => {
 })
 const TOOL_STATUS_TEXT = computed(() => ({
   query_kb: t('chat.toolStatus.query_kb'),
+  query_kbs: t('chat.toolStatus.query_kb'),
   list_kbs: t('chat.toolStatus.list_kbs'),
   find_kb_document: t('chat.toolStatus.find_kb_document'),
   open_kb_document: t('chat.toolStatus.open_kb_document'),
@@ -2830,12 +2831,13 @@ const showMsgRefs = (msg, conv) => {
 }
 
 const getConversationSources = (conv) => {
-  // 拒答/系统错误时即使对话内存在检索候选，也不展示来源与下载，避免误导用户以为文档里有答案。
+  // 拒答/系统错误：仍展示来源按钮（用户可点开确认无可用来源），但点开为空，
+  // 不展示检索候选，避免误导用户以为文档里有答案。
   const lastMessage = getLastMessage(conv)
   const disposition = lastMessage?.extra_metadata?.knowledge_disposition
   const dispositionType = disposition?.type
   if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
-    return { knowledgeChunks: [], webSources: [] }
+    return { knowledgeChunks: [], webSources: [], knowledgeActivity: true }
   }
   return MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
 }

@@ -139,6 +139,15 @@ export const getPreviewTypeByPath = (path) => {
   return 'unsupported'
 }
 
+// 文件名兜底判定：后端对 pdf/word/ppt 一律返回 application/pdf（office 已转 PDF），
+// 因此 office 扩展名按 PDF 预览；markdown/html 走 JSON 分支，此处仅覆盖二进制预览。
+export const getPreviewTypeByFilename = (path) => {
+  const extension = getPreviewFileExtension(path)
+  if (PDF_EXTENSIONS.has(extension) || OFFICE_EXTENSIONS.has(extension)) return 'pdf'
+  if (IMAGE_EXTENSIONS.has(extension)) return 'image'
+  return 'unsupported'
+}
+
 export const getCodeLanguageByPath = (path) =>
   normalizeCodeLanguage(CODE_LANGUAGE_MAP[getPreviewFileExtension(path)] || '')
 
@@ -172,8 +181,22 @@ export const normalizePreviewResponse = async (response, baseFile = {}) => {
     }
   }
 
+  // 三级判定：后端响应头 > content-type > 文件名兜底。
+  // 后端对 pdf/word/ppt 一律返回 application/pdf（office 已转 PDF），
+  // 因此只要文件名是这些扩展名就按 PDF 预览，避免响应头异常时误判为「不支持预览」。
+  // 注意：getPreviewTypeByContentType 对未知类型返回 'unsupported'（truthy），
+  // 不能直接用 || 短路，否则文件名兜底永不触发。
+  const headerType = response?.headers?.get?.('x-yuxi-preview-type')
+  const contentTypeType = getPreviewTypeByContentType(contentType)
+  const filenameType = getPreviewTypeByFilename(baseFile.filename || baseFile.name || baseFile.path)
   const previewType =
-    response?.headers?.get?.('x-ai-kb-preview-type') || getPreviewTypeByContentType(contentType)
+    headerType !== 'unsupported' && headerType
+      ? headerType
+      : contentTypeType !== 'unsupported' && contentTypeType
+        ? contentTypeType
+        : filenameType !== 'unsupported' && filenameType
+          ? filenameType
+          : 'unsupported'
   const blob = await response.blob()
 
   return {
@@ -182,6 +205,31 @@ export const normalizePreviewResponse = async (response, baseFile = {}) => {
     previewType,
     supported: previewType !== 'unsupported',
     message: previewType === 'unsupported' ? '当前文件暂不支持预览，请下载后查看' : '',
-    previewUrl: window.URL.createObjectURL(blob)
+    previewUrl: window.URL.createObjectURL(normalizePreviewBlob(blob, previewType, baseFile.filename || baseFile.name || baseFile.path))
   }
+}
+
+const PREVIEW_IMAGE_MIME_BY_EXTENSION = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.apng': 'image/apng',
+  '.avif': 'image/avif'
+}
+
+// 若 blob 未带正确 MIME（如后端返回 octet-stream），按预览类型补全，
+// 否则 iframe 加载 octet-stream 会触发浏览器下载而非内联预览。
+const normalizePreviewBlob = (blob, previewType, filename) => {
+  if (blob.type && blob.type !== 'application/octet-stream') return blob
+  const mime =
+    previewType === 'pdf'
+      ? 'application/pdf'
+      : previewType === 'image'
+        ? PREVIEW_IMAGE_MIME_BY_EXTENSION[getPreviewFileExtension(filename)] || 'image/*'
+        : ''
+  return mime ? new Blob([blob], { type: mime }) : blob
 }

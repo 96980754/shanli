@@ -119,9 +119,16 @@ const toolName = computed(() => props.toolCall.name || props.toolCall.function?.
 
 const operationLabel = computed(() => `${toolName.value} 搜索`)
 
-const resourceLabel = computed(
-  () => args.value.kb_name || databaseStore.getDatabaseNameById(args.value.kb_id)
-)
+const resourceLabel = computed(() => {
+  // query_kbs 批量检索：参数为 kb_ids 数组，展示各库名称
+  if (Array.isArray(args.value.kb_ids)) {
+    const names = args.value.kb_ids
+      .map((id) => databaseStore.getDatabaseNameById(id))
+      .filter(Boolean)
+    return names.length > 0 ? names.join(', ') : ''
+  }
+  return args.value.kb_name || databaseStore.getDatabaseNameById(args.value.kb_id)
+})
 const queryText = computed(() => args.value.query_text || '')
 
 const EMPTY_RESULT = Object.freeze({
