@@ -83,6 +83,7 @@ const TOOL_RENDERERS = {
   ocr_parse_file: OcrParseFileTool,
   open_kb_document: OpenKbDocumentTool,
   query_kb: QueryKbTool,
+  query_kbs: QueryKbTool,
   read_file: ReadFileTool,
   replace: EditFileTool,
   run_shell_command: ExecuteTool,

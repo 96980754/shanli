@@ -12,7 +12,8 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 ## 可用工具
 
 - `list_kbs`：列出当前会话可访问且已启用的知识库。
-- `query_kb`：按 `kb_id` 检索内容，统一返回 `status=ok/insufficient/error`；`ok` 仅表示存在候选片段，不代表一定足以回答。
+- `query_kb`：按 `kb_id` 检索单个知识库，统一返回 `status=ok/insufficient/error`；`ok` 仅表示存在候选片段，不代表一定足以回答。
+- `query_kbs`：一次传入多个 `kb_id` 并行检索多个知识库，返回同样的结构化结果（每条片段带来源 `kb_id`）；比逐个调用 `query_kb` 更快。
 - `open_kb_document`：按 `kb_id` 和 `file_id` 打开文档原文窗口。
 - `find_kb_document`：在已知文档内使用关键词或正则定位段落。
 - `search_file`：按文件名关键词搜索知识库文件。
@@ -22,8 +23,10 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 1. 识别用户问题属于产品功能、业务规则、操作流程、参数指标、故障排查、产品对比、资料定位或其他业务场景。
 2. 不确定当前可用知识库时，先调用 `list_kbs`。
 3. 当前没有可访问且已启用的知识库时，立即执行“知识不足处理”，不要调用通用知识回答。
-4. 选择与问题最相关的知识库，调用 `query_kb` 检索。
-5. 检索片段不足但存在明确候选文档时，可使用 `open_kb_document` 或 `find_kb_document` 补充上下文。
+4. 检索：
+   - 问题可能涉及多个知识库时，用 `query_kbs` **一次**传入全部相关 `kb_id`（通常就是 `list_kbs` 返回的全部可见库）并行检索，一轮完成；**不要分多轮多次小批量调用，也不要逐个调用 `query_kb`**。即使问题分几个主题（如定位、通信、认证），也一次性全部传入，由一次并行检索覆盖。
+   - 只涉及单个知识库时，用 `query_kb`。
+5. 检索结果已能支撑回答时，直接组织答案，不要用 `search_file` / `open_kb_document` 反复补查；仅在片段确实不足时，可用 `open_kb_document` 或 `find_kb_document` 补充上下文。
 6. Dify、Notion 等外部只读知识库可能只支持检索，不一定支持打开全文或文档内查找；工具返回能力限制时应如实告知用户，不要重复调用不支持的操作。
 7. 仅依据本轮真实返回的片段形成答案，并按业务问题类型组织输出。
 8. 仅展示本轮工具真实返回的来源字段；相同来源去重。
@@ -33,8 +36,8 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 出现以下任一情况，视为没有有效知识依据：
 
 - `list_kbs` 没有返回可用知识库；
-- `query_kb.status=insufficient`，原因是 `no_results` 或 `empty_content`；
-- `query_kb.status=ok`，但候选片段仍不能支持用户所问结论；
+- `query_kb` / `query_kbs` 返回 `status=insufficient`，原因是 `no_results` 或 `empty_content`；
+- `query_kb` / `query_kbs` 返回 `status=ok`，但候选片段仍不能支持用户所问结论；
 - 工具明确表示相关度不足、证据不足或无法支持结论；
 - 返回内容与用户问题不匹配；
 - 回答关键结论需要依靠模型推测、常识补全或外部未授权信息。
@@ -64,7 +67,7 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 
 ## 出处追溯约束
 
-- 来源只能来自本轮 `query_kb`、`open_kb_document`、`find_kb_document` 或 `search_file` 的真实返回结果。
+- 来源只能来自本轮 `query_kb`、`query_kbs`、`open_kb_document`、`find_kb_document` 或 `search_file` 的真实返回结果。
 - 不得编造或修改 `kb_id`、`file_id`、`document_id`、`chunk_id`、文档名、链接、页码、版本和更新时间。
 - 工具没有返回的字段不要展示。
 - 引用片段应与回答结论直接相关，不得引用无关片段充当依据。

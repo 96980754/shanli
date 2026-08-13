@@ -54,6 +54,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output", default=".", help="报告输出目录（默认当前目录）")
     parser.add_argument("--max-questions", type=int, help="最多评估前 N 道题")
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=4,
+        help="同时评估的题目数（默认 4；设 1 为完全串行，更快/更省并发按需调）",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default="/app/saves/ragas_cache",
+        help="ragas 磁盘缓存目录（相同 LLM 调用命中缓存，重跑测试集近乎瞬时；空字符串关闭）",
+    )
     return parser.parse_args()
 
 
@@ -108,6 +119,15 @@ async def resolve_retrieval_config(kb_id: str, kb_instance) -> dict:
         return {}
 
 
+def _build_judge_cache(cache_dir: str | None) -> Any:
+    """构建 ragas judge LLM 磁盘缓存；cache_dir 为空时返回 None（关闭缓存）。"""
+    if not cache_dir:
+        return None
+    from ragas.cache import DiskCacheBackend
+
+    return DiskCacheBackend(cache_dir=cache_dir)
+
+
 def resolve_judge_spec(retrieval_config: dict, args: argparse.Namespace) -> str:
     if args.judge_llm:
         return args.judge_llm
@@ -151,7 +171,10 @@ async def run(args: argparse.Namespace) -> int:
         retrieval_config.setdefault("answer_llm", judge_spec)
         print(f"judge 模型: {judge_spec} | 题目数: {len(questions)} | embedding 指标: {args.with_embedding_metrics}")
 
-        judge_llm = build_judge_llm(judge_spec)
+        judge_cache = _build_judge_cache(args.cache_dir)
+        judge_llm = build_judge_llm(judge_spec, cache=judge_cache)
+        if judge_cache:
+            print(f"已启用 ragas 磁盘缓存: {args.cache_dir}")
         embedding_adapter = build_embedding_adapter(args.embedding_model) if args.with_embedding_metrics else None
 
         results = await run_ragas_evaluation(
@@ -162,7 +185,10 @@ async def run(args: argparse.Namespace) -> int:
             judge_llm=judge_llm,
             embedding_adapter=embedding_adapter,
             with_embedding_metrics=args.with_embedding_metrics,
+            concurrency=args.concurrency,
         )
+        if judge_cache:
+            print(f"并发题目数: {args.concurrency}")
 
         Path(args.output).mkdir(parents=True, exist_ok=True)
         json_path, md_path = write_reports(results, run_name=run_name, output_dir=args.output)
