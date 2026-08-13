@@ -26,6 +26,12 @@ const streamEventToMessageChunk = (streamEvent) => {
     if (streamEvent.additional_reasoning_content) {
       chunk.additional_kwargs = { reasoning_content: streamEvent.additional_reasoning_content }
     }
+    if (streamEvent.handoff_available) {
+      chunk.extra_metadata = {
+        handoff_available: true,
+        ...(streamEvent.handoff_query ? { handoff_query: streamEvent.handoff_query } : {})
+      }
+    }
     return chunk
   }
 
@@ -239,6 +245,9 @@ export function useAgentStreamHandler({
         })
         // 使用审批 composable 处理审批请求
         return processApprovalInStream(chunk, threadId, unref(currentAgentId))
+
+      case 'knowledge_handoff_available':
+        return false
 
       case 'agent_state':
         console.log(`${debugPrefix}[agent_state_chunk]`, {

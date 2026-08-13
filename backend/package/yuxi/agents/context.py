@@ -199,6 +199,15 @@ class BaseContext:
         },
     )
 
+    prefetch_knowledge: bool = field(
+        default=False,
+        metadata={
+            "name": "预检索知识库",
+            "description": "启用后 run 开始时并行检索已绑定知识库并注入首轮上下文，显著降低首 token 延迟。",
+            "type": "boolean",
+        },
+    )
+
     mcps: list[str] | None = field(
         default=None,
         metadata={

@@ -24,6 +24,7 @@ from yuxi.agents.middlewares.subagent_task import create_subagent_task_middlewar
 from yuxi.agents.toolkits.service import resolve_configured_runtime_tools
 
 from .context import ChatBotContext
+from .prefetch import KNOWLEDGE_BASE_SKILL_SLUG, prefetch_knowledge_context
 from .prompt import TODO_MID_PROMPT, build_prompt_with_context
 from .state import ChatBotState
 
@@ -85,12 +86,23 @@ class ChatbotAgent(BaseAgent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    def _apply_prefetch_input(self, graph_input, context) -> None:
+        """预检索模式：在首轮状态里预激活 knowledge-base skill，保持 KB 工具对模型可见。"""
+        super()._apply_prefetch_input(graph_input, context)
+        if isinstance(graph_input, dict):
+            activated = graph_input.setdefault("activated_skills", [])
+            if isinstance(activated, list) and KNOWLEDGE_BASE_SKILL_SLUG not in activated:
+                activated.append(KNOWLEDGE_BASE_SKILL_SLUG)
+
     async def get_graph(self, context=None, **kwargs):
 
         context = await prepare_agent_runtime_context(
             context or self.context_schema(),
             context_schema=self.context_schema,
         )
+
+        if getattr(context, "prefetch_knowledge", False):
+            await prefetch_knowledge_context(context)
 
         # 使用 create_agent 创建智能体
         model_spec = resolve_chat_model_spec(context.model)

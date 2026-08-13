@@ -580,7 +580,7 @@ async def search_file(
 def get_common_kb_tools() -> list:
     """获取通用知识库工具列表
 
-    返回 6 个通用工具：
+    返回 5 个通用工具：
     - list_kbs: 列出用户可访问的知识库
     - query_kb: 在指定知识库中检索
     - query_kbs: 在多个知识库中并行检索

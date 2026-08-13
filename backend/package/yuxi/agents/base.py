@@ -57,6 +57,35 @@ def _normalize_tool_event_data(data: Any) -> Any:
     return {**data, "output": tool_message}
 
 
+def _latest_human_message_text(graph_input: Any) -> str:
+    """从 graph 初始输入中提取最后一条 human 消息文本（兼容 str / dict / BaseMessage）。"""
+    messages = graph_input.get("messages", []) if isinstance(graph_input, dict) else []
+    for message in reversed(messages or []):
+        if _message_role(message) in {"human", "user"}:
+            content = _message_content(message)
+            if content:
+                return content
+    return ""
+
+
+def _message_role(message: Any) -> str:
+    if isinstance(message, str):
+        return "human"
+    if isinstance(message, dict):
+        return message.get("role") or message.get("type") or ""
+    return getattr(message, "type", "") or getattr(message, "role", "")
+
+
+def _message_content(message: Any) -> str:
+    if isinstance(message, str):
+        return message
+    if isinstance(message, dict):
+        content = message.get("content", "")
+        return content if isinstance(content, str) else ""
+    content = getattr(message, "content", "")
+    return content if isinstance(content, str) else ""
+
+
 def _subagent_route_for_namespace(
     routes: dict[tuple[str, ...], dict[str, str]], namespace: list[str]
 ) -> dict[str, str] | None:
@@ -204,6 +233,8 @@ class BaseAgent:
     async def _stream_input_with_state(self, graph_input, input_context=None, **kwargs):
         context = self.context_schema()
         context.update_from_dict(input_context or {})
+        if getattr(context, "prefetch_knowledge", False):
+            self._apply_prefetch_input(graph_input, context)
         graph = await self.get_graph(context=context)
         logger.debug(f"stream_with_state: {context=}")
 
@@ -270,6 +301,12 @@ class BaseAgent:
             route_task.cancel()
             with suppress(asyncio.CancelledError):
                 await route_task
+
+    def _apply_prefetch_input(self, graph_input, context) -> None:
+        """预检索模式：把最新用户问题注入 context，供 get_graph 预检索使用（子类可扩展）。"""
+        query = _latest_human_message_text(graph_input)
+        if query:
+            context._latest_user_query = query
 
     async def stream_messages_with_state(self, messages: list[str], input_context=None, **kwargs):
         async for event in self._stream_input_with_state({"messages": messages}, input_context, **kwargs):
