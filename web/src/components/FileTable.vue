@@ -417,6 +417,7 @@
 
 <script setup>
 import { ref, computed, h, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
@@ -466,6 +467,7 @@ const props = defineProps({
 })
 
 const store = useDatabaseStore()
+const route = useRoute()
 const versionModalVisible = ref(false)
 const versionFileId = ref('')
 
@@ -1104,7 +1106,14 @@ watch(
     if (!nextKbId) return
     statusFilter.value = 'all'
     store.resetFileBrowser()
-    await store.loadDocumentFiles({ kbId: nextKbId, page: 1 })
+    // 全库搜索等入口通过 ?path=... 直达路径型虚拟目录（如 全部文件 / MCX资料-证书 / ...）；
+    // 由 FileTable 在首次加载时消费，避免与后续 reset 竞态覆盖
+    const folderPath = route.query.path
+    if (typeof folderPath === 'string' && folderPath) {
+      await store.navigateToFolder(folderPath)
+    } else {
+      await store.loadDocumentFiles({ kbId: nextKbId, page: 1 })
+    }
   },
   { immediate: true }
 )

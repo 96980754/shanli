@@ -5,6 +5,7 @@ import json
 import weakref
 from typing import Any
 
+from yuxi.config.app import resolve_embedding_model
 from yuxi.knowledge.graphs.extractors import (
     GraphExtractor,
     GraphExtractorFactory,
@@ -373,7 +374,7 @@ class MilvusGraphService:
                 )
                 await self.graph_vector_store.insert_missing_graph_records(
                     kb_id=kb_id,
-                    embedding_model_spec=kb.embedding_model_spec,
+                    embedding_model_spec=resolve_embedding_model(kb.embedding_model_spec),
                     entities=entities,
                     triples=triples,
                 )
@@ -452,7 +453,7 @@ class MilvusGraphService:
                             )
                             await self.graph_vector_store.insert_missing_graph_records(
                                 kb_id=kb_id,
-                                embedding_model_spec=kb.embedding_model_spec,
+                                embedding_model_spec=resolve_embedding_model(kb.embedding_model_spec),
                                 entities=entities,
                                 triples=triples,
                             )

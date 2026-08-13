@@ -20,6 +20,7 @@ export default {
   },
   layout: {
     taskCenter: '任务中心',
+    globalSearch: '全库搜索',
     expandSidebar: '展开侧边栏',
     collapseSidebar: '折叠侧边栏',
     debugPanel: '调试面板'

@@ -347,7 +347,18 @@ const mentionDisplayLabels = computed(() => buildMentionDisplayLabels(props.ment
 
 const messageSources = computed(() => {
   if (props.message.type === 'ai') {
-    return MessageProcessor.extractSourcesFromMessage(props.message, availableKnowledgeBases.value)
+    const extracted = MessageProcessor.extractSourcesFromMessage(
+      props.message,
+      availableKnowledgeBases.value
+    )
+    // 与 getConversationSources 一致：只展示回答实际引用的文档，过滤 query_kbs 带出的无关候选
+    return {
+      ...extracted,
+      knowledgeChunks: MessageProcessor.filterKnowledgeChunksByAnswer(
+        extracted.knowledgeChunks,
+        props.message.content
+      )
+    }
   }
   return { knowledgeChunks: [], webSources: [] }
 })

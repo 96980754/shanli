@@ -4,11 +4,10 @@
 被测路径：
   1. POST /api/auth/token           登录
   2. POST /api/chat/thread          创建会话
-  3. POST /api/agent/runs           创建运行（触发 ARQ worker 执行；预检索在此进行）
+  3. POST /api/agent/runs           创建运行（触发 ARQ worker 执行）
   4. GET  /api/agent/runs/{id}/events  SSE 流式消费事件
 
-用于验证 default-chatbot 预检索快速路径：预期工具调用序列为空（tool_calls=[]）、
-首 token 远低于 ReAct 逐轮决策的旧路径（19.2s → 约 8s）。
+量化 default-chatbot 端到端首 token 延迟、完整回答耗时与工具调用序列。
 
 用法（需可登录账号，密码通过参数传入，不回显）:
   python e2e_first_token.py --username <user> --password <pass> \

@@ -676,7 +676,8 @@ const onFileUploadSuccess = () => {
 const resetFileSelectionState = () => {
   store.selectedRowKeys = []
   store.closeFileDetail()
-  store.resetFileBrowser()
+  // 不在此处 resetFileBrowser：文件浏览器由 FileTable 在 kbId watch 中负责重置与导航，
+  // 这里再 reset 会因 fileBrowserContextId 失效丢弃 ?path= 直达目录的加载结果（空白目录问题）
 }
 
 watch(

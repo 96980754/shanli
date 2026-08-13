@@ -920,8 +920,13 @@ class KnowledgeBaseManager:
 
         kb_instance = await self._get_kb_for_database(kb_id)
         kb_instance.update_database(
-            kb_id, name, description, llm_model_spec, update_llm_model_spec,
-            embedding_model_spec, update_embedding_model_spec,
+            kb_id,
+            name,
+            description,
+            llm_model_spec,
+            update_llm_model_spec,
+            embedding_model_spec,
+            update_embedding_model_spec,
         )
 
         update_data: dict = {

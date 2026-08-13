@@ -62,9 +62,7 @@ class KnowledgeHandoffService:
                 query=normalized_query,
                 query_hash=query_hash,
                 status=(
-                    "customer_service_ready"
-                    if customer_service.is_configured
-                    else "customer_service_not_configured"
+                    "customer_service_ready" if customer_service.is_configured else "customer_service_not_configured"
                 ),
             )
             session.add(ticket)

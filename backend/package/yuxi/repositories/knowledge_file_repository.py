@@ -129,6 +129,13 @@ class KnowledgeFileRepository:
         "previous_version_id",
         "is_active",
         "superseded_at",
+        "enrichment_data",
+        "enrichment_status",
+        "enrichment_version",
+        "enrichment_content_hash",
+        "enrichment_generated_at",
+        "enrichment_error",
+        "enrichment_possibly_outdated",
     }
 
     @staticmethod

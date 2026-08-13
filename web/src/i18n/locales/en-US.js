@@ -20,6 +20,7 @@ export default {
   },
   layout: {
     taskCenter: 'Task Center',
+    globalSearch: 'Global Search',
     expandSidebar: 'Expand sidebar',
     collapseSidebar: 'Collapse sidebar',
     debugPanel: 'Debug Panel'

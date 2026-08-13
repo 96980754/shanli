@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from yuxi.config.app import resolve_embedding_model
 from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorStore
 from yuxi.knowledge.utils import sanitize_processing_error
 from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
@@ -172,12 +173,12 @@ class KnowledgeConflictPublishService:
         await asyncio.to_thread(neo4j_write, self.neo4j_connection.driver, write)
     async def _publish_vector(self, task, conflict, assertion) -> None:
         kb = await self.kb_repository.get_by_kb_id(task.kb_id)
-        if kb is None or not kb.embedding_model_spec:
-            raise ValueError("Graph vector embedding model is unavailable")
+        if kb is None:
+            raise ValueError("Knowledge base is unavailable")
         content = _assertion_content(assertion)
         await self.vector_store.upsert_reviewed_assertion(
             kb_id=task.kb_id,
-            embedding_model_spec=kb.embedding_model_spec,
+            embedding_model_spec=resolve_embedding_model(kb.embedding_model_spec),
             superseded_assertion_ids=(
                 list(conflict.existing_assertion_ids or []) if conflict.resolution == "use_new" else []
             ),

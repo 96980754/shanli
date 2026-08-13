@@ -907,7 +907,8 @@ class PostgresManager(metaclass=SingletonMeta):
                 notified_at TIMESTAMPTZ
             )
             """,
-            "CREATE INDEX IF NOT EXISTS ix_knowledge_handoffs_uid_query_created ON knowledge_handoffs(uid, query_hash, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_handoffs_uid_query_created "
+            "ON knowledge_handoffs(uid, query_hash, created_at DESC)",
             """
             CREATE TABLE IF NOT EXISTS agent_envs (
                 id SERIAL PRIMARY KEY,
