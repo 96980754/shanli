@@ -83,7 +83,7 @@ const toolFinishedMessage = (chunk) => {
   return { ...output, type: 'tool', id }
 }
 
-// tool-started 事件仅用于生成阶段状态提示：切换“正在查询知识库…”等文案。
+// tool-started 事件用于：1) 切换“正在查询知识库…”等状态文案；2) 记录工具开始时刻，供 tool-finished 计算单次工具调用耗时。
 const toolStartedInfo = (chunk) => {
   const streamEvent = chunk?.event
   if (!streamEvent || streamEvent.method !== 'tools') return null
@@ -93,7 +93,7 @@ const toolStartedInfo = (chunk) => {
 
   const toolName = data.tool_name || data.tool
   if (!toolName) return null
-  return { toolName }
+  return { toolName, toolCallId: data.tool_call_id }
 }
 
 export function useAgentStreamHandler({
@@ -104,6 +104,8 @@ export function useAgentStreamHandler({
   streamSmoother
 }) {
   const debugPrefix = '[AgentStateDebug]'
+  // 记录每个工具调用（按 tool_call_id）的开始时刻，用于 tool-finished 时计算单次调用耗时。
+  const toolStartedAt = new Map()
   /**
    * Process a single stream chunk based on its status
    * @param {Object} chunk - The parsed JSON chunk
@@ -185,9 +187,12 @@ export function useAgentStreamHandler({
 
       case 'stream_event':
         {
-          // 工具开始：切换到具体工具状态文案（“正在查询知识库…”）。
+          // 工具开始：切换到具体工具状态文案（“正在查询知识库…”），并记录开始时刻。
           const startedInfo = toolStartedInfo(chunk)
           if (startedInfo) {
+            if (startedInfo.toolCallId) {
+              toolStartedAt.set(startedInfo.toolCallId, Date.now())
+            }
             threadState.activeToolName = startedInfo.toolName
             threadState.generationPhase = 'tool'
             // 兜底：即使极短的过渡文本已提前隐藏加载状态，工具执行期间也要重新显示。
@@ -199,6 +204,11 @@ export function useAgentStreamHandler({
           // 按 tool_call_id 关联到对应 AI 消息的 tool_call，驱动其完成态。
           const toolMessage = toolFinishedMessage(chunk)
           if (toolMessage) {
+            const start = toolMessage.id ? toolStartedAt.get(toolMessage.id) : undefined
+            if (start != null) {
+              toolMessage.duration_ms = Date.now() - start
+              toolStartedAt.delete(toolMessage.id)
+            }
             if (!threadState.onGoingConv.msgChunks[toolMessage.id]) {
               threadState.onGoingConv.msgChunks[toolMessage.id] = []
             }

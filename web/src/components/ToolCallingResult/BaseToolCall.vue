@@ -51,6 +51,9 @@
         </template>
       </div>
 
+      <!-- 单次工具调用耗时（仅在有实测耗时数据时展示） -->
+      <span v-if="durationLabel" class="tool-duration">{{ durationLabel }}</span>
+
       <!-- Fixed Expand Icon -->
       <span class="tool-expand-icon">
         <ChevronsDownUp v-if="isExpanded" size="14" />
@@ -178,6 +181,14 @@ const hasParams = computed(() => {
   return argsStr.length > 2
 })
 
+// 单次工具调用耗时（前端实测 tool-started → tool-finished 的毫秒数）
+const durationLabel = computed(() => {
+  const durationMs = props.toolCall.tool_call_result?.duration_ms
+  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs)) return ''
+  if (durationMs >= 1000) return `耗时 ${(durationMs / 1000).toFixed(1)}s`
+  return `耗时 ${Math.max(0, Math.round(durationMs))}ms`
+})
+
 // Result Logic
 const resultContent = computed(() => {
   return props.toolCall.tool_call_result?.content
@@ -282,6 +293,17 @@ const formatResultData = (data) => {
       color: var(--gray-300);
       display: flex;
       align-items: center;
+    }
+
+    .tool-duration {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--gray-500);
+      background-color: var(--gray-25);
+      border-radius: 4px;
+      padding: 1px 6px;
+      white-space: nowrap;
     }
 
     .tool-header-content {

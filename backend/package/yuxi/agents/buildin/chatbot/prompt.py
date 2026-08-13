@@ -141,4 +141,7 @@ def build_prompt_with_context(context):
             HARD_GUARDRAILS_PROMPT.strip(),
         ]
     )
+    prefetch_block = getattr(context, "_prefetch_knowledge_block", None)
+    if prefetch_block:
+        sections.append(prefetch_block)
     return "\n\n".join(section for section in sections if section).strip()

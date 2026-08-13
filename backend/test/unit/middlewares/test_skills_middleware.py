@@ -19,7 +19,7 @@ _KB_TOOL_NAMES = {
     "query_kb",
     "find_kb_document",
     "open_kb_document",
-    "get_mindmap",
+    "search_file",
 }
 
 
@@ -169,7 +169,7 @@ async def test_awrap_model_call_mounts_knowledge_base_skill_tools():
                                 "query_kb",
                                 "find_kb_document",
                                 "open_kb_document",
-                                "get_mindmap",
+                                "search_file",
                             ],
                             "mcps": [],
                             "skills": [],
@@ -201,7 +201,7 @@ async def test_awrap_model_call_mounts_knowledge_base_skill_tools():
         "query_kb",
         "find_kb_document",
         "open_kb_document",
-        "get_mindmap",
+        "search_file",
     }
 
 
