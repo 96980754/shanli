@@ -19,7 +19,7 @@
             />
             <ChevronDown v-else :size="14" class="expand-icon" />
             <FileText :size="14" color="var(--gray-600)" />
-            <span class="file-name">{{ fileGroup.filename }}</span>
+            <span class="file-name">{{ fileGroup.displayName }}</span>
             <span class="chunk-count">{{ fileGroup.chunks.length }} chunks</span>
           </div>
           <div v-if="fileGroup.kb_id && fileGroup.file_id" class="file-actions">
@@ -163,6 +163,12 @@ const normalizedChunks = computed(() =>
     })
 )
 
+// 来源展示只取文件名（去掉前缀路径），分组仍按完整 source 路径避免同名文件串组。
+const getBaseName = (path = '') => {
+  const parts = String(path).split(/[\\/]/).filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : String(path)
+}
+
 const fileGroupList = computed(() => {
   const groups = new Map()
   for (const item of normalizedChunks.value) {
@@ -170,6 +176,7 @@ const fileGroupList = computed(() => {
     if (!groups.has(filename)) {
       groups.set(filename, {
         filename,
+        displayName: getBaseName(filename),
         kb_id: item?.kb_id || '',
         file_id: item?.file_id || '',
         chunks: []

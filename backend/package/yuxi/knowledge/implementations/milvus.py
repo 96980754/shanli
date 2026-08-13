@@ -21,6 +21,7 @@ from pymilvus import (
     utility,
 )
 
+from yuxi.config.app import resolve_reranker_model
 from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
@@ -1151,13 +1152,8 @@ class MilvusKB(KnowledgeBase):
             if not use_reranker:
                 return retrieved_chunks[:final_top_k]
 
-            # 使用重排序模型
-            reranker_model = merged_kwargs.get("reranker_model")
-            if not reranker_model:
-                raise ValueError(
-                    "Reranker model must be specified when use_reranker=True. "
-                    "Please provide reranker_model in query parameters."
-                )
+            # 使用重排序模型；未显式指定时跟随设置-基本设置的全局默认 reranker。
+            reranker_model = resolve_reranker_model(merged_kwargs.get("reranker_model"))
 
             try:
                 from yuxi.models.rerank import get_reranker

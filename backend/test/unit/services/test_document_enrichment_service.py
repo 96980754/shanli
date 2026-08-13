@@ -98,12 +98,12 @@ def _service(monkeypatch, record):
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"status": FileStatus.WAITING_CONFIRMATION}, "尚未确认并完成入库"),
+        ({"status": FileStatus.WAITING_CONFIRMATION}, "尚未完成入库"),
         ({"is_active": False}, "当前生效版本"),
-        ({"confirmed_at": None}, "尚未确认并完成入库"),
+        ({"markdown_file": None}, "尚未完成入库"),
     ],
 )
-async def test_generation_only_accepts_active_confirmed_formal_markdown(monkeypatch, overrides, message):
+async def test_generation_only_accepts_active_indexed_markdown(monkeypatch, overrides, message):
     service, _repository = _service(monkeypatch, _record(**overrides))
     with pytest.raises(EnrichmentNotFound, match=message):
         await service.generate(
@@ -113,6 +113,18 @@ async def test_generation_only_accepts_active_confirmed_formal_markdown(monkeypa
             components={"summary", "keywords", "tags"},
             model_spec="configured:model",
         )
+@pytest.mark.asyncio
+async def test_generation_accepts_indexed_document_without_confirmation(monkeypatch):
+    """普通上传的已入库文档（未走清洗确认流程，confirmed_at=None）也可生成信息增强。"""
+    service, _repository = _service(monkeypatch, _record(confirmed_at=None))
+    result = await service.generate(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+        components={"summary", "keywords", "tags"},
+        model_spec="configured:model",
+    )
+    assert result["status"] == "ready"
 @pytest.mark.asyncio
 async def test_generation_persists_version_bound_results(monkeypatch):
     record = _record()

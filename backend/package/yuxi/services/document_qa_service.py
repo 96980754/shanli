@@ -64,11 +64,10 @@ class DocumentQAService:
     def _assert_eligible(record) -> None:
         if (
             not record.is_active
-            or not record.confirmed_at
             or record.status not in INDEXED_QA_STATUSES
             or not record.markdown_file
         ):
-            raise QANotFound("文档不是当前已确认且可检索的正式版本")
+            raise QANotFound("文档不是当前可检索的正式版本")
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
         if not path or not is_minio_url(path):
@@ -158,9 +157,7 @@ class DocumentQAService:
             "file_id": file_id,
             "cleaning_version": int(record.cleaning_version or 0),
             "draft_mode": record.status == DRAFT_QA_STATUS,
-            "confirmable": bool(
-                record.status in INDEXED_QA_STATUSES and record.confirmed_at and int(record.chunk_count or 0) > 0
-            ),
+            "confirmable": bool(record.status in INDEXED_QA_STATUSES and int(record.chunk_count or 0) > 0),
             "items": [self._public(item) for item in items],
         }
     async def get(self, *, kb_id: str, file_id: str, qa_id: str) -> dict[str, Any]:
@@ -183,7 +180,7 @@ class DocumentQAService:
         try:
             generated = await self.generator.generate(
                 chunks,
-                model_spec=config.document_qa_model or record.__dict__.get("llm_model_spec"),
+                model_spec=config.document_qa_model or record.__dict__.get("llm_model_spec") or config.default_model,
                 temperature=float(config.document_qa_temperature),
                 timeout_seconds=float(config.document_qa_timeout_seconds),
                 attempts=int(config.document_qa_output_attempts),

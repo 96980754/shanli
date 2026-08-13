@@ -32,7 +32,20 @@ const search = async () => {
   } finally { loading.value = false }
 }
 
-const browseDirectory = (kbId) => router.push({ path: '/workspace', query: { kb_id: kbId } })
+// filename 是完整相对路径（如 定位资料-证书/C10—UN38.3的报告证书/xxx.pdf），目录路径 = 去掉最后一个 / 段
+const folderPathOf = (filename = '') => {
+  const index = filename.lastIndexOf('/')
+  return index === -1 ? '' : filename.slice(0, index)
+}
+
+// 搜索/热门文档/分类入口统一跳转到知识库文件浏览，并定位到文档所在目录
+const browseDirectory = (item) => {
+  const folderPath = folderPathOf(item?.filename)
+  router.push({
+    path: `/extensions/knowledgebase/${item.kb_id}`,
+    query: folderPath ? { path: folderPath } : undefined
+  })
+}
 
 onMounted(async () => {
   const [databaseResponse, hotResponse] = await Promise.all([databaseApi.getAccessibleDatabases(), documentBrowseApi.hot()])
@@ -55,14 +68,14 @@ onMounted(async () => {
           </a-space>
           <a-list :loading="loading" :data-source="documents" class="document-list">
             <template #renderItem="{ item }">
-              <a-list-item><a-list-item-meta :title="item.filename" :description="`${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`" /><template #actions><a @click="browseDirectory(item.kb_id)">打开目录</a></template></a-list-item>
+              <a-list-item><a-list-item-meta :title="item.filename" :description="`${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`" /><template #actions><a @click="browseDirectory(item)">打开目录</a></template></a-list-item>
             </template>
           </a-list>
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="8">
-        <a-card title="热门文档" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item.kb_id)">{{ item.filename }}</a><span>{{ item.view_count }} 次浏览</span></a-list-item></template></a-list></a-card>
-        <a-card title="知识库分类 / 目录" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item.kb_id)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
+        <a-card title="热门文档" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.filename }}</a><span>{{ item.view_count }} 次浏览</span></a-list-item></template></a-list></a-card>
+        <a-card title="知识库分类 / 目录" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
       </a-col>
     </a-row>
   </div>

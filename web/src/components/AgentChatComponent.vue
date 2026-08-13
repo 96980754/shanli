@@ -2839,7 +2839,18 @@ const getConversationSources = (conv) => {
   if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
     return { knowledgeChunks: [], webSources: [], knowledgeActivity: true }
   }
-  return MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
+  const extracted = MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
+  // 只保留 AI 回答正文实际引用的文档：query_kbs 一次并行检索会带出大量无关候选文件，
+  // 面板应跟随回答的「依据来源」，而非展示全部检索内容。
+  const citedChunks = MessageProcessor.filterKnowledgeChunksByAnswer(
+    extracted.knowledgeChunks,
+    lastMessage?.content
+  )
+  // 发生过知识检索（即使召回不足/检索失败，模型仍可能据已有知识作答）即保留来源按钮；
+  // 纯聊天（未检索知识库）不展示。
+  return MessageProcessor.hasKnowledgeRetrieval(conv)
+    ? { ...extracted, knowledgeChunks: citedChunks, knowledgeActivity: true }
+    : extracted
 }
 
 // ==================== LIFECYCLE & WATCHERS ====================

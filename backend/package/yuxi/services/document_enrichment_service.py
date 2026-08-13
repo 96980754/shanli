@@ -44,8 +44,8 @@ class DocumentEnrichmentService:
     def _assert_eligible(record) -> None:
         if not record.is_active:
             raise EnrichmentNotFound("文档不是当前生效版本")
-        if record.status not in GENERATABLE_FILE_STATUSES or not record.confirmed_at or not record.markdown_file:
-            raise EnrichmentNotFound("文档尚未确认并完成入库")
+        if record.status not in GENERATABLE_FILE_STATUSES or not record.markdown_file:
+            raise EnrichmentNotFound("文档尚未完成入库")
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
         if not path or not is_minio_url(path):
@@ -134,7 +134,9 @@ class DocumentEnrichmentService:
         if claimed is None:
             raise EnrichmentVersionConflict("文档信息已被其他操作更新，请刷新后重试")
         claimed_version = int(claimed.enrichment_version or current_version + 1)
-        configured_model = model_spec if model_spec is not None else config.document_enrichment_model
+        configured_model = (
+            model_spec if model_spec is not None else (config.document_enrichment_model or config.default_model)
+        )
         try:
             generated = await self.generator.generate(
                 markdown,

@@ -208,6 +208,22 @@
           <p class="ant-upload-text">点击或将文件拖拽到此处</p>
           <p class="ant-upload-hint">支持类型: {{ uploadHint }}</p>
           <div class="zip-tip" v-if="hasZipFiles">📦 ZIP包将自动解压提取 Markdown 与图片</div>
+          <!-- 上传完成后在文件名旁提供显式的「查看」按钮，用户无需猜测文件名可点击预览。
+               originNode 是 VNode，必须经 UploadItemWrap 用 h() 渲染，不能 {{ }} 文本插值（会被序列化成 JSON 文本） -->
+          <template #itemRender="{ originNode, file, actions }">
+            <UploadItemWrap :origin="originNode">
+              <a-button
+                v-if="file.status === 'done'"
+                type="link"
+                size="small"
+                class="upload-item-preview-btn"
+                @click="actions.preview(file)"
+              >
+                <Eye :size="13" />
+                查看
+              </a-button>
+            </UploadItemWrap>
+          </template>
         </a-upload-dragger>
 
         <div v-if="showAggregateProgress" class="upload-progress-card">
@@ -640,7 +656,8 @@ import {
   Sparkles,
   RefreshCw,
   FileText,
-  Edit3
+  Edit3,
+  Eye
 } from 'lucide-vue-next'
 import { buildChunkParamsPayload } from '@/utils/chunkUtils'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
@@ -1341,6 +1358,11 @@ const officeEditVisible = ref(false)
 const previewVisible = ref(false)
 const previewTarget = ref(null) // { name }
 const previewData = ref(null) // normalizePreviewResponse 结果
+
+// itemRender 的默认列表项 originNode 是 VNode，这里经 h() 渲染并预留默认槽放「查看」按钮。
+// 注意：prop 必须用单词形式（:origin），模板编译器对 kebab-case 不会转 camel，函数式组件拿不到 props.originNode
+const UploadItemWrap = (props, { slots }) =>
+  h('div', { class: 'upload-item-wrap' }, [props.origin, slots.default?.()])
 
 const handlePreviewUploaded = async (file) => {
   const filePath = file?.response?.file_path
@@ -2897,6 +2919,29 @@ const chunkData = async () => {
   .ant-upload-hint {
     font-size: 12px;
     color: var(--gray-500);
+  }
+}
+
+.upload-item-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  :deep(.ant-upload-list-item) {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.upload-item-preview-btn {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--color-primary-700);
+
+  &:hover {
+    color: var(--color-primary-900) !important;
   }
 }
 

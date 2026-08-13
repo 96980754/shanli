@@ -558,6 +558,11 @@ async def save_messages_from_langgraph_state(
                 question=knowledge_question,
                 evidence=knowledge_evidence,
             )
+            # 拒答消息标记可转人工，前端据此展示「转人工」按钮（企微客服）。
+            disposition = msg_dict.get("knowledge_disposition") or {}
+            if disposition.get("type") == "knowledge_refusal":
+                msg_dict["handoff_available"] = True
+                msg_dict["handoff_query"] = knowledge_question or ""
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,

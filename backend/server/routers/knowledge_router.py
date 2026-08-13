@@ -80,6 +80,7 @@ from yuxi.services.knowledge_category_service import KnowledgeCategoryError, Kno
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+from yuxi.services.wecom_handoff_service import KnowledgeHandoffService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
@@ -104,6 +105,7 @@ class UpdateDatabaseRequest(BaseModel):
     name: str
     description: str
     llm_model_spec: str | None = None
+    embedding_model_spec: str | None = None
     category_id: int | None = None
     additional_params: dict | None = None
     share_config: dict | None = None
@@ -335,6 +337,10 @@ class PendingIndexDocumentsRequest(BaseModel):
 class GlobalKnowledgeSearchRequest(BaseModel):
     query: str
     limit: int = 10
+
+
+class KnowledgeHandoffRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=10_000)
 
 
 async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
@@ -931,6 +937,13 @@ async def update_database_info(
     await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         update_llm_model_spec = "llm_model_spec" in data.model_fields_set
+        update_embedding_model_spec = "embedding_model_spec" in data.model_fields_set
+        if update_embedding_model_spec:
+            if not data.embedding_model_spec:
+                raise HTTPException(status_code=400, detail="embedding_model_spec 不能为空")
+            info = model_cache.get_model_info(data.embedding_model_spec)
+            if not info or info.model_type != "embedding":
+                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {data.embedding_model_spec}")
         update_category_id = "category_id" in data.model_fields_set
         if update_category_id:
             if data.category_id is None:
@@ -963,6 +976,8 @@ async def update_database_info(
             data.description,
             data.llm_model_spec,
             update_llm_model_spec=update_llm_model_spec,
+            embedding_model_spec=data.embedding_model_spec,
+            update_embedding_model_spec=update_embedding_model_spec,
             category_id=data.category_id,
             update_category_id=update_category_id,
             additional_params=additional_params,
@@ -2595,8 +2610,20 @@ async def global_knowledge_search(
 ):
     """Search every knowledge base the current user is allowed to search."""
     limit = min(max(request.limit, 1), 30)
-    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
-    return {"result": result, "status": "success"}
+    result, search_incomplete = await GlobalKnowledgeSearchService().search_with_status(
+        current_user, request.query, limit
+    )
+    return {
+        "result": result,
+        "status": "success",
+        "handoff_available": not result and not search_incomplete,
+        "search_complete": not search_incomplete,
+    }
+
+
+@knowledge.post("/handoffs")
+async def create_knowledge_handoff(request: KnowledgeHandoffRequest, current_user: User = Depends(get_required_user)):
+    return await KnowledgeHandoffService().create_and_open(current_user, request.query)
 
 
 @knowledge.post("/databases/{kb_id}/query-test")

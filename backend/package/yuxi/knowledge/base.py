@@ -7,6 +7,7 @@ import string
 from abc import ABC, abstractmethod
 from typing import Any
 
+from yuxi.config.app import resolve_embedding_model
 from yuxi.knowledge.chunking.ragflow_like.presets import ensure_chunk_defaults_in_additional_params
 from yuxi.knowledge.schemas import FindOutputSchema, FindWindowSchema, SearchResultSchema
 from yuxi.knowledge.utils import resolve_processing_params, sanitize_processing_params
@@ -108,7 +109,7 @@ class KnowledgeBase(ABC):
                     "name": meta.get("name"),
                     "description": meta.get("description"),
                     "kb_type": meta.get("kb_type"),
-                    "embedding_model_spec": meta.get("embedding_model_spec"),
+                    "embedding_model_spec": resolve_embedding_model(meta.get("embedding_model_spec")),
                     "llm_model_spec": meta.get("llm_model_spec"),
                     "query_params": meta.get("query_params"),
                     "metadata": normalized_additional_params,
@@ -1549,6 +1550,8 @@ class KnowledgeBase(ABC):
         description: str,
         llm_model_spec: str | None = None,
         update_llm_model_spec: bool = False,
+        embedding_model_spec: str | None = None,
+        update_embedding_model_spec: bool = False,
     ) -> dict:
         """
         更新数据库
@@ -1558,6 +1561,9 @@ class KnowledgeBase(ABC):
             name: 新名称
             description: 新描述
             llm_model_spec: LLM 模型 spec（可选）
+            update_llm_model_spec: 是否同步更新 llm_model_spec 到内存 meta
+            embedding_model_spec: 嵌入模型 spec（可选）
+            update_embedding_model_spec: 是否同步更新 embedding_model_spec 到内存 meta
 
         Returns:
             更新后的数据库信息
@@ -1569,6 +1575,8 @@ class KnowledgeBase(ABC):
         self.databases_meta[kb_id]["description"] = description
         if update_llm_model_spec:
             self.databases_meta[kb_id]["llm_model_spec"] = llm_model_spec
+        if update_embedding_model_spec:
+            self.databases_meta[kb_id]["embedding_model_spec"] = embedding_model_spec
 
         return self.get_database_info(kb_id)
 
@@ -1608,7 +1616,7 @@ class KnowledgeBase(ABC):
                 "name": kb.name,
                 "description": kb.description,
                 "kb_type": kb.kb_type,
-                "embedding_model_spec": kb.embedding_model_spec,
+                "embedding_model_spec": resolve_embedding_model(kb.embedding_model_spec),
                 "llm_model_spec": kb.llm_model_spec,
                 "query_params": kb.query_params or self._get_default_query_params(kb.kb_id),
                 "metadata": self.normalize_additional_params(kb.additional_params),

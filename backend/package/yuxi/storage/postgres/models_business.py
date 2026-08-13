@@ -574,6 +574,21 @@ class MessageFeedback(Base):
         }
 
 
+class KnowledgeHandoff(Base):
+    """A question that needs a human because retrieval found no evidence."""
+
+    __tablename__ = "knowledge_handoffs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uid = Column(String(64), ForeignKey("users.uid"), nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    query_hash = Column(String(64), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="pending", index=True)
+    notification_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False, index=True)
+    notified_at = Column(DateTime, nullable=True)
+
+
 class MCPServer(Base):
     """MCP 服务器配置模型"""
 

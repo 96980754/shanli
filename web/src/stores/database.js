@@ -464,6 +464,36 @@ export const useDatabaseStore = defineStore('database', () => {
     })
   }
 
+  // 全库搜索等入口通过目录路径直达：重建路径型虚拟目录的面包屑链，并加载目标目录下的文件
+  async function navigateToFolder(folderPath = '') {
+    let prefix = ''
+    const crumbs = [
+      { file_id: null, filename: '全部文件', path_prefix: '' },
+      ...folderPath
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => {
+          prefix = prefix ? `${prefix}/${segment}` : segment
+          return {
+            file_id: `__virtual_folder__:root:${prefix}/`,
+            filename: segment,
+            is_virtual_folder: true,
+            parent_id: null,
+            path_prefix: `${prefix}/`
+          }
+        })
+    ]
+    folderBreadcrumbs.value = crumbs
+    selectedRowKeys.value = []
+    return loadDocumentFiles({
+      parentId: null,
+      pathPrefix: crumbs[crumbs.length - 1].path_prefix,
+      page: 1,
+      status: 'all',
+      recursive: false
+    })
+  }
+
   async function addUploadedFiles({ items, params, parentId }) {
     if (items.length === 0) {
       message.error('请先上传文件')
@@ -809,6 +839,7 @@ export const useDatabaseStore = defineStore('database', () => {
     loadDocumentFiles,
     enterFolder,
     goToFolder,
+    navigateToFolder,
     resetFileBrowser,
 
     startAutoRefresh,

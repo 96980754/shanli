@@ -130,9 +130,9 @@ const msg = ref(props.message)
 // Sources state
 const isSourcesExpanded = ref(false)
 
-// 最多展示 top5 条知识库来源（已按相关度降序排好）
+// 展示全部知识库来源（已按相关度降序排好），不做条数截断
 const knowledgeChunks = computed(() =>
-  (Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []).slice(0, 5)
+  Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []
 )
 const webSources = computed(() =>
   Array.isArray(props.sources?.webSources) ? props.sources.webSources : []
