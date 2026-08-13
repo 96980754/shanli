@@ -56,6 +56,7 @@ class Config(BaseModel):
         default="siliconflow-cn:Pro/BAAI/bge-reranker-v2-m3",
         description="默认 Re-Ranker 模型",
     )
+    transcription_model: str | None = Field(default=None, description="默认语音转写模型")
     content_guard_llm_model: str = Field(
         default="siliconflow-cn:Pro/MiniMaxAI/MiniMax-M2.5",
         description="内容审查LLM模型",

@@ -181,6 +181,23 @@ export const multimodalApi = {
   }
 }
 
+export const transcriptionApi = {
+  transcribe: (audioBlob, language = '') => {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'recording.webm')
+    if (language) formData.append('language', language)
+
+    return apiRequest(
+      '/api/chat/transcriptions',
+      {
+        method: 'POST',
+        body: formData
+      },
+      true
+    )
+  }
+}
+
 // =============================================================================
 // === 对话线程分组 ===
 // =============================================================================

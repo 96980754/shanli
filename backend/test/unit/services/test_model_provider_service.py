@@ -30,6 +30,23 @@ def test_normalize_payload_accepts_enabled_chat_model():
     assert payload["enabled_models"][0]["display_name"] == "anthropic/claude-sonnet-4.5"
 
 
+def test_normalize_payload_accepts_transcription_without_changing_chat_type():
+    payload = _normalize_payload(
+        {
+            "provider_id": "openai-audio",
+            "display_name": "OpenAI Audio",
+            "base_url": "https://api.openai.com/v1",
+            "capabilities": ["chat", "transcription"],
+            "enabled_models": [
+                {"id": "gpt-chat", "type": "chat", "source": "manual"},
+                {"id": "whisper-1", "type": "transcription", "source": "manual"},
+            ],
+        }
+    )
+
+    assert [model["type"] for model in payload["enabled_models"]] == ["chat", "transcription"]
+
+
 def test_normalize_payload_accepts_anthropic_provider_type():
     payload = _normalize_payload(
         {

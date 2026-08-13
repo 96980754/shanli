@@ -3,7 +3,7 @@ import uuid
 from typing import Any
 
 import aiofiles
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,7 @@ from yuxi.services.thread_files_service import (
     save_thread_artifact_to_workspace_view,
 )
 from yuxi.services.feedback_service import get_message_feedback_view, submit_message_feedback_view
+from yuxi.services.transcription_service import transcribe_audio
 from yuxi.utils.logging_config import logger
 from yuxi.utils.image_processor import process_uploaded_image
 from yuxi.utils.paths import VIRTUAL_PATH_PREFIX
@@ -56,6 +57,11 @@ class ImageUploadResponse(BaseModel):
     error: str | None = None
 
 
+class TranscriptionResponse(BaseModel):
+    text: str
+    language: str | None = None
+
+
 chat = APIRouter(prefix="/chat", tags=["chat"])
 
 
@@ -72,8 +78,17 @@ async def call(query: str = Body(...), meta: dict = Body(None), current_user: Us
 
     response = await model.call(query)
     logger.debug({"query": query, "response": response.content})
-
     return {"response": response.content, "request_id": meta["request_id"]}
+
+
+@chat.post("/transcriptions", response_model=TranscriptionResponse)
+async def create_transcription(
+    file: UploadFile = File(...),
+    language: str | None = Form(default=None),
+    _current_user: User = Depends(get_required_user),
+):
+    """将聊天录音转写为文本，不保存音频或创建消息。"""
+    return await transcribe_audio(file, language=language)
 
 
 @chat.get("/thread/{thread_id}/history")
