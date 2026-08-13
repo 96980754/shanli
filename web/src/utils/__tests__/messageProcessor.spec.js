@@ -54,6 +54,23 @@ const run = () => {
     { kb_id: 'kb-finance', file_id: 'f1', kb_name: '财税库', source: 'doc-a.pdf' }
   )
 
+  // 单次工具调用耗时（duration_ms）随 tool_call_result 透传，供前端标记「本次检索耗时」
+  const durationMessages = MessageProcessor.convertToolResultToMessages([
+    {
+      type: 'ai',
+      tool_calls: [{ id: 'call-dur', name: 'query_kb', args: { kb_id: 'kb-finance' } }]
+    },
+    {
+      type: 'tool',
+      tool_call_id: 'call-dur',
+      content: JSON.stringify(queryOutput()),
+      duration_ms: 1234
+    }
+  ])
+  const durationToolCall = durationMessages.find((msg) => msg.type === 'ai').tool_calls[0]
+  assert.equal(durationToolCall.tool_call_result.duration_ms, 1234)
+  assert.equal(durationToolCall.tool_call_result.content.includes('kb-finance'), true)
+
   const historyConv = {
     messages: [
       {
