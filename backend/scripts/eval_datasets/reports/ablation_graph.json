@@ -1,0 +1,522 @@
+[
+  {
+    "idx": 8,
+    "kb": "loc",
+    "section": "产品使用",
+    "query": "如何查看终端的历史轨迹回放？",
+    "on": {
+      "latency": 2.3269508030061843,
+      "answer_len": 429,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.59999999997,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.7833089839987224,
+      "answer_len": 324,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.7499999999625,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 14,
+    "kb": "loc",
+    "section": "产品使用",
+    "query": "终端支持哪些定位方式（GPS/北斗/基站）？",
+    "on": {
+      "latency": 1.3872037760011153,
+      "answer_len": 85,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9467813051041186,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.6326556099957088,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9467813051041186,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 29,
+    "kb": "loc",
+    "section": "故障排查",
+    "query": "终端 GPS 信号弱，如何改善？",
+    "on": {
+      "latency": 1.1679952760023298,
+      "answer_len": 120,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9765432098656928,
+        "context_recall": 0.3333333333333333
+      }
+    },
+    "off": {
+      "latency": 0.7616962860047352,
+      "answer_len": 67,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.6568027210790525,
+        "context_recall": 0.3333333333333333
+      }
+    }
+  },
+  {
+    "idx": 53,
+    "kb": "loc",
+    "section": "应用场景",
+    "query": "在安防行业，我们的产品能怎么用？用在什么地方，解决什么问题？",
+    "on": {
+      "latency": 1.1415488450002158,
+      "answer_len": 543,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9765432098656928,
+        "context_recall": 0.875
+      }
+    },
+    "off": {
+      "latency": 0.7039869129948784,
+      "answer_len": 351,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.375
+      }
+    }
+  },
+  {
+    "idx": 61,
+    "kb": "loc",
+    "section": "部署配置",
+    "query": "定位功能如何部署？需要什么配置的服务器？",
+    "on": {
+      "latency": 1.1980143559921999,
+      "answer_len": 131,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.8701388888780122,
+        "context_recall": 0.6666666666666666
+      }
+    },
+    "off": {
+      "latency": 0.8775691070040921,
+      "answer_len": 71,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.625,
+        "context_precision": 0.6496031745923478,
+        "context_recall": 0.8
+      }
+    }
+  },
+  {
+    "idx": 83,
+    "kb": "loc",
+    "section": "方案整合",
+    "query": "客户是化工园区，需要防爆终端+人员定位+电子围栏，请给出整体解决方案（Word 文档输出）？",
+    "on": {
+      "latency": 1.2653111699910369,
+      "answer_len": 2725,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.7624309392265194,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.875
+      }
+    },
+    "off": {
+      "latency": 1.0505695580068277,
+      "answer_len": 3012,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.5,
+        "context_precision": 0.9861111110987848,
+        "context_recall": 0.375
+      }
+    }
+  },
+  {
+    "idx": 41,
+    "kb": "mcx",
+    "section": "产品规格",
+    "query": "MCX（MCSTARS）系统支持哪些通信协议？",
+    "on": {
+      "latency": 1.7883068750088569,
+      "answer_len": 299,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.4166666666666667,
+        "context_precision": 0.7375850340030685,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.8042534319974948,
+      "answer_len": 218,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9593749999880078,
+        "context_recall": 0.6666666666666666
+      }
+    }
+  },
+  {
+    "idx": 47,
+    "kb": "mcx",
+    "section": "产品规格",
+    "query": "MCX 调度台支持多少路并发呼叫？",
+    "on": {
+      "latency": 1.2700987639982486,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.7683333333179667,
+        "context_recall": 0.5
+      }
+    },
+    "off": {
+      "latency": 0.7535725480120163,
+      "answer_len": 9,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.7861111110980092,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 60,
+    "kb": "mcx",
+    "section": "应用场景",
+    "query": "客户要做应急指挥调度，我们的产品能提供什么方案？",
+    "on": {
+      "latency": 1.6367052679997869,
+      "answer_len": 727,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.2222222222222222
+      }
+    },
+    "off": {
+      "latency": 0.735765078003169,
+      "answer_len": 575,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.9714285714285714,
+        "context_precision": 0.9626543209769582,
+        "context_recall": 0.7419354838709677
+      }
+    }
+  },
+  {
+    "idx": 63,
+    "kb": "mcx",
+    "section": "部署配置",
+    "query": "部署 MCX（MCSTARS）系统需要开放哪些服务端口？",
+    "on": {
+      "latency": 1.3531028989964398,
+      "answer_len": 9,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.7499999999625,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.6708674550027354,
+      "answer_len": 9,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 76,
+    "kb": "mcx",
+    "section": "商务资质",
+    "query": "MCSTARS（MCX）软件的软件著作权证书在哪里获取？",
+    "on": {
+      "latency": 1.0794355209945934,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.6841062479943503,
+      "answer_len": 255,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 91,
+    "kb": "mcx",
+    "section": "方案整合",
+    "query": "客户需要应急指挥场景，推荐什么终端和调度方案？",
+    "on": {
+      "latency": 1.046755684990785,
+      "answer_len": 406,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.9545454545454546,
+        "context_precision": 0.9467813051041186,
+        "context_recall": 0.0
+      }
+    },
+    "off": {
+      "latency": 0.8245811460074037,
+      "answer_len": 330,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.6842105263157895,
+        "context_precision": 0.9282627865858059,
+        "context_recall": 0.4
+      }
+    }
+  },
+  {
+    "idx": 1,
+    "kb": "poc",
+    "section": "产品使用",
+    "query": "如何关闭 SOS 报警信息？",
+    "on": {
+      "latency": 1.7379524239950115,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9999999999,
+        "context_recall": 0.6666666666666666
+      }
+    },
+    "off": {
+      "latency": 0.6922166100121103,
+      "answer_len": 137,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.36666666664833336,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 20,
+    "kb": "poc",
+    "section": "故障排查",
+    "query": "调度台闪退，如何排查？",
+    "on": {
+      "latency": 1.2191765799943823,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.38769841269065874,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.6596531789982691,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.5138888888717592,
+        "context_recall": 0.6666666666666666
+      }
+    }
+  },
+  {
+    "idx": 35,
+    "kb": "poc",
+    "section": "产品规格",
+    "query": "F10 终端有哪些功能？",
+    "on": {
+      "latency": 0.9300800839846488,
+      "answer_len": 661,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.9622641509433962,
+        "context_precision": 0.7688492063363922,
+        "context_recall": 0.5833333333333334
+      }
+    },
+    "off": {
+      "latency": 0.7546768260071985,
+      "answer_len": 535,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.9230769230769231,
+        "context_precision": 0.8486394557701895,
+        "context_recall": 0.5
+      }
+    }
+  },
+  {
+    "idx": 62,
+    "kb": "poc",
+    "section": "部署配置",
+    "query": "客户有 200 个用户，服务器推荐什么配置？",
+    "on": {
+      "latency": 1.2459904100105632,
+      "answer_len": 137,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.8571428571428571,
+        "context_precision": 0.8522817460210925,
+        "context_recall": 1.0
+      }
+    },
+    "off": {
+      "latency": 0.8097546579956543,
+      "answer_len": 279,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.5100529100444091,
+        "context_recall": 0.75
+      }
+    }
+  },
+  {
+    "idx": 75,
+    "kb": "poc",
+    "section": "商务资质",
+    "query": "F10 终端有哪些商务资质和认证（检测报告、防爆认证等）？",
+    "on": {
+      "latency": 1.2445536640007049,
+      "answer_len": 79,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.5833333333041666,
+        "context_recall": 0.5
+      }
+    },
+    "off": {
+      "latency": 0.6960468839970417,
+      "answer_len": 50,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.8333333333055556,
+        "context_recall": 0.75
+      }
+    }
+  },
+  {
+    "idx": 90,
+    "kb": "poc",
+    "section": "方案整合",
+    "query": "客户需要跨区域多站点统一调度，方案如何设计？",
+    "on": {
+      "latency": 1.31583205901552,
+      "answer_len": 281,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.8235294117647058,
+        "context_precision": 0.7856701939947976,
+        "context_recall": 0.2222222222222222
+      }
+    },
+    "off": {
+      "latency": 0.8229767050070222,
+      "answer_len": 232,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.75,
+        "context_precision": 0.841225749549736,
+        "context_recall": 0.3333333333333333
+      }
+    }
+  },
+  {
+    "idx": 93,
+    "kb": "poc",
+    "section": "规划不确定",
+    "query": "F10 终端下一代产品什么时候发布？",
+    "on": {
+      "latency": 1.1510976589925122,
+      "answer_len": 9,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.0,
+        "context_precision": 0.7777777777518519,
+        "context_recall": 0.75
+      }
+    },
+    "off": {
+      "latency": 0.7626374039973598,
+      "answer_len": 10,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 1.0,
+        "context_precision": 0.91666666664375,
+        "context_recall": 1.0
+      }
+    }
+  },
+  {
+    "idx": 98,
+    "kb": "poc",
+    "section": "图片流程",
+    "query": "根据终端型号，能否提供该终端的图片和详细规格？",
+    "on": {
+      "latency": 1.1408173799864016,
+      "answer_len": 152,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.6666666666666666,
+        "context_precision": 0.8611111110895834,
+        "context_recall": 0.18181818181818182
+      }
+    },
+    "off": {
+      "latency": 0.7205885529983789,
+      "answer_len": 65,
+      "n_chunks": 10,
+      "ragas": {
+        "faithfulness": 0.2,
+        "context_precision": 0.8333333333055556,
+        "context_recall": 0.2727272727272727
+      }
+    }
+  }
+]
