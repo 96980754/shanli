@@ -494,12 +494,11 @@ async def search_file(
 def get_common_kb_tools() -> list:
     """获取通用知识库工具列表
 
-    返回 6 个通用工具：
+    返回 5 个通用工具：
     - list_kbs: 列出用户可访问的知识库
-    - get_mindmap: 获取指定知识库的思维导图
     - query_kb: 在指定知识库中检索
     - find_kb_document: 在指定文件内定位关键词或正则模式
     - open_kb_document: 按 file_id 分段打开知识库文档
     - search_file: 搜索知识库中的文件
     """
-    return [list_kbs, get_mindmap, query_kb, find_kb_document, open_kb_document, search_file]
+    return [list_kbs, query_kb, find_kb_document, open_kb_document, search_file]

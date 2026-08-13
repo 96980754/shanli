@@ -15,7 +15,6 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 - `query_kb`：按 `kb_id` 检索内容，统一返回 `status=ok/insufficient/error`；`ok` 仅表示存在候选片段，不代表一定足以回答。
 - `open_kb_document`：按 `kb_id` 和 `file_id` 打开文档原文窗口。
 - `find_kb_document`：在已知文档内使用关键词或正则定位段落。
-- `get_mindmap`：查看知识库思维导图结构。
 - `search_file`：按文件名关键词搜索知识库文件。
 
 ## 标准操作流程
