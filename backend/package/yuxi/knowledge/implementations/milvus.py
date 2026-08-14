@@ -1021,6 +1021,8 @@ class MilvusKB(KnowledgeBase):
 
             output_fields = ["content", "chunk_id", "file_id", "chunk_index"]
             retrieved_chunks: list[dict] = []
+            # 主检索的 query embedding 供图谱路径复用（search_mode=keyword 时无 embedding，为 None）
+            query_embedding: list | None = None
             if search_mode == "vector":
                 embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
                 embedding_function = self._get_embedding_function(embedding_model_spec, sync=True)
@@ -1122,7 +1124,9 @@ class MilvusKB(KnowledgeBase):
                 logger.debug(f"Milvus hybrid query response: {len(retrieved_chunks)} chunks found")
 
             if use_graph_retrieval:
-                graph_chunks = await self._retrieve_graph_chunks(query_text, kb_id, retrieved_chunks, merged_kwargs)
+                graph_chunks = await self._retrieve_graph_chunks(
+                    query_text, kb_id, retrieved_chunks, merged_kwargs, query_embedding=query_embedding
+                )
                 if graph_chunks:
                     graph_weight = float(merged_kwargs.get("graph_weight", 1.0))
                     retrieved_chunks = self._fuse_chunk_rankings(retrieved_chunks, graph_chunks, graph_weight)
@@ -1193,6 +1197,7 @@ class MilvusKB(KnowledgeBase):
         kb_id: str,
         base_chunks: list[dict],
         query_params: dict[str, Any],
+        query_embedding: list | None = None,
     ) -> list[dict]:
         try:
             from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
@@ -1208,6 +1213,10 @@ class MilvusKB(KnowledgeBase):
             graph_max_nodes = max(int(query_params.get("graph_max_nodes", 10000)), 1)
 
             vector_store = await _run_milvus_query_io(MilvusGraphVectorStore)
+            # 主检索（vector/hybrid 分支）已对同一 query 编过 embedding，注入图谱缓存复用，
+            # 三路子检索直接命中已完成 Future，不再调用外部 embedding API。
+            if query_embedding is not None:
+                vector_store.seed_query_embedding(query_text, embedding_model_spec, query_embedding)
             entity_hits, triple_hits, assertion_hits = await asyncio.gather(
                 vector_store.search_entities(
                     kb_id=kb_id,
