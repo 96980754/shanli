@@ -1784,6 +1784,7 @@ const replyLoadingText = computed(() => {
   const threadState = currentThreadState.value
   if (!threadState) return t('chat.reply.generating')
   if (threadState.contextCompressing) return t('chat.reply.compressing')
+  if (threadState.generationPhase === 'thinking') return t('chat.reply.thinking')
   if (threadState.generationPhase === 'tool' && threadState.activeToolName) {
     return (
       TOOL_STATUS_TEXT.value[threadState.activeToolName] ||

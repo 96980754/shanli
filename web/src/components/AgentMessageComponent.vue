@@ -44,7 +44,7 @@
           </template>
           <a-collapse-panel
             key="show"
-            :header="message.status == 'reasoning' ? '正在思考...' : '推理过程'"
+            :header="isReasoning ? '正在思考...' : '推理过程'"
             class="reasoning-header"
           >
             <p class="reasoning-content">{{ parsedData.reasoning_content }}</p>
@@ -152,7 +152,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onUnmounted } from 'vue'
+import { computed, ref, onUnmounted, watch } from 'vue'
 import { message as notification } from 'ant-design-vue'
 import { CaretRightOutlined } from '@ant-design/icons-vue'
 import RefsComponent from '@/components/RefsComponent.vue'
@@ -371,6 +371,15 @@ const parsedData = computed(() => {
     content,
     reasoning_content: reasoningContent
   }
+})
+
+// 思考中（只有推理内容、正文尚未开始）：展开推理面板并显示"正在思考..."，
+// 正文出现后自动收起；用户手动展开/收起不受影响。
+const isReasoning = computed(
+  () => props.isProcessing && !!parsedData.value.reasoning_content && !parsedData.value.content
+)
+watch(isReasoning, (active) => {
+  reasoningActiveKey.value = active ? ['show'] : ['hide']
 })
 </script>
 
