@@ -220,6 +220,7 @@ export default {
     newChat: '新的对话',
     reply: {
       generating: '正在生成回复...',
+      thinking: '正在思考...',
       compressing: '正在整理答案...',
       calling: '正在调用工具...',
       finalizing: '正在完成...'

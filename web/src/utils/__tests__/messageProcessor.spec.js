@@ -236,6 +236,58 @@ const run = () => {
   })
   assert.deepEqual(assistantBody, { content: '最终答案', reasoningContent: '推理过程' })
 
+  // ---- 来源面板回归：filterKnowledgeChunksByAnswer / extractCitationNames ----
+  // 回归场景：回答以《》/表格 + 「来源说明」段落列出实际使用的文档。
+  // 旧实现只解析《》与表格，忽略「来源说明」，导致来源面板折叠（只显示《》恰好命中的 1 个文件）。
+  const citedFiles = [
+    'POCSTARS 定位产品解决方案介绍.pdf',
+    'C10单页-中文-1.pdf',
+    '面向关键任务的群组通信（MCX）技术白皮书.pdf',
+    '无关营销资料.pdf'
+  ]
+  const citationChunks = citedFiles.map((source, i) => ({
+    kb_id: 'kb',
+    file_id: `f${i}`,
+    content: `chunk-${i}`,
+    score: 1 - i / 10,
+    metadata: { source, chunk_id: `c${i}` }
+  }))
+  const sourceAnswer =
+    '…正文引用《面向关键任务的群组通信（MCX）技术白皮书》…\n\n' +
+    '**来源说明**：以上内容依据知识库中以下材料整理——' +
+    '定位资料（POCSTARS 定位产品解决方案介绍、C10单页）、' +
+    'MCX-资料（MCSTARS 产品白皮书及销售一纸禅）。\n\n' +
+    '如需进一步输出成投标方案文档或按具体客户规模细化配置清单，请告知。'
+
+  // 「来源说明」中被点名且能匹配到文件的文档应进入来源面板；未点名的文件不应混入；
+  // 同时保留《》命中的 MCX 白皮书（回归前唯一能命中的来源）
+  const sourceCited = MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, sourceAnswer)
+  assert.deepEqual(
+    sourceCited.map((c) => c.metadata.source).sort(),
+    [
+      'C10单页-中文-1.pdf',
+      'POCSTARS 定位产品解决方案介绍.pdf',
+      '面向关键任务的群组通信（MCX）技术白皮书.pdf'
+    ]
+  )
+
+  // 句号后的补充说明不应被当作引用；「来源说明」分组名（如"定位资料"）作为候选被保留，
+  // 匹配不到任何文件时自然忽略
+  const citationNames = MessageProcessor.extractCitationNames(sourceAnswer)
+  assert.equal(citationNames.some((n) => n.includes('如需进一步')), false)
+  assert.equal(citationNames.includes('定位资料'), true)
+
+  // 无任何引用时回退全量，不误删
+  const noCiteAnswer = '这是一段不引用任何文档的普通回答。'
+  assert.equal(MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, noCiteAnswer).length, 4)
+  assert.equal(MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, '').length, 4)
+
+  // 有「来源说明」但匹配不到任何被引用文件时回退全量
+  const noMatchChunks = [
+    { kb_id: 'kb', file_id: 'f-a', content: 'x', metadata: { source: '完全无关文档.pdf', chunk_id: 'c-a' } }
+  ]
+  assert.equal(MessageProcessor.filterKnowledgeChunksByAnswer(noMatchChunks, sourceAnswer).length, 1)
+
   console.log('messageProcessor query_kb source extraction: all assertions passed')
 }
 

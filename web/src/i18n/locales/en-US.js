@@ -220,6 +220,7 @@ export default {
     newChat: 'New Chat',
     reply: {
       generating: 'Generating response...',
+      thinking: 'Thinking...',
       compressing: 'Compiling the answer...',
       calling: 'Calling a tool...',
       finalizing: 'Finalizing...'

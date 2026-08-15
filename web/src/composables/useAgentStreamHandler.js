@@ -156,7 +156,17 @@ export function useAgentStreamHandler({
               ...(chunk.request_id ? { request_id: chunk.request_id } : {}),
               ...(threadId ? { thread_id: threadId } : {})
             }
-            if (streamSmoother) {
+            // 思考增量（reasoning 非空、正文为空）绕过平滑层直接落地，实时滚动思考过程；
+            // 正文仍走平滑层，保持原有流式节奏。
+            const isThinkingDelta =
+              !messageChunk.content &&
+              (messageChunk.reasoning_content || messageChunk.additional_kwargs?.reasoning_content)
+            if (isThinkingDelta) {
+              if (!threadState.onGoingConv.msgChunks[messageChunk.id]) {
+                threadState.onGoingConv.msgChunks[messageChunk.id] = []
+              }
+              threadState.onGoingConv.msgChunks[messageChunk.id].push(messageChunk)
+            } else if (streamSmoother) {
               streamSmoother.pushChunk(messageChunk, threadId)
             } else {
               if (!threadState.onGoingConv.msgChunks[messageChunk.id]) {
@@ -165,16 +175,17 @@ export function useAgentStreamHandler({
               threadState.onGoingConv.msgChunks[messageChunk.id].push(messageChunk)
             }
           }
-          // 最终回答正文开始流式输出时隐藏生成状态；仅 reasoning_content 的增量不触发。
+          // 最终回答正文开始流式输出时隐藏生成状态；仅 reasoning_content 的增量切换为"正在思考"。
           const finalDelta = chunk?.stream_event
-          if (
-            finalDelta?.type === 'message_delta' &&
-            typeof finalDelta.content === 'string' &&
-            finalDelta.content
-          ) {
-            threadState.replyLoadingVisible = false
-            threadState.generationPhase = null
-            threadState.activeToolName = null
+          if (finalDelta?.type === 'message_delta') {
+            if (typeof finalDelta.content === 'string' && finalDelta.content) {
+              threadState.replyLoadingVisible = false
+              threadState.generationPhase = null
+              threadState.activeToolName = null
+            } else if (finalDelta.reasoning_content || finalDelta.additional_reasoning_content) {
+              threadState.generationPhase = 'thinking'
+              threadState.replyLoadingVisible = true
+            }
           }
         }
         return false
