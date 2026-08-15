@@ -257,9 +257,17 @@ export class MessageProcessor {
         let bestIdx = -1
         for (let i = 0; i < citationCores.length; i++) {
           const c = citationCores[i]
-          const maxLen = Math.max(core.length, c.length)
-          if (!maxLen) continue
-          const sim = 1 - MessageProcessor.levenshtein(core, c) / maxLen
+          let sim = 0
+          // 子串包含：模型改写文件名时最常见的形态是「逻辑名 = 文件名 ± 前后缀」，
+          // 如「C10单页」⊆「C10单页-中文-1」「定位产品核心卖点与功能介绍」⊆「POCSTARS 定位产品核心卖点与功能介绍」，
+          // 比编辑距离更能命中这类改写；较短的串不足 4 字符时不做包含匹配，避免过于宽泛
+          const shorter = core.length <= c.length ? core : c
+          if (shorter.length >= 4 && (core.includes(c) || c.includes(core))) {
+            sim = 1
+          } else {
+            const maxLen = Math.max(core.length, c.length)
+            if (maxLen) sim = 1 - MessageProcessor.levenshtein(core, c) / maxLen
+          }
           if (sim > bestSim) {
             bestSim = sim
             bestIdx = i
@@ -282,7 +290,7 @@ export class MessageProcessor {
   }
 
   /**
-   * 从回答正文提取引用文档名：《》包裹的名字 + 表格「来源文档」列首格。
+   * 从回答正文提取引用文档名：《》包裹的名字 + 表格「来源文档」列首格 + 「来源说明/依据来源」段落。
    * @param {string} text - AI 回答正文
    * @returns {Array} 引用文档名列表
    */
@@ -304,6 +312,28 @@ export class MessageProcessor {
         .split('|')
         .map((c) => c.trim())
       if (cells.length >= 2 && docKwRe.test(cells[0])) names.push(cells[0])
+    }
+
+    // 「来源说明/依据来源」段落：模型在此按「材料、材料」列出实际使用的文档名，
+    // 是《》与表格之外最主要的引用来源，之前被完全忽略导致来源面板折叠
+    const sourceMatch = text.match(/来源说明|依据来源|参考来源|资料来源|引用来源|参考文献/)
+    if (sourceMatch) {
+      let section = text.slice(sourceMatch.index, sourceMatch.index + 800)
+      // 文档清单在句号处结束，句号后的补充说明（如"如需进一步…请告知"）不属于引用
+      const periodIdx = section.indexOf('。')
+      if (periodIdx !== -1) section = section.slice(0, periodIdx)
+      // 跳过引导语（"**：以上内容依据知识库中以下材料整理——" 或 "："）
+      const dashIdx = section.indexOf('——')
+      const colonIdx = section.indexOf('：')
+      if (dashIdx !== -1) section = section.slice(dashIdx + '——'.length)
+      else if (colonIdx !== -1) section = section.slice(colonIdx + 1)
+      else section = section.slice(sourceMatch[0].length)
+      // 以顿号/逗号/括号/换行切分文档名；括号内的分组名（如"定位资料"）也切成候选，
+      // 匹配不上任何文件时自然被忽略，不会进入来源面板
+      for (const token of section.split(/[、，,；;()（）\n|]+/)) {
+        const name = token.replace(/[*•-]/g, '').trim()
+        if (name) names.push(name)
+      }
     }
 
     const seen = new Set()
