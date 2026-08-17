@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 
 # 原文与清洗后文本的长度阈值
-_MIN_KEEP_RATIO = 0.5   # 清洗后至少保留原文 50%
-_MAX_GROW_RATIO = 2.0   # 清洗后最多膨胀到原文 200%（标题重排等轻微增长不误报）
+_MIN_KEEP_RATIO = 0.5  # 清洗后至少保留原文 50%
+_MAX_GROW_RATIO = 2.0  # 清洗后最多膨胀到原文 200%（标题重排等轻微增长不误报）
 
 # 数字 token：带单位的数值（如 4GB、32G、12.5%、1,000 元、2026 年）
 _NUMBER_PATTERN = re.compile(

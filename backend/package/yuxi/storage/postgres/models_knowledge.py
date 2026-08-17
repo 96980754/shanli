@@ -197,6 +197,7 @@ class KnowledgeFile(Base):
 
 class KnowledgeAssertion(Base):
     """A version-bound candidate or reviewed business assertion."""
+
     __tablename__ = "knowledge_assertions"
     __table_args__ = (
         UniqueConstraint("assertion_id", name="uq_knowledge_assertions_assertion_id"),
@@ -234,8 +235,11 @@ class KnowledgeAssertion(Base):
     published_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+
+
 class EntityLinkCandidate(Base):
     """A deterministic entity-link candidate for one assertion."""
+
     __tablename__ = "entity_link_candidates"
     __table_args__ = (
         UniqueConstraint("link_id", name="uq_entity_link_candidates_link_id"),
@@ -266,8 +270,11 @@ class EntityLinkCandidate(Base):
     resolved_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
+
+
 class KnowledgeConflict(Base):
     """Unified review record for document-version conflicts and reviewed assertions."""
+
     __tablename__ = "knowledge_conflicts"
     __table_args__ = (
         UniqueConstraint("conflict_id", name="uq_knowledge_conflicts_conflict_id"),
@@ -319,8 +326,11 @@ class KnowledgeConflict(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now_naive)
     updated_at = Column(DateTime(timezone=True), default=utc_now_naive, onupdate=utc_now_naive)
     version = Column(Integer, nullable=False, default=1)
+
+
 class KnowledgeConflictPublishTask(Base):
     """Durable outbox task for publishing one reviewed assertion version."""
+
     __tablename__ = "knowledge_conflict_publish_tasks"
     __table_args__ = (
         UniqueConstraint("task_id", name="uq_knowledge_conflict_publish_tasks_task_id"),

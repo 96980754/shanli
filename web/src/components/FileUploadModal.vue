@@ -217,7 +217,7 @@
                 type="link"
                 size="small"
                 class="upload-item-preview-btn"
-                @click="actions.preview(file)"
+                @click="actions.preview()"
               >
                 <Eye :size="13" />
                 查看

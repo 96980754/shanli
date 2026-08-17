@@ -205,9 +205,7 @@ def _append_duplicate_errors(rows: list[dict[str, Any]], errors: list[dict[str, 
                 continue
             first = row_numbers[0]
             for row_number in row_numbers:
-                errors.append(
-                    _error(row_number, field, "duplicate_in_file", f"与 Excel 第 {first} 行重复")
-                )
+                errors.append(_error(row_number, field, "duplicate_in_file", f"与 Excel 第 {first} 行重复"))
 
 
 async def validate_user_import(
@@ -227,13 +225,9 @@ async def validate_user_import(
     for row in rows:
         if current_user.role == "superadmin":
             if not row["department_name"]:
-                errors.append(
-                    _error(row["excel_row"], "department_name", "required", "超级管理员导入时必须填写部门")
-                )
+                errors.append(_error(row["excel_row"], "department_name", "required", "超级管理员导入时必须填写部门"))
             elif row["department_name"] not in departments_by_name:
-                errors.append(
-                    _error(row["excel_row"], "department_name", "unknown_department", "部门不存在")
-                )
+                errors.append(_error(row["excel_row"], "department_name", "unknown_department", "部门不存在"))
             else:
                 row["department_id"] = departments_by_name[row["department_name"]].id
         else:

@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 
 def _docx_blocks(file_path: str) -> list[dict]:
@@ -46,10 +45,7 @@ def _docx_blocks(file_path: str) -> list[dict]:
                 kind = "heading" if style and style.lower().startswith("heading") else "para"
                 blocks.append({"kind": kind, "text": text})
         for table in document.tables:
-            rows = [
-                [cell.text.strip().replace("\n", " ") for cell in row.cells]
-                for row in table.rows
-            ]
+            rows = [[cell.text.strip().replace("\n", " ") for cell in row.cells] for row in table.rows]
             if rows:
                 blocks.append({"kind": "table", "rows": rows})
 

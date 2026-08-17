@@ -1,4 +1,5 @@
 """Document summary, keyword, and tag generation with manual override protection."""
+
 from __future__ import annotations
 from copy import deepcopy
 from typing import Any
@@ -19,13 +20,22 @@ from yuxi.services.task_service import TaskContext, tasker
 from yuxi.storage.minio.client import get_minio_client
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
 from yuxi.utils.logging_config import logger
+
 GENERATABLE_FILE_STATUSES = {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP}
+
+
 class DocumentEnrichmentError(ValueError):
     """Base document enrichment domain error."""
+
+
 class EnrichmentNotFound(DocumentEnrichmentError):
     """The requested eligible document does not exist."""
+
+
 class EnrichmentVersionConflict(DocumentEnrichmentError):
     """The document enrichment was modified by another operation."""
+
+
 class DocumentEnrichmentService:
     def __init__(
         self,
@@ -35,17 +45,20 @@ class DocumentEnrichmentService:
     ) -> None:
         self.file_repository = file_repository or KnowledgeFileRepository()
         self.generator = generator or DocumentEnrichmentGenerator()
+
     async def _get_record(self, kb_id: str, file_id: str):
         record = await self.file_repository.get_by_file_id(file_id)
         if record is None or record.kb_id != kb_id or record.is_folder:
             raise EnrichmentNotFound("文档不存在")
         return record
+
     @staticmethod
     def _assert_eligible(record) -> None:
         if not record.is_active:
             raise EnrichmentNotFound("文档不是当前生效版本")
         if record.status not in GENERATABLE_FILE_STATUSES or not record.markdown_file:
             raise EnrichmentNotFound("文档尚未完成入库")
+
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
         if not path or not is_minio_url(path):
@@ -61,6 +74,7 @@ class DocumentEnrichmentService:
         if len(markdown) > int(config.document_enrichment_max_chars):
             raise DocumentEnrichmentError("文档超过信息增强允许的最大字符数")
         return markdown
+
     @staticmethod
     def _public_payload(record) -> dict[str, Any]:
         data = deepcopy(record.enrichment_data or {})
@@ -81,9 +95,11 @@ class DocumentEnrichmentService:
             "keyword_source": (data.get("component_sources") or {}).get("keywords"),
             "tag_source": (data.get("component_sources") or {}).get("tags"),
         }
+
     async def get(self, *, kb_id: str, file_id: str) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
         return self._public_payload(record)
+
     async def get_generation_identity(self, *, kb_id: str, file_id: str) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
         self._assert_eligible(record)
@@ -91,6 +107,7 @@ class DocumentEnrichmentService:
             "file_id": record.file_id,
             "cleaning_version": int(record.cleaning_version or 0),
         }
+
     async def generate(
         self,
         *,
@@ -232,6 +249,7 @@ class DocumentEnrichmentService:
         if updated is None:
             raise EnrichmentVersionConflict("正文版本或文档信息已变化，本次生成结果未保存")
         return self._public_payload(updated) | {"idempotent": False}
+
     async def _finish_generation_failure(
         self,
         *,
@@ -258,6 +276,7 @@ class DocumentEnrichmentService:
         if updated is None:
             raise EnrichmentVersionConflict("正文版本或文档信息已变化")
         return updated
+
     @staticmethod
     def _component_is_manual(data: dict[str, Any], component: str) -> bool:
         if component == "summary":
@@ -267,6 +286,7 @@ class DocumentEnrichmentService:
             return source == "manual"
         value = data.get(component) or []
         return bool(value) and all(isinstance(item, dict) and item.get("source") == "manual" for item in value)
+
     @staticmethod
     def _has_outdated_components(data: dict[str, Any]) -> bool:
         summary = data.get("summary")
@@ -279,6 +299,7 @@ class DocumentEnrichmentService:
             for component in ("keywords", "tags")
             for item in (data.get(component) or [])
         )
+
     @staticmethod
     def _build_generated_keywords(
         values: list[Any],
@@ -305,6 +326,7 @@ class DocumentEnrichmentService:
             }
             for order, item in enumerate(normalized)
         ]
+
     @staticmethod
     def _build_generated_tags(
         values: list[Any],
@@ -328,6 +350,7 @@ class DocumentEnrichmentService:
             }
             for item in normalized
         ]
+
     async def update_summary(
         self,
         *,
@@ -356,6 +379,7 @@ class DocumentEnrichmentService:
             "updated_by": operator_id,
         }
         return await self._save_manual_data(record, data, operator_id, expected_version)
+
     async def update_keywords(
         self,
         *,
@@ -388,6 +412,7 @@ class DocumentEnrichmentService:
         data.setdefault("component_sources", {})["keywords"] = "manual"
         data.setdefault("component_statuses", {})["keywords"] = "ready"
         return await self._save_manual_data(record, data, operator_id, expected_version)
+
     async def update_tags(
         self,
         *,
@@ -418,11 +443,13 @@ class DocumentEnrichmentService:
         data.setdefault("component_sources", {})["tags"] = "manual"
         data.setdefault("component_statuses", {})["tags"] = "ready"
         return await self._save_manual_data(record, data, operator_id, expected_version)
+
     async def _manual_update_context(self, kb_id: str, file_id: str):
         record = await self._get_record(kb_id, file_id)
         self._assert_eligible(record)
         markdown = await self._read_markdown(record.markdown_file)
         return record, markdown
+
     async def _save_manual_data(
         self,
         record,
@@ -449,6 +476,7 @@ class DocumentEnrichmentService:
         if updated is None:
             raise EnrichmentVersionConflict("文档信息已被其他编辑更新，请刷新后重试")
         return self._public_payload(updated)
+
     async def mark_enqueue_failure(self, *, kb_id: str, file_id: str, operator_id: str, error: BaseException) -> None:
         record = await self._get_record(kb_id, file_id)
         await self.file_repository.update_enrichment_fields_with_version(
@@ -463,6 +491,8 @@ class DocumentEnrichmentService:
                 "updated_by": operator_id,
             },
         )
+
+
 async def enqueue_document_enrichment(
     *,
     kb_id: str,
@@ -475,6 +505,7 @@ async def enqueue_document_enrichment(
     service = DocumentEnrichmentService()
     identity = await service.get_generation_identity(kb_id=kb_id, file_id=file_id)
     normalized_components = sorted(requested)
+
     async def run_enrichment(context: TaskContext):
         await context.set_progress(10, "正在生成文档摘要、关键词和标签")
         result = await DocumentEnrichmentService().generate(
@@ -491,6 +522,7 @@ async def enqueue_document_enrichment(
             "status": result["status"],
             "version": result["version"],
         }
+
     payload = {
         "kb_id": kb_id,
         "file_id": file_id,
@@ -507,6 +539,8 @@ async def enqueue_document_enrichment(
         coroutine=run_enrichment,
     )
     return task.id, created
+
+
 async def enqueue_auto_document_enrichment(*, kb_id: str, file_id: str, operator_id: str) -> None:
     if not config.document_enrichment_auto_generate:
         return
@@ -527,6 +561,8 @@ async def enqueue_auto_document_enrichment(*, kb_id: str, file_id: str, operator
                 file_id,
                 sanitize_processing_error(status_error),
             )
+
+
 __all__ = [
     "DocumentEnrichmentError",
     "DocumentEnrichmentService",

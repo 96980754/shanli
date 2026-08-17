@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text, union_all, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
@@ -86,6 +85,7 @@ class DocumentCreateOutcome:
     existing: KnowledgeFile | None = None
     conflicts: tuple[KnowledgeFile, ...] = ()
     conflict_type: str | None = None
+
 
 # asyncpg 单条 SQL 参数上限为 32767；按 file_id 批量查询时统一分批，避免
 # mindmap_file_ids 等大尺寸传入触发 `too many parameters` 报错。
@@ -604,7 +604,8 @@ class KnowledgeFileRepository:
 
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
-                select(KnowledgeFile).where(
+                select(KnowledgeFile)
+                .where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
                     self._parent_condition(parent_id),
@@ -646,8 +647,7 @@ class KnowledgeFileRepository:
     ) -> list[KnowledgeFile]:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
-                select(KnowledgeFile)
-                .where(
+                select(KnowledgeFile).where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.replacement_target_file_id == replacement_target_file_id,
                     KnowledgeFile.is_active.is_(False),

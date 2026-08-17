@@ -38,7 +38,7 @@ class MilvusGraphVectorStore:
         # 查询级 embedding 缓存：检索路径每次查询新建本实例（见 milvus._retrieve_graph_chunks），
         # 故实例生命周期 = 单次查询，缓存随查询结束自动回收，无需清理。
         # 键 = (embedding_model_spec, query_text)，值 = 共享的 embedding awaitable
-        #（未完成时为 asyncio.Task，已注入主检索结果为 completed Future）。
+        # （未完成时为 asyncio.Task，已注入主检索结果为 completed Future）。
         self._query_embedding_tasks: dict[tuple[str, str], asyncio.Future] = {}
         self._init_connection()
 

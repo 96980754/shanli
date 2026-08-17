@@ -37,7 +37,13 @@ def build_knowledge_evidence(messages: list[Any]) -> tuple[str, dict[str, Any] |
     queries: list[dict[str, Any]] = []
 
     for message in messages:
-        data = message.model_dump() if hasattr(message, "model_dump") else dict(message) if isinstance(message, dict) else {}
+        data = (
+            message.model_dump()
+            if hasattr(message, "model_dump")
+            else dict(message)
+            if isinstance(message, dict)
+            else {}
+        )
         message_type = data.get("type") or data.get("role")
         if message_type in {"human", "user"}:
             content = data.get("content")

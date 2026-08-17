@@ -1,4 +1,5 @@
 """Validation and provider-backed generation for document enrichment."""
+
 from __future__ import annotations
 import asyncio
 import hashlib
@@ -7,6 +8,7 @@ import re
 import unicodedata
 from typing import Any
 from yuxi.models import select_model
+
 ENRICHMENT_COMPONENTS = frozenset({"summary", "keywords", "tags"})
 GENERATOR_VERSION = "1.0"
 _FACT_TOKEN_RE = re.compile(
@@ -31,15 +33,25 @@ _STOPWORDS = {
     "是",
     "的",
 }
+
+
 class EnrichmentValidationError(ValueError):
     """Raised when generated content violates the document enrichment contract."""
+
+
 class EnrichmentProviderUnavailable(RuntimeError):
     """Raised when no configured model can generate enrichment."""
+
+
 def formal_content_hash(markdown: str) -> str:
     return hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+
+
 def normalize_label(value: str) -> tuple[str, str]:
     display = _SPACE_RE.sub(" ", unicodedata.normalize("NFKC", str(value))).strip()
     return display, display.casefold()
+
+
 def validate_summary(markdown: str, summary: str, *, max_chars: int) -> str:
     normalized = str(summary).strip()
     if not normalized:
@@ -51,6 +63,8 @@ def validate_summary(markdown: str, summary: str, *, max_chars: int) -> str:
     if added_facts:
         raise EnrichmentValidationError("摘要包含原文中不存在的数字、链接或型号")
     return normalized
+
+
 def normalize_keywords(values: list[Any], markdown: str, *, limit: int) -> list[dict[str, str]]:
     normalized_markdown = unicodedata.normalize("NFKC", markdown).casefold()
     result: list[dict[str, str]] = []
@@ -70,6 +84,8 @@ def normalize_keywords(values: list[Any], markdown: str, *, limit: int) -> list[
         if len(result) >= max(1, int(limit)):
             break
     return result
+
+
 def normalize_tags(values: list[Any], *, limit: int) -> list[dict[str, str | None]]:
     result: list[dict[str, str | None]] = []
     seen: set[str] = set()
@@ -89,6 +105,8 @@ def normalize_tags(values: list[Any], *, limit: int) -> list[dict[str, str | Non
         if len(result) >= max(1, int(limit)):
             break
     return result
+
+
 def mark_enrichment_data_outdated(data: dict[str, Any] | None) -> dict[str, Any]:
     component_sources = dict((data or {}).get("component_sources") or {})
     component_statuses = dict((data or {}).get("component_statuses") or {})
@@ -109,6 +127,8 @@ def mark_enrichment_data_outdated(data: dict[str, Any] | None) -> dict[str, Any]
         for item in updated[component]:
             item["status"] = "possibly_outdated"
     return updated
+
+
 def _extract_json_object(value: str) -> dict[str, Any]:
     text = value.strip()
     if text.startswith("```"):
@@ -121,6 +141,8 @@ def _extract_json_object(value: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise EnrichmentValidationError("模型输出必须是 JSON 对象")
     return payload
+
+
 def _split_markdown(markdown: str, max_chars: int) -> list[str]:
     if len(markdown) <= max_chars:
         return [markdown]
@@ -140,8 +162,11 @@ def _split_markdown(markdown: str, max_chars: int) -> list[str]:
     if current:
         chunks.append(current)
     return chunks
+
+
 class DocumentEnrichmentGenerator:
     """Generate validated structured enrichment through the configured model boundary."""
+
     async def _call_json(
         self,
         model,
@@ -171,6 +196,7 @@ class DocumentEnrichmentGenerator:
                         },
                     ]
         raise EnrichmentValidationError("模型未返回有效的结构化结果") from last_error
+
     async def generate(
         self,
         markdown: str,
@@ -257,6 +283,8 @@ class DocumentEnrichmentGenerator:
                 raise EnrichmentValidationError("标签输出为空")
             result["tags"] = normalized_tags
         return result
+
+
 __all__ = [
     "DocumentEnrichmentGenerator",
     "ENRICHMENT_COMPONENTS",

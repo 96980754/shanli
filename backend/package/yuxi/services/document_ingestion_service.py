@@ -23,6 +23,7 @@ from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.storage.minio.client import MinIOClient, get_minio_client
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
+
 DUPLICATE_STRATEGIES = {"prompt", "skip", "replace", "keep_both"}
 EXACT_CONTENT_STRATEGIES = ("skip",)
 SAME_NAME_STRATEGIES = ("skip", "replace", "keep_both")
@@ -53,6 +54,8 @@ def _validate_basic_file_signature(filename: str, content: bytes) -> None:
 async def get_arq_job_status(queue, task_id: str) -> str:
     status = await Job(task_id, queue).status()
     return status.value if isinstance(status, JobStatus) else str(status)
+
+
 class DuplicateConflictError(Exception):
     def __init__(
         self,
@@ -75,8 +78,12 @@ class DuplicateConflictError(Exception):
         }
         if cleanup_pending:
             self.detail["cleanup_pending"] = True
+
+
 class DuplicateStrategyError(ValueError):
     pass
+
+
 class InvalidReplacementTargetError(ValueError):
     def __init__(self) -> None:
         super().__init__("替换目标不属于当前文件夹或文件名不匹配")
@@ -84,8 +91,12 @@ class InvalidReplacementTargetError(ValueError):
             "code": "invalid_replacement_target",
             "message": "替换目标不属于当前文件夹或文件名不匹配",
         }
+
+
 class ReplacementCleanupInvariantError(RuntimeError):
     pass
+
+
 class ReplacementInProgressError(RuntimeError):
     def __init__(self, *, target_file_id: str, candidate_file_id: str) -> None:
         super().__init__("该文档已有正在处理的替换版本")
@@ -95,20 +106,27 @@ class ReplacementInProgressError(RuntimeError):
             "target_file_id": target_file_id,
             "candidate_file_id": candidate_file_id,
         }
+
+
 @dataclass(frozen=True)
 class UploadDecision:
     action: str
     existing_file_id: str | None = None
     conflicts: tuple[Any, ...] = ()
+
+
 @dataclass(frozen=True)
 class DocumentCreationResult:
     action: str
     file_meta: dict[str, Any] | None = None
     existing_file_id: str | None = None
     cleanup_pending: bool = False
+
+
 class DocumentIngestionService:
     def __init__(self, *, file_repository: KnowledgeFileRepository | None = None) -> None:
         self.file_repository = file_repository or KnowledgeFileRepository()
+
     async def check_upload_conflict(
         self,
         *,
@@ -174,6 +192,7 @@ class DocumentIngestionService:
                     candidate_file_id=pending_candidates[0].file_id,
                 )
         return UploadDecision(action="upload", conflicts=tuple(same_name_records))
+
     async def create_uploaded_document(
         self,
         *,
@@ -339,6 +358,7 @@ class DocumentIngestionService:
                 cleanup_pending=not cleanup_succeeded,
             )
         raise RuntimeError("Unsupported document creation outcome")
+
     async def activate_replacement(self, *, kb_id: str, new_file_id: str, old_file_id: str) -> None:
         await self.file_repository.switch_active_version(
             kb_id=kb_id,
@@ -353,10 +373,12 @@ class DocumentIngestionService:
                 new_file_id,
                 sanitize_processing_error(error),
             )
+
     @staticmethod
     def _cleanup_task_prefix(new_file_id: str) -> str:
         digest = hashlib.sha256(new_file_id.encode()).hexdigest()[:24]
         return f"replacement-cleanup:{digest}:"
+
     @staticmethod
     def _next_cleanup_task_id(new_file_id: str, current_task_id: str | None) -> str:
         prefix = DocumentIngestionService._cleanup_task_prefix(new_file_id)
@@ -365,6 +387,7 @@ class DocumentIngestionService:
             suffix = current_task_id[len(prefix) :]
             generation = int(suffix) if suffix.isdigit() else 0
         return f"{prefix}{generation + 1}"
+
     @staticmethod
     def _lease_is_valid(lease_expires_at, now) -> bool:
         if lease_expires_at is None:
@@ -372,6 +395,7 @@ class DocumentIngestionService:
         if getattr(lease_expires_at, "tzinfo", None) is not None and getattr(now, "tzinfo", None) is None:
             lease_expires_at = lease_expires_at.replace(tzinfo=None)
         return lease_expires_at > now
+
     @staticmethod
     def _task_update_is_recent(task_updated_at, now) -> bool:
         if task_updated_at is None:
@@ -379,6 +403,7 @@ class DocumentIngestionService:
         if getattr(task_updated_at, "tzinfo", None) is not None and getattr(now, "tzinfo", None) is None:
             task_updated_at = task_updated_at.replace(tzinfo=None)
         return task_updated_at >= now - timedelta(seconds=REPLACEMENT_CLEANUP_CLAIM_GRACE_SECONDS)
+
     async def _ensure_replacement_cleanup_enqueued(
         self,
         *,
@@ -469,6 +494,7 @@ class DocumentIngestionService:
             )
             raise
         return task_id, True
+
     async def enqueue_replacement_cleanup(
         self,
         *,
@@ -500,6 +526,7 @@ class DocumentIngestionService:
             force_reclaim=force_reclaim,
         )
         return task_id
+
     async def recover_pending_replacement_cleanups(self, *, queue=None) -> int:
         pending_records = await self.file_repository.list_pending_replacement_cleanup()
         if not pending_records:
@@ -524,6 +551,7 @@ class DocumentIngestionService:
                     sanitize_processing_error(error),
                 )
         return recovered
+
     async def cleanup_replaced_version(
         self,
         *,
@@ -579,6 +607,7 @@ class DocumentIngestionService:
                 "error_message": None,
             },
         )
+
     async def _cleanup_superseded_chain(self, *, kb_id: str, first_file_id: str, strict_vector_delete) -> None:
         current_file_id: str | None = first_file_id
         visited: set[str] = set()
@@ -589,6 +618,7 @@ class DocumentIngestionService:
                 raise ReplacementCleanupInvariantError("Superseded replacement version is not safe to clean")
             await strict_vector_delete(kb_id, current_file_id)
             current_file_id = getattr(record, "previous_version_id", None)
+
     async def mark_cleanup_failure(
         self,
         *,
@@ -610,6 +640,7 @@ class DocumentIngestionService:
             kb_id=kb_id,
             data=data,
         )
+
     async def mark_cleanup_retry(
         self,
         *,
@@ -629,18 +660,21 @@ class DocumentIngestionService:
                 "error_message": sanitize_processing_error(error),
             },
         )
+
     @staticmethod
     def _validate_strategy(value: str) -> str:
         strategy = value.strip().lower()
         if strategy not in DUPLICATE_STRATEGIES:
             raise DuplicateStrategyError(f"Unsupported duplicate_strategy: {value}")
         return strategy
+
     @staticmethod
     def _normalize_optional_string(value: object) -> str | None:
         if not isinstance(value, str):
             return None
         normalized = value.strip()
         return normalized or None
+
     async def serialize_conflicts(self, records: list[Any]) -> list[dict[str, Any]]:
         display_paths = await self.file_repository.build_document_display_paths(records)
         return [
@@ -657,6 +691,7 @@ class DocumentIngestionService:
             }
             for record in records
         ]
+
     @staticmethod
     def _validate_upload_url_host(item: str, public_endpoint: str) -> None:
         parsed = urlparse(item)
@@ -664,6 +699,7 @@ class DocumentIngestionService:
         actual_host = str(parsed.netloc or "").strip().lower()
         if parsed.scheme not in {"http", "https"} or not expected_host or actual_host != expected_host:
             raise ValueError("Invalid upload URL host for configured MinIO endpoint")
+
     @staticmethod
     def _filename_from_staged_object(kb_id: str, bucket_name: str, object_name: str) -> str:
         expected_bucket = MinIOClient.KB_BUCKETS["documents"]
@@ -677,6 +713,7 @@ class DocumentIngestionService:
         if not normalized or normalized.startswith("/") or ".." in normalized.split("/"):
             raise ValueError("Invalid staged object filename")
         return normalized
+
     @staticmethod
     async def _delete_staged_object(bucket_name: str, object_name: str) -> bool:
         minio_client = get_minio_client()
@@ -693,6 +730,7 @@ class DocumentIngestionService:
                 if attempt < 3:
                     await asyncio.sleep(0.05 * (2 ** (attempt - 1)))
         return False
+
     async def _delete_staged_object_if_unclaimed(
         self,
         kb_id: str,
@@ -710,6 +748,8 @@ class DocumentIngestionService:
             )
             return False
         return await self._delete_staged_object(bucket_name, object_name)
+
+
 async def process_document_replacement_cleanup(
     ctx: dict[str, Any],
     kb_id: str,
@@ -756,6 +796,8 @@ async def process_document_replacement_cleanup(
         if should_retry:
             raise Retry(defer=2 ** (attempt - 1)) from error
         raise
+
+
 __all__ = [
     "DocumentCreationResult",
     "DocumentIngestionService",
