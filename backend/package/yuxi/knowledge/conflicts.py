@@ -6,6 +6,8 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any
+
+
 class ConflictClassification(StrEnum):
     DUPLICATE = "DUPLICATE"
     COMPLETION = "COMPLETION"
@@ -13,6 +15,8 @@ class ConflictClassification(StrEnum):
     CONFLICT = "CONFLICT"
     LINK_AMBIGUOUS = "LINK_AMBIGUOUS"
     INVALID = "INVALID"
+
+
 @dataclass(frozen=True)
 class BusinessRule:
     entity_type: str
@@ -23,6 +27,8 @@ class BusinessRule:
     allowed_values: tuple[str, ...] = ()
     version_sensitive: bool = True
     time_sensitive: bool = True
+
+
 @dataclass(frozen=True)
 class DetectionResult:
     classification: ConflictClassification
@@ -33,13 +39,13 @@ class DetectionResult:
     normalized_incoming_value: Any
     severity: str
     requires_review: bool
+
+
 PRODUCT_SPECIFICATION_RULES: dict[str, BusinessRule] = {
     "product_name": BusinessRule("Product", "product_name", "string"),
     "product_model": BusinessRule("Product", "product_model", "string"),
     "product_version": BusinessRule("Product", "product_version", "string"),
-    "max_concurrent_users": BusinessRule(
-        "Specification", "max_concurrent_users", "integer"
-    ),
+    "max_concurrent_users": BusinessRule("Specification", "max_concurrent_users", "integer"),
     "supported_os": BusinessRule(
         "Specification",
         "supported_os",
@@ -47,9 +53,7 @@ PRODUCT_SPECIFICATION_RULES: dict[str, BusinessRule] = {
         multiple=True,
         allowed_values=("Windows", "Linux", "macOS", "Android", "iOS"),
     ),
-    "product_capability": BusinessRule(
-        "Specification", "product_capability", "string", multiple=True
-    ),
+    "product_capability": BusinessRule("Specification", "product_capability", "string", multiple=True),
     "launch_date": BusinessRule("Specification", "launch_date", "date"),
     "weight": BusinessRule("Specification", "weight", "decimal", standard_unit="kg"),
     "deployment_mode": BusinessRule(
@@ -59,9 +63,7 @@ PRODUCT_SPECIFICATION_RULES: dict[str, BusinessRule] = {
         multiple=True,
         allowed_values=("on-premises", "private-cloud", "public-cloud", "hybrid"),
     ),
-    "compatible_with": BusinessRule(
-        "Specification", "compatible_with", "string", multiple=True
-    ),
+    "compatible_with": BusinessRule("Specification", "compatible_with", "string", multiple=True),
 }
 _UNIT_FACTORS: dict[tuple[str, str], Decimal] = {
     ("g", "kg"): Decimal("0.001"),
@@ -69,20 +71,22 @@ _UNIT_FACTORS: dict[tuple[str, str], Decimal] = {
     ("mg", "kg"): Decimal("0.000001"),
     ("lb", "kg"): Decimal("0.45359237"),
 }
+
+
 def normalize_entity_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value or "")
     return " ".join(normalized.casefold().split())
+
+
 def normalize_value(raw_value: Any, rule: BusinessRule, unit: str | None = None) -> Any:
     values = raw_value if rule.multiple and isinstance(raw_value, list) else [raw_value]
     normalized = [_normalize_single_value(value, rule, unit) for value in values]
     if rule.multiple:
-        return sorted(
-            dict.fromkeys(normalized), key=lambda value: str(value).casefold()
-        )
+        return sorted(dict.fromkeys(normalized), key=lambda value: str(value).casefold())
     return normalized[0]
-def _normalize_single_value(
-    raw_value: Any, rule: BusinessRule, unit: str | None
-) -> Any:
+
+
+def _normalize_single_value(raw_value: Any, rule: BusinessRule, unit: str | None) -> Any:
     if raw_value is None or (isinstance(raw_value, str) and not raw_value.strip()):
         raise ValueError("value is empty")
     if rule.value_type == "integer":
@@ -114,6 +118,8 @@ def _normalize_single_value(
             raise ValueError(f"value is not in allowed values: {normalized}")
         return allowed
     return normalized
+
+
 def _time_ranges_overlap(incoming: Any, existing: Any) -> bool:
     incoming_start = getattr(incoming, "valid_from", None)
     incoming_end = getattr(incoming, "valid_to", None)
@@ -124,9 +130,12 @@ def _time_ranges_overlap(incoming: Any, existing: Any) -> bool:
     if existing_end and incoming_start and existing_end < incoming_start:
         return False
     return True
+
+
 class ConflictDetector:
     def __init__(self, rules: dict[str, BusinessRule] | None = None):
         self.rules = rules or PRODUCT_SPECIFICATION_RULES
+
     def detect(
         self,
         incoming: Any,
@@ -138,9 +147,7 @@ class ConflictDetector:
         if rule is None or rule.entity_type != incoming.entity_type:
             return self._invalid("属性不在 Product / Specification MVP 规则范围内")
         try:
-            incoming_value = normalize_value(
-                incoming.raw_value, rule, getattr(incoming, "unit", None)
-            )
+            incoming_value = normalize_value(incoming.raw_value, rule, getattr(incoming, "unit", None))
         except ValueError as exc:
             return self._invalid(str(exc))
         if link_status != "linked":
@@ -157,8 +164,7 @@ class ConflictDetector:
         relevant = [
             item
             for item in existing_assertions
-            if item.predicate == incoming.predicate
-            and item.status in {"accepted", "published"}
+            if item.predicate == incoming.predicate and item.status in {"accepted", "published"}
         ]
         if not relevant:
             return DetectionResult(
@@ -177,19 +183,13 @@ class ConflictDetector:
                 existing_values.append(
                     item.normalized_value
                     if item.normalized_value is not None
-                    else normalize_value(
-                        item.raw_value, rule, getattr(item, "unit", None)
-                    )
+                    else normalize_value(item.raw_value, rule, getattr(item, "unit", None))
                 )
             except ValueError:
                 continue
         existing_ids = tuple(item.assertion_id for item in relevant)
         if rule.multiple:
-            flattened = {
-                value
-                for item in existing_values
-                for value in (item if isinstance(item, list) else [item])
-            }
+            flattened = {value for item in existing_values for value in (item if isinstance(item, list) else [item])}
             incoming_items = set(incoming_value)
             if incoming_items.issubset(flattened):
                 return self._result(
@@ -231,9 +231,7 @@ class ConflictDetector:
                 and item.product_version
                 and incoming.product_version != item.product_version
             )
-            time_overlaps = not rule.time_sensitive or _time_ranges_overlap(
-                incoming, item
-            )
+            time_overlaps = not rule.time_sensitive or _time_ranges_overlap(incoming, item)
             if not version_differs and time_overlaps:
                 same_version_and_time.append(item)
         if not same_version_and_time:
@@ -253,15 +251,14 @@ class ConflictDetector:
             "同一实体、版本和有效时间内的单值属性不同",
             tuple(item.assertion_id for item in same_version_and_time),
             [
-                item.normalized_value
-                if item.normalized_value is not None
-                else item.raw_value
+                item.normalized_value if item.normalized_value is not None else item.raw_value
                 for item in same_version_and_time
             ],
             incoming_value,
             "high",
             True,
         )
+
     @staticmethod
     def _invalid(reason: str) -> DetectionResult:
         return DetectionResult(
@@ -274,6 +271,7 @@ class ConflictDetector:
             severity="high",
             requires_review=True,
         )
+
     @staticmethod
     def _result(
         classification: ConflictClassification,

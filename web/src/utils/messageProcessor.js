@@ -98,60 +98,19 @@ export class MessageProcessor {
   }
 
   /**
-   * 提取一轮对话中所有知识库检索块
+   * 提取一轮对话中所有知识来源：query_kb/query_kbs 检索块 + find_kb_document 定位窗口 + search_file 定位文件。
    * @param {Object} conv - 单轮对话
    * @param {Array} databases - 知识库列表
-   * @returns {Array} 归一化后的检索块
+   * @returns {Array} 归一化后的来源块
    */
   static extractKnowledgeChunksFromConversation(conv, databases = []) {
     if (!conv || !Array.isArray(conv.messages) || conv.messages.length === 0) return []
 
     const databaseNames = new Map(
-      (databases || [])
-        .filter((db) => db?.kb_id)
-        .map((db) => [db.kb_id, db.name || db.kb_id])
+      (databases || []).filter((db) => db?.kb_id).map((db) => [db.kb_id, db.name || db.kb_id])
     )
     const normalizedChunks = []
     const dedupSet = new Set()
-
-    const appendChunk = (chunk, outputKbId) => {
-      if (!chunk || typeof chunk !== 'object') return
-      const content = typeof chunk.content === 'string' ? chunk.content.trim() : ''
-      if (!content) return
-
-      const metadata = chunk.metadata && typeof chunk.metadata === 'object' ? chunk.metadata : {}
-      const kbId = chunk.kb_id || outputKbId || ''
-      const fileId = chunk.file_id || metadata.file_id || ''
-      if (!kbId) return
-
-      const chunkId = metadata.chunk_id || chunk.id || ''
-      const dedupKey = chunkId
-        ? `${kbId}::${chunkId}`
-        : `${kbId}::${fileId}::${content}`
-      if (dedupSet.has(dedupKey)) return
-      dedupSet.add(dedupKey)
-
-      const score =
-        typeof chunk.score === 'number'
-          ? chunk.score
-          : typeof metadata.score === 'number'
-            ? metadata.score
-            : null
-      normalizedChunks.push({
-        kb_id: kbId,
-        file_id: fileId,
-        kb_name: databaseNames.get(kbId) || kbId,
-        content,
-        score,
-        metadata: {
-          ...metadata,
-          source: metadata.source || '',
-          file_id: fileId,
-          chunk_id: chunkId,
-          chunk_index: metadata.chunk_index
-        }
-      })
-    }
 
     const parseToolResultContent = (content) => {
       if (Array.isArray(content)) return content
@@ -166,26 +125,126 @@ export class MessageProcessor {
       return null
     }
 
+    // search_file 命中的文件可作为 find_kb_document（仅返回 file_id）的来源名解析依据：
+    // 先收集同一轮对话内 search_file 的结果，构建 file_id → {filename, kb_name} 映射。
+    const fileInfoMap = new Map()
+    const collectFileInfo = (parsed) => {
+      if (!parsed || !Array.isArray(parsed.files)) return
+      for (const file of parsed.files) {
+        if (!file || !file.file_id || fileInfoMap.has(file.file_id)) continue
+        fileInfoMap.set(file.file_id, {
+          filename: typeof file.filename === 'string' ? file.filename : file.file_id,
+          kb_name: typeof file.kb_name === 'string' ? file.kb_name : '',
+          kb_id: file.kb_id || ''
+        })
+      }
+    }
+    for (const msg of conv.messages) {
+      if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
+      for (const toolCall of msg.tool_calls) {
+        const toolName = toolCall?.name || toolCall?.function?.name
+        if (toolName !== 'search_file') continue
+        collectFileInfo(parseToolResultContent(toolCall?.tool_call_result?.content))
+      }
+    }
+
+    const appendChunk = (chunk, outputKbId, sourceOverride = '', kbNameOverride = '') => {
+      if (!chunk || typeof chunk !== 'object') return
+      const content = typeof chunk.content === 'string' ? chunk.content.trim() : ''
+      if (!content) return
+
+      const metadata = chunk.metadata && typeof chunk.metadata === 'object' ? chunk.metadata : {}
+      const kbId = chunk.kb_id || outputKbId || ''
+      const fileId = chunk.file_id || metadata.file_id || ''
+      if (!kbId) return
+
+      const chunkId = metadata.chunk_id || chunk.id || ''
+      const dedupKey = chunkId ? `${kbId}::${chunkId}` : `${kbId}::${fileId}::${content}`
+      if (dedupSet.has(dedupKey)) return
+      dedupSet.add(dedupKey)
+
+      const score =
+        typeof chunk.score === 'number'
+          ? chunk.score
+          : typeof metadata.score === 'number'
+            ? metadata.score
+            : null
+      normalizedChunks.push({
+        kb_id: kbId,
+        file_id: fileId,
+        kb_name: kbNameOverride || databaseNames.get(kbId) || kbId,
+        content,
+        score,
+        metadata: {
+          ...metadata,
+          source: sourceOverride || metadata.source || '',
+          file_id: fileId,
+          chunk_id: chunkId,
+          chunk_index: metadata.chunk_index
+        }
+      })
+    }
+
+    // search_file：定位到的文件以完整路径文件名作为来源卡片内容，便于面板内区分同名文件
+    const appendLocatedFile = (file) => {
+      if (!file || !file.file_id || !file.filename) return
+      appendChunk(
+        {
+          kb_id: file.kb_id,
+          file_id: file.file_id,
+          content: file.filename,
+          metadata: { file_id: file.file_id }
+        },
+        null,
+        file.filename,
+        file.kb_name
+      )
+    }
+
     for (const msg of conv.messages) {
       if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
 
       for (const toolCall of msg.tool_calls) {
         const toolName = toolCall?.name || toolCall?.function?.name
-        // query_kb 与 query_kbs 都返回同样的 schema_v1 检索结果，均为知识来源数据
-        if (toolName !== 'query_kb' && toolName !== 'query_kbs') continue
+        const parsed = parseToolResultContent(toolCall?.tool_call_result?.content)
 
-        const content = toolCall?.tool_call_result?.content
-        const parsed = parseToolResultContent(content)
-        if (
-          !parsed ||
-          parsed.schema_version !== 1 ||
-          parsed.status !== 'ok' ||
-          !Array.isArray(parsed.results)
-        ) {
-          continue
+        if (toolName === 'query_kb' || toolName === 'query_kbs') {
+          // query_kb 与 query_kbs 都返回同样的 schema_v1 检索结果，均为知识来源数据
+          if (
+            !parsed ||
+            parsed.schema_version !== 1 ||
+            parsed.status !== 'ok' ||
+            !Array.isArray(parsed.results)
+          ) {
+            continue
+          }
+          for (const chunk of parsed.results) appendChunk(chunk, parsed.kb_id)
+        } else if (toolName === 'search_file') {
+          // search_file：定位到的文件进入来源面板
+          if (!parsed || !Array.isArray(parsed.files)) continue
+          for (const file of parsed.files) appendLocatedFile(file)
+        } else if (toolName === 'find_kb_document') {
+          // find_kb_document：文件内定位命中的窗口按行区间作为来源块；
+          // 来源文件名由同轮 search_file 结果解析，缺失时回退 file_id，不吞掉已定位内容
+          if (!parsed || typeof parsed.kb_id !== 'string' || !Array.isArray(parsed.windows))
+            continue
+          const fileInfo = fileInfoMap.get(parsed.file_id)
+          const source = fileInfo?.filename || parsed.file_id
+          for (const win of parsed.windows) {
+            if (!win || typeof win.content !== 'string') continue
+            appendChunk(
+              {
+                kb_id: parsed.kb_id,
+                file_id: parsed.file_id,
+                content: win.content,
+                metadata: { file_id: parsed.file_id }
+              },
+              null,
+              source,
+              fileInfo?.kb_name
+            )
+          }
         }
-
-        for (const chunk of parsed.results) appendChunk(chunk, parsed.kb_id)
       }
     }
 
@@ -199,7 +258,7 @@ export class MessageProcessor {
   }
 
   /**
-   * 判断一轮对话是否发生过知识检索（query_kb/query_kbs）。
+   * 判断一轮对话是否发生过知识检索（query_kb/query_kbs/find_kb_document/search_file）。
    * 与 extractKnowledgeChunksFromConversation 共享相同的工具识别规则，
    * 但不要求召回结果可用——召回不足/检索失败时仍视为发生过检索，
    * 前端据此保留来源入口，避免「答了但来源不显示」。
@@ -210,7 +269,14 @@ export class MessageProcessor {
       if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
       for (const toolCall of msg.tool_calls) {
         const toolName = toolCall?.name || toolCall?.function?.name
-        if (toolName === 'query_kb' || toolName === 'query_kbs') return true
+        if (
+          toolName === 'query_kb' ||
+          toolName === 'query_kbs' ||
+          toolName === 'find_kb_document' ||
+          toolName === 'search_file'
+        ) {
+          return true
+        }
       }
     }
     return false
@@ -236,7 +302,9 @@ export class MessageProcessor {
 
     const citationNames = MessageProcessor.extractCitationNames(text)
     if (citationNames.length === 0) return chunks
-    const citationCores = citationNames.map((n) => MessageProcessor.normalizeDocName(n)).filter(Boolean)
+    const citationCores = citationNames
+      .map((n) => MessageProcessor.normalizeDocName(n))
+      .filter(Boolean)
     if (citationCores.length === 0) return chunks
 
     // 引用在正文中出现的位置，用于让面板顺序跟随回答的引用顺序

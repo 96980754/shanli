@@ -427,7 +427,10 @@ async def _prewarm_sandbox(
     try:
         from yuxi.agents.backends.sandbox.provider import get_sandbox_provider
 
-        get_sandbox_provider().get(
+        # 同步阻塞调用丢到线程池：冷建沙箱（docker 启动 + 健康探测）耗时约 4s，
+        # 若直接在事件循环里跑会冻结整个 loop，连带推迟首条模型 token。
+        await asyncio.to_thread(
+            get_sandbox_provider().get,
             thread_id,
             uid=uid,
             create_if_missing=True,
@@ -996,6 +999,14 @@ async def stream_agent_chat(
 
         # 先构建 langgraph_config
         langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid}}
+        # meta 可显式指定沙箱作用域（file_thread_id/skills_thread_id）：透传给运行时，
+        # 让预冷与运行时命中同一沙箱，多个 run 可共用一个沙箱容器；缺省则退回 thread_id，行为不变。
+        scope_file = str(meta.get("file_thread_id") or thread_id).strip()
+        scope_skills = str(meta.get("skills_thread_id") or thread_id).strip()
+        if scope_file != thread_id:
+            langgraph_config["configurable"]["file_thread_id"] = scope_file
+        if scope_skills != thread_id:
+            langgraph_config["configurable"]["skills_thread_id"] = scope_skills
 
         # LangGraph 会自动从 checkpointer 恢复 state（包括 uploads）
         # 无需手动加载或传递
