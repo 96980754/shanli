@@ -21,7 +21,7 @@ from pymilvus import (
     utility,
 )
 
-from yuxi.config.app import resolve_reranker_model
+from yuxi.config.app import resolve_embedding_model, resolve_reranker_model
 from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
@@ -370,7 +370,7 @@ class MilvusKB(KnowledgeBase):
         if not (metadata := self.databases_meta.get(kb_id)):
             raise ValueError(f"Database {kb_id} not found")
 
-        embedding_model_spec = metadata.get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(metadata.get("embedding_model_spec"))
         if not embedding_model_spec:
             raise ValueError(f"Embedding model spec not found for database {kb_id}")
 
@@ -526,7 +526,7 @@ class MilvusKB(KnowledgeBase):
         escaped_id = self._escape_milvus_string_literal(vector_id)
         await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
         content = f"问题：{question}\n答案：{answer}"
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
         embeddings = await embedding_function([content])
         collection.insert(
@@ -738,7 +738,7 @@ class MilvusKB(KnowledgeBase):
         if not collection:
             raise ValueError(f"Failed to get Milvus collection for {kb_id}")
 
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
 
         file_meta = await self._load_file_meta(kb_id, file_id)
@@ -870,7 +870,7 @@ class MilvusKB(KnowledgeBase):
         if not collection:
             raise ValueError(f"Failed to get Milvus collection for {kb_id}")
 
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
 
         # 处理默认参数
@@ -1024,7 +1024,7 @@ class MilvusKB(KnowledgeBase):
             # 主检索的 query embedding 供图谱路径复用（search_mode=keyword 时无 embedding，为 None）
             query_embedding: list | None = None
             if search_mode == "vector":
-                embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+                embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
                 embedding_function = self._get_embedding_function(embedding_model_spec, sync=True)
                 query_embedding = await _run_milvus_query_io(embedding_function, [query_text])
 
@@ -1079,7 +1079,7 @@ class MilvusKB(KnowledgeBase):
 
                 logger.debug(f"Milvus BM25 query response: {len(retrieved_chunks)} chunks found")
             else:
-                embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+                embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
                 embedding_function = self._get_embedding_function(embedding_model_spec, sync=True)
                 query_embedding = await _run_milvus_query_io(embedding_function, [query_text])
                 bm25_top_k = int(merged_kwargs.get("bm25_top_k", recall_top_k))
@@ -1203,7 +1203,7 @@ class MilvusKB(KnowledgeBase):
             from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
             from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorStore
 
-            embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+            embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
             if not embedding_model_spec:
                 return []
 

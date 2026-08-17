@@ -109,7 +109,8 @@ class KnowledgeBase(ABC):
                     "name": meta.get("name"),
                     "description": meta.get("description"),
                     "kb_type": meta.get("kb_type"),
-                    "embedding_model_spec": resolve_embedding_model(meta.get("embedding_model_spec")),
+                    # 存原始 spec：为空表示跟随全局默认，使用点实时 resolve，全局 embed_model 切换无需重启生效
+                    "embedding_model_spec": meta.get("embedding_model_spec"),
                     "llm_model_spec": meta.get("llm_model_spec"),
                     "query_params": meta.get("query_params"),
                     "metadata": normalized_additional_params,
@@ -1373,6 +1374,8 @@ class KnowledgeBase(ABC):
 
         meta = self.databases_meta[kb_id].copy()
         meta["kb_id"] = kb_id
+        # 展示用有效模型：为空时实时跟随全局默认，设置页切换后无需重启即反映
+        meta["embedding_model_spec"] = resolve_embedding_model(meta.get("embedding_model_spec"))
 
         meta["stats"] = self._get_database_stats(kb_id)
         meta["row_count"] = meta["stats"].get("row_count") or meta["stats"].get("file_count") or 0
@@ -1616,7 +1619,8 @@ class KnowledgeBase(ABC):
                 "name": kb.name,
                 "description": kb.description,
                 "kb_type": kb.kb_type,
-                "embedding_model_spec": resolve_embedding_model(kb.embedding_model_spec),
+                # 存原始 spec：为空表示跟随全局默认，使用点实时 resolve，全局 embed_model 切换无需重启生效
+                "embedding_model_spec": kb.embedding_model_spec,
                 "llm_model_spec": kb.llm_model_spec,
                 "query_params": kb.query_params or self._get_default_query_params(kb.kb_id),
                 "metadata": self.normalize_additional_params(kb.additional_params),
