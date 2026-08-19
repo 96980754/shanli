@@ -305,6 +305,52 @@ const run = () => {
     1
   )
 
+  // 回归：模型以「──来源：」+ 完整路径列表（poc资料/MNO/xxx.pptx（kb_id））引用文档时，
+  // 来源面板也应只保留被引用的文件，而不是回退全量
+  const pathCitedAnswer =
+    '…正文内容…\n\n──来源：\n' +
+    'poc资料/MNO/POCSTARS MNO产品解决方案-V1.2-202605.pptx（kb_3cm2gz6tyb）\n' +
+    'poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx（kb_3cm2gz6tyb）\n' +
+    'poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（kb_3cm2gz6tyb）'
+  const pathChunks = [
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p1',
+      content: 'c1',
+      metadata: { source: 'POCSTARS MNO产品解决方案-V1.2-202605.pptx', chunk_id: 'cp1' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p2',
+      content: 'c2',
+      metadata: { source: '【修订中】POCSTARS MNO产品白皮书V1.1.docx', chunk_id: 'cp2' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p3',
+      content: 'c3',
+      metadata: { source: 'POCSTARS MNO全平台功能清单V1.0-20260522.xlsx', chunk_id: 'cp3' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p4',
+      content: 'c4',
+      metadata: { source: '无关营销资料.pdf', chunk_id: 'cp4' }
+    }
+  ]
+  const pathFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(pathChunks, pathCitedAnswer)
+  assert.deepEqual(pathFiltered.map((c) => c.file_id).sort(), ['p1', 'p2', 'p3'])
+
+  // 回归：真实模型输出常以「**来源**：」+「- 」无序列表列出完整路径（markdown 加粗把
+  // 「来源」与冒号隔开，旧正则只能匹配紧邻冒号），来源面板同样应只保留被引用的文件
+  const boldCitedAnswer =
+    '…正文内容…\n\n**来源**：\n' +
+    '- poc资料/MNO/POCSTARS MNO产品解决方案-V1.2-202605.pptx（kb_3cm2gz6tyb）\n' +
+    '- poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx（kb_3cm2gz6tyb）\n' +
+    '- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（kb_3cm2gz6tyb）'
+  const boldFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(pathChunks, boldCitedAnswer)
+  assert.deepEqual(boldFiltered.map((c) => c.file_id).sort(), ['p1', 'p2', 'p3'])
+
   // ---- 来源面板回归：find_kb_document / search_file 定位结果纳入来源 ----
   // 对话 a297b81d 场景：query_kbs 召回为空，但模型通过 find_kb_document 定位到文件，
   // 这些「定位到的文档」也应进入来源面板（此前只认 query_kb/query_kbs，来源面板为空）。
@@ -405,6 +451,43 @@ const run = () => {
   // 前端据此保留来源按钮，避免「定位到了文档但不显示来源」
   assert.equal(MessageProcessor.hasKnowledgeRetrieval(locateConv), true)
   assert.equal(MessageProcessor.hasKnowledgeRetrieval(fallbackConv), true)
+
+  // 同一文档跨多库命中（bug1）：来源面板分组与「来源 N」计数按文档名去重，避免重复卡片
+  const duplicateDocChunks = [
+    {
+      kb_id: 'kb-yingxiao',
+      file_id: 'file-fb4fa6',
+      content: '话术正文',
+      metadata: { source: 'POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c1' }
+    },
+    {
+      kb_id: 'kb-yingxiao',
+      file_id: 'file-fb4fa6',
+      content: '话术正文2',
+      metadata: { source: 'POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c2' }
+    },
+    {
+      kb_id: 'kb-dingwei',
+      file_id: 'file-e7711e',
+      content: '话术正文3',
+      metadata: { source: '定位资料/POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c3' }
+    },
+    {
+      kb_id: 'kb-dingwei',
+      file_id: 'file-1846ce',
+      content: '客群画像正文',
+      metadata: {
+        source: '定位资料/POCSTARS 产品目标客群画像、应用场景销售话术.pdf',
+        chunk_id: 'c4'
+      }
+    }
+  ]
+  const grouped = MessageProcessor.groupKnowledgeChunksByDocument(duplicateDocChunks)
+  assert.equal(grouped.length, 2) // 同名文档跨库合并为 1 组，共 2 个文档
+  assert.equal(grouped[0].chunks.length + grouped[1].chunks.length, 4) // 全部 chunk 保留
+  assert.equal(new Set(grouped.map((g) => g.displayName)).size, 2)
+  // 「来源 N」计数直接取分组长度，与卡片数一致
+  assert.equal(grouped.length, 2)
 
   console.log('messageProcessor query_kb source extraction: all assertions passed')
 }

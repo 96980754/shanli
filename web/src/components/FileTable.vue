@@ -82,6 +82,39 @@
       />
     </a-modal>
 
+    <!-- 移动到其它文件夹 -->
+    <!-- destroy-on-close：a-tree 的展开/加载状态保存在 DOM 内部，modal 默认不销毁内容，
+         第二次打开会残留上次展开的虚拟目录（空展开、不再触发懒加载），这里强制每次全新挂载 -->
+    <a-modal
+      v-model:open="moveModalVisible"
+      title="移动文件"
+      :confirm-loading="moveSubmitting"
+      :destroy-on-close="true"
+      @ok="handleMoveConfirm"
+    >
+      <div class="move-file-picker">
+        <div
+          class="move-root-option"
+          :class="{ active: moveTargetId === null }"
+          @click="onMoveTargetSelect(null)"
+        >
+          <FolderInput :size="14" />
+          <span>根目录（不移动到任何文件夹）</span>
+        </div>
+        <a-tree
+          class="move-folder-tree"
+          :tree-data="moveTreeData"
+          :load-data="onMoveLoadData"
+          :selected-keys="moveSelectedKeys"
+          :show-line="true"
+          @select="onMoveTreeSelect"
+        />
+        <p v-if="!moveTreeData.length" class="move-empty-hint">
+          暂无可选文件夹，可直接移动到根目录
+        </p>
+      </div>
+    </a-modal>
+
     <FileBrowserTable
       class="knowledge-file-browser"
       :rows="files"
@@ -306,7 +339,10 @@
                 <template v-if="row.is_folder">
                   <a-button
                     v-if="props.canUpload"
-                    type="text" block @click="showCreateFolderModal(row.file_id)">
+                    type="text"
+                    block
+                    @click="showCreateFolderModal(row.file_id)"
+                  >
                     <template #icon><component :is="h(FolderPlus)" size="14" /></template>
                     新建子文件夹
                   </a-button>
@@ -369,13 +405,29 @@
                     重新入库
                   </a-button>
 
-                  <a-button v-if="props.canManage" type="text" block @click="openVersionHistory(row)">
+                  <!-- 移动到其它文件夹（后端 PUT /documents/{id}/move，new_parent_id 空值=根目录） -->
+                  <a-button v-if="props.canManage" type="text" block @click="openMoveModal(row)">
+                    <template #icon><component :is="h(FolderInput)" size="14" /></template>
+                    移动到
+                  </a-button>
+
+                  <a-button
+                    v-if="props.canManage"
+                    type="text"
+                    block
+                    @click="openVersionHistory(row)"
+                  >
                     <template #icon><component :is="h(History)" size="14" /></template>
                     版本历史
                   </a-button>
 
                   <!-- 清洗预览 / 信息增强 / QA 知识对（PR12 吸收） -->
-                  <a-button v-if="props.canManage" type="text" block @click="openCleaningPreview(row)">
+                  <a-button
+                    v-if="props.canManage"
+                    type="text"
+                    block
+                    @click="openCleaningPreview(row)"
+                  >
                     <template #icon><Sparkles :size="14" /></template>
                     清洗预览
                   </a-button>
@@ -387,7 +439,12 @@
                     <template #icon><HelpCircle :size="14" /></template>
                     QA 知识对
                   </a-button>
-                  <a-button v-if="props.canManage" type="text" block @click="conflictModalVisible = true">
+                  <a-button
+                    v-if="props.canManage"
+                    type="text"
+                    block
+                    @click="conflictModalVisible = true"
+                  >
                     <template #icon><AlertTriangle :size="14" /></template>
                     冲突审核
                   </a-button>
@@ -448,6 +505,7 @@ import {
   RotateCw,
   Ellipsis,
   FolderPlus,
+  FolderInput,
   CheckSquare,
   FileText,
   Database,
@@ -631,6 +689,81 @@ const showCreateFolderModal = (parentId = null) => {
   }
   currentParentId.value = parentId ?? store.fileBrowser.parentId
   createFolderModalVisible.value = true
+}
+
+// 移动到其它文件夹
+const moveModalVisible = ref(false)
+const moveSubmitting = ref(false)
+const movingRow = ref(null) // 被移动的文件
+const moveTargetId = ref(null) // 目标文件夹 id；null = 根目录
+const moveTreeData = ref([])
+
+const openMoveModal = (record) => {
+  closePopover(record.file_id)
+  movingRow.value = record
+  moveTargetId.value = null
+  moveTreeData.value = []
+  moveModalVisible.value = true
+  loadMoveFolderChildren(null).then((nodes) => {
+    moveTreeData.value = nodes
+  })
+}
+
+// 懒加载构建移动目标 a-tree，与主浏览器同一套导航语义：真实文件夹节点用 parent_id、虚拟文件夹
+// （按文件名路径前缀聚合的导航节点，id 形如 __virtual_folder__:root:poc资料/）用 path_prefix。
+// 两者都可作为移动目标——后端 move_file 对虚拟目录改写 filename 路径前缀、对真实文件夹写 parent_id。
+const loadMoveFolderChildren = async (node) => {
+  const params = { page_size: 500 }
+  if (node && node.dataRef?.isVirtual) {
+    params.path_prefix = node.dataRef.pathPrefix
+  } else if (node?.key) {
+    params.parent_id = node.key
+  }
+  try {
+    const data = await documentApi.listDocuments(store.kbId, params)
+    return (data?.items || [])
+      .filter((item) => item.is_folder)
+      .map((item) => ({
+        title: item.filename,
+        key: item.file_id,
+        isLeaf: false,
+        isVirtual: Boolean(item.is_virtual_folder),
+        pathPrefix: item.path_prefix || ''
+      }))
+  } catch (error) {
+    console.error('加载文件夹列表失败:', error)
+    return []
+  }
+}
+
+const onMoveLoadData = async (treeNode) => {
+  const children = await loadMoveFolderChildren(treeNode)
+  treeNode.dataRef.children = children
+  moveTreeData.value = [...moveTreeData.value]
+}
+
+const onMoveTreeSelect = (selectedKeys) => {
+  moveTargetId.value = selectedKeys.length ? selectedKeys[0] : null
+}
+
+const onMoveTargetSelect = (targetId) => {
+  moveTargetId.value = targetId
+}
+
+const moveSelectedKeys = computed(() => (moveTargetId.value === null ? [] : [moveTargetId.value]))
+
+const handleMoveConfirm = async () => {
+  if (!movingRow.value) return
+  moveSubmitting.value = true
+  try {
+    await store.moveFile(movingRow.value.file_id, moveTargetId.value)
+    moveModalVisible.value = false
+    message.success('文件移动成功')
+  } catch {
+    // 错误 toast 已由 store 抛出
+  } finally {
+    moveSubmitting.value = false
+  }
 }
 
 defineExpose({
@@ -1106,8 +1239,14 @@ watch(
     if (!nextKbId) return
     statusFilter.value = 'all'
     store.resetFileBrowser()
-    // 全库搜索等入口通过 ?path=... 直达路径型虚拟目录（如 全部文件 / MCX资料-证书 / ...）；
+    // 全库搜索等入口通过 ?folder_id=... 直达真实文件夹（parent_id 树，优先），
+    // 或 ?path=... 直达路径型虚拟目录（如 全部文件 / MCX资料-证书 / ...）；
     // 由 FileTable 在首次加载时消费，避免与后续 reset 竞态覆盖
+    const folderId = route.query.folder_id
+    if (typeof folderId === 'string' && folderId) {
+      await store.navigateToFolderById(folderId)
+      return
+    }
     const folderPath = route.query.path
     if (typeof folderPath === 'string' && folderPath) {
       await store.navigateToFolder(folderPath)
@@ -1568,5 +1707,71 @@ import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
   to {
     transform: rotate(360deg);
   }
+}
+
+/* 移动文件对话框 */
+.move-file-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.move-root-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--gray-700);
+  transition: all 0.1s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: var(--main-200);
+    background-color: var(--main-10);
+  }
+
+  &.active {
+    border-color: var(--main-color);
+    background-color: var(--main-10);
+    color: var(--main-color);
+    font-weight: 500;
+  }
+
+  .lucide {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.move-folder-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  padding: 4px;
+
+  .ant-tree-node-content-wrapper:hover {
+    background-color: var(--gray-50);
+  }
+
+  .ant-tree-node-selected {
+    background-color: var(--main-10);
+  }
+}
+
+.move-empty-hint {
+  margin: 0;
+  padding: 16px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--gray-400);
+  flex-shrink: 0;
 }
 </style>

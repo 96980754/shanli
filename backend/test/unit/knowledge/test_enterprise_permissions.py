@@ -119,7 +119,7 @@ async def test_share_config_grants_view_search_and_download_by_default():
     assert await service.has_permission(user, "kb-1", "can_upload") is False
 
 
-async def test_explicit_view_grant_can_disable_default_download():
+async def test_explicit_grant_merges_with_share_config_fallback():
     service = service_for(
         SimpleNamespace(
             kb_id="kb-1",
@@ -131,7 +131,26 @@ async def test_explicit_view_grant_can_disable_default_download():
     user = {"role": "user", "uid": "lisi", "department_id": 10}
 
     assert await service.has_permission(user, "kb-1", "can_view") is True
-    assert await service.has_permission(user, "kb-1", "can_download") is False
+    assert await service.has_permission(user, "kb-1", "can_search") is True
+    # 窄授权不再收窄 share_config 兜底
+    assert await service.has_permission(user, "kb-1", "can_download") is True
+    assert await service.has_permission(user, "kb-1", "can_upload") is False
+
+
+async def test_department_share_config_fallback_survives_narrow_grant():
+    service = service_for(
+        SimpleNamespace(
+            kb_id="kb-1",
+            created_by="owner",
+            share_config={"access_level": "department", "department_ids": [10], "user_uids": []},
+        ),
+        [permission("user", "lisi", can_view=True, can_search=True, can_download=False)],
+    )
+    user = {"role": "user", "uid": "lisi", "department_id": 10}
+
+    assert await service.has_permission(user, "kb-1", "can_view") is True
+    assert await service.has_permission(user, "kb-1", "can_search") is True
+    assert await service.has_permission(user, "kb-1", "can_download") is True
 
 
 async def test_share_config_does_not_grant_download_when_database_is_not_visible():

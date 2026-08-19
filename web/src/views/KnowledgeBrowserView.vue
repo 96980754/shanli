@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Folder } from 'lucide-vue-next'
 import { documentBrowseApi, databaseApi } from '@/apis/knowledge_api'
 import PageHeader from '@/components/shared/PageHeader.vue'
 
@@ -38,8 +39,17 @@ const folderPathOf = (filename = '') => {
   return index === -1 ? '' : filename.slice(0, index)
 }
 
-// 搜索/热门文档/分类入口统一跳转到知识库文件浏览，并定位到文档所在目录
+// 搜索/热门文档/分类入口统一跳转到知识库文件浏览，并定位到目标目录。
+// 真实文件夹（is_folder）走 folder_id 深链（parent_id 树）；文件走 path 路径型虚拟目录；
+// 知识库分类卡片项（无 filename/is_folder）进入知识库根层。
 const browseDirectory = (item) => {
+  if (item?.is_folder) {
+    router.push({
+      path: `/extensions/knowledgebase/${item.kb_id}`,
+      query: { folder_id: item.file_id }
+    })
+    return
+  }
   const folderPath = folderPathOf(item?.filename)
   router.push({
     path: `/extensions/knowledgebase/${item.kb_id}`,
@@ -68,7 +78,25 @@ onMounted(async () => {
           </a-space>
           <a-list :loading="loading" :data-source="documents" class="document-list">
             <template #renderItem="{ item }">
-              <a-list-item><a-list-item-meta :title="item.filename" :description="`${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`" /><template #actions><a @click="browseDirectory(item)">打开目录</a></template></a-list-item>
+              <a-list-item>
+                <a-list-item-meta>
+                  <template #title>
+                    <span class="result-title">
+                      <Folder v-if="item.is_folder" :size="14" class="folder-icon" />
+                      {{ item.filename }}
+                      <a-tag v-if="item.is_folder" class="folder-tag">文件夹</a-tag>
+                    </span>
+                  </template>
+                  <template #description>
+                    {{
+                      item.is_folder
+                        ? `${item.kb_name} · 文件夹`
+                        : `${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`
+                    }}
+                  </template>
+                </a-list-item-meta>
+                <template #actions><a @click="browseDirectory(item)">打开目录</a></template>
+              </a-list-item>
             </template>
           </a-list>
         </a-card>
@@ -82,5 +110,5 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="less">
-.filters { width: 100%; } .filters :deep(.ant-input), .filters :deep(.ant-picker) { min-width: 180px; } .document-list { margin-top: 16px; } .side-card { margin-top: 16px; } .side-card:first-child { margin-top: 0; } .side-card .ant-list-item { display: flex; justify-content: space-between; gap: 12px; }
+.filters { width: 100%; } .filters :deep(.ant-input), .filters :deep(.ant-picker) { min-width: 180px; } .document-list { margin-top: 16px; } .side-card { margin-top: 16px; } .side-card:first-child { margin-top: 0; } .side-card .ant-list-item { display: flex; justify-content: space-between; gap: 12px; } .result-title { display: inline-flex; align-items: center; gap: 6px; } .folder-icon { color: var(--main-color); flex-shrink: 0; } .folder-tag { margin-inline-end: 0; font-size: 12px; line-height: 18px; }
 </style>

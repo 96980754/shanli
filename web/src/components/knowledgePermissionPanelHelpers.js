@@ -64,7 +64,8 @@ export const formatSubjectLabel = (record, { users = [], departments = [] } = {}
 
   if (record.subject_type === 'department') {
     const department = departments.find((item) => String(item.id) === subjectId)
-    return department ? `${department.name}（${subjectId}）` : subjectId
+    // 部门名唯一，无需展示内部 ID（数字易被误读为成员数）
+    return department ? department.name : subjectId
   }
 
   if (record.subject_type === 'role') {
@@ -73,4 +74,98 @@ export const formatSubjectLabel = (record, { users = [], departments = [] } = {}
   }
 
   return subjectId
+}
+
+export const FALLBACK_PERMISSION_FLAGS = resetPermissionFlags({
+  can_view: true,
+  can_search: true,
+  can_download: true
+})
+
+const applyFlags = (row, flags = {}) => {
+  for (const key of permissionKeys) {
+    row[key] = row[key] || Boolean(flags[key])
+  }
+}
+
+// 汇总创建者、共享设置兜底与显式授权为「有效访问全集」，同一对象按来源取并集去重。
+export const buildAccessRows = ({
+  createdBy,
+  shareConfig,
+  permissions = [],
+  users = [],
+  departments = []
+}) => {
+  const rows = new Map()
+
+  const getOrCreate = (key, subjectType, subjectId) => {
+    if (!rows.has(key)) {
+      rows.set(key, {
+        key,
+        subject_type: subjectType,
+        subject_id: subjectId,
+        label: '',
+        sources: [],
+        editable: false,
+        id: undefined,
+        ...resetPermissionFlags()
+      })
+    }
+    return rows.get(key)
+  }
+
+  if (createdBy) {
+    const row = getOrCreate(`user:${createdBy}`, 'user', String(createdBy))
+    applyFlags(row, Object.fromEntries(permissionKeys.map((key) => [key, true])))
+    row.sources.push('创建者')
+  }
+
+  if (shareConfig && shareConfig.access_level) {
+    if (shareConfig.access_level === 'global') {
+      const row = getOrCreate('global', 'global', '')
+      applyFlags(row, FALLBACK_PERMISSION_FLAGS)
+      row.sources.push('共享设置')
+    } else if (shareConfig.access_level === 'department') {
+      for (const deptId of shareConfig.department_ids || []) {
+        const row = getOrCreate(`department:${deptId}`, 'department', String(deptId))
+        applyFlags(row, FALLBACK_PERMISSION_FLAGS)
+        row.sources.push('共享设置')
+      }
+    } else if (shareConfig.access_level === 'user') {
+      for (const uid of shareConfig.user_uids || []) {
+        const row = getOrCreate(`user:${uid}`, 'user', String(uid))
+        applyFlags(row, FALLBACK_PERMISSION_FLAGS)
+        row.sources.push('共享设置')
+      }
+    }
+  }
+
+  for (const permission of permissions) {
+    const key = `${permission.subject_type}:${permission.subject_id}`
+    const row = getOrCreate(key, permission.subject_type, String(permission.subject_id))
+    applyFlags(row, permission)
+    row.sources.push('授权')
+    row.editable = true
+    if (row.id == null) row.id = permission.id
+  }
+
+  const order = { user: 0, department: 1, role: 2, global: 3 }
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      label:
+        row.subject_type === 'global'
+          ? '全体用户'
+          : formatSubjectLabel(row, { users, departments }),
+      sources: [...new Set(row.sources)]
+    }))
+    .sort((a, b) => {
+      const aCreator = a.sources.includes('创建者') ? 0 : 1
+      const bCreator = b.sources.includes('创建者') ? 0 : 1
+      if (aCreator !== bCreator) return aCreator - bCreator
+      if (order[a.subject_type] !== order[b.subject_type]) {
+        return order[a.subject_type] - order[b.subject_type]
+      }
+      return a.label.localeCompare(b.label, 'zh-Hans-CN')
+    })
 }

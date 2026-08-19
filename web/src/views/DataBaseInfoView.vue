@@ -253,7 +253,7 @@
           </div>
 
           <div v-if="activeTab === 'permissions'" class="tab-panel">
-            <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" />
+            <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" :database="database" />
           </div>
         </main>
       </div>
@@ -265,7 +265,7 @@
           <template #icon>
             <Trash2 :size="16" style="vertical-align: -3px; margin-right: 4px" />
           </template>
-          删除数据库
+          删除知识库
         </a-button>
         <a-button key="back" @click="editModalVisible = false">取消</a-button>
         <a-button key="submit" type="primary" @click="handleEditSubmit">确定</a-button>
@@ -367,11 +367,7 @@
 
         <a-form-item v-if="canEditShareConfig" label="共享设置" name="share_config">
           <a-form-item-rest>
-            <ShareConfigForm
-              ref="shareConfigFormRef"
-              :model-value="database.share_config"
-              :auto-select-user-dept="true"
-            />
+            <ShareConfigForm ref="shareConfigFormRef" :model-value="database.share_config" />
           </a-form-item-rest>
         </a-form-item>
         <a-form-item

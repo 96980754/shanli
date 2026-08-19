@@ -50,6 +50,8 @@ class KnowledgePermissionService:
     This service intentionally models private-deployment authorization, not SaaS
     tenant isolation. Permissions are additive: user, department, and role grants
     are merged; there is no deny rule in the first production-oriented slice.
+    Explicit grants and the share_config fallback are OR-combined (the wider set
+    wins per action), so a narrow grant never narrows fallback access.
     """
 
     def __init__(
@@ -86,10 +88,10 @@ class KnowledgePermissionService:
 
         grants = await self.permission_repository.list_by_kb_id(kb_id)
         merged = self._merge_matching_grants(user, grants)
-        if any(getattr(merged, action) for action in KNOWLEDGE_PERMISSION_ACTIONS):
-            return merged
-
-        return self._share_config_fallback(user, getattr(kb, "share_config", None))
+        fallback = self._share_config_fallback(user, getattr(kb, "share_config", None))
+        return EffectiveKnowledgePermissions(
+            **{action: merged.allows(action) or fallback.allows(action) for action in KNOWLEDGE_PERMISSION_ACTIONS}
+        )
 
     @staticmethod
     def _all_permissions() -> EffectiveKnowledgePermissions:

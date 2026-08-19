@@ -382,9 +382,15 @@ export class MessageProcessor {
       if (cells.length >= 2 && docKwRe.test(cells[0])) names.push(cells[0])
     }
 
-    // 「来源说明/依据来源」段落：模型在此按「材料、材料」列出实际使用的文档名，
-    // 是《》与表格之外最主要的引用来源，之前被完全忽略导致来源面板折叠
-    const sourceMatch = text.match(/来源说明|依据来源|参考来源|资料来源|引用来源|参考文献/)
+    // 「来源说明/依据来源」段落：模型在此按「材料、材料」或换行列出实际使用的文档名，
+    // 常见形态还有「──来源：」/「**来源**：」+ 完整路径列表（如 poc资料/MNO/xxx.pptx（kb_id）），
+    // 「来源」与冒号之间可能被 markdown 加粗/斜体标记隔开（如 **来源**：）；
+    // 取最后一次出现（引用清单通常在回答末尾），避免命中正文散文里的「来源」二字
+    const sourceRe =
+      /来源说明|依据来源|参考来源|资料来源|引用来源|参考文献|来源\s*[*_]{0,2}\s*[：:]/g
+    let sourceMatch = null
+    let m
+    while ((m = sourceRe.exec(text))) sourceMatch = m
     if (sourceMatch) {
       let section = text.slice(sourceMatch.index, sourceMatch.index + 800)
       // 文档清单在句号处结束，句号后的补充说明（如"如需进一步…请告知"）不属于引用
@@ -414,6 +420,46 @@ export class MessageProcessor {
       }
     }
     return out
+  }
+
+  /**
+   * 按文档名分组检索块。来源路径去掉前缀取文件名作为文档身份：
+   * 同一文档跨多个知识库命中（如「营销包」与「定位资料」都含同一份培训材料，
+   * metadata.source 路径不同但文件名一致）时合并为一组。
+   * 来源面板的分组与「来源 N」计数共用此口径，避免数字与卡片数不一致。
+   *
+   * @param {Array} chunks - 检索块数组
+   * @returns {Array<{filename: string, displayName: string, kb_id: string, file_id: string, chunks: Array}>}
+   */
+  static groupKnowledgeChunksByDocument(chunks) {
+    if (!Array.isArray(chunks)) return []
+    const groups = new Map()
+    for (const item of chunks) {
+      if (!item || typeof item !== 'object') continue
+      const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {}
+      const source =
+        metadata.source ||
+        metadata.file_name ||
+        metadata.filename ||
+        metadata.title ||
+        item.file_name ||
+        item.filename ||
+        item.file_id ||
+        item.kb_id ||
+        '未知来源'
+      const displayName = String(source).split(/[\\/]/).filter(Boolean).pop() || source
+      if (!groups.has(displayName)) {
+        groups.set(displayName, {
+          filename: source,
+          displayName,
+          kb_id: item?.kb_id || '',
+          file_id: item?.file_id || '',
+          chunks: []
+        })
+      }
+      groups.get(displayName).chunks.push(item)
+    }
+    return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
   }
 
   /**

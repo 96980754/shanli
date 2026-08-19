@@ -769,7 +769,6 @@ async def create_database(
             category_id=category_id,
             share_config=share_config,
             created_by=current_user.uid,
-            created_by_department_id=current_user.department_id,
             **additional_params,
         )
 
@@ -983,7 +982,6 @@ async def update_database_info(
             additional_params=additional_params,
             share_config=data.share_config,
             operator_uid=current_user.uid,
-            operator_department_id=current_user.department_id,
         )
         return {"message": "更新成功", "database": database}
     except HTTPException:
@@ -2793,6 +2791,21 @@ async def move_document(
     except Exception as e:
         logger.error(f"移动文件失败 {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@knowledge.get("/databases/{kb_id}/folders/{folder_id}/chain")
+async def get_folder_chain(
+    kb_id: str,
+    folder_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """返回真实文件夹的祖先链（top-down，含目标自身），供全库搜索等入口深链进入文件浏览。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文件夹目录")
+    chain = await KnowledgeFileRepository().get_folder_chain(kb_id=kb_id, folder_id=folder_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="文件夹不存在")
+    return {"folder_id": folder_id, "chain": chain}
 
 
 @knowledge.post("/files/fetch-url")

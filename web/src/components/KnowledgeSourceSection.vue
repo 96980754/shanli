@@ -1,19 +1,26 @@
 <template>
   <div class="source-section">
-    <div class="section-title">知识库来源 ({{ chunks.length }})</div>
+    <div class="section-title">知识库来源 ({{ docCount }})</div>
     <KbResultGroupedList :chunks="chunks" :show-summary="false" />
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KbResultGroupedList from '@/components/sources/KbResultGroupedList.vue'
 
-defineProps({
+const props = defineProps({
   chunks: {
     type: Array,
     default: () => []
   }
 })
+
+// 标题数字与面板卡片数一致：按文档名去重（跨库同名文档只算 1）
+const docCount = computed(
+  () => MessageProcessor.groupKnowledgeChunksByDocument(props.chunks).length
+)
 </script>
 
 <style scoped lang="less">

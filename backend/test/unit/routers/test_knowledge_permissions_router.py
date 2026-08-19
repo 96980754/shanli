@@ -347,3 +347,43 @@ async def test_add_uploaded_documents_requires_upload_permission(monkeypatch):
 
     assert exc_info.value.status_code == 403
     assert service.calls == [({"uid": "uploader", "role": "admin", "department_id": 1}, "kb-1", "can_upload")]
+
+
+async def test_get_folder_chain_requires_view_permission(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.get_folder_chain("kb-1", "folder-1", current_user=user(uid="viewer", role="user"))
+
+    assert exc_info.value.status_code == 403
+    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view")]
+
+
+async def test_get_folder_chain_returns_top_down_chain(monkeypatch):
+    service, _repository = install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    get_folder_chain = AsyncMock(
+        return_value=[
+            {"file_id": "folder-a", "filename": "A"},
+            {"file_id": "folder-b", "filename": "B"},
+        ]
+    )
+    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain))
+
+    result = await knowledge_router.get_folder_chain("kb-1", "folder-b", current_user=user(uid="viewer", role="user"))
+
+    get_folder_chain.assert_awaited_once_with(kb_id="kb-1", folder_id="folder-b")
+    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view")]
+    assert result == {"folder_id": "folder-b", "chain": [{"file_id": "folder-a", "filename": "A"}, {"file_id": "folder-b", "filename": "B"}]}
+
+
+async def test_get_folder_chain_returns_404_when_folder_missing(monkeypatch):
+    install_fakes(monkeypatch, allowed=True)
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
+    get_folder_chain = AsyncMock(return_value=None)
+    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.get_folder_chain("kb-1", "missing", current_user=user(uid="viewer", role="user"))
+
+    assert exc_info.value.status_code == 404

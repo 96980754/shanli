@@ -215,17 +215,26 @@
         </template>
 
         <template v-if="!userManagement.editMode || userManagement.displayPasswordFields">
-          <a-form-item label="密码" required class="form-item">
+          <!-- 编辑模式勾选「修改密码」时是重置密码语义，标签/占位符用「新密码」提示，避免与创建时的初始密码混淆 -->
+          <a-form-item
+            :label="userManagement.editMode ? '新密码' : '密码'"
+            required
+            class="form-item"
+          >
             <a-input-password
               v-model:value="userManagement.form.password"
-              placeholder="请输入密码"
+              :placeholder="userManagement.editMode ? '请输入新密码' : '请输入密码'"
             />
           </a-form-item>
 
-          <a-form-item label="确认密码" required class="form-item">
+          <a-form-item
+            :label="userManagement.editMode ? '确认新密码' : '确认密码'"
+            required
+            class="form-item"
+          >
             <a-input-password
               v-model:value="userManagement.form.confirmPassword"
-              placeholder="请再次输入密码"
+              :placeholder="userManagement.editMode ? '请再次输入新密码' : '请再次输入密码'"
             />
           </a-form-item>
         </template>
