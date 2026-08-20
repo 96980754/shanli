@@ -29,17 +29,35 @@ class AgentRunInputMessage:
         return replace(self, extra_metadata=dict(metadata))
 
 
-def build_chat_input_message(query: str, image_content: str | None = None) -> AgentRunInputMessage:
+def build_chat_input_message(
+    query: str,
+    image_content: str | None = None,
+    *,
+    industry_solution: dict[str, Any] | None = None,
+) -> AgentRunInputMessage:
+    model_query = query
+    extra_metadata: dict[str, Any] = {}
+    if industry_solution:
+        structured_request = json.dumps(industry_solution, ensure_ascii=False)
+        model_query = (
+            f"{query}\n\n"
+            "<industry_solution_request>\n"
+            f"{structured_request}\n"
+            "</industry_solution_request>\n"
+            "请使用 industry-solution 技能严格按结构化请求生成方案和 Word 交付物。"
+        )
+        extra_metadata["industry_solution"] = industry_solution
+
     if image_content:
         langchain_message = HumanMessage(
             content=[
-                {"type": "text", "text": query},
+                {"type": "text", "text": model_query},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_content}"}},
             ]
         )
         message_type = "multimodal_image"
     else:
-        langchain_message = HumanMessage(content=query)
+        langchain_message = HumanMessage(content=model_query)
         message_type = "text"
 
     return AgentRunInputMessage(
@@ -47,6 +65,7 @@ def build_chat_input_message(query: str, image_content: str | None = None) -> Ag
         message_type=message_type,
         image_content=image_content,
         langchain_message=langchain_message,
+        extra_metadata=extra_metadata,
     )
 
 

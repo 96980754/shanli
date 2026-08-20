@@ -77,6 +77,19 @@ def test_markdown_to_blocks_handles_multiple_headings_levels():
     ]
 
 
+def test_markdown_to_blocks_preserves_inline_emphasis_and_list_semantics():
+    blocks = markdown_to_blocks(
+        "**安全管理**保障运行。\n\n- **感知层**采集数据\n- 普通星号 * 需要保留\n"
+    )
+
+    assert blocks[0]["text"] == "安全管理保障运行。"
+    assert blocks[0]["runs"][0] == {"text": "安全管理", "bold": True, "italic": False}
+    assert blocks[1]["kind"] == "list_item"
+    assert blocks[1]["ordered"] is False
+    assert blocks[1]["runs"][0] == {"text": "感知层", "bold": True, "italic": False}
+    assert blocks[2]["text"] == "普通星号 * 需要保留"
+
+
 def test_markdown_to_blocks_empty_returns_empty():
     assert markdown_to_blocks("") == []
     assert markdown_to_blocks("   \n  ") == []

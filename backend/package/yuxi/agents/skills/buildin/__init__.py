@@ -49,6 +49,20 @@ BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
         enabled=True,
     ),
     BuiltinSkillSpec(
+        slug="industry-solution",
+        source_dir=_SKILLS_ROOT / "industry-solution",
+        description="分别检索多个产品资料，生成带可追溯来源的行业解决方案并交付 Word 文档。",
+        version="2026.08.15",
+        tool_dependencies=(
+            "list_kbs",
+            "research_industry_products",
+            "export_industry_solution_docx",
+            "present_artifacts",
+        ),
+        skill_dependencies=("knowledge-base",),
+        enabled=True,
+    ),
+    BuiltinSkillSpec(
         slug="mysql-reporter",
         source_dir=_SKILLS_ROOT / "mysql-reporter",
         description="基于 MySQL 数据库生成查询报表和可视化图表，适合分析业务指标、统计趋势，并用 Charts MCP 展示结果。",

@@ -107,7 +107,8 @@ export const agentApi = {
       image_content: data.image_content || null,
       model_spec: data.model_spec || null,
       resume: data.resume ?? null,
-      created_by_run_id: data.created_by_run_id || null
+      created_by_run_id: data.created_by_run_id || null,
+      industry_solution: data.industry_solution || null
     }),
 
   /**
