@@ -61,14 +61,15 @@ class UserRepository:
 
     async def list_with_department(
         self, skip: int = 0, limit: int = 100, department_id: int | None = None, role: str | None = None
-    ) -> Annotated[list[tuple[User, str | None]], "用户列表，包含部门名称"]:
-        """获取用户列表，包含部门名称"""
+    ) -> Annotated[list[tuple[User, str | None, str | None]], "用户列表，包含部门名称与团队名称"]:
+        """获取用户列表，包含部门名称与团队名称"""
         async with pg_manager.get_async_session_context() as session:
-            from yuxi.storage.postgres.models_business import Department
+            from yuxi.storage.postgres.models_business import Department, Team
 
             query = (
-                select(User, Department.name.label("department_name"))
+                select(User, Department.name.label("department_name"), Team.name.label("team_name"))
                 .outerjoin(Department, User.department_id == Department.id)
+                .outerjoin(Team, User.team_id == Team.id)
                 .where(User.is_deleted == 0)
             )
             if department_id is not None:

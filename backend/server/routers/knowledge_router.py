@@ -502,7 +502,7 @@ async def _has_running_graph_build_task(kb_id: str) -> bool:
 
 
 def _user_permission_context(user: User) -> dict:
-    return {"uid": user.uid, "role": user.role, "department_id": user.department_id}
+    return {"uid": user.uid, "role": user.role, "department_id": user.department_id, "team_id": user.team_id}
 
 
 def _serialize_kb_permission(permission) -> dict:

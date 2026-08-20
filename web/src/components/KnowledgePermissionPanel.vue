@@ -13,6 +13,7 @@
         <a-select v-model:value="form.subject_type" style="width: 120px">
           <a-select-option value="user">用户</a-select-option>
           <a-select-option value="department">部门</a-select-option>
+          <a-select-option value="team">团队</a-select-option>
           <a-select-option value="role">角色</a-select-option>
         </a-select>
       </a-form-item>
@@ -42,7 +43,11 @@
       </a-form-item>
       <a-form-item>
         <a-space wrap>
-          <a-checkbox v-for="item in permissionOptions" :key="item.key" v-model:checked="form[item.key]">
+          <a-checkbox
+            v-for="item in permissionOptions"
+            :key="item.key"
+            v-model:checked="form[item.key]"
+          >
             {{ item.label }}
           </a-checkbox>
         </a-space>
@@ -129,7 +134,12 @@ const columns = [
   { title: '授权类型', dataIndex: 'subject_type', key: 'subject_type', width: 90 },
   { title: '授权对象', dataIndex: 'subject_id', key: 'subject_id', width: 200 },
   { title: '来源', dataIndex: 'sources', key: 'sources', width: 160 },
-  ...permissionOptions.map((item) => ({ title: item.label, dataIndex: item.key, key: item.key, width: 82 })),
+  ...permissionOptions.map((item) => ({
+    title: item.label,
+    dataIndex: item.key,
+    key: item.key,
+    width: 82
+  })),
   { title: '操作', key: 'actions', fixed: 'right', width: 130 }
 ]
 
@@ -153,6 +163,7 @@ const saving = ref(false)
 const optionLoading = ref(false)
 const users = ref([])
 const departments = ref([])
+const teams = ref([])
 
 const userOptions = computed(() =>
   users.value.map((item) => ({
@@ -169,8 +180,26 @@ const departmentOptions = computed(() =>
   }))
 )
 
+// 团队选项按部门分组级联（部门名 › 团队名），与行标签渲染一致
+const teamOptions = computed(() => {
+  const groups = new Map()
+  for (const team of teams.value) {
+    const deptId = String(team.department_id)
+    if (!groups.has(deptId)) {
+      const department = departments.value.find((item) => String(item.id) === deptId)
+      groups.set(deptId, {
+        label: department ? department.name : `部门 ${deptId}`,
+        options: []
+      })
+    }
+    groups.get(deptId).options.push({ value: String(team.id), label: team.name })
+  }
+  return [...groups.values()]
+})
+
 const subjectOptions = computed(() => {
   if (form.subject_type === 'department') return departmentOptions.value
+  if (form.subject_type === 'team') return teamOptions.value
   if (form.subject_type === 'role') return roleOptions
   return userOptions.value
 })
@@ -181,7 +210,8 @@ const accessRows = computed(() =>
     shareConfig: props.database?.share_config,
     permissions: permissions.value,
     users: users.value,
-    departments: departments.value
+    departments: departments.value,
+    teams: teams.value
   })
 )
 
@@ -197,6 +227,7 @@ const resetForm = () => {
 
 const subjectTypeLabel = (type) => {
   if (type === 'department') return '部门'
+  if (type === 'team') return '团队'
   if (type === 'role') return '角色'
   if (type === 'global') return '全体'
   return '用户'
@@ -205,16 +236,19 @@ const subjectTypeLabel = (type) => {
 const loadSubjectOptions = async () => {
   optionLoading.value = true
   try {
-    const [userResult, departmentResult] = await Promise.all([
+    const [userResult, departmentResult, teamResult] = await Promise.all([
       authApi.getUserAccessOptions(),
-      departmentApi.getDepartments()
+      departmentApi.getDepartments(),
+      departmentApi.getAllTeams()
     ])
     users.value = Array.isArray(userResult) ? userResult : []
     departments.value = departmentResult.departments || departmentResult || []
+    teams.value = Array.isArray(teamResult) ? teamResult : []
   } catch (error) {
     message.warning(error.message || '加载授权对象失败，请手动刷新后重试')
     users.value = []
     departments.value = []
+    teams.value = []
   } finally {
     optionLoading.value = false
   }

@@ -43,11 +43,11 @@ async def test_get_databases_by_user_includes_explicit_view_grant(monkeypatch, t
     monkeypatch.setattr(permission_module, "KnowledgePermissionService", lambda: permission_service)
 
     result = await manager.get_databases_by_user(
-        SimpleNamespace(uid="viewer", role="user", department_id=10)
+        SimpleNamespace(uid="viewer", role="user", department_id=10, team_id=None)
     )
 
     assert result == {"databases": [databases[0]]}
     assert permission_service.calls == [
-        ({"uid": "viewer", "role": "user", "department_id": 10}, "kb-granted", "can_view"),
-        ({"uid": "viewer", "role": "user", "department_id": 10}, "kb-private", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 10, "team_id": None}, "kb-granted", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 10, "team_id": None}, "kb-private", "can_view"),
     ]

@@ -130,6 +130,43 @@ const run = () => {
 
   assert.equal(
     formatSubjectLabel(
+      { subject_type: 'team', subject_id: '20' },
+      {
+        users: [],
+        departments: [{ id: 10, name: '研发部' }],
+        teams: [{ id: 20, department_id: 10, name: '核心组' }]
+      }
+    ),
+    '研发部 › 核心组'
+  )
+
+  // 团队未匹配到部门时仅展示团队名
+  assert.equal(
+    formatSubjectLabel(
+      { subject_type: 'team', subject_id: '20' },
+      {
+        users: [],
+        departments: [],
+        teams: [{ id: 20, department_id: 99, name: '核心组' }]
+      }
+    ),
+    '核心组'
+  )
+
+  assert.equal(
+    formatSubjectLabel(
+      { subject_type: 'team', subject_id: '999' },
+      {
+        users: [],
+        departments: [],
+        teams: [{ id: 20, department_id: 10, name: '核心组' }]
+      }
+    ),
+    '999'
+  )
+
+  assert.equal(
+    formatSubjectLabel(
       { subject_type: 'user', subject_id: 'unknown-user' },
       {
         users: [{ uid: 'zhangsan', username: '张三' }],
@@ -305,6 +342,56 @@ const run = () => {
   assert.equal(roleRows[0].label, '管理员（admin）')
   assert.equal(roleRows[0].editable, true)
   assert.equal(roleRows[0].sources.includes('授权'), true)
+
+  // 团队授权：标签「部门 › 团队名」，排序位于部门之后
+  const teamRows = buildAccessRows({
+    createdBy: null,
+    shareConfig: {},
+    permissions: [
+      { id: 8, subject_type: 'team', subject_id: '20', can_view: true, can_upload: true },
+      { id: 9, subject_type: 'department', subject_id: '10', can_view: true }
+    ],
+    departments: [{ id: 10, name: '研发部' }],
+    teams: [{ id: 20, department_id: 10, name: '核心组' }]
+  })
+  assert.equal(teamRows.length, 2)
+  assert.equal(teamRows[0].key, 'department:10')
+  assert.equal(teamRows[0].label, '研发部')
+  assert.equal(teamRows[1].key, 'team:20')
+  assert.equal(teamRows[1].label, '研发部 › 核心组')
+  assert.equal(teamRows[1].editable, true)
+  assert.equal(teamRows[1].id, 8)
+  assert.equal(teamRows[1].can_view, true)
+  assert.equal(teamRows[1].can_upload, true)
+  assert.equal(teamRows[1].sources.includes('授权'), true)
+
+  // 团队 id 数字归一化（buildPermissionPayload）
+  assert.deepEqual(
+    buildPermissionPayload({
+      subject_type: 'team',
+      subject_id: ' 020 ',
+      can_view: true,
+      can_search: false,
+      can_upload: false,
+      can_download: false,
+      can_delete: false,
+      can_manage: false,
+      can_grant: false,
+      can_export: false
+    }),
+    {
+      subject_type: 'team',
+      subject_id: '20',
+      can_view: true,
+      can_search: false,
+      can_upload: false,
+      can_download: false,
+      can_delete: false,
+      can_manage: false,
+      can_grant: false,
+      can_export: false
+    }
+  )
 }
 
 run()

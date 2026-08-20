@@ -115,6 +115,8 @@ class KnowledgePermissionService:
             return bool(user.get("uid") and str(user["uid"]) == subject_id)
         if subject_type == "department":
             return bool(user.get("department_id") is not None and str(user["department_id"]) == subject_id)
+        if subject_type == "team":
+            return bool(user.get("team_id") is not None and str(user["team_id"]) == subject_id)
         if subject_type == "role":
             role_names = {str(user.get("role") or "")}
             role_names.update(str(role) for role in user.get("roles") or [])

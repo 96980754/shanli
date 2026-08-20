@@ -286,6 +286,7 @@ class KnowledgeBaseManager:
                 "uid": user.uid,
                 "role": user.role,
                 "department_id": user.department_id,
+                "team_id": user.team_id,
             }
 
         user_role = user_info.get("role")

@@ -76,8 +76,8 @@ def install_fakes(monkeypatch, *, allowed=True):
     return service, repository
 
 
-def user(uid="admin", role="admin", department_id=1):
-    return SimpleNamespace(uid=uid, role=role, department_id=department_id)
+def user(uid="admin", role="admin", department_id=1, team_id=None):
+    return SimpleNamespace(uid=uid, role=role, department_id=department_id, team_id=team_id)
 
 
 async def test_list_database_permissions_requires_grant_permission(monkeypatch):
@@ -94,7 +94,9 @@ async def test_list_database_permissions_returns_permission_matrix(monkeypatch):
 
     result = await knowledge_router.list_database_permissions("kb-1", current_user=user(uid="owner"))
 
-    assert service.calls == [({"uid": "owner", "role": "admin", "department_id": 1}, "kb-1", "can_grant")]
+    assert service.calls == [
+        ({"uid": "owner", "role": "admin", "department_id": 1, "team_id": None}, "kb-1", "can_grant")
+    ]
     assert result == {
         "permissions": [
             {
@@ -157,7 +159,9 @@ async def test_get_database_access_returns_effective_permissions(monkeypatch):
 
     result = await knowledge_router.get_database_access("kb-1", current_user=user(uid="viewer", role="user"))
 
-    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "effective")]
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "effective")
+    ]
     assert result == {
         "can_view": True,
         "can_search": True,
@@ -186,7 +190,9 @@ async def test_get_database_info_requires_view_permission(monkeypatch):
         await knowledge_router.get_database_info("kb-1", current_user=user(uid="viewer"))
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "viewer", "role": "admin", "department_id": 1}, "kb-1", "can_view")]
+    assert service.calls == [
+        ({"uid": "viewer", "role": "admin", "department_id": 1, "team_id": None}, "kb-1", "can_view")
+    ]
 
 
 async def test_update_database_info_requires_manage_permission(monkeypatch):
@@ -197,7 +203,9 @@ async def test_update_database_info_requires_manage_permission(monkeypatch):
         await knowledge_router.update_database_info("kb-1", request, current_user=user(uid="manager"))
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "manager", "role": "admin", "department_id": 1}, "kb-1", "can_manage")]
+    assert service.calls == [
+        ({"uid": "manager", "role": "admin", "department_id": 1, "team_id": None}, "kb-1", "can_manage")
+    ]
 
 
 async def test_list_documents_requires_view_permission(monkeypatch):
@@ -207,7 +215,9 @@ async def test_list_documents_requires_view_permission(monkeypatch):
         await knowledge_router.list_documents("kb-1", current_user=user(uid="viewer"))
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "viewer", "role": "admin", "department_id": 1}, "kb-1", "can_view")]
+    assert service.calls == [
+        ({"uid": "viewer", "role": "admin", "department_id": 1, "team_id": None}, "kb-1", "can_view")
+    ]
 
 
 async def test_download_document_requires_view_and_download_permissions(monkeypatch):
@@ -225,8 +235,8 @@ async def test_download_document_requires_view_and_download_permissions(monkeypa
     )
 
     assert service.calls == [
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view"),
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_download"),
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_download"),
     ]
     get_file_download.assert_awaited_once_with(kb_id="kb-1", file_id="file-1", variant="original")
     assert response.media_type == "text/plain"
@@ -268,7 +278,9 @@ async def test_scoped_document_search_requires_manage_permission(monkeypatch):
         )
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "uploader", "role": "user", "department_id": 1}, "kb-1", "can_manage")]
+    assert service.calls == [
+        ({"uid": "uploader", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_manage")
+    ]
 
 
 async def test_scoped_document_search_only_queries_requested_database(monkeypatch):
@@ -297,7 +309,9 @@ async def test_scoped_document_search_only_queries_requested_database(monkeypatc
         page=2,
         page_size=20,
     )
-    assert service.calls == [({"uid": "manager", "role": "user", "department_id": 1}, "kb-1", "can_manage")]
+    assert service.calls == [
+        ({"uid": "manager", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_manage")
+    ]
     assert result == {
         "items": [{"file_id": "file-1", "kb_id": "kb-1", "kb_name": "kb-1"}],
         "total": 1,
@@ -346,7 +360,9 @@ async def test_add_uploaded_documents_requires_upload_permission(monkeypatch):
         await knowledge_router.add_uploaded_documents("kb-1", payload, current_user=user(uid="uploader"))
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "uploader", "role": "admin", "department_id": 1}, "kb-1", "can_upload")]
+    assert service.calls == [
+        ({"uid": "uploader", "role": "admin", "department_id": 1, "team_id": None}, "kb-1", "can_upload")
+    ]
 
 
 async def test_get_folder_chain_requires_view_permission(monkeypatch):
@@ -356,7 +372,9 @@ async def test_get_folder_chain_requires_view_permission(monkeypatch):
         await knowledge_router.get_folder_chain("kb-1", "folder-1", current_user=user(uid="viewer", role="user"))
 
     assert exc_info.value.status_code == 403
-    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view")]
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_view")
+    ]
 
 
 async def test_get_folder_chain_returns_top_down_chain(monkeypatch):
@@ -368,20 +386,29 @@ async def test_get_folder_chain_returns_top_down_chain(monkeypatch):
             {"file_id": "folder-b", "filename": "B"},
         ]
     )
-    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain))
+    monkeypatch.setattr(
+        knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain)
+    )
 
     result = await knowledge_router.get_folder_chain("kb-1", "folder-b", current_user=user(uid="viewer", role="user"))
 
     get_folder_chain.assert_awaited_once_with(kb_id="kb-1", folder_id="folder-b")
-    assert service.calls == [({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view")]
-    assert result == {"folder_id": "folder-b", "chain": [{"file_id": "folder-a", "filename": "A"}, {"file_id": "folder-b", "filename": "B"}]}
+    assert service.calls == [
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_view")
+    ]
+    assert result == {
+        "folder_id": "folder-b",
+        "chain": [{"file_id": "folder-a", "filename": "A"}, {"file_id": "folder-b", "filename": "B"}],
+    }
 
 
 async def test_get_folder_chain_returns_404_when_folder_missing(monkeypatch):
     install_fakes(monkeypatch, allowed=True)
     monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", AsyncMock())
     get_folder_chain = AsyncMock(return_value=None)
-    monkeypatch.setattr(knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain))
+    monkeypatch.setattr(
+        knowledge_router, "KnowledgeFileRepository", lambda: SimpleNamespace(get_folder_chain=get_folder_chain)
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await knowledge_router.get_folder_chain("kb-1", "missing", current_user=user(uid="viewer", role="user"))

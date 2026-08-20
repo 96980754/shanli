@@ -1259,6 +1259,53 @@ class PostgresManager(metaclass=SingletonMeta):
             """,
             "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_status_seen ON knowledge_gaps(status, last_seen_at DESC)",
             "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_agent_seen ON knowledge_gaps(agent_slug, last_seen_at DESC)",
+            # 团队分组：表 + users.team_id + 默认团队种子 + 存量用户回填
+            """
+            CREATE TABLE IF NOT EXISTS teams (
+                id SERIAL PRIMARY KEY,
+                department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+                name VARCHAR(50) NOT NULL,
+                description VARCHAR(255),
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_teams_department_name UNIQUE (department_id, name)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_teams_department_id ON teams(department_id)",
+            (
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_teams_default_per_department "
+                "ON teams(department_id) WHERE is_default IS TRUE"
+            ),
+            "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS team_id INTEGER",
+            """
+            INSERT INTO teams (department_id, name, description, is_default, created_at)
+            SELECT d.id, '默认团队', '系统自动创建的默认团队', TRUE, NOW()
+            FROM departments d
+            WHERE NOT EXISTS (
+                SELECT 1 FROM teams t WHERE t.department_id = d.id AND t.is_default IS TRUE
+            )
+            """,
+            """
+            UPDATE users u
+            SET team_id = (
+                SELECT t.id FROM teams t
+                WHERE t.department_id = u.department_id AND t.is_default IS TRUE
+                LIMIT 1
+            )
+            WHERE u.team_id IS NULL AND u.department_id IS NOT NULL
+            """,
+            # 兜底：早期建表依赖 ORM 的 Python 端默认值，RAW 种子未写 created_at，补上历史空值
+            "UPDATE teams SET created_at = NOW() WHERE created_at IS NULL",
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_team_id') THEN
+                    ALTER TABLE users
+                    ADD CONSTRAINT fk_users_team_id
+                    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+                END IF;
+            END $$
+            """,
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警

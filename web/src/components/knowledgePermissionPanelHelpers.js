@@ -43,7 +43,7 @@ export const roleOptions = [
 export const buildPermissionPayload = (form) => {
   const trimmedSubjectId = String(form.subject_id ?? '').trim()
   const subjectId =
-    form.subject_type === 'department' && /^\d+$/.test(trimmedSubjectId)
+    ['department', 'team'].includes(form.subject_type) && /^\d+$/.test(trimmedSubjectId)
       ? String(Number(trimmedSubjectId))
       : trimmedSubjectId
 
@@ -54,7 +54,7 @@ export const buildPermissionPayload = (form) => {
   }
 }
 
-export const formatSubjectLabel = (record, { users = [], departments = [] } = {}) => {
+export const formatSubjectLabel = (record, { users = [], departments = [], teams = [] } = {}) => {
   const subjectId = String(record.subject_id ?? '')
 
   if (record.subject_type === 'user') {
@@ -66,6 +66,13 @@ export const formatSubjectLabel = (record, { users = [], departments = [] } = {}
     const department = departments.find((item) => String(item.id) === subjectId)
     // 部门名唯一，无需展示内部 ID（数字易被误读为成员数）
     return department ? department.name : subjectId
+  }
+
+  if (record.subject_type === 'team') {
+    const team = teams.find((item) => String(item.id) === subjectId)
+    if (!team) return subjectId
+    const department = departments.find((item) => String(item.id) === String(team.department_id))
+    return department ? `${department.name} › ${team.name}` : team.name
   }
 
   if (record.subject_type === 'role') {
@@ -94,7 +101,8 @@ export const buildAccessRows = ({
   shareConfig,
   permissions = [],
   users = [],
-  departments = []
+  departments = [],
+  teams = []
 }) => {
   const rows = new Map()
 
@@ -149,14 +157,14 @@ export const buildAccessRows = ({
     if (row.id == null) row.id = permission.id
   }
 
-  const order = { user: 0, department: 1, role: 2, global: 3 }
+  const order = { user: 0, department: 1, team: 2, role: 3, global: 4 }
   return [...rows.values()]
     .map((row) => ({
       ...row,
       label:
         row.subject_type === 'global'
           ? '全体用户'
-          : formatSubjectLabel(row, { users, departments }),
+          : formatSubjectLabel(row, { users, departments, teams }),
       sources: [...new Set(row.sources)]
     }))
     .sort((a, b) => {

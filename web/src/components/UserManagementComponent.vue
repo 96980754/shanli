@@ -105,7 +105,8 @@
                     <User v-else :size="14" />
                   </span>
                   <span v-if="user.department_name" class="dept-text">
-                    {{ user.department_name }}
+                    {{ user.department_name
+                    }}<template v-if="user.team_name"> › {{ user.team_name }}</template>
                   </span>
                 </div>
               </template>
@@ -266,6 +267,26 @@
             </a-select-option>
           </a-select>
         </a-form-item>
+
+        <!-- 团队选择器（仅超级管理员可见，随部门级联） -->
+        <a-form-item v-if="userStore.isSuperAdmin" label="团队" class="form-item">
+          <a-select
+            v-model:value="userManagement.form.teamId"
+            placeholder="请选择团队"
+            allow-clear
+            :disabled="!userManagement.form.departmentId"
+          >
+            <a-select-option v-for="team in filteredTeams" :key="team.id" :value="team.id">
+              {{ team.name }}
+            </a-select-option>
+          </a-select>
+          <div
+            v-if="userManagement.form.departmentId && !userManagement.form.teamId"
+            class="help-text"
+          >
+            未选择团队时将分配到该部门默认团队
+          </div>
+        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -384,6 +405,7 @@ const userManagement = reactive({
     confirmPassword: '',
     role: 'user', // 默认角色
     departmentId: null, // 部门ID
+    teamId: null, // 团队ID（随部门级联）
     usernameError: '', // 用户名错误信息
     phoneError: '' // 手机号错误信息
   },
@@ -393,6 +415,17 @@ const userManagement = reactive({
 // 部门列表（仅超级管理员使用）
 const departmentManagement = reactive({
   departments: []
+})
+
+// 全部团队（仅超级管理员使用，随部门级联筛选）
+const teamManagement = reactive({
+  teams: []
+})
+
+const filteredTeams = computed(() => {
+  const departmentId = userManagement.form.departmentId
+  if (departmentId == null) return []
+  return teamManagement.teams.filter((team) => String(team.department_id) === String(departmentId))
 })
 
 const userImport = reactive({
@@ -477,10 +510,14 @@ const paginatedUsers = computed(() => {
 const fetchDepartments = async () => {
   if (!userStore.isSuperAdmin) return // 普通管理员不需要获取所有部门列表
   try {
-    const departments = await departmentApi.getDepartments()
+    const [departments, teams] = await Promise.all([
+      departmentApi.getDepartments(),
+      departmentApi.getAllTeams()
+    ])
     departmentManagement.departments = departments
+    teamManagement.teams = teams
   } catch (error) {
-    console.error('获取部门列表失败:', error)
+    console.error('获取部门/团队列表失败:', error)
   }
 }
 
@@ -548,6 +585,14 @@ watch(
   () => [userManagement.searchKeyword, userManagement.departmentFilter, userManagement.roleFilter],
   () => {
     userManagement.currentPage = 1
+  }
+)
+
+// 部门变化时重置团队（防止遗留跨部门的团队选择）
+watch(
+  () => userManagement.form.departmentId,
+  () => {
+    userManagement.form.teamId = null
   }
 )
 
@@ -679,6 +724,7 @@ const showAddUserModal = () => {
     confirmPassword: '',
     role: 'user', // 默认角色为普通用户
     departmentId: null,
+    teamId: null,
     usernameError: '',
     phoneError: ''
   }
@@ -699,6 +745,7 @@ const showEditUserModal = (user) => {
     confirmPassword: '',
     role: user.role,
     departmentId: user.department_id || null,
+    teamId: user.team_id || null,
     usernameError: '',
     phoneError: ''
   }
@@ -762,6 +809,11 @@ const handleUserFormSubmit = async () => {
         updateData.department_id = userManagement.form.departmentId
       }
 
+      // 超级管理员可以指定团队（未选时保持现状，后端在改部门时自动落到新部门默认团队）
+      if (userStore.isSuperAdmin && userManagement.form.teamId) {
+        updateData.team_id = userManagement.form.teamId
+      }
+
       // 如果显示了密码字段并且填写了密码，才更新密码
       if (userManagement.displayPasswordFields && userManagement.form.password) {
         updateData.password = userManagement.form.password
@@ -780,6 +832,11 @@ const handleUserFormSubmit = async () => {
       // 超级管理员可以指定部门
       if (userStore.isSuperAdmin && userManagement.form.departmentId) {
         createData.department_id = userManagement.form.departmentId
+      }
+
+      // 超级管理员可以指定团队（未选时后端自动落到该部门默认团队）
+      if (userStore.isSuperAdmin && userManagement.form.teamId) {
+        createData.team_id = userManagement.form.teamId
       }
 
       // 添加手机号字段（如果填写了）

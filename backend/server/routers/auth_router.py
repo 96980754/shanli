@@ -16,6 +16,7 @@ from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import APIKey, User, Department
 from yuxi.repositories.user_repository import UserRepository
 from yuxi.repositories.department_repository import DepartmentRepository
+from yuxi.repositories.team_repository import TeamRepository
 from server.utils.auth_middleware import (
     get_admin_user,
     get_superadmin_user,
@@ -78,6 +79,7 @@ class UserCreate(BaseModel):
     role: str = "user"
     phone_number: str | None = None
     department_id: int | None = None
+    team_id: int | None = None
 
 
 class UserUpdate(BaseModel):
@@ -87,6 +89,7 @@ class UserUpdate(BaseModel):
     phone_number: str | None = None
     avatar: str | None = None
     department_id: int | None = None
+    team_id: int | None = None
 
 
 class UserProfileUpdate(BaseModel):
@@ -103,6 +106,8 @@ class UserResponse(BaseModel):
     role: str
     department_id: int | None = None
     department_name: str | None = None  # 部门名称
+    team_id: int | None = None  # 团队ID
+    team_name: str | None = None  # 团队名称
     created_at: str
     last_login: str | None = None
 
@@ -698,6 +703,21 @@ async def create_user(
                 detail="普通管理员不能指定部门",
             )
 
+    # 团队分配逻辑：未指定时落到本部门默认团队，指定时校验属于该部门
+    team_id = user_data.team_id
+    if department_id is not None:
+        team_repo = TeamRepository()
+        if team_id is not None:
+            team = await team_repo.get_by_id(team_id)
+            if team is None or team.department_id != department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="团队不属于所选部门",
+                )
+        else:
+            default_team = await team_repo.get_default(department_id)
+            team_id = default_team.id if default_team else None
+
     new_user = await user_repo.create(
         {
             "username": user_data.username,
@@ -706,6 +726,7 @@ async def create_user(
             "password_hash": hashed_password,
             "role": user_data.role,
             "department_id": department_id,
+            "team_id": team_id,
         }
     )
 
@@ -720,14 +741,20 @@ async def create_user(
 # 路由：获取所有用户（管理员权限）
 @auth.get("/users", response_model=list[UserResponse])
 async def read_users(
-    skip: int = 0, limit: int = 100, current_user: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)
+    skip: int = 0,
+    limit: int = 100,
+    department_id: int | None = None,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
 ):
     user_repo = UserRepository()
 
     # 部门隔离逻辑
     if current_user.role == "superadmin":
-        # 超级管理员可以看到所有用户
-        users_with_dept = await user_repo.list_with_department(skip=skip, limit=limit)
+        # 超级管理员可以看到所有用户，可按部门过滤
+        users_with_dept = await user_repo.list_with_department(
+            skip=skip, limit=limit, department_id=department_id
+        )
     else:
         # 普通管理员只能看到本部门用户
         users_with_dept = await user_repo.list_with_department(
@@ -735,9 +762,10 @@ async def read_users(
         )
 
     users = []
-    for user, dept_name in users_with_dept:
+    for user, dept_name, team_name in users_with_dept:
         user_dict = user.to_dict()
         user_dict["department_name"] = dept_name
+        user_dict["team_name"] = team_name
         users.append(user_dict)
     return users
 
@@ -773,7 +801,7 @@ async def read_user_access_options(
             "department_id": user.department_id,
             "department_name": dept_name,
         }
-        for user, dept_name in users_with_dept
+        for user, dept_name, _team_name in users_with_dept
     ]
 
 
@@ -878,6 +906,7 @@ async def update_user(
         update_details.append(f"头像: {user_data.avatar or '已清空'}")
 
     # 部门修改权限控制（只有超级管理员可以修改用户部门）
+    department_changed = False
     if user_data.department_id is not None and user_data.department_id != user.department_id:
         if current_user.role != "superadmin":
             raise HTTPException(
@@ -897,7 +926,28 @@ async def update_user(
                 )
 
         user.department_id = user_data.department_id
+        department_changed = True
         update_details.append(f"部门ID: {user_data.department_id}")
+
+    # 团队修改：指定时校验属于当前部门；部门变更后未指定则重置为默认团队
+    if user_data.team_id is not None or department_changed:
+        team_repo = TeamRepository()
+        if user_data.team_id is not None:
+            team = await team_repo.get_by_id(user_data.team_id)
+            if team is None or team.department_id != user.department_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="团队不属于所选部门",
+                )
+            user.team_id = user_data.team_id
+            update_details.append(f"团队: {team.name}")
+        elif user.department_id is not None:
+            default_team = await team_repo.get_default(user.department_id)
+            if default_team is not None:
+                user.team_id = default_team.id
+                update_details.append(f"团队: {default_team.name}")
+            else:
+                user.team_id = None
 
     await db.commit()
 
