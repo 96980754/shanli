@@ -159,7 +159,6 @@ class KnowledgeBaseManager:
         share_config: dict | None,
         *,
         user_uid: str | None = None,
-        department_id: int | str | None = None,
     ) -> dict:
         return normalize_share_config(
             share_config,
@@ -167,7 +166,6 @@ class KnowledgeBaseManager:
             default_access_level="global",
             invalid_access_level_message="无效的知识库权限等级",
             user_uid=user_uid,
-            department_id=department_id,
         )
 
     async def get_databases(self, category_id: int | None = None) -> dict:
@@ -288,6 +286,7 @@ class KnowledgeBaseManager:
                 "uid": user.uid,
                 "role": user.role,
                 "department_id": user.department_id,
+                "team_id": user.team_id,
             }
 
         user_role = user_info.get("role")
@@ -341,7 +340,6 @@ class KnowledgeBaseManager:
         category_id: int | None = None,
         share_config: dict | None = None,
         created_by: str | None = None,
-        created_by_department_id: int | str | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -355,7 +353,6 @@ class KnowledgeBaseManager:
             llm_model_spec: LLM 模型 spec
             share_config: 共享配置
             created_by: 创建者 uid
-            created_by_department_id: 创建者部门 ID
             **kwargs: 其他配置参数
 
         Returns:
@@ -378,7 +375,6 @@ class KnowledgeBaseManager:
         share_config = self._normalize_share_config(
             share_config,
             user_uid=created_by,
-            department_id=created_by_department_id,
         )
 
         kb_instance = self._get_or_create_kb_instance(kb_type)
@@ -639,6 +635,7 @@ class KnowledgeBaseManager:
         else:
             db_info["additional_params"] = normalized_additional_params
         db_info["share_config"] = kb.share_config or DEFAULT_SHARE_CONFIG.copy()
+        db_info["created_by"] = getattr(kb, "created_by", None)
         db_info["mindmap"] = kb.mindmap
         db_info["sample_questions"] = kb.sample_questions or []
         db_info["query_params"] = kb.query_params
@@ -908,7 +905,6 @@ class KnowledgeBaseManager:
         additional_params: dict | None = None,
         share_config: dict | None = None,
         operator_uid: str | None = None,
-        operator_department_id: int | str | None = None,
     ) -> dict:
         """更新数据库"""
         from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
@@ -962,7 +958,6 @@ class KnowledgeBaseManager:
             update_data["share_config"] = self._normalize_share_config(
                 share_config,
                 user_uid=operator_uid,
-                department_id=operator_department_id,
             )
 
         # 保存到数据库

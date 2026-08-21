@@ -105,6 +105,7 @@ import {
   ChevronDown
 } from 'lucide-vue-next'
 import { agentApi } from '@/apis'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
 
@@ -141,9 +142,15 @@ const webSources = computed(() =>
 const hasSources = computed(() => knowledgeChunks.value.length > 0 || webSources.value.length > 0)
 
 // 发生过知识检索（含拒答轮次）即显示来源按钮；纯聊天无来源无活动则不显示
-const showSourceButton = computed(() => hasSources.value || Boolean(props.sources?.knowledgeActivity))
+const showSourceButton = computed(
+  () => hasSources.value || Boolean(props.sources?.knowledgeActivity)
+)
 
-const sourceCount = computed(() => knowledgeChunks.value.length + webSources.value.length)
+// 「来源 N」按去重后的文档数计：同一文档在多个知识库命中时只算 1，与面板卡片数一致
+const knowledgeDocCount = computed(
+  () => MessageProcessor.groupKnowledgeChunksByDocument(knowledgeChunks.value).length
+)
+const sourceCount = computed(() => knowledgeDocCount.value + webSources.value.length)
 
 const toggleSources = () => {
   isSourcesExpanded.value = !isSourcesExpanded.value

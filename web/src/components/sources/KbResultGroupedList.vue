@@ -5,15 +5,15 @@
     </div>
 
     <div class="kb-results" v-if="normalizedChunks.length > 0">
-      <div v-for="fileGroup in fileGroupList" :key="fileGroup.filename" class="file-group">
+      <div v-for="fileGroup in fileGroupList" :key="fileGroup.displayName" class="file-group">
         <div
           class="file-header"
-          :class="{ expanded: expandedFiles.has(fileGroup.filename) }"
-          @click="toggleFile(fileGroup.filename)"
+          :class="{ expanded: expandedFiles.has(fileGroup.displayName) }"
+          @click="toggleFile(fileGroup.displayName)"
         >
           <div class="file-info">
             <ChevronRight
-              v-if="!expandedFiles.has(fileGroup.filename)"
+              v-if="!expandedFiles.has(fileGroup.displayName)"
               :size="14"
               class="expand-icon"
             />
@@ -48,7 +48,7 @@
           </div>
         </div>
 
-        <div v-if="expandedFiles.has(fileGroup.filename)" class="chunks-container">
+        <div v-if="expandedFiles.has(fileGroup.displayName)" class="chunks-container">
           <div
             v-for="(chunk, index) in fileGroup.chunks"
             :key="getChunkKey(chunk, index)"
@@ -98,6 +98,7 @@ import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { FileText, ChevronRight, ChevronDown, Download, Eye, LoaderCircle } from 'lucide-vue-next'
 import { documentApi } from '@/apis/knowledge_api'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KbChunkDetailModal from './KbChunkDetailModal.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 
@@ -163,39 +164,18 @@ const normalizedChunks = computed(() =>
     })
 )
 
-// 来源展示只取文件名（去掉前缀路径），分组仍按完整 source 路径避免同名文件串组。
-const getBaseName = (path = '') => {
-  const parts = String(path).split(/[\\/]/).filter(Boolean)
-  return parts.length ? parts[parts.length - 1] : String(path)
-}
-
-const fileGroupList = computed(() => {
-  const groups = new Map()
-  for (const item of normalizedChunks.value) {
-    const filename = item?.metadata?.source || '未知来源'
-    if (!groups.has(filename)) {
-      groups.set(filename, {
-        filename,
-        displayName: getBaseName(filename),
-        kb_id: item?.kb_id || '',
-        file_id: item?.file_id || '',
-        chunks: []
-      })
-    }
-    groups.get(filename).chunks.push(item)
-  }
-
-  return Array.from(groups.values()).sort((a, b) => a.filename.localeCompare(b.filename))
-})
+// 来源展示只取文件名（去掉前缀路径），分组按文档名去重合并：
+// 同一文档在多个知识库命中（source 路径不同但文件名一致）时归为一组，避免来源面板出现重复文档卡片
+const fileGroupList = computed(() =>
+  MessageProcessor.groupKnowledgeChunksByDocument(normalizedChunks.value)
+)
 
 watch(
   fileGroupList,
   (groups) => {
     // 分组变化时仅清理失效展开项，默认保持折叠状态。
-    const validFilenames = new Set(groups.map((item) => item.filename))
-    expandedFiles.value = new Set(
-      [...expandedFiles.value].filter((filename) => validFilenames.has(filename))
-    )
+    const validNames = new Set(groups.map((item) => item.displayName))
+    expandedFiles.value = new Set([...expandedFiles.value].filter((name) => validNames.has(name)))
   },
   { immediate: true }
 )
@@ -265,7 +245,7 @@ const downloadOriginal = async (fileGroup) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = getDownloadFilename(response, fileGroup.filename || 'document')
+    link.download = getDownloadFilename(response, fileGroup.displayName || 'document')
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()

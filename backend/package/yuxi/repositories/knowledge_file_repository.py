@@ -392,7 +392,6 @@ class KnowledgeFileRepository:
             return [], 0
         filters = [
             KnowledgeFile.kb_id.in_(kb_ids),
-            KnowledgeFile.is_folder.is_(False),
             KnowledgeFile.is_current.is_(True),
         ]
         if keyword and keyword.strip():
@@ -418,6 +417,7 @@ class KnowledgeFileRepository:
                 KnowledgeFile.filename,
                 KnowledgeFile.file_type,
                 KnowledgeFile.status,
+                KnowledgeFile.is_folder,
                 KnowledgeFile.created_by,
                 KnowledgeFile.updated_at,
                 KnowledgeFile.created_at,
@@ -433,6 +433,7 @@ class KnowledgeFileRepository:
                 KnowledgeFile.filename,
                 KnowledgeFile.file_type,
                 KnowledgeFile.status,
+                KnowledgeFile.is_folder,
                 KnowledgeFile.created_by,
                 KnowledgeFile.updated_at,
                 KnowledgeFile.created_at,
@@ -695,6 +696,47 @@ class KnowledgeFileRepository:
                     parent_id = folder.parent_id
                 paths[record.file_id] = "/".join(reversed([part for part in parts if part]))
         return paths
+
+    async def get_folder_chain(
+        self, *, kb_id: str, folder_id: str
+    ) -> list[dict] | None:
+        """返回真实文件夹（is_folder=True）的祖先链（top-down，含目标自身）。
+
+        用于全库搜索等入口从文件夹结果深链进入文件浏览：前端需要完整面包屑。
+        沿 parent_id 上溯，visited-set + 64 跳上限防环路/深链；祖先缺失（悬空
+        parent_id）即视为到达根边界。目标文件夹不存在返回 None。
+        """
+        async with pg_manager.get_async_session_context() as session:
+            target = (
+                await session.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id == folder_id,
+                        KnowledgeFile.is_folder.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                return None
+            chain: list[dict] = []
+            current: KnowledgeFile | None = target
+            visited: set[str] = set()
+            while current is not None and current.file_id not in visited and len(visited) < 64:
+                visited.add(current.file_id)
+                chain.append({"file_id": current.file_id, "filename": current.filename})
+                parent_id = current.parent_id
+                if not parent_id:
+                    break
+                current = (
+                    await session.execute(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == parent_id,
+                            KnowledgeFile.is_folder.is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+            return list(reversed(chain))
 
     async def list_file_ids_by_filename_contains(
         self,

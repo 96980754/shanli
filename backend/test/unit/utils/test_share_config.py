@@ -16,16 +16,25 @@ def test_normalize_share_config_defaults_to_global() -> None:
     assert result == {"access_level": "global", "department_ids": [], "user_uids": []}
 
 
-def test_normalize_share_config_department_adds_actor_department_and_deduplicates() -> None:
+def test_normalize_share_config_department_preserves_selected_and_deduplicates() -> None:
     result = normalize_share_config(
-        {"access_level": "department", "department_ids": ["2", 1], "user_uids": ["ignored"]},
+        {"access_level": "department", "department_ids": ["2", 1, 1], "user_uids": ["ignored"]},
         default_config={"access_level": "global", "department_ids": [], "user_uids": []},
         default_access_level="global",
         invalid_access_level_message="无效的权限等级",
-        department_id="2",
     )
 
     assert result == {"access_level": "department", "department_ids": [1, 2], "user_uids": []}
+
+
+def test_normalize_share_config_department_requires_selection() -> None:
+    with pytest.raises(ValueError, match="部门共享至少需要选择一个部门"):
+        normalize_share_config(
+            {"access_level": "department", "department_ids": [], "user_uids": []},
+            default_config={"access_level": "global", "department_ids": [], "user_uids": []},
+            default_access_level="global",
+            invalid_access_level_message="无效的权限等级",
+        )
 
 
 def test_normalize_share_config_user_adds_actor_and_deduplicates() -> None:
