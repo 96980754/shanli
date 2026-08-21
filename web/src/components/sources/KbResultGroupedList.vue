@@ -479,6 +479,7 @@ const downloadHistoryVersion = async (fileGroup, version) => {
           color: var(--color-success-700);
           font-size: 11px;
           white-space: nowrap;
+        }
 
         .product-name {
           flex-shrink: 0;
