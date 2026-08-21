@@ -59,6 +59,19 @@ export const dashboardApi = {
     return apiAdminGet(`/api/dashboard/feedbacks?${queryParams.toString()}`)
   },
 
+  /**
+   * 获取反馈汇总和点踩原因分布
+   * @param {Object} params - 查询参数
+   * @param {string} params.agent_id - 智能体ID过滤
+   * @returns {Promise<Object>} - 反馈统计信息
+   */
+  getFeedbackSummary: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.agent_id) queryParams.append('agent_id', params.agent_id)
+    const query = queryParams.toString()
+    return apiAdminGet(`/api/dashboard/feedback-summary${query ? `?${query}` : ''}`)
+  },
+
   // ========== 新增并行API接口 ==========
 
   /**
