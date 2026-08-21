@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from yuxi.repositories.task_repository import TaskRepository
@@ -77,6 +77,12 @@ from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.document_version_service import DocumentVersionService
 from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
+from yuxi.services.knowledge_preview_service import (
+    KnowledgePreviewModelError,
+    KnowledgePreviewRetrievalError,
+    KnowledgePreviewService,
+)
+from yuxi.services.knowledge_source_version_service import KnowledgeSourceVersionService
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
@@ -337,6 +343,27 @@ class PendingIndexDocumentsRequest(BaseModel):
 class GlobalKnowledgeSearchRequest(BaseModel):
     query: str
     limit: int = 10
+
+
+class KnowledgePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=4000)
+    meta: dict = Field(default_factory=dict)
+    generate_answer: bool = True
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("问题不能为空")
+        return value
+
+
+class SourceVersionBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_ids: list[str] = Field(min_length=1, max_length=200)
 
 
 class KnowledgeHandoffRequest(BaseModel):
@@ -1392,6 +1419,22 @@ async def list_document_versions(
             for item in versions
         ],
     }
+
+
+@knowledge.post("/databases/{kb_id}/source-versions")
+async def list_source_versions(
+    kb_id: str,
+    request: SourceVersionBatchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _require_kb_permission(current_user, kb_id, "can_download")
+    await _ensure_database_supports_documents(kb_id, "来源版本下载")
+    items = await KnowledgeSourceVersionService().list_for_current_files(
+        kb_id=kb_id,
+        file_ids=request.file_ids,
+    )
+    return {"items": items}
 
 
 @knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/validation-report")
@@ -2637,6 +2680,26 @@ async def query_test(
     except Exception as e:
         logger.error(f"测试查询失败 {e}, {traceback.format_exc()}")
         return {"message": f"测试查询失败: {e}", "status": "failed"}
+
+
+@knowledge.post("/databases/{kb_id}/preview")
+async def preview_knowledge_base(
+    kb_id: str,
+    request: KnowledgePreviewRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_search")
+    try:
+        return await KnowledgePreviewService().preview(
+            kb_id=kb_id,
+            query=request.query.strip(),
+            meta=request.meta,
+            generate_answer=request.generate_answer,
+        )
+    except KnowledgePreviewRetrievalError as exc:
+        raise HTTPException(status_code=503, detail="知识库检索服务暂时不可用") from exc
+    except KnowledgePreviewModelError as exc:
+        raise HTTPException(status_code=503, detail="回答模型暂时不可用，请检查知识库模型配置") from exc
 
 
 @knowledge.put("/databases/{kb_id}/query-params")
