@@ -1,0 +1,142 @@
+{
+  "disclaimer": "本报告基于简化评估链路（复用 evaluate_question），不代表生产 Agent 最终表现。",
+  "metrics": {
+    "faithfulness": 0.5336805555555556,
+    "context_precision": 0.628566573209871,
+    "context_recall": 0.9267857142857143
+  },
+  "items": [
+    {
+      "index": 0,
+      "query": "MCX（MCSTARS）系统支持哪些通信协议？",
+      "ragas_metrics": {
+        "faithfulness": 0.6666666666666666,
+        "context_precision": 0.6635912698329749,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 1,
+      "query": "MCX 调度台支持多少路并发呼叫？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.6349206349047619,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 2,
+      "query": "MCX 终端是否支持离线对讲？",
+      "ragas_metrics": {
+        "faithfulness": 0.8,
+        "context_precision": 0.9999999999,
+        "context_recall": 0.8
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 3,
+      "query": "客户要做应急指挥调度，我们的产品能提供什么方案？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9765432098656928,
+        "context_recall": 0.9642857142857143
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 4,
+      "query": "部署 MCX（MCSTARS）系统需要开放哪些服务端口？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.5833333333041666,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 5,
+      "query": "MCSTARS（MCX）软件的软件著作权证书在哪里获取？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.249999999975,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 6,
+      "query": "投标需要提供哪些资质文件？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.49999999995,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 7,
+      "query": "产品的售后服务 SLA 是怎样的？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.5428571428435713,
+        "context_recall": 0.8571428571428571
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 8,
+      "query": "客户需要应急指挥场景，推荐什么终端和调度方案？",
+      "ragas_metrics": {
+        "faithfulness": 0.9375,
+        "context_precision": 0.99999999999,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 9,
+      "query": "MCX（MCSTARS）产品/功能是否有规划？预计上线时间是什么时候？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.6253968253843175,
+        "context_recall": 0.5
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 10,
+      "query": "客户咨询的 MCX（MCSTARS）功能后续版本是否支持？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.5947278911479664,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 11,
+      "query": "客户要申请产品返修，应该找谁、走什么流程？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.17142857142,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    }
+  ]
+}

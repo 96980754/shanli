@@ -3,7 +3,7 @@
     <div class="permission-panel-header">
       <div>
         <h3>权限设置</h3>
-        <p>按用户、部门或角色配置当前知识库的操作级权限。</p>
+        <p>汇总创建者、共享设置与显式授权，可在此配置显式授权。</p>
       </div>
       <a-button type="primary" :loading="loading" @click="loadPermissions">刷新</a-button>
     </div>
@@ -13,6 +13,7 @@
         <a-select v-model:value="form.subject_type" style="width: 120px">
           <a-select-option value="user">用户</a-select-option>
           <a-select-option value="department">部门</a-select-option>
+          <a-select-option value="team">团队</a-select-option>
           <a-select-option value="role">角色</a-select-option>
         </a-select>
       </a-form-item>
@@ -42,7 +43,11 @@
       </a-form-item>
       <a-form-item>
         <a-space wrap>
-          <a-checkbox v-for="item in permissionOptions" :key="item.key" v-model:checked="form[item.key]">
+          <a-checkbox
+            v-for="item in permissionOptions"
+            :key="item.key"
+            v-model:checked="form[item.key]"
+          >
             {{ item.label }}
           </a-checkbox>
         </a-space>
@@ -52,13 +57,21 @@
       </a-form-item>
     </a-form>
 
+    <a-alert
+      type="info"
+      show-icon
+      class="permission-note"
+      message="平台管理员与超级管理员默认拥有该知识库的全部权限（无需单独授权）"
+    />
+
     <a-table
-      row-key="id"
+      row-key="key"
       :columns="columns"
-      :data-source="permissions"
+      :data-source="accessRows"
       :loading="loading"
       :pagination="false"
       size="middle"
+      :scroll="{ x: 'max-content' }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="permissionKeys.includes(column.key)">
@@ -70,15 +83,21 @@
           <a-tag>{{ subjectTypeLabel(record.subject_type) }}</a-tag>
         </template>
         <template v-else-if="column.key === 'subject_id'">
-          {{ subjectLabel(record) }}
+          {{ record.label }}
+        </template>
+        <template v-else-if="column.key === 'sources'">
+          <a-tag v-for="source in record.sources" :key="source" :color="sourceColor(source)">
+            {{ source }}
+          </a-tag>
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-space>
+          <a-space v-if="record.editable">
             <a-button type="link" size="small" @click="editPermission(record)">编辑</a-button>
             <a-popconfirm title="确认删除这条授权？" @confirm="deletePermission(record)">
               <a-button type="link" danger size="small">删除</a-button>
             </a-popconfirm>
           </a-space>
+          <span v-else>—</span>
         </template>
       </template>
     </a-table>
@@ -92,8 +111,8 @@ import { databaseApi } from '@/apis/knowledge_api'
 import { authApi } from '@/apis/auth_api'
 import { departmentApi } from '@/apis/department_api'
 import {
+  buildAccessRows,
   buildPermissionPayload,
-  formatSubjectLabel,
   permissionKeys,
   permissionOptions,
   permissionPresets,
@@ -104,13 +123,23 @@ const props = defineProps({
   kbId: {
     type: String,
     required: true
+  },
+  database: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const columns = [
-  { title: '授权类型', dataIndex: 'subject_type', key: 'subject_type', width: 100 },
-  { title: '授权对象', dataIndex: 'subject_id', key: 'subject_id', width: 180 },
-  ...permissionOptions.map((item) => ({ title: item.label, dataIndex: item.key, key: item.key, width: 82 })),
+  { title: '授权类型', dataIndex: 'subject_type', key: 'subject_type', width: 90 },
+  { title: '授权对象', dataIndex: 'subject_id', key: 'subject_id', width: 200 },
+  { title: '来源', dataIndex: 'sources', key: 'sources', width: 160 },
+  ...permissionOptions.map((item) => ({
+    title: item.label,
+    dataIndex: item.key,
+    key: item.key,
+    width: 82
+  })),
   { title: '操作', key: 'actions', fixed: 'right', width: 130 }
 ]
 
@@ -134,6 +163,7 @@ const saving = ref(false)
 const optionLoading = ref(false)
 const users = ref([])
 const departments = ref([])
+const teams = ref([])
 
 const userOptions = computed(() =>
   users.value.map((item) => ({
@@ -145,15 +175,51 @@ const userOptions = computed(() =>
 const departmentOptions = computed(() =>
   departments.value.map((item) => ({
     value: String(item.id),
-    label: item.name ? `${item.name}（${item.id}）` : String(item.id)
+    // 部门名唯一，下拉选项不展示内部 ID（数字易被误读为成员数）
+    label: item.name ? item.name : String(item.id)
   }))
 )
 
+// 团队选项按部门分组级联（部门名 › 团队名），与行标签渲染一致
+const teamOptions = computed(() => {
+  const groups = new Map()
+  for (const team of teams.value) {
+    const deptId = String(team.department_id)
+    if (!groups.has(deptId)) {
+      const department = departments.value.find((item) => String(item.id) === deptId)
+      groups.set(deptId, {
+        label: department ? department.name : `部门 ${deptId}`,
+        options: []
+      })
+    }
+    groups.get(deptId).options.push({ value: String(team.id), label: team.name })
+  }
+  return [...groups.values()]
+})
+
 const subjectOptions = computed(() => {
   if (form.subject_type === 'department') return departmentOptions.value
+  if (form.subject_type === 'team') return teamOptions.value
   if (form.subject_type === 'role') return roleOptions
   return userOptions.value
 })
+
+const accessRows = computed(() =>
+  buildAccessRows({
+    createdBy: props.database?.created_by,
+    shareConfig: props.database?.share_config,
+    permissions: permissions.value,
+    users: users.value,
+    departments: departments.value,
+    teams: teams.value
+  })
+)
+
+const sourceColor = (source) => {
+  if (source === '创建者') return 'gold'
+  if (source === '共享设置') return 'blue'
+  return 'green'
+}
 
 const resetForm = () => {
   Object.assign(form, emptyForm())
@@ -161,25 +227,28 @@ const resetForm = () => {
 
 const subjectTypeLabel = (type) => {
   if (type === 'department') return '部门'
+  if (type === 'team') return '团队'
   if (type === 'role') return '角色'
+  if (type === 'global') return '全体'
   return '用户'
 }
-
-const subjectLabel = (record) => formatSubjectLabel(record, { users: users.value, departments: departments.value })
 
 const loadSubjectOptions = async () => {
   optionLoading.value = true
   try {
-    const [userResult, departmentResult] = await Promise.all([
+    const [userResult, departmentResult, teamResult] = await Promise.all([
       authApi.getUserAccessOptions(),
-      departmentApi.getDepartments()
+      departmentApi.getDepartments(),
+      departmentApi.getAllTeams()
     ])
     users.value = Array.isArray(userResult) ? userResult : []
     departments.value = departmentResult.departments || departmentResult || []
+    teams.value = Array.isArray(teamResult) ? teamResult : []
   } catch (error) {
     message.warning(error.message || '加载授权对象失败，请手动刷新后重试')
     users.value = []
     departments.value = []
+    teams.value = []
   } finally {
     optionLoading.value = false
   }
@@ -288,6 +357,10 @@ onMounted(() => {
 .permission-panel-header p {
   margin: 0;
   color: var(--gray-500, #667085);
+}
+
+.permission-note {
+  margin-bottom: 16px;
 }
 
 .permission-form {

@@ -313,7 +313,13 @@ class LocalContainerProvisionerBackend:
     def _to_record(self, container, sandbox_id: str) -> SandboxRecord:
         state = (container.attrs.get("State") or {}).get("Status")
         host_port = self._host_port_for(container)
-        sandbox_url = self._sandbox_url(host_port) if host_port is not None else ""
+        if self._network:
+            # api/worker/provisioner 与沙箱同处一个 docker 网络时，用容器名 + 内部端口直达。
+            # host.docker.internal 的已发布端口在 Docker Desktop/WSL2 下从容器内不可达，
+            # 会导致沙箱 readiness 检查与 api 侧 read_file 全部超时。
+            sandbox_url = f"http://{self._container_name(sandbox_id)}:{self._container_port}"
+        else:
+            sandbox_url = self._sandbox_url(host_port) if host_port is not None else ""
         return SandboxRecord(
             sandbox_id=sandbox_id,
             sandbox_url=sandbox_url,

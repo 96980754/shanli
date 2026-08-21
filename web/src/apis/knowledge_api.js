@@ -238,6 +238,29 @@ export const documentApi = {
   },
 
   /**
+   * 移动文件到其它文件夹（newParentId 为 null 表示移动到根目录）
+   * @param {string} kbId - 知识库ID
+   * @param {string} fileId - 文件ID
+   * @param {string|null} newParentId - 目标文件夹ID
+   * @returns {Promise} - 移动结果
+   */
+  moveFile: async (kbId, fileId, newParentId) => {
+    return apiPut(`/api/knowledge/databases/${kbId}/documents/${fileId}/move`, {
+      new_parent_id: newParentId
+    })
+  },
+
+  /**
+   * 获取真实文件夹（is_folder）的祖先链（top-down，含目标自身），用于全库搜索深链进入文件夹目录
+   * @param {string} kbId - 知识库ID
+   * @param {string} folderId - 目标文件夹ID
+   * @returns {Promise} - { folder_id, chain: [{file_id, filename}] }
+   */
+  getFolderChain: async (kbId, folderId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/folders/${folderId}/chain`)
+  },
+
+  /**
    * 添加文档到知识库
    * @param {string} kbId - 知识库ID
    * @param {Array} items - 文档列表
@@ -271,6 +294,12 @@ export const documentApi = {
 
   getDocumentVersions: async (kbId, fileId) => {
     return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/versions`)
+  },
+
+  getSourceVersions: async (kbId, fileIds) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/source-versions`, {
+      file_ids: fileIds
+    })
   },
 
   getDocumentValidationReport: async (kbId, candidateFileId) => {
@@ -348,7 +377,10 @@ export const documentApi = {
    * @returns {Promise} - { type: 'docx'|'xlsx', blocks|sheets }
    */
   getOfficeContentByPath: async (kbId, filePath, filename = '') => {
-    return apiPost(`/api/knowledge/databases/${kbId}/office-extract`, { file_path: filePath, filename })
+    return apiPost(`/api/knowledge/databases/${kbId}/office-extract`, {
+      file_path: filePath,
+      filename
+    })
   },
 
   /**
@@ -599,8 +631,7 @@ export const documentApi = {
       true,
       'json'
     )
-  },
-
+  }
 }
 
 // =============================================================================
@@ -696,6 +727,14 @@ export const queryApi = {
     return apiPost(`/api/knowledge/databases/${kbId}/query-test`, {
       query,
       meta
+    })
+  },
+
+  preview: async (kbId, query, meta = {}, generateAnswer = true) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/preview`, {
+      query,
+      meta,
+      generate_answer: generateAnswer
     })
   },
 
@@ -810,7 +849,10 @@ export const fileApi = {
    * @returns {Promise} - 重试结果
    */
   retryReplacementCleanup: async (kbId, fileId) => {
-    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`, {})
+    return apiAdminPost(
+      `/api/knowledge/databases/${kbId}/documents/${fileId}/replacement-cleanup/retry`,
+      {}
+    )
   },
 
   /**

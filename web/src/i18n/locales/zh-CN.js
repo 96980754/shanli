@@ -20,6 +20,7 @@ export default {
   },
   layout: {
     taskCenter: '任务中心',
+    globalSearch: '全库搜索',
     expandSidebar: '展开侧边栏',
     collapseSidebar: '折叠侧边栏',
     debugPanel: '调试面板'
@@ -219,6 +220,7 @@ export default {
     newChat: '新的对话',
     reply: {
       generating: '正在生成回复...',
+      thinking: '正在思考...',
       compressing: '正在整理答案...',
       calling: '正在调用工具...',
       finalizing: '正在完成...'

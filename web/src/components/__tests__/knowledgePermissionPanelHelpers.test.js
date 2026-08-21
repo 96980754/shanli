@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import {
+  buildAccessRows,
   buildPermissionPayload,
   formatSubjectLabel,
   permissionKeys,
@@ -102,7 +103,7 @@ const run = () => {
         departments: [{ id: 10, name: '研发部' }]
       }
     ),
-    '研发部（10）'
+    '研发部'
   )
 
   assert.equal(
@@ -125,6 +126,43 @@ const run = () => {
       }
     ),
     '管理员（admin）'
+  )
+
+  assert.equal(
+    formatSubjectLabel(
+      { subject_type: 'team', subject_id: '20' },
+      {
+        users: [],
+        departments: [{ id: 10, name: '研发部' }],
+        teams: [{ id: 20, department_id: 10, name: '核心组' }]
+      }
+    ),
+    '研发部 › 核心组'
+  )
+
+  // 团队未匹配到部门时仅展示团队名
+  assert.equal(
+    formatSubjectLabel(
+      { subject_type: 'team', subject_id: '20' },
+      {
+        users: [],
+        departments: [],
+        teams: [{ id: 20, department_id: 99, name: '核心组' }]
+      }
+    ),
+    '核心组'
+  )
+
+  assert.equal(
+    formatSubjectLabel(
+      { subject_type: 'team', subject_id: '999' },
+      {
+        users: [],
+        departments: [],
+        teams: [{ id: 20, department_id: 10, name: '核心组' }]
+      }
+    ),
+    '999'
   )
 
   assert.equal(
@@ -231,6 +269,120 @@ const run = () => {
       subject_type: 'department',
       subject_id: '',
       can_view: false,
+      can_search: false,
+      can_upload: false,
+      can_download: false,
+      can_delete: false,
+      can_manage: false,
+      can_grant: false,
+      can_export: false
+    }
+  )
+
+  // 创建者行：全权限、只读、来源「创建者」
+  const creatorRows = buildAccessRows({
+    createdBy: 'owner',
+    shareConfig: {},
+    permissions: []
+  })
+  assert.equal(creatorRows.length, 1)
+  assert.equal(creatorRows[0].key, 'user:owner')
+  assert.deepEqual(creatorRows[0].sources, ['创建者'])
+  assert.equal(creatorRows[0].editable, false)
+  assert.equal(creatorRows[0].can_view, true)
+  assert.equal(creatorRows[0].can_upload, true)
+  assert.equal(creatorRows[0].can_grant, true)
+  assert.equal(creatorRows[0].can_export, true)
+
+  // 空 shareConfig（database prop 未加载完）→ 不产生兜底行
+  assert.deepEqual(buildAccessRows({ createdBy: null, shareConfig: {} }), [])
+
+  // global 共享设置 → 全体用户伪行，仅 view/search/download
+  const globalRows = buildAccessRows({
+    createdBy: null,
+    shareConfig: { access_level: 'global', department_ids: [], user_uids: [] }
+  })
+  assert.equal(globalRows.length, 1)
+  assert.equal(globalRows[0].key, 'global')
+  assert.equal(globalRows[0].label, '全体用户')
+  assert.deepEqual(globalRows[0].sources, ['共享设置'])
+  assert.equal(globalRows[0].editable, false)
+  assert.equal(globalRows[0].can_view, true)
+  assert.equal(globalRows[0].can_search, true)
+  assert.equal(globalRows[0].can_download, true)
+  assert.equal(globalRows[0].can_upload, false)
+
+  // 部门共享设置 + 同部门显式授权 → 单行并集、双来源、可编辑且带 id
+  const mergedRows = buildAccessRows({
+    createdBy: null,
+    shareConfig: { access_level: 'department', department_ids: [10], user_uids: [] },
+    permissions: [
+      { id: 5, subject_type: 'department', subject_id: '10', can_view: true, can_upload: true }
+    ],
+    departments: [{ id: 10, name: '研发部' }]
+  })
+  assert.equal(mergedRows.length, 1)
+  assert.equal(mergedRows[0].key, 'department:10')
+  assert.equal(mergedRows[0].label, '研发部')
+  assert.deepEqual(mergedRows[0].sources, ['共享设置', '授权'])
+  assert.equal(mergedRows[0].editable, true)
+  assert.equal(mergedRows[0].id, 5)
+  assert.equal(mergedRows[0].can_view, true)
+  assert.equal(mergedRows[0].can_upload, true)
+  assert.equal(mergedRows[0].can_download, true)
+  assert.equal(mergedRows[0].can_delete, false)
+
+  // 角色授权解析 label，且默认可编辑
+  const roleRows = buildAccessRows({
+    createdBy: null,
+    shareConfig: {},
+    permissions: [{ id: 7, subject_type: 'role', subject_id: 'admin', can_view: true }]
+  })
+  assert.equal(roleRows.length, 1)
+  assert.equal(roleRows[0].label, '管理员（admin）')
+  assert.equal(roleRows[0].editable, true)
+  assert.equal(roleRows[0].sources.includes('授权'), true)
+
+  // 团队授权：标签「部门 › 团队名」，排序位于部门之后
+  const teamRows = buildAccessRows({
+    createdBy: null,
+    shareConfig: {},
+    permissions: [
+      { id: 8, subject_type: 'team', subject_id: '20', can_view: true, can_upload: true },
+      { id: 9, subject_type: 'department', subject_id: '10', can_view: true }
+    ],
+    departments: [{ id: 10, name: '研发部' }],
+    teams: [{ id: 20, department_id: 10, name: '核心组' }]
+  })
+  assert.equal(teamRows.length, 2)
+  assert.equal(teamRows[0].key, 'department:10')
+  assert.equal(teamRows[0].label, '研发部')
+  assert.equal(teamRows[1].key, 'team:20')
+  assert.equal(teamRows[1].label, '研发部 › 核心组')
+  assert.equal(teamRows[1].editable, true)
+  assert.equal(teamRows[1].id, 8)
+  assert.equal(teamRows[1].can_view, true)
+  assert.equal(teamRows[1].can_upload, true)
+  assert.equal(teamRows[1].sources.includes('授权'), true)
+
+  // 团队 id 数字归一化（buildPermissionPayload）
+  assert.deepEqual(
+    buildPermissionPayload({
+      subject_type: 'team',
+      subject_id: ' 020 ',
+      can_view: true,
+      can_search: false,
+      can_upload: false,
+      can_download: false,
+      can_delete: false,
+      can_manage: false,
+      can_grant: false,
+      can_export: false
+    }),
+    {
+      subject_type: 'team',
+      subject_id: '20',
+      can_view: true,
       can_search: false,
       can_upload: false,
       can_download: false,

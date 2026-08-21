@@ -114,7 +114,6 @@ def normalize_skill_share_config(
     share_config: dict | None,
     *,
     operator_uid: str,
-    operator_department_id: int | str | None,
     source_type: str = "upload",
     allowed_access_levels: set[str] | None = None,
 ) -> dict:
@@ -127,7 +126,6 @@ def normalize_skill_share_config(
         default_access_level="user",
         invalid_access_level_message="无效的 Skill 权限等级",
         user_uid=operator_uid,
-        department_id=operator_department_id,
         allowed_access_levels=allowed_access_levels,
         unauthorized_access_level_message="当前用户无权使用该 Skill 共享范围",
     )
@@ -656,7 +654,6 @@ def _build_default_share_payload(operator: User) -> dict[str, Any]:
     default_share_config = normalize_skill_share_config(
         None,
         operator_uid=operator.uid,
-        operator_department_id=operator.department_id,
         allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
     )
     return {
@@ -899,7 +896,6 @@ async def confirm_skill_install_draft(
     normalized_share_config = normalize_skill_share_config(
         share_config,
         operator_uid=operator.uid,
-        operator_department_id=operator.department_id,
         source_type=source_type,
         allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
     )
@@ -1226,7 +1222,6 @@ async def update_skill_share_config(
     normalized = normalize_skill_share_config(
         share_config,
         operator_uid=operator.uid,
-        operator_department_id=operator.department_id,
         source_type=item.source_type,
         allowed_access_levels=set(get_allowed_skill_access_levels(operator)),
     )

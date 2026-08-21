@@ -242,3 +242,13 @@ class Config(BaseModel):
 
 
 config = Config()
+
+
+def resolve_embedding_model(spec: str | None = None) -> str:
+    """知识库未显式指定向量模型时，跟随设置-基本设置的全局默认 embed_model。"""
+    return spec or config.embed_model
+
+
+def resolve_reranker_model(spec: str | None = None) -> str:
+    """知识库未显式指定重排序模型时，跟随设置-基本设置的全局默认 reranker。"""
+    return spec or config.reranker

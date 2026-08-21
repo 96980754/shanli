@@ -123,7 +123,6 @@ def normalize_agent_share_config(
     share_config: dict | None,
     *,
     user_uid: str | None = None,
-    department_id: int | str | None = None,
     force_private: bool = False,
 ) -> dict:
     if force_private:
@@ -137,7 +136,6 @@ def normalize_agent_share_config(
         default_access_level="global",
         invalid_access_level_message="无效的智能体权限等级",
         user_uid=user_uid,
-        department_id=department_id,
     )
 
 
@@ -467,7 +465,6 @@ class AgentRepository:
         normalized_share_config = normalize_agent_share_config(
             share_config,
             user_uid=str(creator.uid) if creator else created_by,
-            department_id=creator.department_id if creator else None,
             force_private=bool(creator and creator.role not in ADMIN_ROLES),
         )
         if is_default and normalized_share_config.get("access_level") != "global":
@@ -529,7 +526,6 @@ class AgentRepository:
                 normalized_share_config = normalize_agent_share_config(
                     share_config,
                     user_uid=str(updater.uid) if updater else updated_by,
-                    department_id=updater.department_id if updater else None,
                     force_private=bool(updater and updater.role not in ADMIN_ROLES),
                 )
                 agent.share_config = normalized_share_config

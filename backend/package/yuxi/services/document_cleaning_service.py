@@ -1,4 +1,5 @@
 """Document cleaning drafts, confirmation, and safe indexing orchestration."""
+
 from __future__ import annotations
 import asyncio
 import secrets
@@ -14,12 +15,20 @@ from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
+
+
 class DocumentCleaningError(ValueError):
     """User-visible cleaning domain error."""
+
+
 class CleaningVersionConflict(DocumentCleaningError):
     """Raised when a stale editor tries to overwrite a newer draft."""
+
+
 class DocumentCleaningNotFound(DocumentCleaningError):
     """Raised without revealing whether a document exists in another knowledge base."""
+
+
 class DocumentCleaningService:
     def __init__(
         self,
@@ -32,8 +41,10 @@ class DocumentCleaningService:
         self.cleaner = cleaner or OptionalAIDocumentCleaner()
         if qa_service is None:
             from yuxi.services.document_qa_service import DocumentQAService
+
             qa_service = DocumentQAService()
         self.qa_service = qa_service
+
     @staticmethod
     def resolve_auto_confirm(params: dict[str, Any] | None) -> bool:
         params = params or {}
@@ -42,9 +53,11 @@ class DocumentCleaningService:
         if params.get("auto_index") is False:
             return False
         return bool(config.document_cleaning_auto_confirm)
+
     @staticmethod
     def _has_online_version(record) -> bool:
         return bool(record.is_active and int(record.chunk_count or 0) > 0)
+
     @classmethod
     def _preserve_previous_confirmation(cls, record, metadata: dict[str, Any]) -> None:
         if not cls._has_online_version(record) or "_previous_confirmed" in metadata:
@@ -54,16 +67,19 @@ class DocumentCleaningService:
             "confirmed_at": utc_isoformat(record.confirmed_at) if record.confirmed_at else None,
             "confirmed_by": record.confirmed_by,
         }
+
     @staticmethod
     def _public_cleaning_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         public_metadata = deepcopy(metadata or {})
         public_metadata.pop("_previous_confirmed", None)
         return public_metadata
+
     async def _get_record(self, kb_id: str, file_id: str):
         record = await self.file_repository.get_by_file_id(file_id)
         if record is None or record.kb_id != kb_id or record.is_folder:
             raise DocumentCleaningNotFound("文档不存在")
         return record
+
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
         if not path or not is_minio_url(path):
@@ -74,6 +90,7 @@ class DocumentCleaningService:
             return content.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise DocumentCleaningError("Markdown 内容编码无效") from exc
+
     @staticmethod
     async def _save_draft(kb_id: str, file_id: str, version: int, content: str) -> str:
         minio_client = get_minio_client()
@@ -88,6 +105,7 @@ class DocumentCleaningService:
             content_type="text/markdown; charset=utf-8",
         )
         return result.url
+
     @staticmethod
     async def _delete_draft(path: str | None) -> None:
         if not path or not is_minio_url(path):
@@ -97,6 +115,7 @@ class DocumentCleaningService:
             await get_minio_client().adelete_file(bucket_name, object_name)
         except Exception as exc:  # noqa: BLE001 - orphan cleanup must not hide the domain result
             logger.warning("Failed to clean unused document draft: {}", sanitize_processing_error(exc))
+
     @staticmethod
     def _validate_content(content: str) -> str:
         if not isinstance(content, str) or not content.strip():
@@ -107,6 +126,7 @@ class DocumentCleaningService:
         if not sanitized.strip():
             raise DocumentCleaningError("清洗草稿不包含可保存内容")
         return sanitized
+
     async def _mark_pending_qas_outdated(self, record) -> None:
         if int(record.chunk_count or 0) > 0:
             return
@@ -114,6 +134,7 @@ class DocumentCleaningService:
             await self.qa_service.mark_file_qas_outdated(kb_id=record.kb_id, file_id=record.file_id)
         except Exception as exc:  # noqa: BLE001 - QA staleness must not block draft saving
             logger.warning("Failed to mark pending QA drafts outdated: {}", sanitize_processing_error(exc))
+
     async def get_preview(self, *, kb_id: str, file_id: str) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
         original_path = record.original_markdown_file or record.markdown_file
@@ -141,6 +162,7 @@ class DocumentCleaningService:
             "has_online_chunks": int(record.chunk_count or 0) > 0,
             "error_message": record.error_message,
         }
+
     async def generate_draft(
         self,
         *,
@@ -233,6 +255,7 @@ class DocumentCleaningService:
                 },
             )
             raise
+
     async def save_draft(
         self,
         *,
@@ -299,6 +322,7 @@ class DocumentCleaningService:
         if previous_content is not None and formal_content_hash(previous_content) != formal_content_hash(cleaned):
             await self._mark_pending_qas_outdated(updated)
         return await self.get_preview(kb_id=kb_id, file_id=file_id)
+
     async def cancel_draft(
         self,
         *,
@@ -335,6 +359,7 @@ class DocumentCleaningService:
         if record.cleaning_draft_file and record.cleaning_draft_file != record.markdown_file:
             await self._delete_draft(record.cleaning_draft_file)
         return await self.get_preview(kb_id=kb_id, file_id=file_id)
+
     async def confirm(
         self,
         *,
@@ -501,12 +526,14 @@ class DocumentCleaningService:
             params=record.processing_params or {},
         )
         from yuxi.services.document_enrichment_service import enqueue_auto_document_enrichment
+
         await enqueue_auto_document_enrichment(
             kb_id=kb_id,
             file_id=target_record.file_id,
             operator_id=operator_id,
         )
         from yuxi.services.document_qa_service import enqueue_auto_document_qa
+
         try:
             await self.qa_service.rebase_draft_qas(
                 kb_id=kb_id,
@@ -532,6 +559,8 @@ class DocumentCleaningService:
             "status": result.get("status") or FileStatus.INDEXED,
             "idempotent": False,
         }
+
+
 __all__ = [
     "CleaningVersionConflict",
     "DocumentCleaningError",

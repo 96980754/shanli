@@ -205,7 +205,7 @@ async def _build_query_output(target_kb_id: str, result: Any) -> dict[str, Any]:
             normalized = KnowledgeBase.build_search_output(target_kb_id, result["results"])
         else:
             normalized = KnowledgeBase.build_search_output(target_kb_id, result)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         return _query_error(target_kb_id, "invalid_result", "知识库返回了无法解析的检索结果")
 
     results = normalized["results"]

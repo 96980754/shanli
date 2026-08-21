@@ -1,4 +1,5 @@
 """Deterministic and optional provider-backed Markdown cleaning."""
+
 from __future__ import annotations
 import asyncio
 import json
@@ -8,6 +9,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any
 from yuxi.models import select_model
+
 CLEANER_NAME = "deterministic_markdown"
 CLEANER_VERSION = "1.0"
 MAX_CHANGE_ITEMS = 200
@@ -42,8 +44,12 @@ _FACT_TOKEN_RE = re.compile(
     r"https?://[^\s)>]+|\b\d+(?:[./_-]\d+)*\b|\b[A-Z][A-Z0-9]*(?:[-_/][A-Za-z0-9.]+)+\b",
 )
 _CONTENT_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*|[\u3400-\u9fff]")
+
+
 class AICleaningValidationError(ValueError):
     """Raised when provider output is unsafe or violates the cleaning contract."""
+
+
 @dataclass(frozen=True)
 class CleaningChange:
     change_type: str
@@ -51,6 +57,8 @@ class CleaningChange:
     cleaned_text: str
     reason: str
     position: dict[str, Any] | None = None
+
+
 @dataclass(frozen=True)
 class CleaningResult:
     original_markdown: str
@@ -61,6 +69,7 @@ class CleaningResult:
     cleaner_name: str = CLEANER_NAME
     cleaner_version: str = CLEANER_VERSION
     ai_applied: bool = False
+
     def to_metadata(self, *, status: str) -> dict[str, Any]:
         return {
             "cleaning_rules": list(self.cleaning_rules),
@@ -72,15 +81,21 @@ class CleaningResult:
             "status": status,
             "ai_applied": self.ai_applied,
         }
+
+
 def sanitize_markdown_html(markdown: str) -> str:
     """Remove executable HTML while preserving ordinary Markdown and safe inline HTML."""
     cleaned = _HTML_DANGEROUS_BLOCK_RE.sub("", markdown)
     cleaned = _HTML_DANGEROUS_SINGLE_RE.sub("", cleaned)
     cleaned = _HTML_EVENT_HANDLER_RE.sub("", cleaned)
     return _HTML_JAVASCRIPT_URL_RE.sub(r"\1#\2", cleaned)
+
+
 def _snippet(value: str, limit: int = 240) -> str:
     normalized = " ".join(value.split())
     return normalized if len(normalized) <= limit else f"{normalized[: limit - 1]}…"
+
+
 def _record_change(
     changes: list[CleaningChange],
     *,
@@ -101,6 +116,8 @@ def _record_change(
             position=position,
         )
     )
+
+
 def _map_outside_fenced_code(markdown: str, transform) -> str:
     lines = markdown.split("\n")
     output: list[str] = []
@@ -120,6 +137,8 @@ def _map_outside_fenced_code(markdown: str, transform) -> str:
             continue
         output.append(line if in_fence else transform(line, line_number))
     return "\n".join(output)
+
+
 def _normalize_horizontal_spacing(markdown: str, changes: list[CleaningChange]) -> str:
     def transform(line: str, line_number: int) -> str:
         if not line.strip() or _MARKDOWN_STRUCTURAL_RE.match(line):
@@ -136,7 +155,10 @@ def _normalize_horizontal_spacing(markdown: str, changes: list[CleaningChange]) 
             position={"line": line_number},
         )
         return cleaned
+
     return _map_outside_fenced_code(markdown, transform)
+
+
 def _remove_isolated_page_numbers(markdown: str, changes: list[CleaningChange]) -> str:
     def transform(line: str, line_number: int) -> str:
         if not _DECORATED_PAGE_NUMBER_RE.match(line):
@@ -150,7 +172,10 @@ def _remove_isolated_page_numbers(markdown: str, changes: list[CleaningChange]) 
             position={"line": line_number},
         )
         return ""
+
     return _map_outside_fenced_code(markdown, transform)
+
+
 def _page_edge_candidates(parse_metadata: dict[str, Any] | None) -> set[str]:
     blocks = (parse_metadata or {}).get("blocks")
     if not isinstance(blocks, list):
@@ -184,6 +209,8 @@ def _page_edge_candidates(parse_metadata: dict[str, Any] | None) -> set[str]:
                 edge_counts[candidate] += 1
     threshold = max(3, (len(pages) * 3 + 4) // 5)
     return {candidate for candidate, count in edge_counts.items() if count >= threshold}
+
+
 def _remove_repeated_page_edges(
     markdown: str,
     parse_metadata: dict[str, Any] | None,
@@ -192,6 +219,7 @@ def _remove_repeated_page_edges(
     candidates = _page_edge_candidates(parse_metadata)
     if not candidates:
         return markdown
+
     def transform(line: str, line_number: int) -> str:
         if line.strip() not in candidates:
             return line
@@ -204,10 +232,15 @@ def _remove_repeated_page_edges(
             position={"line": line_number},
         )
         return ""
+
     return _map_outside_fenced_code(markdown, transform)
+
+
 def _is_joinable_line(line: str) -> bool:
     stripped = line.strip()
     return bool(stripped) and not _MARKDOWN_STRUCTURAL_RE.match(line) and not stripped.endswith("|")
+
+
 def _repair_soft_line_breaks(markdown: str, changes: list[CleaningChange]) -> str:
     lines = markdown.split("\n")
     output: list[str] = []
@@ -257,6 +290,8 @@ def _repair_soft_line_breaks(markdown: str, changes: list[CleaningChange]) -> st
         output.append(line)
         index += 1
     return "\n".join(output)
+
+
 def _remove_consecutive_duplicate_paragraphs(markdown: str, changes: list[CleaningChange]) -> str:
     paragraphs = re.split(r"\n{2,}", markdown)
     output: list[str] = []
@@ -281,8 +316,11 @@ def _remove_consecutive_duplicate_paragraphs(markdown: str, changes: list[Cleani
         output.append(paragraph)
         previous_normalized = normalized if normalized else previous_normalized
     return "\n\n".join(output)
+
+
 class RuleBasedDocumentCleaner:
     """Conservative rules that do not require an external provider."""
+
     def clean(
         self,
         markdown: str,
@@ -361,6 +399,8 @@ class RuleBasedDocumentCleaner:
             warnings=[],
             changes=changes,
         )
+
+
 def _extract_json_object(value: str) -> dict[str, Any]:
     text = value.strip()
     if text.startswith("```"):
@@ -373,6 +413,8 @@ def _extract_json_object(value: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise AICleaningValidationError("AI 清洗结果必须是对象")
     return payload
+
+
 def validate_ai_cleaned_markdown(original: str, cleaned: str) -> None:
     if not cleaned.strip():
         raise AICleaningValidationError("AI 清洗结果为空")
@@ -386,6 +428,8 @@ def validate_ai_cleaned_markdown(original: str, cleaned: str) -> None:
     cleaned_tokens = Counter(token.casefold() for token in _CONTENT_TOKEN_RE.findall(cleaned))
     if any(count > original_tokens[token] for token, count in cleaned_tokens.items()):
         raise AICleaningValidationError("AI 清洗结果包含原文中不存在或额外增加的文字")
+
+
 def _split_for_ai(markdown: str, max_chars: int) -> list[str]:
     if len(markdown) <= max_chars:
         return [markdown]
@@ -406,10 +450,14 @@ def _split_for_ai(markdown: str, max_chars: int) -> list[str]:
     if current:
         chunks.append(current)
     return chunks
+
+
 class OptionalAIDocumentCleaner:
     """Optional second pass through the existing configured chat-model boundary."""
+
     def __init__(self, rule_cleaner: RuleBasedDocumentCleaner | None = None):
         self.rule_cleaner = rule_cleaner or RuleBasedDocumentCleaner()
+
     async def clean(
         self,
         markdown: str,
@@ -494,6 +542,8 @@ class OptionalAIDocumentCleaner:
                 cleaner_version=rule_result.cleaner_version,
                 ai_applied=False,
             )
+
+
 __all__ = [
     "AICleaningValidationError",
     "CleaningChange",

@@ -39,8 +39,8 @@ from yuxi.storage.redis import get_arq_redis_settings
 from yuxi.utils.logging_config import logger
 from yuxi.utils.thread_utils import extract_thread_id
 
-LOADING_FLUSH_INTERVAL_MS = 100
-LOADING_FLUSH_MAX_CHARS = 512
+LOADING_FLUSH_INTERVAL_MS = 50
+LOADING_FLUSH_MAX_CHARS = 256
 RUN_CANCEL_POLL_SECONDS = 0.2
 SUPPORTED_RUN_TYPES = {"chat", "resume", "subagent"}
 

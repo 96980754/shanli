@@ -80,13 +80,23 @@
     okText="提交"
     cancelText="取消"
   >
-    <a-textarea
-      v-model:value="dislikeReason"
-      :rows="4"
-      placeholder="您的反馈将帮助我们改进服务（可选）"
-      :maxlength="500"
-      show-count
-    />
+    <div class="dislike-form">
+      <div class="reason-hint">请选择一个最符合的原因</div>
+      <a-radio-group v-model:value="dislikeReasonCode" class="reason-options">
+        <a-radio v-for="option in dislikeReasonOptions" :key="option.value" :value="option.value">
+          {{ option.label }}
+        </a-radio>
+      </a-radio-group>
+
+      <div class="reason-hint detail-hint">补充说明（可选）</div>
+      <a-textarea
+        v-model:value="dislikeReasonDetail"
+        :rows="4"
+        placeholder="可以补充具体问题，帮助管理员更快定位和改进"
+        :maxlength="500"
+        show-count
+      />
+    </div>
   </a-modal>
 </template>
 
@@ -105,6 +115,7 @@ import {
   ChevronDown
 } from 'lucide-vue-next'
 import { agentApi } from '@/apis'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
 
@@ -130,9 +141,9 @@ const msg = ref(props.message)
 // Sources state
 const isSourcesExpanded = ref(false)
 
-// 最多展示 top5 条知识库来源（已按相关度降序排好）
+// 展示全部知识库来源（已按相关度降序排好），不做条数截断
 const knowledgeChunks = computed(() =>
-  (Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []).slice(0, 5)
+  Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []
 )
 const webSources = computed(() =>
   Array.isArray(props.sources?.webSources) ? props.sources.webSources : []
@@ -141,9 +152,15 @@ const webSources = computed(() =>
 const hasSources = computed(() => knowledgeChunks.value.length > 0 || webSources.value.length > 0)
 
 // 发生过知识检索（含拒答轮次）即显示来源按钮；纯聊天无来源无活动则不显示
-const showSourceButton = computed(() => hasSources.value || Boolean(props.sources?.knowledgeActivity))
+const showSourceButton = computed(
+  () => hasSources.value || Boolean(props.sources?.knowledgeActivity)
+)
 
-const sourceCount = computed(() => knowledgeChunks.value.length + webSources.value.length)
+// 「来源 N」按去重后的文档数计：同一文档在多个知识库命中时只算 1，与面板卡片数一致
+const knowledgeDocCount = computed(
+  () => MessageProcessor.groupKnowledgeChunksByDocument(knowledgeChunks.value).length
+)
+const sourceCount = computed(() => knowledgeDocCount.value + webSources.value.length)
 
 const toggleSources = () => {
   isSourcesExpanded.value = !isSourcesExpanded.value
@@ -181,8 +198,30 @@ watch(
 
 // Modal state for dislike
 const dislikeModalVisible = ref(false)
-const dislikeReason = ref('')
+const dislikeReasonCode = ref(null)
+const dislikeReasonDetail = ref('')
 const submittingFeedback = ref(false)
+const dislikeReasonOptions = [
+  { value: 'answer_incorrect', label: '答案有误' },
+  { value: 'outdated', label: '信息过时' },
+  { value: 'irrelevant', label: '答非所问' },
+  { value: 'other', label: '其他' }
+]
+
+const selectedReasonLabel = computed(
+  () => dislikeReasonOptions.find((item) => item.value === dislikeReasonCode.value)?.label || ''
+)
+
+const resetDislikeForm = () => {
+  dislikeReasonCode.value = null
+  dislikeReasonDetail.value = ''
+}
+
+const buildDislikeReason = () => {
+  const label = selectedReasonLabel.value
+  const detail = dislikeReasonDetail.value.trim()
+  return detail ? `${label}\n${detail}` : label
+}
 
 // 使用 useClipboard 实现复制功能
 const { copy, isSupported } = useClipboard()
@@ -288,22 +327,29 @@ const dislikeThisResponse = async (msg) => {
     return
   }
 
-  // Open modal to get reason
+  resetDislikeForm()
   dislikeModalVisible.value = true
 }
 
-// Submit dislike feedback with reason
+// Submit dislike feedback with structured reason
 const submitDislikeFeedback = async () => {
+  if (!dislikeReasonCode.value) {
+    antMessage.warning('请选择一个不满意的原因')
+    return
+  }
+
+  const reason = buildDislikeReason()
+
   try {
     submittingFeedback.value = true
-    await agentApi.submitMessageFeedback(msg.value.id, 'dislike', dislikeReason.value || null)
+    await agentApi.submitMessageFeedback(msg.value.id, 'dislike', reason)
 
     feedbackState.hasSubmitted = true
     feedbackState.rating = 'dislike'
-    feedbackState.reason = dislikeReason.value
+    feedbackState.reason = reason
 
     dislikeModalVisible.value = false
-    dislikeReason.value = ''
+    resetDislikeForm()
 
     antMessage.success('感谢您的反馈！')
   } catch (error) {
@@ -312,6 +358,7 @@ const submitDislikeFeedback = async () => {
       antMessage.info('您已经提交过反馈了')
       feedbackState.hasSubmitted = true
       dislikeModalVisible.value = false
+      resetDislikeForm()
     } else {
       antMessage.error('提交反馈失败，请稍后重试')
     }
@@ -323,7 +370,7 @@ const submitDislikeFeedback = async () => {
 // Cancel dislike modal
 const cancelDislike = () => {
   dislikeModalVisible.value = false
-  dislikeReason.value = ''
+  resetDislikeForm()
 }
 </script>
 
@@ -421,6 +468,28 @@ const cancelDislike = () => {
     flex-direction: column;
     gap: 12px;
     animation: slideDown 0.2s ease-out;
+  }
+}
+
+.dislike-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .reason-hint {
+    color: var(--gray-700);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .detail-hint {
+    margin-top: 4px;
+  }
+
+  .reason-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
   }
 }
 

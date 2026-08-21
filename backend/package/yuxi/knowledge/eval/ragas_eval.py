@@ -208,7 +208,9 @@ async def run_ragas_evaluation(
                 select_model_fn=_select_model,
             )
             rag_scores = await score_sample(
-                _sample_from_question_data(q, result["detail"]["retrieved_chunks"], result["detail"]["generated_answer"]),
+                _sample_from_question_data(
+                    q, result["detail"]["retrieved_chunks"], result["detail"]["generated_answer"]
+                ),
                 metrics,
             )
             return {

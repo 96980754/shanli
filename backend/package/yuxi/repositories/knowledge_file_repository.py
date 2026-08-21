@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text, union_all, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
@@ -87,6 +86,7 @@ class DocumentCreateOutcome:
     conflicts: tuple[KnowledgeFile, ...] = ()
     conflict_type: str | None = None
 
+
 # asyncpg 单条 SQL 参数上限为 32767；按 file_id 批量查询时统一分批，避免
 # mindmap_file_ids 等大尺寸传入触发 `too many parameters` 报错。
 SQL_IN_BATCH_SIZE = 10_000
@@ -129,6 +129,13 @@ class KnowledgeFileRepository:
         "previous_version_id",
         "is_active",
         "superseded_at",
+        "enrichment_data",
+        "enrichment_status",
+        "enrichment_version",
+        "enrichment_content_hash",
+        "enrichment_generated_at",
+        "enrichment_error",
+        "enrichment_possibly_outdated",
     }
 
     @staticmethod
@@ -219,6 +226,95 @@ class KnowledgeFileRepository:
                     .order_by(KnowledgeFile.document_version.desc(), KnowledgeFile.created_at.desc())
                 )
             return list(result.scalars().all())
+
+    async def list_version_chains_for_current_files(
+        self,
+        *,
+        kb_id: str,
+        file_ids: list[str],
+    ) -> dict[str, list[KnowledgeFile]]:
+        """批量读取当前文件及其已生效历史版本，避免来源卡片逐文件查询。"""
+        normalized_ids = list(dict.fromkeys(file_id for file_id in file_ids if file_id))
+        if not normalized_ids:
+            return {}
+
+        async with pg_manager.get_async_session_context() as session:
+            current_result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.file_id.in_(normalized_ids),
+                    KnowledgeFile.is_current.is_(True),
+                    KnowledgeFile.is_active.is_(True),
+                    KnowledgeFile.is_folder.is_(False),
+                )
+            )
+            current_records = list(current_result.scalars().all())
+            chains = {record.file_id: [record] for record in current_records}
+
+            replacement_currents = [record for record in current_records if record.previous_version_id]
+            if replacement_currents:
+                replacement_chain = (
+                    select(
+                        KnowledgeFile.file_id.label("source_file_id"),
+                        KnowledgeFile.previous_version_id.label("file_id"),
+                    )
+                    .where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id.in_([record.file_id for record in replacement_currents]),
+                    )
+                    .cte("knowledge_file_replacement_chain", recursive=True)
+                )
+                replacement_chain = replacement_chain.union_all(
+                    select(
+                        replacement_chain.c.source_file_id,
+                        KnowledgeFile.previous_version_id.label("file_id"),
+                    ).join(
+                        KnowledgeFile,
+                        and_(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == replacement_chain.c.file_id,
+                        ),
+                    )
+                )
+                replacement_result = await session.execute(
+                    select(replacement_chain.c.source_file_id, KnowledgeFile).join(
+                        KnowledgeFile,
+                        and_(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == replacement_chain.c.file_id,
+                        ),
+                    )
+                )
+                for source_file_id, record in replacement_result.all():
+                    chains[str(source_file_id)].append(record)
+
+            logical_currents = [
+                record
+                for record in current_records
+                if not record.previous_version_id and record.logical_document_id
+            ]
+            logical_ids = {record.logical_document_id for record in logical_currents}
+            if logical_ids:
+                logical_result = await session.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.logical_document_id.in_(logical_ids),
+                        KnowledgeFile.activated_at.is_not(None),
+                        KnowledgeFile.is_folder.is_(False),
+                    )
+                )
+                records_by_logical_id: dict[str, list[KnowledgeFile]] = {}
+                for record in logical_result.scalars().all():
+                    records_by_logical_id.setdefault(str(record.logical_document_id), []).append(record)
+                for current in logical_currents:
+                    seen = {record.file_id for record in chains[current.file_id]}
+                    chains[current.file_id].extend(
+                        record
+                        for record in records_by_logical_id.get(str(current.logical_document_id), [])
+                        if record.file_id not in seen
+                    )
+
+            return chains
 
     async def create_candidate_version(
         self,
@@ -385,7 +481,6 @@ class KnowledgeFileRepository:
             return [], 0
         filters = [
             KnowledgeFile.kb_id.in_(kb_ids),
-            KnowledgeFile.is_folder.is_(False),
             KnowledgeFile.is_current.is_(True),
         ]
         if keyword and keyword.strip():
@@ -411,6 +506,7 @@ class KnowledgeFileRepository:
                 KnowledgeFile.filename,
                 KnowledgeFile.file_type,
                 KnowledgeFile.status,
+                KnowledgeFile.is_folder,
                 KnowledgeFile.created_by,
                 KnowledgeFile.updated_at,
                 KnowledgeFile.created_at,
@@ -426,6 +522,7 @@ class KnowledgeFileRepository:
                 KnowledgeFile.filename,
                 KnowledgeFile.file_type,
                 KnowledgeFile.status,
+                KnowledgeFile.is_folder,
                 KnowledgeFile.created_by,
                 KnowledgeFile.updated_at,
                 KnowledgeFile.created_at,
@@ -597,7 +694,8 @@ class KnowledgeFileRepository:
 
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
-                select(KnowledgeFile).where(
+                select(KnowledgeFile)
+                .where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
                     self._parent_condition(parent_id),
@@ -639,8 +737,7 @@ class KnowledgeFileRepository:
     ) -> list[KnowledgeFile]:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
-                select(KnowledgeFile)
-                .where(
+                select(KnowledgeFile).where(
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.replacement_target_file_id == replacement_target_file_id,
                     KnowledgeFile.is_active.is_(False),
@@ -688,6 +785,47 @@ class KnowledgeFileRepository:
                     parent_id = folder.parent_id
                 paths[record.file_id] = "/".join(reversed([part for part in parts if part]))
         return paths
+
+    async def get_folder_chain(
+        self, *, kb_id: str, folder_id: str
+    ) -> list[dict] | None:
+        """返回真实文件夹（is_folder=True）的祖先链（top-down，含目标自身）。
+
+        用于全库搜索等入口从文件夹结果深链进入文件浏览：前端需要完整面包屑。
+        沿 parent_id 上溯，visited-set + 64 跳上限防环路/深链；祖先缺失（悬空
+        parent_id）即视为到达根边界。目标文件夹不存在返回 None。
+        """
+        async with pg_manager.get_async_session_context() as session:
+            target = (
+                await session.execute(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id == folder_id,
+                        KnowledgeFile.is_folder.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                return None
+            chain: list[dict] = []
+            current: KnowledgeFile | None = target
+            visited: set[str] = set()
+            while current is not None and current.file_id not in visited and len(visited) < 64:
+                visited.add(current.file_id)
+                chain.append({"file_id": current.file_id, "filename": current.filename})
+                parent_id = current.parent_id
+                if not parent_id:
+                    break
+                current = (
+                    await session.execute(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.kb_id == kb_id,
+                            KnowledgeFile.file_id == parent_id,
+                            KnowledgeFile.is_folder.is_(True),
+                        )
+                    )
+                ).scalar_one_or_none()
+            return list(reversed(chain))
 
     async def list_file_ids_by_filename_contains(
         self,

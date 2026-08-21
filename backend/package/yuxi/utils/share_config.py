@@ -21,7 +21,6 @@ def normalize_share_config(
     default_access_level: str,
     invalid_access_level_message: str,
     user_uid: str | None = None,
-    department_id: int | str | None = None,
     allowed_access_levels: Collection[str] | None = None,
     unauthorized_access_level_message: str | None = None,
 ) -> dict:
@@ -36,10 +35,7 @@ def normalize_share_config(
         return EMPTY_SHARE_CONFIG.copy()
 
     if access_level == "department":
-        department_ids = _normalize_department_ids(config.get("department_ids"))
-        if department_id is not None:
-            department_ids.append(int(department_id))
-        department_ids = sorted(set(department_ids))
+        department_ids = sorted(set(_normalize_department_ids(config.get("department_ids"))))
         if not department_ids:
             raise ValueError("部门共享至少需要选择一个部门")
         return {"access_level": "department", "department_ids": department_ids, "user_uids": []}

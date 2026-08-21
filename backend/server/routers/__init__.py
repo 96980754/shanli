@@ -4,11 +4,12 @@ from fastapi import APIRouter
 
 from server.routers.agent_invocation_router import agent_invocation_router
 from server.routers.agent_router import agent_router
-from server.routers.auth_dept_router import department
+from server.routers.auth_dept_router import department, team
 from server.routers.auth_router import auth
 from server.routers.chat_router import chat
 from server.routers.curated_qa_router import curated_qa_dashboard
 from server.routers.dashboard_router import dashboard
+from server.routers.feedback_dashboard_router import feedback_dashboard
 from server.routers.filesystem_router import filesystem_router
 from server.routers.knowledge_gap_web_search_router import knowledge_gap_web_search
 from server.routers.mcp_router import mcp
@@ -35,9 +36,11 @@ router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
 
 # 管理与工作台接口：后台任务、权限域以及工具体系配置。
 router.include_router(dashboard)  # /api/dashboard/* 仪表盘聚合数据
+router.include_router(feedback_dashboard)  # /api/dashboard/feedback-summary 反馈汇总统计
 router.include_router(curated_qa_dashboard)  # /api/dashboard/feedbacks/* 人工问答调优
 router.include_router(knowledge_gap_web_search)  # /api/dashboard/knowledge-gaps/* 联网补答
 router.include_router(department)  # /api/departments/* 部门与权限相关数据
+router.include_router(team)  # /api/teams/* 团队列表（知识库权限面板选项）
 router.include_router(tasks)  # /api/tasks/* 后台任务查询与管理
 router.include_router(mcp)  # /api/system/mcp-servers/* MCP 服务管理
 router.include_router(model_providers)  # /api/system/model-providers/* 独立模型配置

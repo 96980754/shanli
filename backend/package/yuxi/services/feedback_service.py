@@ -8,6 +8,47 @@ from yuxi.storage.postgres.models_business import Conversation, Message, Message
 from yuxi.utils.logging_config import logger
 
 
+FEEDBACK_REASON_OPTIONS = {
+    "answer_incorrect": "答案有误",
+    "outdated": "信息过时",
+    "irrelevant": "答非所问",
+    "other": "其他",
+}
+FEEDBACK_REASON_SEPARATOR = "\n"
+
+
+def parse_feedback_reason(reason: str | None) -> dict:
+    """解析结构化点踩原因，并兼容历史自由文本反馈。"""
+    raw_reason = str(reason or "").strip()
+    if not raw_reason:
+        return {
+            "reason_code": None,
+            "reason_label": None,
+            "reason_detail": None,
+        }
+
+    for reason_code, label in FEEDBACK_REASON_OPTIONS.items():
+        if raw_reason == label:
+            return {
+                "reason_code": reason_code,
+                "reason_label": label,
+                "reason_detail": None,
+            }
+        prefix = f"{label}{FEEDBACK_REASON_SEPARATOR}"
+        if raw_reason.startswith(prefix):
+            return {
+                "reason_code": reason_code,
+                "reason_label": label,
+                "reason_detail": raw_reason[len(prefix) :].strip() or None,
+            }
+
+    return {
+        "reason_code": None,
+        "reason_label": "历史反馈",
+        "reason_detail": raw_reason,
+    }
+
+
 async def submit_message_feedback_view(
     *,
     message_id: int,

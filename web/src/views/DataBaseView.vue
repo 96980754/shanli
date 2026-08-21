@@ -54,8 +54,8 @@
       destroyOnClose
     >
       <div class="new-database-form">
-        <!-- 知识库类型选择 -->
-        <div class="form-section">
+        <!-- 知识库类型选择：当前仅 AI知识库 一种可创建类型，单选无意义，隐藏选择器 -->
+        <div v-if="showKbTypeSelector" class="form-section">
           <h3 class="section-title">{{ $t('db.section.type') }}<span class="required-mark">*</span></h3>
           <div class="kb-type-cards">
             <div
@@ -173,11 +173,7 @@
         <!-- 共享配置 -->
         <div class="form-section compact-section">
           <h3 class="section-title">{{ $t('db.section.sharing') }}</h3>
-          <ShareConfigForm
-            ref="shareConfigFormRef"
-            v-model="shareConfig"
-            :auto-select-user-dept="true"
-          />
+          <ShareConfigForm ref="shareConfigFormRef" v-model="shareConfig" />
         </div>
       </div>
       <template #footer>
@@ -379,6 +375,10 @@ const selectedPresetDescription = computed(() =>
 
 // 支持的知识库类型
 const supportedKbTypes = ref({})
+
+// 可创建类型仅一种时不展示类型选择器（dify/notion 为历史只读连接器，不参与创建）；
+// 以后新增可创建类型（如图谱知识库）后选择器自动恢复出现
+const showKbTypeSelector = computed(() => kbTypes.value.length > 1)
 
 // 有序的知识库类型（Dify/Notion 仅保留历史兼容，不再开放新建）
 const orderedKbTypes = computed(() =>

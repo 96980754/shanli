@@ -39,12 +39,42 @@ class Department(Base):
 
     # 关联关系
     users = relationship("User", back_populates="department", cascade="all, delete-orphan")
+    teams = relationship("Team", back_populates="department", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "created_at": format_utc_datetime(self.created_at),
+        }
+
+
+class Team(Base):
+    """团队模型（部门下的分组，每部门至多一个默认团队）"""
+
+    __tablename__ = "teams"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    description = Column(String(255), nullable=True)
+    is_default = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=utc_now_naive)
+
+    # 关联关系
+    department = relationship("Department", back_populates="teams")
+    users = relationship("User", back_populates="team")
+
+    __table_args__ = (UniqueConstraint("department_id", "name", name="uq_teams_department_name"),)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "department_id": self.department_id,
+            "name": self.name,
+            "description": self.description,
+            "is_default": bool(self.is_default),
             "created_at": format_utc_datetime(self.created_at),
         }
 
@@ -62,6 +92,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False, default="user")  # 角色: superadmin, admin, user
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # 部门ID
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)  # 团队ID
     created_at = Column(DateTime, default=utc_now_naive)
     last_login = Column(DateTime, nullable=True)
 
@@ -80,6 +111,9 @@ class User(Base):
     # 关联部门
     department = relationship("Department", back_populates="users")
 
+    # 关联团队
+    team = relationship("Team", back_populates="users")
+
     # 关联 API Keys
     api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
 
@@ -95,6 +129,7 @@ class User(Base):
             "avatar": self.avatar,
             "role": self.role,
             "department_id": self.department_id,
+            "team_id": self.team_id,
             "created_at": format_utc_datetime(self.created_at),
             "last_login": format_utc_datetime(self.last_login),
             "login_failed_count": self.login_failed_count,

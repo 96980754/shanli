@@ -82,3 +82,7 @@ docs/vibe
 /models
 
 docs/测试数据/
+
+# 一键复现验收脚本的运行产物（脚本可随时重跑生成，不入库；人工整理的报告见 docs/）
+backend/scripts/bench/reports/
+backend/scripts/eval_datasets/reports/*.jsonl

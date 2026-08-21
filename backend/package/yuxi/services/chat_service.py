@@ -453,6 +453,55 @@ async def _stream_agent_events(agent, messages, *, input_context=None, **kwargs)
         yield mode, payload
 
 
+# =============================================================================
+# 沙箱预冷：沙箱容器冷启动约 4s（docker 启动 + 健康探测），若在首个工具调用时才
+# 触发会阻塞模型拿到工具结果。这里在 run 开始时后台预冷，把耗时藏到首轮 LLM 生成
+# 之后；热路径（缓存命中）为亚毫秒，预冷失败也不影响本次运行。
+# =============================================================================
+
+_PREWARM_TASKS: set[asyncio.Task] = set()
+
+
+def _schedule_sandbox_prewarm(*, thread_id: str, uid: str, meta: dict) -> None:
+    """后台预冷 run 的沙箱作用域，提前建好/复用容器，首个 read_file 不再等 4s。"""
+    file_thread_id = str(meta.get("file_thread_id") or thread_id).strip()
+    skills_thread_id = str(meta.get("skills_thread_id") or thread_id).strip()
+    task = asyncio.create_task(
+        _prewarm_sandbox(
+            thread_id=thread_id,
+            uid=uid,
+            file_thread_id=file_thread_id,
+            skills_thread_id=skills_thread_id,
+        )
+    )
+    _PREWARM_TASKS.add(task)
+    task.add_done_callback(_PREWARM_TASKS.discard)
+
+
+async def _prewarm_sandbox(
+    *,
+    thread_id: str,
+    uid: str,
+    file_thread_id: str,
+    skills_thread_id: str,
+) -> None:
+    try:
+        from yuxi.agents.backends.sandbox.provider import get_sandbox_provider
+
+        # 同步阻塞调用丢到线程池：冷建沙箱（docker 启动 + 健康探测）耗时约 4s，
+        # 若直接在事件循环里跑会冻结整个 loop，连带推迟首条模型 token。
+        await asyncio.to_thread(
+            get_sandbox_provider().get,
+            thread_id,
+            uid=uid,
+            create_if_missing=True,
+            file_thread_id=file_thread_id,
+            skills_thread_id=skills_thread_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Sandbox prewarm failed for thread {thread_id}: {exc}")
+
+
 async def _get_existing_message_ids(conv_repo: ConversationRepository, thread_id: str) -> set[str]:
     existing_messages = await conv_repo.get_messages_by_thread_id(thread_id)
     return {
@@ -619,6 +668,11 @@ async def save_messages_from_langgraph_state(
                 question=knowledge_question,
                 evidence=knowledge_evidence,
             )
+            # 拒答消息标记可转人工，前端据此展示「转人工」按钮（企微客服）。
+            disposition = msg_dict.get("knowledge_disposition") or {}
+            if disposition.get("type") == "knowledge_refusal":
+                msg_dict["handoff_available"] = True
+                msg_dict["handoff_query"] = knowledge_question or ""
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,
@@ -1044,9 +1098,21 @@ async def stream_agent_chat(
             except Exception as exc:
                 logger.exception("Knowledge preflight failed; continuing with assistant: %s", exc)
         langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid}}
+        # meta 可显式指定沙箱作用域（file_thread_id/skills_thread_id）：透传给运行时，
+        # 让预冷与运行时命中同一沙箱，多个 run 可共用一个沙箱容器；缺省则退回 thread_id，行为不变。
+        scope_file = str(meta.get("file_thread_id") or thread_id).strip()
+        scope_skills = str(meta.get("skills_thread_id") or thread_id).strip()
+        if scope_file != thread_id:
+            langgraph_config["configurable"]["file_thread_id"] = scope_file
+        if scope_skills != thread_id:
+            langgraph_config["configurable"]["skills_thread_id"] = scope_skills
 
         # LangGraph 会自动从 checkpointer 恢复 state（包括 uploads）
         # 无需手动加载或传递
+
+        # 后台预冷沙箱：大多数运行都会用沙箱（skills 默认全量、文件工具、附件），
+        # 提前建容器可避免首个 read_file 阻塞在 ~4s 冷启动上。
+        _schedule_sandbox_prewarm(thread_id=thread_id, uid=uid, meta=meta)
 
         protocol_message_ids: dict[tuple[str, str], str] = {}
         async for mode, payload in _stream_agent_events(
@@ -1312,6 +1378,9 @@ async def stream_agent_resume(
         metadata=langfuse_run.metadata,
         tags=langfuse_run.tags,
     )
+
+    # 后台预冷沙箱，避免恢复执行的首个 read_file 阻塞在 ~4s 冷启动上
+    _schedule_sandbox_prewarm(thread_id=thread_id, uid=uid, meta=meta)
 
     protocol_message_ids: dict[tuple[str, str], str] = {}
 
