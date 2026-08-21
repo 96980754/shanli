@@ -14,7 +14,6 @@
           <div class="file-info">
             <ChevronRight
               v-if="!expandedFiles.has(getFileKey(fileGroup))"
-
               :size="14"
               class="expand-icon"
             />
