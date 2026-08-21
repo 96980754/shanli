@@ -157,6 +157,10 @@
                 @remove-attachment="handleAttachmentRemove"
               >
                 <template #actions-left-extra>
+                  <IndustrySolutionButton
+                    :disabled="!currentAgent || isProcessing || sendDisabled"
+                    @generate="handleIndustrySolutionGenerate"
+                  />
                   <slot name="input-actions-left" :has-active-thread="!!currentChatId"></slot>
                 </template>
                 <template #actions-right-extra>
@@ -589,6 +593,7 @@ import {
   SyncOutlined
 } from '@ant-design/icons-vue'
 import AgentInputArea from '@/components/AgentInputArea.vue'
+import IndustrySolutionButton from '@/components/IndustrySolutionButton.vue'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
 import RefsComponent from '@/components/RefsComponent.vue'
@@ -618,6 +623,7 @@ import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { enrichTaskToolCalls, parseToolCallArgs } from '@/components/ToolCallingResult/toolRegistry'
 import { getConversationDisplayItems } from '@/utils/messageGrouping'
 import { makeChildThreadId } from '@/utils/subagentThread'
+import { buildIndustrySolutionQuery } from '@/utils/industrySolution'
 
 // ==================== PROPS & EMITS ====================
 const props = defineProps({
@@ -1372,7 +1378,12 @@ const shouldShowRefs = computed(() => {
 
 const shouldShowArtifacts = computed(() => {
   return (conv) => {
-    if (!currentArtifacts.value.length || conv.status === 'streaming') return false
+    if (
+      !currentArtifacts.value.length ||
+      conv.status === 'streaming' ||
+      !MessageProcessor.hasArtifactPresentation(conv)
+    )
+      return false
     const latestConv = conversations.value[conversations.value.length - 1]
     return latestConv === conv
   }
@@ -2460,8 +2471,10 @@ const selectThreadFromRoute = async (threadId) => {
   return true
 }
 
-const handleSendMessage = async ({ image } = {}) => {
-  const text = userInput.value.trim()
+const handleSendMessage = async ({ image, industrySolution } = {}) => {
+  const text = industrySolution
+    ? buildIndustrySolutionQuery(industrySolution)
+    : userInput.value.trim()
   const imageContent = image?.imageContent || null
   if (
     (!text && !image) ||
@@ -2494,7 +2507,9 @@ const handleSendMessage = async ({ image } = {}) => {
   // 仅当用户显式选择过模型才下发覆盖；否则传 null，由后端使用智能体配置的模型
   const modelSpec = selectedModelByThread[threadId] || null
 
-  userInput.value = ''
+  if (!industrySolution) {
+    userInput.value = ''
+  }
 
   await nextTick()
   scrollController.scrollToBottom(true)
@@ -2558,7 +2573,8 @@ const handleSendMessage = async ({ image } = {}) => {
         attachment_file_ids: pendingAttachmentFileIds
       },
       image_content: imageContent,
-      model_spec: modelSpec
+      model_spec: modelSpec,
+      industry_solution: industrySolution || null
     })
     const runId = runResp?.run_id
     if (!runId) {
@@ -2573,6 +2589,10 @@ const handleSendMessage = async ({ image } = {}) => {
     resetOnGoingConv(threadId)
     handleChatError(error, 'send')
   }
+}
+
+const handleIndustrySolutionGenerate = async (payload) => {
+  await handleSendMessage({ industrySolution: payload })
 }
 
 // 发送或中断
@@ -2840,7 +2860,10 @@ const getConversationSources = (conv) => {
   if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
     return { knowledgeChunks: [], webSources: [], knowledgeActivity: true }
   }
-  const extracted = MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
+  const extracted = MessageProcessor.extractSourcesFromConversation(
+    conv,
+    availableKnowledgeBases.value
+  )
   // 只保留 AI 回答正文实际引用的文档：query_kbs 一次并行检索会带出大量无关候选文件，
   // 面板应跟随回答的「依据来源」，而非展示全部检索内容。
   const citedChunks = MessageProcessor.filterKnowledgeChunksByAnswer(

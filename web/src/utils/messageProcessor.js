@@ -159,7 +159,10 @@ export class MessageProcessor {
       if (!kbId) return
 
       const chunkId = metadata.chunk_id || chunk.id || ''
-      const dedupKey = chunkId ? `${kbId}::${chunkId}` : `${kbId}::${fileId}::${content}`
+      const productKey = metadata.product ? `::${metadata.product}` : ''
+      const dedupKey = chunkId
+        ? `${kbId}::${chunkId}${productKey}`
+        : `${kbId}::${fileId}::${content}${productKey}`
       if (dedupSet.has(dedupKey)) return
       dedupSet.add(dedupKey)
 
@@ -208,7 +211,28 @@ export class MessageProcessor {
         const toolName = toolCall?.name || toolCall?.function?.name
         const parsed = parseToolResultContent(toolCall?.tool_call_result?.content)
 
-        if (toolName === 'query_kb' || toolName === 'query_kbs') {
+        if (toolName === 'research_industry_products') {
+          for (const productResult of parsed?.products || []) {
+            for (const evidence of productResult?.evidence || []) {
+              const source = evidence?.source || {}
+              appendChunk(
+                {
+                  id: source.chunk_id,
+                  kb_id: source.kb_id,
+                  file_id: source.file_id,
+                  content: evidence.content,
+                  metadata: {
+                    source: source.title,
+                    chunk_id: source.chunk_id,
+                    product: productResult.product,
+                    source_reference: evidence.source_reference
+                  }
+                },
+                source.kb_id
+              )
+            }
+          }
+        } else if (toolName === 'query_kb' || toolName === 'query_kbs') {
           // query_kb 与 query_kbs 都返回同样的 schema_v1 检索结果，均为知识来源数据
           if (
             !parsed ||
@@ -258,7 +282,7 @@ export class MessageProcessor {
   }
 
   /**
-   * 判断一轮对话是否发生过知识检索（query_kb/query_kbs/find_kb_document/search_file）。
+   * 判断一轮对话是否发生过知识检索（含行业方案分产品调研与文件定位工具）。
    * 与 extractKnowledgeChunksFromConversation 共享相同的工具识别规则，
    * 但不要求召回结果可用——召回不足/检索失败时仍视为发生过检索，
    * 前端据此保留来源入口，避免「答了但来源不显示」。
@@ -273,13 +297,26 @@ export class MessageProcessor {
           toolName === 'query_kb' ||
           toolName === 'query_kbs' ||
           toolName === 'find_kb_document' ||
-          toolName === 'search_file'
+          toolName === 'search_file' ||
+          toolName === 'research_industry_products'
         ) {
           return true
         }
       }
     }
     return false
+  }
+
+  static hasArtifactPresentation(conv) {
+    if (!conv || !Array.isArray(conv.messages)) return false
+    return conv.messages.some(
+      (msg) =>
+        msg?.type === 'ai' &&
+        Array.isArray(msg.tool_calls) &&
+        msg.tool_calls.some(
+          (toolCall) => (toolCall?.name || toolCall?.function?.name) === 'present_artifacts'
+        )
+    )
   }
 
   /**
@@ -448,16 +485,20 @@ export class MessageProcessor {
         item.kb_id ||
         '未知来源'
       const displayName = String(source).split(/[\\/]/).filter(Boolean).pop() || source
-      if (!groups.has(displayName)) {
-        groups.set(displayName, {
+      const product = metadata.product || ''
+      const groupKey = product ? `${product}::${displayName}` : displayName
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          key: groupKey,
           filename: source,
           displayName,
+          product,
           kb_id: item?.kb_id || '',
           file_id: item?.file_id || '',
           chunks: []
         })
       }
-      groups.get(displayName).chunks.push(item)
+      groups.get(groupKey).chunks.push(item)
     }
     return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
   }

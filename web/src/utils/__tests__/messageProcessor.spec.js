@@ -219,6 +219,90 @@ const run = () => {
     true
   )
 
+  const industryConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'research_industry_products',
+            tool_call_result: {
+              content: JSON.stringify({
+                products: [
+                  {
+                    product: '产品A',
+                    evidence: [
+                      {
+                        content: '产品A证据',
+                        source_reference: 1,
+                        source: {
+                          title: '共同手册.docx',
+                          kb_id: 'kb-finance',
+                          file_id: 'file-a',
+                          chunk_id: 'shared-chunk'
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    product: '产品B',
+                    evidence: [
+                      {
+                        content: '产品B证据',
+                        source_reference: 2,
+                        source: {
+                          title: '共同手册.docx',
+                          kb_id: 'kb-finance',
+                          file_id: 'file-a',
+                          chunk_id: 'shared-chunk'
+                        }
+                      }
+                    ]
+                  }
+                ]
+              })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const industryChunks = MessageProcessor.extractKnowledgeChunksFromConversation(
+    industryConv,
+    databases
+  )
+  assert.equal(industryChunks.length, 2)
+  assert.deepEqual(
+    industryChunks.map((chunk) => chunk.metadata.product),
+    ['产品A', '产品B']
+  )
+  assert.deepEqual(
+    industryChunks.map((chunk) => ({
+      kb_id: chunk.kb_id,
+      file_id: chunk.file_id,
+      source: chunk.metadata.source,
+      url: chunk.metadata.url
+    })),
+    [
+      {
+        kb_id: 'kb-finance',
+        file_id: 'file-a',
+        source: '共同手册.docx',
+        url: undefined
+      },
+      {
+        kb_id: 'kb-finance',
+        file_id: 'file-a',
+        source: '共同手册.docx',
+        url: undefined
+      }
+    ]
+  )
+  assert.equal(MessageProcessor.hasKnowledgeRetrieval(industryConv), true)
+  assert.equal(MessageProcessor.hasArtifactPresentation(industryConv), false)
+  industryConv.messages[0].tool_calls.push({ name: 'present_artifacts' })
+  assert.equal(MessageProcessor.hasArtifactPresentation(industryConv), true)
+
   const conversations = MessageProcessor.convertServerHistoryToMessages([
     { type: 'human', content: '请选择语言' },
     { type: 'ai', content: '请选择输出语言' },

@@ -306,6 +306,17 @@ async def query_kbs(
     一次性传入多个 kb_id，各库并行检索，比逐个调用 query_kb 更快。
     返回结果按 kb_id 标注来源，可直接用于回答。单库问题请用 query_kb。
     """
+    return await retrieve_kbs(kb_ids, query_text, file_name=file_name, runtime=runtime)
+
+
+async def retrieve_kbs(
+    kb_ids: list[str],
+    query_text: str,
+    *,
+    file_name: str | None = None,
+    runtime: ToolRuntime = None,
+) -> dict:
+    """Reuse the authenticated multi-KB retrieval path outside the tool wrapper."""
     if not kb_ids:
         return _query_error("", "invalid_request", "请提供 kb_id 列表")
     if not query_text:

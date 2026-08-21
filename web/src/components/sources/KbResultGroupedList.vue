@@ -5,7 +5,7 @@
     </div>
 
     <div class="kb-results" v-if="normalizedChunks.length > 0">
-      <div v-for="fileGroup in fileGroupList" :key="getFileKey(fileGroup)" class="file-group">
+      <div v-for="fileGroup in fileGroupList" :key="fileGroup.key || getFileKey(fileGroup)" class="file-group">
         <div
           class="file-header"
           :class="{ expanded: expandedFiles.has(getFileKey(fileGroup)) }"
@@ -19,6 +19,7 @@
             />
             <ChevronDown v-else :size="14" class="expand-icon" />
             <FileText :size="14" color="var(--gray-600)" />
+            <span v-if="fileGroup.product" class="product-name">{{ fileGroup.product }}</span>
             <span class="file-name">{{ fileGroup.displayName }}</span>
             <span v-if="getSourceVersion(fileGroup)?.document_version" class="current-version">
               V{{ getSourceVersion(fileGroup).document_version }} 当前版本
@@ -478,6 +479,16 @@ const downloadHistoryVersion = async (fileGroup, version) => {
           color: var(--color-success-700);
           font-size: 11px;
           white-space: nowrap;
+        }
+
+        .product-name {
+          flex-shrink: 0;
+          padding: 2px 6px;
+          border-radius: 4px;
+          color: var(--main-700);
+          background: var(--main-30);
+          font-size: 11px;
+          font-weight: 500;
         }
 
         .chunk-count {
