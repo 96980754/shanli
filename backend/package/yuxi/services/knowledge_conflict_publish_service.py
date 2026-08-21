@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from yuxi.config.app import resolve_embedding_model
 from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorStore
 from yuxi.knowledge.utils import sanitize_processing_error
 from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
@@ -13,8 +14,11 @@ from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.storage.neo4j import get_shared_neo4j_connection, neo4j_write
 from yuxi.utils.datetime_utils import utc_isoformat
 from yuxi.utils.logging_config import logger
+
 PUBLISH_JOB_NAME = "process_knowledge_conflict_publish"
 PUBLISH_LEASE_SECONDS = 300
+
+
 class KnowledgeConflictPublishService:
     def __init__(
         self,
@@ -28,22 +32,26 @@ class KnowledgeConflictPublishService:
         self.kb_repository = kb_repository or KnowledgeBaseRepository()
         self._vector_store = vector_store
         self._neo4j_connection = neo4j_connection
+
     @property
     def vector_store(self) -> MilvusGraphVectorStore:
         if self._vector_store is None:
             self._vector_store = MilvusGraphVectorStore()
         return self._vector_store
+
     @property
     def neo4j_connection(self):
         if self._neo4j_connection is None:
             self._neo4j_connection = get_shared_neo4j_connection()
         return self._neo4j_connection
+
     async def enqueue(self, task_id: str, *, queue=None) -> bool:
         queue = queue or await get_arq_pool()
         # PostgreSQL is the idempotency boundary. Random ARQ job ids allow a failed
         # delivery to be recovered while duplicate deliveries are rejected by claim().
         job = await queue.enqueue_job(PUBLISH_JOB_NAME, task_id)
         return job is not None
+
     async def recover(self, *, queue=None, limit: int = 100) -> int:
         task_ids = await self.repository.list_recoverable_task_ids(limit=limit)
         enqueued = 0
@@ -56,6 +64,7 @@ class KnowledgeConflictPublishService:
                     "Failed to enqueue knowledge publish task {}: {}", task_id, sanitize_processing_error(exc)
                 )
         return enqueued
+
     async def process(self, task_id: str) -> str:
         task = await self.repository.claim(task_id, lease_seconds=PUBLISH_LEASE_SECONDS)
         if task is None:
@@ -95,6 +104,7 @@ class KnowledgeConflictPublishService:
             )
             logger.warning("Knowledge publish task {} ended as {}: {}", task_id, status, message)
             return status
+
     async def retry(self, *, kb_id: str, conflict_id: str) -> dict[str, Any] | None:
         task = await self.repository.retry(kb_id=kb_id, conflict_id=conflict_id)
         if task is None:
@@ -109,8 +119,10 @@ class KnowledgeConflictPublishService:
                     sanitize_processing_error(exc),
                 )
         return serialize_publish_task(task)
+
     async def _publish_neo4j(self, task, conflict, assertion, entity) -> None:
         old_ids = list(conflict.existing_assertion_ids or []) if conflict.resolution == "use_new" else []
+
         def write(tx):
             if old_ids:
                 tx.run(
@@ -169,15 +181,17 @@ class KnowledgeConflictPublishService:
                 chunk_id=assertion.chunk_id,
                 updated_at=utc_isoformat(),
             )
+
         await asyncio.to_thread(neo4j_write, self.neo4j_connection.driver, write)
+
     async def _publish_vector(self, task, conflict, assertion) -> None:
         kb = await self.kb_repository.get_by_kb_id(task.kb_id)
-        if kb is None or not kb.embedding_model_spec:
-            raise ValueError("Graph vector embedding model is unavailable")
+        if kb is None:
+            raise ValueError("Knowledge base is unavailable")
         content = _assertion_content(assertion)
         await self.vector_store.upsert_reviewed_assertion(
             kb_id=task.kb_id,
-            embedding_model_spec=kb.embedding_model_spec,
+            embedding_model_spec=resolve_embedding_model(kb.embedding_model_spec),
             superseded_assertion_ids=(
                 list(conflict.existing_assertion_ids or []) if conflict.resolution == "use_new" else []
             ),
@@ -194,12 +208,14 @@ class KnowledgeConflictPublishService:
                 "predicate": assertion.predicate,
             },
         )
+
     async def _remove_stale_projection(self, task, assertion) -> None:
         await self.vector_store.delete_reviewed_assertions(
             task.kb_id,
             [assertion.assertion_id],
             max_version=task.id,
         )
+
         def write(tx):
             tx.run(
                 """
@@ -214,11 +230,18 @@ class KnowledgeConflictPublishService:
                 publish_sequence=task.id,
                 updated_at=utc_isoformat(),
             )
+
         await asyncio.to_thread(neo4j_write, self.neo4j_connection.driver, write)
+
+
 async def process_knowledge_conflict_publish(_ctx: dict[str, Any], task_id: str) -> str:
     return await KnowledgeConflictPublishService().process(task_id)
+
+
 async def recover_knowledge_conflict_publish_tasks(ctx: dict[str, Any]) -> int:
     return await KnowledgeConflictPublishService().recover(queue=ctx.get("redis"))
+
+
 def serialize_publish_task(task) -> dict[str, Any]:
     return {
         "task_id": task.task_id,
@@ -233,16 +256,22 @@ def serialize_publish_task(task) -> dict[str, Any]:
         "updated_at": task.updated_at,
         "completed_at": task.completed_at,
     }
+
+
 def _assertion_content(assertion) -> str:
     value = assertion.normalized_value if assertion.normalized_value is not None else assertion.raw_value
     version = f" ({assertion.product_version})" if assertion.product_version else ""
     return f"{assertion.entity_name}{version} {assertion.predicate}: {value}"
+
+
 def _publish_error_code(error: Exception) -> str:
     if isinstance(error, LookupError):
         return "publish_source_missing"
     if "embedding" in str(error).lower():
         return "vector_embedding_unavailable"
     return "publish_adapter_failed"
+
+
 __all__ = [
     "KnowledgeConflictPublishService",
     "PUBLISH_JOB_NAME",

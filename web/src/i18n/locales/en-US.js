@@ -20,6 +20,7 @@ export default {
   },
   layout: {
     taskCenter: 'Task Center',
+    globalSearch: 'Global Search',
     expandSidebar: 'Expand sidebar',
     collapseSidebar: 'Collapse sidebar',
     debugPanel: 'Debug Panel'
@@ -219,6 +220,7 @@ export default {
     newChat: 'New Chat',
     reply: {
       generating: 'Generating response...',
+      thinking: 'Thinking...',
       compressing: 'Compiling the answer...',
       calling: 'Calling a tool...',
       finalizing: 'Finalizing...'

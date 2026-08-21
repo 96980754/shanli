@@ -54,6 +54,23 @@ const run = () => {
     { kb_id: 'kb-finance', file_id: 'f1', kb_name: '财税库', source: 'doc-a.pdf' }
   )
 
+  // 单次工具调用耗时（duration_ms）随 tool_call_result 透传，供前端标记「本次检索耗时」
+  const durationMessages = MessageProcessor.convertToolResultToMessages([
+    {
+      type: 'ai',
+      tool_calls: [{ id: 'call-dur', name: 'query_kb', args: { kb_id: 'kb-finance' } }]
+    },
+    {
+      type: 'tool',
+      tool_call_id: 'call-dur',
+      content: JSON.stringify(queryOutput()),
+      duration_ms: 1234
+    }
+  ])
+  const durationToolCall = durationMessages.find((msg) => msg.type === 'ai').tool_calls[0]
+  assert.equal(durationToolCall.tool_call_result.duration_ms, 1234)
+  assert.equal(durationToolCall.tool_call_result.content.includes('kb-finance'), true)
+
   const historyConv = {
     messages: [
       {
@@ -123,7 +140,10 @@ const run = () => {
 
   assert.equal(dedupChunks.length, 2)
   assert.equal(dedupChunks[0].score, 0.9)
-  assert.equal(dedupChunks.some((chunk) => chunk.kb_id === 'kb-other'), true)
+  assert.equal(
+    dedupChunks.some((chunk) => chunk.kb_id === 'kb-other'),
+    true
+  )
 
   const ignoredConv = {
     messages: [
@@ -146,7 +166,10 @@ const run = () => {
       }
     ]
   }
-  assert.deepEqual(MessageProcessor.extractKnowledgeChunksFromConversation(ignoredConv, databases), [])
+  assert.deepEqual(
+    MessageProcessor.extractKnowledgeChunksFromConversation(ignoredConv, databases),
+    []
+  )
 
   // query_kbs 批量检索：多库结果合并，每条自带来源 kb_id，应与 query_kb 一样进入来源列表
   const batchConv = {
@@ -218,6 +241,253 @@ const run = () => {
     content: '<think>推理过程</think>最终答案'
   })
   assert.deepEqual(assistantBody, { content: '最终答案', reasoningContent: '推理过程' })
+
+  // ---- 来源面板回归：filterKnowledgeChunksByAnswer / extractCitationNames ----
+  // 回归场景：回答以《》/表格 + 「来源说明」段落列出实际使用的文档。
+  // 旧实现只解析《》与表格，忽略「来源说明」，导致来源面板折叠（只显示《》恰好命中的 1 个文件）。
+  const citedFiles = [
+    'POCSTARS 定位产品解决方案介绍.pdf',
+    'C10单页-中文-1.pdf',
+    '面向关键任务的群组通信（MCX）技术白皮书.pdf',
+    '无关营销资料.pdf'
+  ]
+  const citationChunks = citedFiles.map((source, i) => ({
+    kb_id: 'kb',
+    file_id: `f${i}`,
+    content: `chunk-${i}`,
+    score: 1 - i / 10,
+    metadata: { source, chunk_id: `c${i}` }
+  }))
+  const sourceAnswer =
+    '…正文引用《面向关键任务的群组通信（MCX）技术白皮书》…\n\n' +
+    '**来源说明**：以上内容依据知识库中以下材料整理——' +
+    '定位资料（POCSTARS 定位产品解决方案介绍、C10单页）、' +
+    'MCX-资料（MCSTARS 产品白皮书及销售一纸禅）。\n\n' +
+    '如需进一步输出成投标方案文档或按具体客户规模细化配置清单，请告知。'
+
+  // 「来源说明」中被点名且能匹配到文件的文档应进入来源面板；未点名的文件不应混入；
+  // 同时保留《》命中的 MCX 白皮书（回归前唯一能命中的来源）
+  const sourceCited = MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, sourceAnswer)
+  assert.deepEqual(sourceCited.map((c) => c.metadata.source).sort(), [
+    'C10单页-中文-1.pdf',
+    'POCSTARS 定位产品解决方案介绍.pdf',
+    '面向关键任务的群组通信（MCX）技术白皮书.pdf'
+  ])
+
+  // 句号后的补充说明不应被当作引用；「来源说明」分组名（如"定位资料"）作为候选被保留，
+  // 匹配不到任何文件时自然忽略
+  const citationNames = MessageProcessor.extractCitationNames(sourceAnswer)
+  assert.equal(
+    citationNames.some((n) => n.includes('如需进一步')),
+    false
+  )
+  assert.equal(citationNames.includes('定位资料'), true)
+
+  // 无任何引用时回退全量，不误删
+  const noCiteAnswer = '这是一段不引用任何文档的普通回答。'
+  assert.equal(
+    MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, noCiteAnswer).length,
+    4
+  )
+  assert.equal(MessageProcessor.filterKnowledgeChunksByAnswer(citationChunks, '').length, 4)
+
+  // 有「来源说明」但匹配不到任何被引用文件时回退全量
+  const noMatchChunks = [
+    {
+      kb_id: 'kb',
+      file_id: 'f-a',
+      content: 'x',
+      metadata: { source: '完全无关文档.pdf', chunk_id: 'c-a' }
+    }
+  ]
+  assert.equal(
+    MessageProcessor.filterKnowledgeChunksByAnswer(noMatchChunks, sourceAnswer).length,
+    1
+  )
+
+  // 回归：模型以「──来源：」+ 完整路径列表（poc资料/MNO/xxx.pptx（kb_id））引用文档时，
+  // 来源面板也应只保留被引用的文件，而不是回退全量
+  const pathCitedAnswer =
+    '…正文内容…\n\n──来源：\n' +
+    'poc资料/MNO/POCSTARS MNO产品解决方案-V1.2-202605.pptx（kb_3cm2gz6tyb）\n' +
+    'poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx（kb_3cm2gz6tyb）\n' +
+    'poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（kb_3cm2gz6tyb）'
+  const pathChunks = [
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p1',
+      content: 'c1',
+      metadata: { source: 'POCSTARS MNO产品解决方案-V1.2-202605.pptx', chunk_id: 'cp1' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p2',
+      content: 'c2',
+      metadata: { source: '【修订中】POCSTARS MNO产品白皮书V1.1.docx', chunk_id: 'cp2' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p3',
+      content: 'c3',
+      metadata: { source: 'POCSTARS MNO全平台功能清单V1.0-20260522.xlsx', chunk_id: 'cp3' }
+    },
+    {
+      kb_id: 'kb_3cm2gz6tyb',
+      file_id: 'p4',
+      content: 'c4',
+      metadata: { source: '无关营销资料.pdf', chunk_id: 'cp4' }
+    }
+  ]
+  const pathFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(pathChunks, pathCitedAnswer)
+  assert.deepEqual(pathFiltered.map((c) => c.file_id).sort(), ['p1', 'p2', 'p3'])
+
+  // 回归：真实模型输出常以「**来源**：」+「- 」无序列表列出完整路径（markdown 加粗把
+  // 「来源」与冒号隔开，旧正则只能匹配紧邻冒号），来源面板同样应只保留被引用的文件
+  const boldCitedAnswer =
+    '…正文内容…\n\n**来源**：\n' +
+    '- poc资料/MNO/POCSTARS MNO产品解决方案-V1.2-202605.pptx（kb_3cm2gz6tyb）\n' +
+    '- poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx（kb_3cm2gz6tyb）\n' +
+    '- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（kb_3cm2gz6tyb）'
+  const boldFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(pathChunks, boldCitedAnswer)
+  assert.deepEqual(boldFiltered.map((c) => c.file_id).sort(), ['p1', 'p2', 'p3'])
+
+  // ---- 来源面板回归：find_kb_document / search_file 定位结果纳入来源 ----
+  // 对话 a297b81d 场景：query_kbs 召回为空，但模型通过 find_kb_document 定位到文件，
+  // 这些「定位到的文档」也应进入来源面板（此前只认 query_kb/query_kbs，来源面板为空）。
+  const m200Source = 'poc资料/miniserver/Miniserver M200规格书20251125.xlsx'
+  const locateConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'search_file',
+            tool_call_result: {
+              content: JSON.stringify({
+                files: [
+                  {
+                    kb_id: 'kb-m200',
+                    kb_name: 'poc-资料',
+                    file_id: 'file-m200',
+                    filename: m200Source,
+                    file_type: 'xlsx'
+                  }
+                ],
+                total: 1
+              })
+            }
+          },
+          {
+            name: 'find_kb_document',
+            tool_call_result: {
+              content: JSON.stringify({
+                kb_id: 'kb-m200',
+                file_id: 'file-m200',
+                semantic: false,
+                match_mode: 'keyword',
+                total_matches: 2,
+                windows: [
+                  {
+                    start_line: 1,
+                    end_line: 4,
+                    matched_lines: [2],
+                    content: '1: Miniserver M200\n2: 规格\n'
+                  },
+                  {
+                    start_line: 10,
+                    end_line: 12,
+                    matched_lines: [11],
+                    content: '10: 处理器\n11: 内存\n'
+                  }
+                ]
+              })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const locateChunks = MessageProcessor.extractKnowledgeChunksFromConversation(locateConv, [])
+  assert.equal(locateChunks.length, 3) // 1 个定位文件卡片 + 2 个定位窗口
+  // find_kb_document 窗口：来源名由同轮 search_file 结果解析，而非回退 file_id
+  const findWindows = locateChunks.filter((c) => c.content.startsWith('1: Miniserver'))
+  assert.equal(findWindows.length, 1)
+  assert.equal(findWindows[0].metadata.source, m200Source)
+  assert.equal(findWindows[0].kb_name, 'poc-资料')
+  // search_file 定位文件：以完整路径文件名作为来源卡片内容
+  const locatedCard = locateChunks.find((c) => c.content === m200Source)
+  assert.equal(locatedCard.metadata.source, m200Source)
+  assert.equal(locatedCard.file_id, 'file-m200')
+  // 面板按 metadata.source 分组，定位卡片与窗口应同组（来源名一致）
+  assert.equal(new Set(locateChunks.map((c) => c.metadata.source)).size, 1)
+
+  // find_kb_document 无 search_file 兜底：来源名回退 file_id，仍不吞掉已定位内容
+  const fallbackConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'find_kb_document',
+            tool_call_result: {
+              content: JSON.stringify({
+                kb_id: 'kb-fb',
+                file_id: 'file-fb',
+                match_mode: 'keyword',
+                total_matches: 1,
+                windows: [{ start_line: 1, end_line: 1, matched_lines: [1], content: '1: 内容' }]
+              })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const fallbackChunks = MessageProcessor.extractKnowledgeChunksFromConversation(fallbackConv, [])
+  assert.equal(fallbackChunks.length, 1)
+  assert.equal(fallbackChunks[0].metadata.source, 'file-fb')
+
+  // hasKnowledgeRetrieval：仅 find_kb_document/search_file（无 query_kb）也算发生过检索，
+  // 前端据此保留来源按钮，避免「定位到了文档但不显示来源」
+  assert.equal(MessageProcessor.hasKnowledgeRetrieval(locateConv), true)
+  assert.equal(MessageProcessor.hasKnowledgeRetrieval(fallbackConv), true)
+
+  // 同一文档跨多库命中（bug1）：来源面板分组与「来源 N」计数按文档名去重，避免重复卡片
+  const duplicateDocChunks = [
+    {
+      kb_id: 'kb-yingxiao',
+      file_id: 'file-fb4fa6',
+      content: '话术正文',
+      metadata: { source: 'POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c1' }
+    },
+    {
+      kb_id: 'kb-yingxiao',
+      file_id: 'file-fb4fa6',
+      content: '话术正文2',
+      metadata: { source: 'POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c2' }
+    },
+    {
+      kb_id: 'kb-dingwei',
+      file_id: 'file-e7711e',
+      content: '话术正文3',
+      metadata: { source: '定位资料/POCSTARS定位产品介绍话术-海外版.docx', chunk_id: 'c3' }
+    },
+    {
+      kb_id: 'kb-dingwei',
+      file_id: 'file-1846ce',
+      content: '客群画像正文',
+      metadata: {
+        source: '定位资料/POCSTARS 产品目标客群画像、应用场景销售话术.pdf',
+        chunk_id: 'c4'
+      }
+    }
+  ]
+  const grouped = MessageProcessor.groupKnowledgeChunksByDocument(duplicateDocChunks)
+  assert.equal(grouped.length, 2) // 同名文档跨库合并为 1 组，共 2 个文档
+  assert.equal(grouped[0].chunks.length + grouped[1].chunks.length, 4) // 全部 chunk 保留
+  assert.equal(new Set(grouped.map((g) => g.displayName)).size, 2)
+  // 「来源 N」计数直接取分组长度，与卡片数一致
+  assert.equal(grouped.length, 2)
 
   console.log('messageProcessor query_kb source extraction: all assertions passed')
 }

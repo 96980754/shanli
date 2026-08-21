@@ -10,10 +10,10 @@
               placeholder="输入查询内容..."
               :auto-size="{ minRows: 2, maxRows: 6 }"
               class="search-textarea"
-              @press-enter.prevent="onQuery"
+              @press-enter.prevent="() => onQuery(true)"
             />
             <div class="search-actions">
-              <span class="query-hint">Enter 检索知识库内容</span>
+              <span class="query-hint">Enter 预览回答</span>
               <div style="display: flex; gap: 12px; align-items: center">
                 <a-tooltip :title="showRawData ? '切换至格式化显示' : '切换至原始数据'">
                   <a-button
@@ -27,14 +27,22 @@
                   </a-button>
                 </a-tooltip>
                 <a-button
-                  @click="onQuery"
+                  @click="onQuery(false)"
+                  :disabled="!queryText.trim() || searchLoading"
+                  class="retrieval-only-button"
+                >
+                  仅检索
+                </a-button>
+                <a-button
+                  @click="onQuery(true)"
                   :loading="searchLoading"
                   class="search-button"
                   type="primary"
                   :disabled="!queryText.trim()"
                   :icon="h(SearchOutlined)"
-                  shape="circle"
-                />
+                >
+                  预览回答
+                </a-button>
               </div>
             </div>
           </div>
@@ -46,68 +54,89 @@
             <pre>{{ JSON.stringify(queryResult, null, 2) }}</pre>
           </div>
 
-          <!-- 格式化显示 -->
-          <div v-else>
-            <div v-if="typeof queryResult === 'string'" class="result-text">
-              {{ queryResult }}
+          <div v-else class="preview-result">
+            <div class="result-summary">
+              <span>
+                {{ queryResult.retrieved_chunks.length }} 个文档块 ·
+                {{ queryResult.retrieval.mode }}
+                <template v-if="queryResult.retrieval.rerank_applied"> · 已重排序</template>
+              </span>
+              <a-button
+                type="text"
+                size="small"
+                class="clear-results-btn"
+                @click="clearQueryResult"
+              >
+                清空
+              </a-button>
             </div>
 
-            <!-- Milvus 返回列表格式 -->
-            <div v-else-if="Array.isArray(queryResult)" class="result-list">
-              <div v-if="queryResult.length === 0" class="no-results">
-                <p>未找到相关结果</p>
-              </div>
-              <div v-else>
-                <div class="result-summary">
-                  <span>检索到 {{ queryResult.length }} 个相关文档块：</span>
-                  <a-button
-                    type="text"
-                    size="small"
-                    class="clear-results-btn"
-                    @click="clearQueryResult"
+            <section v-if="queryResult.answer" class="answer-preview-card">
+              <div class="preview-section-title">回答预览</div>
+              <MarkdownPreview :content="queryResult.answer" class="answer-content" />
+              <div class="answer-model">模型：{{ queryResult.model_spec }}</div>
+            </section>
+
+            <section v-if="queryResult.citations.length" class="citation-preview-card">
+              <div class="preview-section-title">引用来源</div>
+              <KnowledgeSourceSection :chunks="queryResult.citations" />
+            </section>
+
+            <a-collapse v-model:activeKey="retrievalActiveKeys" class="retrieval-details" ghost>
+              <a-collapse-panel
+                key="retrieval"
+                :header="`检索详情（${queryResult.retrieved_chunks.length}）`"
+              >
+                <div v-if="queryResult.retrieved_chunks.length === 0" class="no-results">
+                  <p>未找到相关结果</p>
+                </div>
+                <div v-else class="result-list">
+                  <div
+                    v-for="(chunk, index) in queryResult.retrieved_chunks"
+                    :key="chunk.id || index"
+                    class="result-item"
                   >
-                    清空
-                  </a-button>
+                    <div class="result-header">
+                      <span class="result-index">#{{ index + 1 }}</span>
+                      <span v-if="typeof chunk.score === 'number'" class="result-score">
+                        score: {{ chunk.score.toFixed(4) }}
+                      </span>
+                      <span
+                        v-if="typeof chunk.rerank_score === 'number'"
+                        class="result-rerank-score"
+                      >
+                        rerank: {{ chunk.rerank_score.toFixed(4) }}
+                      </span>
+                      <span class="result-score">{{ queryResult.retrieval.mode }}</span>
+                      <span v-if="chunk.metadata?.document_version" class="result-version">
+                        V{{ chunk.metadata.document_version }} 当前版本
+                      </span>
+                    </div>
+
+                    <div class="result-content">{{ chunk.content }}</div>
+
+                    <div class="result-metadata">
+                      <span v-if="chunk.metadata?.source" class="metadata-item">
+                        <strong>文件:</strong> {{ chunk.metadata.source }}
+                      </span>
+                      <span v-if="chunk.file_id" class="metadata-item">
+                        <strong>file_id:</strong> {{ chunk.file_id }}
+                      </span>
+                      <span v-if="chunk.id" class="metadata-item">
+                        <strong>chunk_id:</strong> {{ chunk.id }}
+                      </span>
+                      <span v-if="chunk.metadata?.chunk_index !== undefined" class="metadata-item">
+                        <strong>块索引:</strong> {{ chunk.metadata.chunk_index }}
+                      </span>
+                      <span v-if="typeof chunk.distance === 'number'" class="metadata-item">
+                        <strong>距离:</strong> {{ chunk.distance.toFixed(4) }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div v-for="(chunk, index) in queryResult" :key="index" class="result-item">
-                  <div class="result-header">
-                    <span class="result-index">#{{ index + 1 }}</span>
-                    <span v-if="chunk.score" class="result-score">
-                      相似度: {{ (chunk.score * 100).toFixed(2) }}%
-                    </span>
-                    <span v-if="chunk.rerank_score" class="result-rerank-score">
-                      重排序分数: {{ (chunk.rerank_score * 100).toFixed(2) }}%
-                    </span>
-                  </div>
-
-                  <div class="result-content">
-                    {{ chunk.content }}
-                  </div>
-
-                  <div class="result-metadata">
-                    <span v-if="chunk.metadata?.source" class="metadata-item">
-                      <strong>来源:</strong> {{ chunk.metadata.source }}
-                    </span>
-                    <span v-if="chunk.metadata?.file_id" class="metadata-item">
-                      <strong>文件ID:</strong> {{ chunk.metadata.file_id }}
-                    </span>
-                    <span v-if="chunk.metadata?.chunk_index !== undefined" class="metadata-item">
-                      <strong>块索引:</strong> {{ chunk.metadata.chunk_index }}
-                    </span>
-                    <span v-if="chunk.distance !== undefined" class="metadata-item">
-                      <strong>距离:</strong> {{ chunk.distance.toFixed(4) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 其他格式（降级处理） -->
-            <div v-else class="result-unknown">
-              <pre>{{ JSON.stringify(queryResult, null, 2) }}</pre>
-            </div>
+              </a-collapse-panel>
+            </a-collapse>
           </div>
-          <!-- 关闭格式化显示的div -->
         </div>
 
         <div v-else-if="showQuerySuggestions" class="query-suggestions">
@@ -162,6 +191,9 @@ import { message } from 'ant-design-vue'
 import { queryApi } from '@/apis/knowledge_api'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import { Braces, RefreshCw } from 'lucide-vue-next'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
+import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
+import { normalizeKnowledgePreview } from '@/utils/knowledgePreview'
 
 const store = useDatabaseStore()
 const MAX_VISIBLE_EXAMPLES = 10
@@ -185,9 +217,10 @@ const props = defineProps({
 defineEmits(['toggleVisible'])
 
 const searchLoading = computed(() => store.state.searchLoading)
-const queryResult = ref('')
+const queryResult = ref(null)
 const showRawData = ref(false)
 const showQuerySuggestions = computed(() => !searchLoading.value && !queryResult.value)
+const retrievalActiveKeys = ref([])
 
 // 查询测试
 const queryText = ref('')
@@ -283,11 +316,12 @@ const generateSampleQuestions = async (silent = false) => {
 
 const useQueryExample = (example) => {
   queryText.value = example
-  onQuery()
+  onQuery(true)
 }
 
 const clearQueryResult = () => {
-  queryResult.value = ''
+  queryResult.value = null
+  retrievalActiveKeys.value = []
 }
 
 // 监听知识库ID变化，切换知识库时重新加载问题
@@ -305,7 +339,7 @@ watch(
   { immediate: false }
 )
 
-const onQuery = async () => {
+const onQuery = async (generateAnswer = true) => {
   if (!queryText.value.trim()) {
     message.error('请输入查询内容')
     return
@@ -317,12 +351,18 @@ const onQuery = async () => {
   const queryMeta = { ...store.meta }
 
   try {
-    const data = await queryApi.queryTest(store.database.kb_id, queryText.value.trim(), queryMeta)
-    queryResult.value = data
+    const data = await queryApi.preview(
+      store.database.kb_id,
+      queryText.value.trim(),
+      queryMeta,
+      generateAnswer
+    )
+    queryResult.value = normalizeKnowledgePreview(data)
+    retrievalActiveKeys.value = []
   } catch (error) {
     console.error(error)
-    message.error(error.message)
-    queryResult.value = ''
+    message.error(error?.message || '预览失败，请稍后重试')
+    queryResult.value = null
   } finally {
     store.state.searchLoading = false
   }
@@ -451,6 +491,17 @@ defineExpose({
   }
 }
 
+.retrieval-only-button {
+  border-color: var(--gray-200);
+  background: var(--gray-0);
+  color: var(--gray-700);
+
+  &:hover:not(:disabled) {
+    border-color: var(--main-300);
+    color: var(--main-color);
+  }
+}
+
 .format-toggle-btn {
   color: var(--gray-500);
   display: flex;
@@ -474,6 +525,73 @@ defineExpose({
   overflow-y: auto;
   background-color: var(--gray-25);
   min-height: 0;
+
+  .preview-result {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  > .preview-result > .result-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background-color: var(--main-50);
+    color: var(--gray-800);
+    font-size: 13px;
+
+    span {
+      font-weight: 500;
+    }
+  }
+
+  .answer-preview-card,
+  .citation-preview-card {
+    padding: 14px;
+    border: 1px solid var(--gray-150);
+    border-radius: 8px;
+    background: var(--gray-0);
+  }
+
+  .preview-section-title {
+    margin-bottom: 10px;
+    color: var(--gray-800);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .answer-content {
+    color: var(--gray-900);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .answer-model {
+    margin-top: 10px;
+    color: var(--gray-500);
+    font-size: 11px;
+  }
+
+  .retrieval-details {
+    border: 1px solid var(--gray-150);
+    border-radius: 8px;
+    background: var(--gray-0);
+
+    :deep(.ant-collapse-header) {
+      color: var(--gray-700);
+      font-size: 13px;
+      font-weight: 500;
+    }
+  }
+
+  .no-results {
+    padding: 24px;
+    color: var(--gray-500);
+    text-align: center;
+  }
 
   .result-raw {
     padding: 16px;
@@ -581,6 +699,14 @@ defineExpose({
         .result-rerank-score {
           background-color: var(--color-warning-50);
           color: var(--color-warning-700);
+        }
+
+        .result-version {
+          padding: 2px 8px;
+          border-radius: 12px;
+          background: var(--color-success-50);
+          color: var(--color-success-700);
+          font-size: 12px;
         }
       }
 

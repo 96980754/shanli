@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.storage.postgres.models_business import APIKey, Department, User
 from yuxi.repositories.department_repository import DepartmentRepository
 from yuxi.repositories.user_repository import UserRepository
+from yuxi.repositories.team_repository import TeamRepository
 from server.utils.auth_middleware import get_superadmin_user, get_admin_user, get_db
 from yuxi.utils.auth_utils import AuthUtils
 from yuxi.services.operation_log_service import log_operation
@@ -53,6 +54,39 @@ class DepartmentResponse(BaseModel):
     description: str | None = None
     created_at: str
     user_count: int = 0
+
+
+class TeamCreate(BaseModel):
+    """创建团队请求"""
+
+    name: str
+    description: str | None = None
+
+
+class TeamUpdate(BaseModel):
+    """更新团队请求"""
+
+    name: str | None = None
+    description: str | None = None
+
+
+class TeamMembersUpdate(BaseModel):
+    """设置团队成员请求（勾选的用户 id 全集）"""
+
+    user_ids: list[int]
+
+
+class TeamResponse(BaseModel):
+    """团队响应"""
+
+    id: int
+    department_id: int
+    name: str
+    description: str | None = None
+    is_default: bool
+    created_at: str
+    user_count: int = 0
+    department_name: str | None = None
 
 
 # =============================================================================
@@ -142,8 +176,14 @@ async def create_department(
         }
     )
 
-    # 创建管理员用户
+    # 创建默认团队
+    await TeamRepository().create(
+        new_department.id, "默认团队", "系统自动创建的默认团队", is_default=True
+    )
+
+    # 创建管理员用户（落到默认团队）
     hashed_password = AuthUtils.hash_password(department_data.admin_password)
+    default_team = await TeamRepository().get_default(new_department.id)
     await user_repo.create(
         {
             "username": admin_uid,
@@ -152,6 +192,7 @@ async def create_department(
             "password_hash": hashed_password,
             "role": "admin",
             "department_id": new_department.id,
+            "team_id": default_team.id if default_team else None,
         }
     )
 
@@ -227,8 +268,10 @@ async def delete_department(
     department_users = result.scalars().all()
 
     if department_users:
+        default_team = await TeamRepository().get_default(1)
         for user in department_users:
             user.department_id = 1  # 将被删除部门的用户移至默认部门
+            user.team_id = default_team.id if default_team else None  # 团队同步迁到默认部门默认团队
 
     await db.execute(sqlalchemy_delete(APIKey).where(APIKey.department_id == department_id))
     await db.delete(department)
@@ -242,3 +285,136 @@ async def delete_department(
     await log_operation(db, current_user.id, "删除部门", detail, request)
 
     return {"success": True, "message": "部门已删除"}
+
+
+# =============================================================================
+# === 团队管理路由 ===
+# =============================================================================
+
+
+def _ensure_team_scope(current_user: User, department_id: int) -> None:
+    """普通管理员只能管理本部门团队"""
+    if current_user.role == "superadmin":
+        return
+    if current_user.department_id != department_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只能管理本部门团队",
+        )
+
+
+async def _team_response(team) -> dict:
+    data = team.to_dict()
+    data["user_count"] = await TeamRepository().count_users(team.id)
+    return data
+
+
+@department.get("/{department_id}/teams", response_model=list[TeamResponse])
+async def get_department_teams(
+    department_id: int, current_user: User = Depends(get_admin_user)
+):
+    """获取部门下的团队列表（管理员可访问）"""
+    _ensure_team_scope(current_user, department_id)
+    teams = await TeamRepository().list_by_department(department_id)
+    return [await _team_response(team) for team in teams]
+
+
+@department.post("/{department_id}/teams", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
+async def create_team(
+    department_id: int,
+    team_data: TeamCreate,
+    current_user: User = Depends(get_admin_user),
+):
+    """创建团队（默认团队由系统自动创建）"""
+    _ensure_team_scope(current_user, department_id)
+    name = team_data.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="团队名称不能为空")
+    team_repo = TeamRepository()
+    teams = await team_repo.list_by_department(department_id)
+    if any(t.name == name for t in teams):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="部门下已存在同名团队")
+    team = await team_repo.create(department_id, name, team_data.description, is_default=False)
+    return await _team_response(team)
+
+
+@department.put("/{department_id}/teams/{team_id}", response_model=TeamResponse)
+async def update_team(
+    department_id: int,
+    team_id: int,
+    team_data: TeamUpdate,
+    current_user: User = Depends(get_admin_user),
+):
+    """更新团队名称/描述"""
+    _ensure_team_scope(current_user, department_id)
+    team_repo = TeamRepository()
+    team = await team_repo.get_by_id(team_id)
+    if team is None or team.department_id != department_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="团队不存在")
+    data = {}
+    if team_data.name is not None:
+        name = team_data.name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="团队名称不能为空")
+        teams = await team_repo.list_by_department(department_id)
+        if any(t.name == name and t.id != team_id for t in teams):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="部门下已存在同名团队")
+        data["name"] = name
+    if team_data.description is not None:
+        data["description"] = team_data.description
+    if data:
+        team = await team_repo.update(team_id, data)
+    return await _team_response(team)
+
+
+@department.put("/{department_id}/teams/{team_id}/members", status_code=status.HTTP_200_OK)
+async def update_team_members(
+    department_id: int,
+    team_id: int,
+    payload: TeamMembersUpdate,
+    current_user: User = Depends(get_admin_user),
+):
+    """设置团队成员：勾选的用户加入团队，取消勾选的原成员回到本部门默认团队"""
+    _ensure_team_scope(current_user, department_id)
+    team_repo = TeamRepository()
+    team = await team_repo.get_by_id(team_id)
+    if team is None or team.department_id != department_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="团队不存在")
+    try:
+        await team_repo.set_members(team_id, department_id, payload.user_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"success": True, "message": "团队成员已更新"}
+
+
+@department.delete("/{department_id}/teams/{team_id}", status_code=status.HTTP_200_OK)
+async def delete_team(
+    department_id: int,
+    team_id: int,
+    current_user: User = Depends(get_admin_user),
+):
+    """删除团队（默认团队拒绝；成员自动迁回默认团队）"""
+    _ensure_team_scope(current_user, department_id)
+    team_repo = TeamRepository()
+    team = await team_repo.get_by_id(team_id)
+    if team is None or team.department_id != department_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="团队不存在")
+    if team.is_default:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="默认团队不允许删除")
+    await team_repo.delete(team_id)
+    return {"success": True, "message": "团队已删除"}
+
+
+# 全局团队列表（供知识库权限面板渲染选项与标签）
+team = APIRouter(prefix="/teams", tags=["team"])
+
+
+@team.get("", response_model=list[TeamResponse])
+async def get_all_teams(current_user: User = Depends(get_admin_user)):
+    """获取全部团队（含部门名）"""
+    teams = await TeamRepository().list_with_department()
+    result = []
+    for team_dict in teams:
+        team_dict["user_count"] = await TeamRepository().count_users(team_dict["id"])
+        result.append(team_dict)
+    return result

@@ -177,10 +177,6 @@ const props = defineProps({
       user_uids: []
     })
   },
-  autoSelectUserDept: {
-    type: Boolean,
-    default: false
-  },
   disabled: {
     type: Boolean,
     default: false
@@ -208,11 +204,6 @@ const selectionSearch = reactive({
   user: ''
 })
 
-const currentDepartmentId = computed(() => {
-  if (!userStore.departmentId) return null
-  return Number(userStore.departmentId)
-})
-
 const currentUserUid = computed(() => userStore.uid || '')
 const normalizedAllowedAccessLevels = computed(() => {
   const allowed = props.allowedAccessLevels.filter((level) =>
@@ -227,14 +218,10 @@ const shareModeOptions = computed(() =>
 )
 
 const departmentOptions = computed(() =>
-  departments.value.map((dept) => {
-    const value = Number(dept.id)
-    return {
-      label: dept.name,
-      value,
-      disabled: value === currentDepartmentId.value
-    }
-  })
+  departments.value.map((dept) => ({
+    label: dept.name,
+    value: Number(dept.id)
+  }))
 )
 
 const userOptions = computed(() =>
@@ -250,13 +237,6 @@ const normalizeDepartmentIds = (ids) =>
 
 const normalizeUserUids = (uids) =>
   Array.from(new Set((uids || []).map((uid) => String(uid).trim()).filter(Boolean)))
-
-const ensureCurrentDepartment = () => {
-  if (!props.autoSelectUserDept || !currentDepartmentId.value) return
-  if (!config.department_ids.includes(currentDepartmentId.value)) {
-    config.department_ids = [currentDepartmentId.value, ...config.department_ids]
-  }
-}
 
 const ensureCurrentUser = () => {
   if (!currentUserUid.value) return
@@ -275,7 +255,6 @@ const normalizeActiveConfig = () => {
   if (config.access_level === 'department') {
     config.department_ids = normalizeDepartmentIds(config.department_ids)
     config.user_uids = []
-    ensureCurrentDepartment()
     return
   }
 
@@ -352,7 +331,6 @@ const toggleSelection = (accessLevel, value, checked) => {
       ? [...config.department_ids, departmentId]
       : config.department_ids.filter((id) => id !== departmentId)
     config.department_ids = normalizeDepartmentIds(selected)
-    ensureCurrentDepartment()
     return
   }
 
@@ -368,7 +346,6 @@ const loadDepartments = async () => {
   try {
     const res = await departmentApi.getDepartments()
     departments.value = res.departments || res || []
-    if (config.access_level === 'department') ensureCurrentDepartment()
   } catch (e) {
     console.error('加载部门列表失败:', e)
     departments.value = []
@@ -401,10 +378,6 @@ watch(
   { deep: true }
 )
 
-watch(currentDepartmentId, () => {
-  if (config.access_level === 'department') ensureCurrentDepartment()
-})
-
 watch(currentUserUid, () => {
   if (config.access_level === 'user') ensureCurrentUser()
 })
@@ -417,11 +390,9 @@ const validate = () => {
   }
 
   if (config.access_level === 'department') {
-    if (!currentDepartmentId.value) {
-      return { valid: false, message: '您不属于任何部门，无法使用部门共享模式' }
-    }
-    if (!config.department_ids.includes(currentDepartmentId.value)) {
-      return { valid: false, message: '您所在的部门必须在可访问部门范围内' }
+    // 编辑者的访问权由后端角色/创建者/显式授权保证，共享范围不再强制包含本人部门
+    if (config.department_ids.length === 0) {
+      return { valid: false, message: '请至少选择一个部门' }
     }
     return { valid: true, message: '' }
   }

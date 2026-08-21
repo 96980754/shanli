@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from server.routers.agent_invocation_router import agent_invocation_router
 from server.routers.agent_router import agent_router
-from server.routers.auth_dept_router import department
+from server.routers.auth_dept_router import department, team
 from server.routers.auth_router import auth
 from server.routers.chat_router import chat
 from server.routers.dashboard_router import dashboard
@@ -36,6 +36,7 @@ router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
 router.include_router(dashboard)  # /api/dashboard/* 仪表盘聚合数据
 router.include_router(feedback_dashboard)  # /api/dashboard/feedback-summary 反馈汇总统计
 router.include_router(department)  # /api/departments/* 部门与权限相关数据
+router.include_router(team)  # /api/teams/* 团队列表（知识库权限面板选项）
 router.include_router(tasks)  # /api/tasks/* 后台任务查询与管理
 router.include_router(mcp)  # /api/system/mcp-servers/* MCP 服务管理
 router.include_router(model_providers)  # /api/system/model-providers/* 独立模型配置

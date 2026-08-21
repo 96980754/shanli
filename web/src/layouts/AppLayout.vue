@@ -325,9 +325,9 @@ provide('settingsModal', {
         </button>
       </div>
       <div class="nav">
-        <!-- 全库搜索入口（仅管理员可见） -->
+        <!-- 全库搜索入口（仅管理员可见）——此功能之后再启用，暂隐藏（v-if="false" 改为 true 即可恢复） -->
         <button
-          v-if="userStore.isAdmin"
+          v-if="false && userStore.isAdmin"
           type="button"
           class="nav-item"
           :class="{ active: globalKnowledgeSearchOpen }"

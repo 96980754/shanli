@@ -241,9 +241,7 @@ class KnowledgeChunkRepository:
     async def clear_extraction_result(self, chunk_id: str) -> None:
         async with pg_manager.get_async_session_context() as session:
             await session.execute(
-                update(KnowledgeChunk)
-                .where(KnowledgeChunk.chunk_id == chunk_id)
-                .values(extraction_result=None)
+                update(KnowledgeChunk).where(KnowledgeChunk.chunk_id == chunk_id).values(extraction_result=None)
             )
 
     async def mark_graph_indexed(

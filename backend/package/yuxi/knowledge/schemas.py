@@ -53,13 +53,19 @@ class SearchOutputSchema(BaseModel):
         elif self.status == "insufficient":
             if self.reason not in {"no_results", "empty_content"} or self.results or self.error is not None:
                 raise ValueError("insufficient 状态必须包含有效 reason，且 results/error 为空")
-        elif self.reason not in {
-            "invalid_request",
-            "permission_denied",
-            "knowledge_base_unavailable",
-            "retrieval_error",
-            "invalid_result",
-        } or self.results or self.error is None or self.error.code != self.reason:
+        elif (
+            self.reason
+            not in {
+                "invalid_request",
+                "permission_denied",
+                "knowledge_base_unavailable",
+                "retrieval_error",
+                "invalid_result",
+            }
+            or self.results
+            or self.error is None
+            or self.error.code != self.reason
+        ):
             raise ValueError("error 状态必须包含匹配的 reason/error，且 results 为空")
         return self
 

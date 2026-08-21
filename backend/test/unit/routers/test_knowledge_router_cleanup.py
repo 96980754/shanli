@@ -29,7 +29,7 @@ class FakeTaskContext:
 
 
 def user(uid: str):
-    return SimpleNamespace(uid=uid, role="admin", department_id=1)
+    return SimpleNamespace(uid=uid, role="admin", department_id=1, team_id=None)
 
 
 @pytest.fixture(autouse=True)

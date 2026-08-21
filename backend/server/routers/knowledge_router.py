@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
 from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
 from yuxi.repositories.task_repository import TaskRepository
@@ -77,6 +77,12 @@ from yuxi.knowledge.utils.url_fetcher import fetch_url_content
 from yuxi.models.providers.cache import model_cache
 from yuxi.services.document_version_service import DocumentVersionService
 from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
+from yuxi.services.knowledge_preview_service import (
+    KnowledgePreviewModelError,
+    KnowledgePreviewRetrievalError,
+    KnowledgePreviewService,
+)
+from yuxi.services.knowledge_source_version_service import KnowledgeSourceVersionService
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
@@ -180,6 +186,7 @@ class DocumentCleanBatchRequest(BaseModel):
 
 class CleanWritebackRequest(BaseModel):
     """清洗后写回原格式：cleaned_markdown 按 filename 后缀写回 docx/xlsx 并上传。"""
+
     cleaned_markdown: str
     filename: str
 
@@ -288,8 +295,8 @@ class KnowledgeConflictBatchResolveRequest(BaseModel):
 
 class SaveEditedDocumentRequest(BaseModel):
     content_type: str  # 'docx' | 'xlsx'
-    blocks: list[dict] | None = None   # docx 编辑结果
-    sheets: list[dict] | None = None   # xlsx 编辑结果
+    blocks: list[dict] | None = None  # docx 编辑结果
+    sheets: list[dict] | None = None  # xlsx 编辑结果
     filename: str | None = None
 
 
@@ -336,6 +343,27 @@ class PendingIndexDocumentsRequest(BaseModel):
 class GlobalKnowledgeSearchRequest(BaseModel):
     query: str
     limit: int = 10
+
+
+class KnowledgePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=4000)
+    meta: dict = Field(default_factory=dict)
+    generate_answer: bool = True
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("问题不能为空")
+        return value
+
+
+class SourceVersionBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_ids: list[str] = Field(min_length=1, max_length=200)
 
 
 class KnowledgeHandoffRequest(BaseModel):
@@ -501,7 +529,7 @@ async def _has_running_graph_build_task(kb_id: str) -> bool:
 
 
 def _user_permission_context(user: User) -> dict:
-    return {"uid": user.uid, "role": user.role, "department_id": user.department_id}
+    return {"uid": user.uid, "role": user.role, "department_id": user.department_id, "team_id": user.team_id}
 
 
 def _serialize_kb_permission(permission) -> dict:
@@ -768,7 +796,6 @@ async def create_database(
             category_id=category_id,
             share_config=share_config,
             created_by=current_user.uid,
-            created_by_department_id=current_user.department_id,
             **additional_params,
         )
 
@@ -982,7 +1009,6 @@ async def update_database_info(
             additional_params=additional_params,
             share_config=data.share_config,
             operator_uid=current_user.uid,
-            operator_department_id=current_user.department_id,
         )
         return {"message": "更新成功", "database": database}
     except HTTPException:
@@ -1395,6 +1421,22 @@ async def list_document_versions(
     }
 
 
+@knowledge.post("/databases/{kb_id}/source-versions")
+async def list_source_versions(
+    kb_id: str,
+    request: SourceVersionBatchRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _require_kb_permission(current_user, kb_id, "can_download")
+    await _ensure_database_supports_documents(kb_id, "来源版本下载")
+    items = await KnowledgeSourceVersionService().list_for_current_files(
+        kb_id=kb_id,
+        file_ids=request.file_ids,
+    )
+    return {"items": items}
+
+
 @knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/validation-report")
 async def get_document_validation_report(
     kb_id: str,
@@ -1682,8 +1724,7 @@ async def add_documents(
                 parsed_files = [
                     record
                     for record in added_files
-                    if record["file_meta"].get("status") == "parsed"
-                    and (auto_index or record.get("requires_index"))
+                    if record["file_meta"].get("status") == "parsed" and (auto_index or record.get("requires_index"))
                 ]
                 total_parsed = len(parsed_files)
 
@@ -2420,9 +2461,7 @@ async def office_writeback(
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/office-content")
-async def get_office_content(
-    kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)
-):
+async def get_office_content(kb_id: str, doc_id: str, current_user: User = Depends(get_required_user)):
     """获取 Word/Excel 的可编辑结构化内容（docx→blocks, xlsx→sheets）。"""
     await _require_kb_permission(current_user, kb_id, "can_view")
     try:
@@ -2643,6 +2682,26 @@ async def query_test(
         return {"message": f"测试查询失败: {e}", "status": "failed"}
 
 
+@knowledge.post("/databases/{kb_id}/preview")
+async def preview_knowledge_base(
+    kb_id: str,
+    request: KnowledgePreviewRequest,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_search")
+    try:
+        return await KnowledgePreviewService().preview(
+            kb_id=kb_id,
+            query=request.query.strip(),
+            meta=request.meta,
+            generate_answer=request.generate_answer,
+        )
+    except KnowledgePreviewRetrievalError as exc:
+        raise HTTPException(status_code=503, detail="知识库检索服务暂时不可用") from exc
+    except KnowledgePreviewModelError as exc:
+        raise HTTPException(status_code=503, detail="回答模型暂时不可用，请检查知识库模型配置") from exc
+
+
 @knowledge.put("/databases/{kb_id}/query-params")
 async def update_knowledge_base_query_params(
     kb_id: str, params: dict = Body(...), current_user: User = Depends(get_required_user)
@@ -2795,6 +2854,21 @@ async def move_document(
     except Exception as e:
         logger.error(f"移动文件失败 {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@knowledge.get("/databases/{kb_id}/folders/{folder_id}/chain")
+async def get_folder_chain(
+    kb_id: str,
+    folder_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """返回真实文件夹的祖先链（top-down，含目标自身），供全库搜索等入口深链进入文件浏览。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文件夹目录")
+    chain = await KnowledgeFileRepository().get_folder_chain(kb_id=kb_id, folder_id=folder_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="文件夹不存在")
+    return {"folder_id": folder_id, "chain": chain}
 
 
 @knowledge.post("/files/fetch-url")
@@ -3142,13 +3216,9 @@ async def clean_writeback_route(
     try:
         suffix = os.path.splitext(request.filename or "")[1].lower()
         if suffix == ".xlsx":
-            new_bytes = serialize_edited_content(
-                "xlsx", {"sheets": markdown_to_sheets(request.cleaned_markdown)}
-            )
+            new_bytes = serialize_edited_content("xlsx", {"sheets": markdown_to_sheets(request.cleaned_markdown)})
         else:
-            new_bytes = serialize_edited_content(
-                "docx", {"blocks": markdown_to_blocks(request.cleaned_markdown)}
-            )
+            new_bytes = serialize_edited_content("docx", {"blocks": markdown_to_blocks(request.cleaned_markdown)})
         if not new_bytes:
             raise HTTPException(status_code=400, detail="清洗后内容为空")
         file_path = await knowledge_base.upload_office_bytes(kb_id, new_bytes, request.filename)
@@ -3424,6 +3494,8 @@ async def generate_description(
     except Exception as e:
         logger.error(f"生成描述失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"生成描述失败: {e}")
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/enrichment")
 async def get_document_enrichment(
     kb_id: str,
@@ -3438,6 +3510,8 @@ async def get_document_enrichment(
         return payload
     except Exception as error:  # noqa: BLE001
         _raise_enrichment_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/enrichment/generate")
 async def generate_document_enrichment(
     kb_id: str,
@@ -3462,6 +3536,8 @@ async def generate_document_enrichment(
         }
     except Exception as error:  # noqa: BLE001
         _raise_enrichment_http_error(error)
+
+
 @knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/summary")
 async def update_document_summary(
     kb_id: str,
@@ -3481,6 +3557,8 @@ async def update_document_summary(
         )
     except Exception as error:  # noqa: BLE001
         _raise_enrichment_http_error(error)
+
+
 @knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/keywords")
 async def update_document_keywords(
     kb_id: str,
@@ -3500,6 +3578,8 @@ async def update_document_keywords(
         )
     except Exception as error:  # noqa: BLE001
         _raise_enrichment_http_error(error)
+
+
 @knowledge.put("/databases/{kb_id}/documents/{file_id}/enrichment/tags")
 async def update_document_tags(
     kb_id: str,
@@ -3519,6 +3599,8 @@ async def update_document_tags(
         )
     except Exception as error:  # noqa: BLE001
         _raise_enrichment_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/enrichment/generate")
 async def batch_generate_document_enrichment(
     kb_id: str,
@@ -3542,6 +3624,8 @@ async def batch_generate_document_enrichment(
         except Exception as error:  # noqa: BLE001
             failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
     return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/qa")
 async def list_document_qa(
     kb_id: str,
@@ -3556,6 +3640,8 @@ async def list_document_qa(
         return payload
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
 async def get_document_qa(
     kb_id: str,
@@ -3571,6 +3657,8 @@ async def get_document_qa(
         return payload
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/generate")
 async def generate_document_qa(
     kb_id: str,
@@ -3591,6 +3679,8 @@ async def generate_document_qa(
         return {"status": "queued", "task_id": task_id, "created": created}
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.get("/databases/{kb_id}/documents/{file_id}/qa/tasks/{task_id}")
 async def get_document_qa_generation_task(
     kb_id: str,
@@ -3615,6 +3705,8 @@ async def get_document_qa_generation_task(
         "message": task.get("message"),
         "error": sanitize_processing_error(task["error"]) if task.get("error") else None,
     }
+
+
 @knowledge.post("/databases/{kb_id}/documents/qa/generate")
 async def batch_generate_document_qa(
     kb_id: str,
@@ -3638,6 +3730,8 @@ async def batch_generate_document_qa(
         except Exception as error:  # noqa: BLE001
             failed.append({"file_id": file_id, "error": sanitize_processing_error(error)})
     return {"status": "queued" if queued else "failed", "queued": queued, "failed": failed}
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/qa")
 async def create_manual_document_qa(
     kb_id: str,
@@ -3659,6 +3753,8 @@ async def create_manual_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.put("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
 async def update_document_qa(
     kb_id: str,
@@ -3685,6 +3781,8 @@ async def update_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/confirm")
 async def confirm_document_qa(
     kb_id: str,
@@ -3705,6 +3803,8 @@ async def confirm_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/confirm")
 async def batch_confirm_document_qa(
     kb_id: str,
@@ -3731,6 +3831,8 @@ async def batch_confirm_document_qa(
         except Exception as error:  # noqa: BLE001
             failed.append({"qa_id": item.qa_id, "error": sanitize_processing_error(error)})
     return {"confirmed": confirmed, "failed": failed}
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}/reject")
 async def reject_document_qa(
     kb_id: str,
@@ -3751,6 +3853,8 @@ async def reject_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.delete("/databases/{kb_id}/documents/{file_id}/qa/{qa_id}")
 async def delete_document_qa(
     kb_id: str,
@@ -3771,6 +3875,8 @@ async def delete_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")
 async def retry_replacement_cleanup(
     kb_id: str,
@@ -3784,6 +3890,8 @@ async def retry_replacement_cleanup(
     record = await service.file_repository.get_by_file_id(file_id)
     if record is None or record.kb_id != kb_id:
         raise HTTPException(status_code=404, detail="文档不存在")
+
+
 @knowledge.get("/databases/{kb_id}/conflicts")
 async def list_knowledge_conflicts(
     kb_id: str,
@@ -3794,6 +3902,8 @@ async def list_knowledge_conflicts(
     payload = await KnowledgeConflictService().list_conflicts(kb_id=kb_id, status=status)
     payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
     return payload
+
+
 @knowledge.get("/databases/{kb_id}/conflicts/{conflict_id}")
 async def get_knowledge_conflict(
     kb_id: str,
@@ -3807,6 +3917,8 @@ async def get_knowledge_conflict(
         _raise_knowledge_conflict_http_error(error)
     payload["readonly"] = not await _has_kb_permission(current_user, kb_id, "can_manage")
     return payload
+
+
 @knowledge.post("/databases/{kb_id}/assertions/evaluate")
 async def evaluate_knowledge_assertion(
     kb_id: str,
@@ -3822,6 +3934,8 @@ async def evaluate_knowledge_assertion(
         )
     except KnowledgeConflictError as error:
         _raise_knowledge_conflict_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/resolve")
 async def resolve_knowledge_conflict(
     kb_id: str,
@@ -3842,6 +3956,8 @@ async def resolve_knowledge_conflict(
         )
     except KnowledgeConflictError as error:
         _raise_knowledge_conflict_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/conflicts/{conflict_id}/publish/retry")
 async def retry_knowledge_conflict_publish(
     kb_id: str,
@@ -3853,6 +3969,8 @@ async def retry_knowledge_conflict_publish(
         return await KnowledgeConflictService().retry_publish(kb_id=kb_id, conflict_id=conflict_id)
     except KnowledgeConflictError as error:
         _raise_knowledge_conflict_http_error(error)
+
+
 @knowledge.post("/databases/{kb_id}/conflicts/batch-resolve")
 async def batch_resolve_knowledge_conflicts(
     kb_id: str,
@@ -3868,6 +3986,8 @@ async def batch_resolve_knowledge_conflicts(
         )
     except KnowledgeConflictError as error:
         _raise_knowledge_conflict_http_error(error)
+
+
 @knowledge.get("/databases/{kb_id}/entity-link-candidates")
 async def list_entity_link_candidates(
     kb_id: str,

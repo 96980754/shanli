@@ -121,9 +121,7 @@ async def generate_testset_jsonl(
     return rows
 
 
-def _generate_prechunked_testset(
-    generator: Any, documents: list[Any], size: int, *, run_config: Any
-) -> Any:
+def _generate_prechunked_testset(generator: Any, documents: list[Any], size: int, *, run_config: Any) -> Any:
     """把已入库 chunks 视为预切分文档，走 RAGAS 生成链路。
 
     不能用 generate_with_langchain_docs：它对 DOCUMENT 节点套用 default_transforms，

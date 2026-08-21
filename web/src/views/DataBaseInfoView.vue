@@ -202,7 +202,7 @@
           </div>
 
           <div
-            v-if="userStore.isAdmin"
+            v-if="kbPermissions.can_search"
             v-show="activeTab === 'query'"
             class="tab-panel query-config-panel"
           >
@@ -211,11 +211,15 @@
                 <QuerySection
                   ref="querySectionRef"
                   :visible="true"
-                  :can-manage="userStore.isAdmin"
+                  :can-manage="kbPermissions.can_manage"
                   @toggle-visible="() => {}"
                 />
               </div>
-              <aside v-if="userStore.isAdmin" class="query-config-pane" aria-label="检索配置">
+              <aside
+                v-if="kbPermissions.can_manage"
+                class="query-config-pane"
+                aria-label="检索配置"
+              >
                 <div class="search-config-wrapper">
                   <div v-if="kbPermissions.can_manage" class="query-config-header">
                     <div>
@@ -253,7 +257,7 @@
           </div>
 
           <div v-if="activeTab === 'permissions'" class="tab-panel">
-            <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" />
+            <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" :database="database" />
           </div>
         </main>
       </div>
@@ -265,7 +269,7 @@
           <template #icon>
             <Trash2 :size="16" style="vertical-align: -3px; margin-right: 4px" />
           </template>
-          删除数据库
+          删除知识库
         </a-button>
         <a-button key="back" @click="editModalVisible = false">取消</a-button>
         <a-button key="submit" type="primary" @click="handleEditSubmit">确定</a-button>
@@ -367,11 +371,7 @@
 
         <a-form-item v-if="canEditShareConfig" label="共享设置" name="share_config">
           <a-form-item-rest>
-            <ShareConfigForm
-              ref="shareConfigFormRef"
-              :model-value="database.share_config"
-              :auto-select-user-dept="true"
-            />
+            <ShareConfigForm ref="shareConfigFormRef" :model-value="database.share_config" />
           </a-form-item-rest>
         </a-form-item>
         <a-form-item
@@ -491,7 +491,7 @@ const tabs = computed(() => {
   if (isMilvus.value && kbPermissions.can_view) {
     items.push({ key: 'filetable', label: '文件管理', icon: FileText })
   }
-  if (userStore.isAdmin) {
+  if (kbPermissions.can_search) {
     items.push({ key: 'query', label: '检索测试', icon: Search })
   }
   if (isMilvus.value && userStore.isAdmin) {
@@ -676,7 +676,8 @@ const onFileUploadSuccess = () => {
 const resetFileSelectionState = () => {
   store.selectedRowKeys = []
   store.closeFileDetail()
-  store.resetFileBrowser()
+  // 不在此处 resetFileBrowser：文件浏览器由 FileTable 在 kbId watch 中负责重置与导航，
+  // 这里再 reset 会因 fileBrowserContextId 失效丢弃 ?path= 直达目录的加载结果（空白目录问题）
 }
 
 watch(
