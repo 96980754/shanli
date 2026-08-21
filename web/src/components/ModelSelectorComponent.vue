@@ -19,7 +19,7 @@
             <X :size="14" />
           </button>
         </div>
-        <div v-if="resolvedSize !== 'nano'" class="model-status-controls">
+        <div v-if="resolvedSize !== 'nano' && showStatus" class="model-status-controls">
           <span
             v-if="state.currentModelStatus"
             class="model-status-indicator"
@@ -125,6 +125,14 @@ const props = defineProps({
     type: String,
     default: 'full',
     validator: (value) => ['full', 'short', 'mini'].includes(value)
+  },
+  modelType: {
+    type: String,
+    default: 'chat'
+  },
+  showStatus: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -184,7 +192,7 @@ const fetchV2Models = async () => {
   loadingV2Models.value = true
   fetchV2ModelsPromise = (async () => {
     try {
-      const response = await modelProviderApi.getV2Models('chat')
+      const response = await modelProviderApi.getV2Models(props.modelType)
       if (response.success) {
         v2Models.value = response.data || {}
       }

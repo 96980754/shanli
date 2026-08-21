@@ -876,6 +876,7 @@ defineExpose({
             <a-select-option value="chat">chat</a-select-option>
             <a-select-option value="embedding">embedding</a-select-option>
             <a-select-option value="rerank">rerank</a-select-option>
+            <a-select-option value="transcription">transcription</a-select-option>
           </a-select>
         </label>
 

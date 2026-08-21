@@ -60,6 +60,7 @@
     </template>
     <template #actions-left>
       <div class="input-actions-left">
+        <VoiceInputButton :disabled="disabled" @transcript="handleTranscript" />
         <slot name="actions-left-extra"></slot>
       </div>
     </template>
@@ -80,6 +81,7 @@ import { X } from 'lucide-vue-next'
 import { normalizeAttachmentPreviews } from '@/utils/file_utils'
 import { uploadMultimodalImage } from '@/utils/multimodal_image_upload'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
+import VoiceInputButton from '@/components/VoiceInputButton.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -151,6 +153,10 @@ const handleImageRemoved = () => {
 
 const handleAttachmentRemoved = (attachment) => {
   emit('remove-attachment', attachment.raw)
+}
+
+const handleTranscript = (text) => {
+  inputRef.value?.insertTextAtSelection(text)
 }
 
 const handleSend = () => {
