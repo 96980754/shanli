@@ -111,7 +111,9 @@ defineExpose({ show })
   justify-content: center;
   padding: 64px 0;
 }
-.tip { margin-bottom: 20px; }
+.tip {
+  margin-bottom: 20px;
+}
 .readonly-block {
   padding: 10px 12px;
   border: 1px solid var(--gray-150);
@@ -122,6 +124,12 @@ defineExpose({ show })
   white-space: pre-wrap;
   word-break: break-word;
 }
-.original-answer { max-height: 180px; overflow-y: auto; }
-.existing-tip { color: var(--gray-600); font-size: 12px; }
+.original-answer {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.existing-tip {
+  color: var(--gray-600);
+  font-size: 12px;
+}
 </style>
