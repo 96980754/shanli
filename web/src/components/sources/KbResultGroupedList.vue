@@ -14,12 +14,13 @@
           <div class="file-info">
             <ChevronRight
               v-if="!expandedFiles.has(getFileKey(fileGroup))"
+
               :size="14"
               class="expand-icon"
             />
             <ChevronDown v-else :size="14" class="expand-icon" />
             <FileText :size="14" color="var(--gray-600)" />
-            <span class="file-name">{{ fileGroup.filename }}</span>
+            <span class="file-name">{{ fileGroup.displayName }}</span>
             <span v-if="getSourceVersion(fileGroup)?.document_version" class="current-version">
               V{{ getSourceVersion(fileGroup).document_version }} 当前版本
             </span>
@@ -162,6 +163,7 @@ import {
   groupSourceFileIdsByKnowledgeBase,
   normalizeSourceVersions
 } from '@/utils/knowledgeSourceVersions'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KbChunkDetailModal from './KbChunkDetailModal.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 
@@ -232,26 +234,11 @@ const normalizedChunks = computed(() =>
     })
 )
 
-const fileGroupList = computed(() => {
-  const groups = new Map()
-  for (const item of normalizedChunks.value) {
-    const filename = item?.metadata?.source || '未知来源'
-    const kbId = item?.kb_id || ''
-    const fileId = item?.file_id || ''
-    const groupKey = `${kbId}::${fileId || filename}`
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, {
-        filename,
-        kb_id: kbId,
-        file_id: fileId,
-        chunks: []
-      })
-    }
-    groups.get(groupKey).chunks.push(item)
-  }
-
-  return Array.from(groups.values()).sort((a, b) => a.filename.localeCompare(b.filename))
-})
+// 来源展示只取文件名（去掉前缀路径），分组按文档名去重合并：
+// 同一文档在多个知识库命中（source 路径不同但文件名一致）时归为一组，避免来源面板出现重复文档卡片
+const fileGroupList = computed(() =>
+  MessageProcessor.groupKnowledgeChunksByDocument(normalizedChunks.value)
+)
 
 const toggleFile = (fileGroup) => {
   const fileKey = getFileKey(fileGroup)
@@ -375,7 +362,7 @@ const downloadOriginal = async (fileGroup) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = getDownloadFilename(response, fileGroup.filename || 'document')
+    link.download = getDownloadFilename(response, fileGroup.displayName || 'document')
     link.style.display = 'none'
     document.body.appendChild(link)
     link.click()

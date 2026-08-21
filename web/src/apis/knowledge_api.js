@@ -238,6 +238,29 @@ export const documentApi = {
   },
 
   /**
+   * 移动文件到其它文件夹（newParentId 为 null 表示移动到根目录）
+   * @param {string} kbId - 知识库ID
+   * @param {string} fileId - 文件ID
+   * @param {string|null} newParentId - 目标文件夹ID
+   * @returns {Promise} - 移动结果
+   */
+  moveFile: async (kbId, fileId, newParentId) => {
+    return apiPut(`/api/knowledge/databases/${kbId}/documents/${fileId}/move`, {
+      new_parent_id: newParentId
+    })
+  },
+
+  /**
+   * 获取真实文件夹（is_folder）的祖先链（top-down，含目标自身），用于全库搜索深链进入文件夹目录
+   * @param {string} kbId - 知识库ID
+   * @param {string} folderId - 目标文件夹ID
+   * @returns {Promise} - { folder_id, chain: [{file_id, filename}] }
+   */
+  getFolderChain: async (kbId, folderId) => {
+    return apiGet(`/api/knowledge/databases/${kbId}/folders/${folderId}/chain`)
+  },
+
+  /**
    * 添加文档到知识库
    * @param {string} kbId - 知识库ID
    * @param {Array} items - 文档列表
@@ -677,6 +700,7 @@ export const queryApi = {
   globalSearch: async (query, limit = 10) => {
     return apiPost('/api/knowledge/search', { query, limit })
   },
+  createHandoff: async (query) => apiPost('/api/knowledge/handoffs', { query }),
 
   /**
    * 查询知识库

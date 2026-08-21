@@ -44,9 +44,7 @@ class KnowledgeGapRepository:
                 "last_seen_at": now,
                 "updated_at": now,
                 "status": case((KnowledgeGap.status == "resolved", "new"), else_=KnowledgeGap.status),
-                "resolution_note": case(
-                    (KnowledgeGap.status == "resolved", None), else_=KnowledgeGap.resolution_note
-                ),
+                "resolution_note": case((KnowledgeGap.status == "resolved", None), else_=KnowledgeGap.resolution_note),
                 "resolved_at": case((KnowledgeGap.status == "resolved", None), else_=KnowledgeGap.resolved_at),
                 "resolved_by": case((KnowledgeGap.status == "resolved", None), else_=KnowledgeGap.resolved_by),
             },
@@ -89,7 +87,9 @@ class KnowledgeGapRepository:
         if query:
             conditions.append(KnowledgeGap.question.ilike(f"%{query}%"))
         where = and_(*conditions) if conditions else True
-        total = int((await self.session.execute(select(func.count()).select_from(KnowledgeGap).where(where))).scalar() or 0)
+        total = int(
+            (await self.session.execute(select(func.count()).select_from(KnowledgeGap).where(where))).scalar() or 0
+        )
         result = await self.session.execute(
             select(KnowledgeGap)
             .where(where)

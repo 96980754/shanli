@@ -1769,6 +1769,7 @@ const isReplyLoading = computed(() => {
 })
 const TOOL_STATUS_TEXT = computed(() => ({
   query_kb: t('chat.toolStatus.query_kb'),
+  query_kbs: t('chat.toolStatus.query_kb'),
   list_kbs: t('chat.toolStatus.list_kbs'),
   find_kb_document: t('chat.toolStatus.find_kb_document'),
   open_kb_document: t('chat.toolStatus.open_kb_document'),
@@ -1783,6 +1784,7 @@ const replyLoadingText = computed(() => {
   const threadState = currentThreadState.value
   if (!threadState) return t('chat.reply.generating')
   if (threadState.contextCompressing) return t('chat.reply.compressing')
+  if (threadState.generationPhase === 'thinking') return t('chat.reply.thinking')
   if (threadState.generationPhase === 'tool' && threadState.activeToolName) {
     return (
       TOOL_STATUS_TEXT.value[threadState.activeToolName] ||
@@ -2830,14 +2832,26 @@ const showMsgRefs = (msg, conv) => {
 }
 
 const getConversationSources = (conv) => {
-  // 拒答/系统错误时即使对话内存在检索候选，也不展示来源与下载，避免误导用户以为文档里有答案。
+  // 拒答/系统错误：仍展示来源按钮（用户可点开确认无可用来源），但点开为空，
+  // 不展示检索候选，避免误导用户以为文档里有答案。
   const lastMessage = getLastMessage(conv)
   const disposition = lastMessage?.extra_metadata?.knowledge_disposition
   const dispositionType = disposition?.type
   if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
-    return { knowledgeChunks: [], webSources: [] }
+    return { knowledgeChunks: [], webSources: [], knowledgeActivity: true }
   }
-  return MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
+  const extracted = MessageProcessor.extractSourcesFromConversation(conv, availableKnowledgeBases.value)
+  // 只保留 AI 回答正文实际引用的文档：query_kbs 一次并行检索会带出大量无关候选文件，
+  // 面板应跟随回答的「依据来源」，而非展示全部检索内容。
+  const citedChunks = MessageProcessor.filterKnowledgeChunksByAnswer(
+    extracted.knowledgeChunks,
+    lastMessage?.content
+  )
+  // 发生过知识检索（即使召回不足/检索失败，模型仍可能据已有知识作答）即保留来源按钮；
+  // 纯聊天（未检索知识库）不展示。
+  return MessageProcessor.hasKnowledgeRetrieval(conv)
+    ? { ...extracted, knowledgeChunks: citedChunks, knowledgeActivity: true }
+    : extracted
 }
 
 // ==================== LIFECYCLE & WATCHERS ====================

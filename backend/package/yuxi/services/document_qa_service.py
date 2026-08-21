@@ -25,21 +25,33 @@ from yuxi.services.task_service import TaskContext, tasker
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
+
 DRAFT_QA_STATUS = FileStatus.WAITING_CONFIRMATION
 INDEXED_QA_STATUSES = {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP}
+
+
 class DocumentQAError(ValueError):
     """User-visible document QA domain error."""
+
+
 class QANotFound(DocumentQAError):
     """Raised without disclosing cross-knowledge-base objects."""
+
+
 class QAVersionConflict(DocumentQAError):
     """Raised when a stale editor tries to update a QA pair."""
+
+
 class _RuntimeQAIndexBackend:
     async def upsert_confirmed_qa(self, **payload) -> None:
         kb = await knowledge_base.aget_kb(payload["kb_id"])
         await kb.upsert_confirmed_qa(**payload)
+
     async def delete_confirmed_qa(self, kb_id: str, qa_id: str) -> None:
         kb = await knowledge_base.aget_kb(kb_id)
         await kb.delete_confirmed_qa(kb_id, qa_id)
+
+
 class DocumentQAService:
     def __init__(
         self,
@@ -55,20 +67,18 @@ class DocumentQAService:
         self.qa_repository = qa_repository or DocumentQARepository()
         self.generator = generator or DocumentQAGenerator()
         self.index_backend = index_backend or _RuntimeQAIndexBackend()
+
     async def _get_file(self, kb_id: str, file_id: str):
         record = await self.file_repository.get_by_file_id(file_id)
         if record is None or record.kb_id != kb_id or record.is_folder:
             raise QANotFound("文档不存在")
         return record
+
     @staticmethod
     def _assert_eligible(record) -> None:
-        if (
-            not record.is_active
-            or not record.confirmed_at
-            or record.status not in INDEXED_QA_STATUSES
-            or not record.markdown_file
-        ):
-            raise QANotFound("文档不是当前已确认且可检索的正式版本")
+        if not record.is_active or record.status not in INDEXED_QA_STATUSES or not record.markdown_file:
+            raise QANotFound("文档不是当前可检索的正式版本")
+
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
         if not path or not is_minio_url(path):
@@ -78,6 +88,7 @@ class DocumentQAService:
             return (await get_minio_client().adownload_file(bucket, object_name)).decode("utf-8")
         except Exception as exc:
             raise DocumentQAError("正式 Markdown 不可读取") from exc
+
     async def _context(self, kb_id: str, file_id: str, selected_chunk_ids: list[str] | None = None):
         record = await self._get_file(kb_id, file_id)
         if record.status == DRAFT_QA_STATUS:
@@ -95,6 +106,7 @@ class DocumentQAService:
         if not chunks:
             raise DocumentQAError("文档没有可用于 QA 的文本片段")
         return record, chunks, content_hash
+
     async def _draft_chunks(self, record):
         """Split the pending cleaning draft with the same deterministic chunker used at indexing."""
         if not getattr(record, "cleaning_draft_file", None):
@@ -124,6 +136,7 @@ class DocumentQAService:
         if not chunks:
             raise DocumentQAError("当前清洗文本无法生成可用于 QA 的文本片段")
         return chunks, formal_content_hash(markdown)
+
     @staticmethod
     def _public(record, *, idempotent: bool = False) -> dict[str, Any]:
         return {
@@ -151,6 +164,7 @@ class DocumentQAService:
             "possibly_outdated": bool(getattr(record, "possibly_outdated", False)),
             "idempotent": idempotent,
         }
+
     async def list(self, *, kb_id: str, file_id: str) -> dict[str, Any]:
         record = await self._get_file(kb_id, file_id)
         items = await self.qa_repository.list_by_file_id(kb_id=kb_id, file_id=file_id)
@@ -158,17 +172,17 @@ class DocumentQAService:
             "file_id": file_id,
             "cleaning_version": int(record.cleaning_version or 0),
             "draft_mode": record.status == DRAFT_QA_STATUS,
-            "confirmable": bool(
-                record.status in INDEXED_QA_STATUSES and record.confirmed_at and int(record.chunk_count or 0) > 0
-            ),
+            "confirmable": bool(record.status in INDEXED_QA_STATUSES and int(record.chunk_count or 0) > 0),
             "items": [self._public(item) for item in items],
         }
+
     async def get(self, *, kb_id: str, file_id: str, qa_id: str) -> dict[str, Any]:
         await self._get_file(kb_id, file_id)
         record = await self.qa_repository.get_by_qa_id(qa_id)
         if record is None or record.kb_id != kb_id or record.file_id != file_id:
             raise QANotFound("QA 不存在")
         return self._public(record)
+
     async def generate_drafts(
         self,
         *,
@@ -183,7 +197,7 @@ class DocumentQAService:
         try:
             generated = await self.generator.generate(
                 chunks,
-                model_spec=config.document_qa_model or record.__dict__.get("llm_model_spec"),
+                model_spec=config.document_qa_model or record.__dict__.get("llm_model_spec") or config.default_model,
                 temperature=float(config.document_qa_temperature),
                 timeout_seconds=float(config.document_qa_timeout_seconds),
                 attempts=int(config.document_qa_output_attempts),
@@ -275,6 +289,7 @@ class DocumentQAService:
             for chunk_id in item["source_chunk_ids"]:
                 per_chunk_counts[chunk_id] = per_chunk_counts.get(chunk_id, 0) + 1
         return {"file_id": file_id, "status": "generated", "items": [self._public(item) for item in saved]}
+
     async def create_manual(
         self,
         *,
@@ -321,6 +336,7 @@ class DocumentQAService:
             }
         )
         return self._public(record)
+
     async def update(
         self,
         *,
@@ -396,6 +412,7 @@ class DocumentQAService:
                 )
             return self._public(projection or updated)
         return self._public(updated)
+
     async def confirm(
         self,
         *,
@@ -480,6 +497,7 @@ class DocumentQAService:
         if synced is None:
             raise QAVersionConflict("QA 同步完成但状态已被其他用户更新")
         return self._public(synced)
+
     async def reject_or_delete(
         self,
         *,
@@ -533,6 +551,7 @@ class DocumentQAService:
                 )
             return self._public(projection or updated)
         return self._public(updated)
+
     async def delete_draft(
         self,
         *,
@@ -554,8 +573,10 @@ class DocumentQAService:
             operator_id=operator_id,
             expected_version=expected_version,
         )
+
     async def mark_file_qas_outdated(self, *, kb_id: str, file_id: str) -> int:
         return await self.qa_repository.mark_outdated_by_file_id(kb_id=kb_id, file_id=file_id)
+
     async def rebase_draft_qas(self, *, kb_id: str, file_id: str, operator_id: str | None = None) -> int:
         """Rebind draft-mode QA pairs to the real chunks created after cleaning confirmation."""
         record = await self._get_file(kb_id, file_id)
@@ -605,6 +626,7 @@ class DocumentQAService:
             if updated is not None:
                 rebound += 1
         return rebound
+
     @staticmethod
     def _find_chunk_for_evidence(
         chunk_by_id: dict[str, Any],
@@ -625,6 +647,8 @@ class DocumentQAService:
             if normalized and normalized in " ".join(chunk.content.split()):
                 return chunk_id
         return None
+
+
 async def enqueue_document_qa_generation(
     *,
     kb_id: str,
@@ -641,6 +665,7 @@ async def enqueue_document_qa_generation(
         "selected_chunk_ids": sorted(selected_chunk_ids or []),
         "replace_generated": bool(replace_generated),
     }
+
     async def run_generation(context: TaskContext):
         await context.set_progress(10, "正在生成文档 QA 草稿")
         result = await DocumentQAService().generate_drafts(
@@ -652,6 +677,7 @@ async def enqueue_document_qa_generation(
         )
         await context.set_progress(100, "文档 QA 草稿生成完成")
         return {"kb_id": kb_id, "file_id": file_id, "status": result["status"]}
+
     task, created = await tasker.enqueue_unique_by_payload(
         name="生成文档 QA 草稿",
         task_type="document_qa_generation",
@@ -661,6 +687,8 @@ async def enqueue_document_qa_generation(
         coroutine=run_generation,
     )
     return task.id, created
+
+
 async def enqueue_auto_document_qa(*, kb_id: str, file_id: str, operator_id: str) -> None:
     if not config.document_qa_auto_generate:
         return
@@ -668,6 +696,8 @@ async def enqueue_auto_document_qa(*, kb_id: str, file_id: str, operator_id: str
         await enqueue_document_qa_generation(kb_id=kb_id, file_id=file_id, operator_id=operator_id)
     except Exception as exc:  # noqa: BLE001 - optional QA generation must not affect indexing
         logger.warning("Failed to enqueue document QA for {}: {}", file_id, sanitize_processing_error(exc))
+
+
 __all__ = [
     "DocumentQAError",
     "DocumentQAService",

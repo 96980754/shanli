@@ -112,7 +112,7 @@ export const useDatabaseStore = defineStore('database', () => {
   async function createDatabase(formData) {
     // 验证
     if (!formData.database_name?.trim()) {
-      message.error('数据库名称不能为空')
+      message.error('知识库名称不能为空')
       return false
     }
 
@@ -161,7 +161,7 @@ export const useDatabaseStore = defineStore('database', () => {
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '获取数据库信息失败')
+      message.error(error.message || '获取知识库信息失败')
     } finally {
       if (!isBackground) {
         state.lock = false
@@ -186,8 +186,8 @@ export const useDatabaseStore = defineStore('database', () => {
 
   function deleteDatabase() {
     Modal.confirm({
-      title: '删除数据库',
-      content: '确定要删除该数据库吗？',
+      title: '删除知识库',
+      content: '确定要删除该知识库吗？',
       okText: '确认',
       cancelText: '取消',
       onOk: async () => {
@@ -229,6 +229,20 @@ export const useDatabaseStore = defineStore('database', () => {
       cancelText: '取消',
       onOk: () => deleteFile(fileId)
     })
+  }
+
+  async function moveFile(fileId, newParentId) {
+    state.lock = true
+    try {
+      await documentApi.moveFile(kbId.value, fileId, newParentId)
+      await loadDocumentFiles({ isBackground: true })
+    } catch (error) {
+      console.error(error)
+      message.error(error.message || '移动失败')
+      throw error
+    } finally {
+      state.lock = false
+    }
   }
 
   function handleBatchDelete() {
@@ -462,6 +476,65 @@ export const useDatabaseStore = defineStore('database', () => {
       status: 'all',
       recursive: false
     })
+  }
+
+  // 全库搜索等入口通过目录路径直达：重建路径型虚拟目录的面包屑链，并加载目标目录下的文件
+  async function navigateToFolder(folderPath = '') {
+    let prefix = ''
+    const crumbs = [
+      { file_id: null, filename: '全部文件', path_prefix: '' },
+      ...folderPath
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => {
+          prefix = prefix ? `${prefix}/${segment}` : segment
+          return {
+            file_id: `__virtual_folder__:root:${prefix}/`,
+            filename: segment,
+            is_virtual_folder: true,
+            parent_id: null,
+            path_prefix: `${prefix}/`
+          }
+        })
+    ]
+    folderBreadcrumbs.value = crumbs
+    selectedRowKeys.value = []
+    return loadDocumentFiles({
+      parentId: null,
+      pathPrefix: crumbs[crumbs.length - 1].path_prefix,
+      page: 1,
+      status: 'all',
+      recursive: false
+    })
+  }
+
+  // 全库搜索等入口通过文件夹 ID 直达真实文件夹（parent_id 树，与 navigateToFolder 的路径型虚拟目录正交）：
+  // 拉取祖先链重建面包屑，再加载该文件夹下的文件
+  async function navigateToFolderById(folderId) {
+    if (!folderId) return
+    try {
+      const chain = (await documentApi.getFolderChain(kbId.value, folderId)).chain || []
+      folderBreadcrumbs.value = [
+        { file_id: null, filename: '全部文件', path_prefix: '' },
+        ...chain.map((item) => ({
+          file_id: item.file_id,
+          filename: item.filename,
+          path_prefix: ''
+        }))
+      ]
+      selectedRowKeys.value = []
+      await loadDocumentFiles({
+        parentId: folderId,
+        page: 1,
+        status: 'all',
+        recursive: false
+      })
+    } catch (error) {
+      console.error('进入文件夹失败:', error)
+      message.error(error.message || '进入文件夹失败')
+      folderBreadcrumbs.value = [{ file_id: null, filename: '全部文件', path_prefix: '' }]
+      await loadDocumentFiles({ page: 1 })
+    }
   }
 
   async function addUploadedFiles({ items, params, parentId }) {
@@ -796,6 +869,7 @@ export const useDatabaseStore = defineStore('database', () => {
     deleteDatabase,
     deleteFile,
     handleDeleteFile,
+    moveFile,
     handleBatchDelete,
     addFiles,
     addUploadedFiles,
@@ -809,6 +883,8 @@ export const useDatabaseStore = defineStore('database', () => {
     loadDocumentFiles,
     enterFolder,
     goToFolder,
+    navigateToFolder,
+    navigateToFolderById,
     resetFileBrowser,
 
     startAutoRefresh,

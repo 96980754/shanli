@@ -86,6 +86,7 @@ from yuxi.services.knowledge_source_version_service import KnowledgeSourceVersio
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+from yuxi.services.wecom_handoff_service import KnowledgeHandoffService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
 from yuxi.storage.postgres.models_business import User
@@ -110,6 +111,7 @@ class UpdateDatabaseRequest(BaseModel):
     name: str
     description: str
     llm_model_spec: str | None = None
+    embedding_model_spec: str | None = None
     category_id: int | None = None
     additional_params: dict | None = None
     share_config: dict | None = None
@@ -364,6 +366,10 @@ class SourceVersionBatchRequest(BaseModel):
     file_ids: list[str] = Field(min_length=1, max_length=200)
 
 
+class KnowledgeHandoffRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=10_000)
+
+
 async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
     databases = await knowledge_base.get_databases_by_uid(current_user.uid)
     context = _user_permission_context(current_user)
@@ -523,7 +529,7 @@ async def _has_running_graph_build_task(kb_id: str) -> bool:
 
 
 def _user_permission_context(user: User) -> dict:
-    return {"uid": user.uid, "role": user.role, "department_id": user.department_id}
+    return {"uid": user.uid, "role": user.role, "department_id": user.department_id, "team_id": user.team_id}
 
 
 def _serialize_kb_permission(permission) -> dict:
@@ -790,7 +796,6 @@ async def create_database(
             category_id=category_id,
             share_config=share_config,
             created_by=current_user.uid,
-            created_by_department_id=current_user.department_id,
             **additional_params,
         )
 
@@ -958,6 +963,13 @@ async def update_database_info(
     await _require_kb_permission(current_user, kb_id, "can_manage")
     try:
         update_llm_model_spec = "llm_model_spec" in data.model_fields_set
+        update_embedding_model_spec = "embedding_model_spec" in data.model_fields_set
+        if update_embedding_model_spec:
+            if not data.embedding_model_spec:
+                raise HTTPException(status_code=400, detail="embedding_model_spec 不能为空")
+            info = model_cache.get_model_info(data.embedding_model_spec)
+            if not info or info.model_type != "embedding":
+                raise HTTPException(status_code=400, detail=f"不支持的 embedding 模型: {data.embedding_model_spec}")
         update_category_id = "category_id" in data.model_fields_set
         if update_category_id:
             if data.category_id is None:
@@ -990,12 +1002,13 @@ async def update_database_info(
             data.description,
             data.llm_model_spec,
             update_llm_model_spec=update_llm_model_spec,
+            embedding_model_spec=data.embedding_model_spec,
+            update_embedding_model_spec=update_embedding_model_spec,
             category_id=data.category_id,
             update_category_id=update_category_id,
             additional_params=additional_params,
             share_config=data.share_config,
             operator_uid=current_user.uid,
-            operator_department_id=current_user.department_id,
         )
         return {"message": "更新成功", "database": database}
     except HTTPException:
@@ -2638,8 +2651,20 @@ async def global_knowledge_search(
 ):
     """Search every knowledge base the current user is allowed to search."""
     limit = min(max(request.limit, 1), 30)
-    result = await GlobalKnowledgeSearchService().search(current_user, request.query, limit)
-    return {"result": result, "status": "success"}
+    result, search_incomplete = await GlobalKnowledgeSearchService().search_with_status(
+        current_user, request.query, limit
+    )
+    return {
+        "result": result,
+        "status": "success",
+        "handoff_available": not result and not search_incomplete,
+        "search_complete": not search_incomplete,
+    }
+
+
+@knowledge.post("/handoffs")
+async def create_knowledge_handoff(request: KnowledgeHandoffRequest, current_user: User = Depends(get_required_user)):
+    return await KnowledgeHandoffService().create_and_open(current_user, request.query)
 
 
 @knowledge.post("/databases/{kb_id}/query-test")
@@ -2829,6 +2854,21 @@ async def move_document(
     except Exception as e:
         logger.error(f"移动文件失败 {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@knowledge.get("/databases/{kb_id}/folders/{folder_id}/chain")
+async def get_folder_chain(
+    kb_id: str,
+    folder_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """返回真实文件夹的祖先链（top-down，含目标自身），供全库搜索等入口深链进入文件浏览。"""
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文件夹目录")
+    chain = await KnowledgeFileRepository().get_folder_chain(kb_id=kb_id, folder_id=folder_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="文件夹不存在")
+    return {"folder_id": folder_id, "chain": chain}
 
 
 @knowledge.post("/files/fetch-url")

@@ -1,5 +1,6 @@
 """知识库工具模块"""
 
+import asyncio
 import inspect
 from typing import Any
 
@@ -204,7 +205,7 @@ async def _build_query_output(target_kb_id: str, result: Any) -> dict[str, Any]:
             normalized = KnowledgeBase.build_search_output(target_kb_id, result["results"])
         else:
             normalized = KnowledgeBase.build_search_output(target_kb_id, result)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         return _query_error(target_kb_id, "invalid_result", "知识库返回了无法解析的检索结果")
 
     results = normalized["results"]
@@ -275,6 +276,91 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
     except Exception as e:
         logger.exception("知识库检索失败 kb_id={}: {}", target_kb_id, e)
         return _query_error(target_kb_id, "retrieval_error", "知识库检索服务暂时不可用")
+
+
+# 批量并行检索每库最多保留的片段数：控制合并上下文规模，同时保证各库都能覆盖到
+_QUERY_KBS_PER_KB_KEEP = 5
+
+
+class QueryKBsInput(BaseModel):
+    """并行查询多个知识库输入模型"""
+
+    kb_ids: list[str] = Field(
+        description="知识库资源 ID 列表，也就是 kb_id 列表，需要同时检索的知识库都填进去",
+        min_length=1,
+    )
+    query_text: str = Field(description="检索关键词，应提炼为有助于召回答案的关键词或短语")
+    file_name: str | None = Field(default=None, description="可选文件名关键词过滤，非必要不要使用")
+
+
+@tool(category="knowledge", tags=["知识库"], args_schema=QueryKBsInput)
+async def query_kbs(
+    kb_ids: list[str],
+    query_text: str,
+    file_name: str | None = None,
+    runtime: ToolRuntime = None,
+) -> dict:
+    """在多个知识库中并行检索内容
+
+    当一个问题可能同时涉及多个知识库（如产品资料、证书认证、解决方案）时使用：
+    一次性传入多个 kb_id，各库并行检索，比逐个调用 query_kb 更快。
+    返回结果按 kb_id 标注来源，可直接用于回答。单库问题请用 query_kb。
+    """
+    if not kb_ids:
+        return _query_error("", "invalid_request", "请提供 kb_id 列表")
+    if not query_text:
+        return _query_error("", "invalid_request", "请提供查询内容")
+
+    knowledge_base = _get_knowledge_base()
+    retrievers = knowledge_base.get_retrievers()
+    visible_kbs = await _resolve_visible_knowledge_bases_for_query(runtime)
+
+    targets: list[tuple[Any, str]] = []
+    for kb_id in kb_ids:
+        target_info, target_kb_id, target_error = _find_query_target(
+            kb_id=kb_id,
+            retrievers=retrievers,
+            visible_kbs=visible_kbs,
+        )
+        if target_error:
+            logger.warning(f"知识库批量检索跳过不可用库 {kb_id}: {target_error}")
+            continue
+        targets.append((target_info["retriever"], target_kb_id))
+
+    if not targets:
+        reason = "permission_denied" if visible_kbs else "knowledge_base_unavailable"
+        return _query_error("", reason, "没有可检索的知识库")
+
+    kwargs: dict[str, Any] = {}
+    if file_name:
+        kwargs["file_name"] = file_name
+
+    async def _retrieve_one(retriever: Any, target_kb_id: str) -> tuple[str, dict]:
+        try:
+            if inspect.iscoroutinefunction(retriever):
+                result = await retriever(query_text, **kwargs)
+            else:
+                result = retriever(query_text, **kwargs)
+            return target_kb_id, await _build_query_output(target_kb_id, result)
+        except Exception as e:
+            logger.exception("知识库检索失败 kb_id={}: {}", target_kb_id, e)
+            return target_kb_id, _query_error(target_kb_id, "retrieval_error", "知识库检索服务暂时不可用")
+
+    # 各库并行检索，单库失败不阻断其余库
+    per_kb_outputs = await asyncio.gather(*[_retrieve_one(r, kid) for r, kid in targets])
+
+    # 合并各库非空结果，每库截取前 N 条保证跨库覆盖；结果内自带来源 kb_id
+    merged_results: list[dict] = []
+    for _, output in per_kb_outputs:
+        if output.get("status") != "ok":
+            continue
+        merged_results.extend(output.get("results", [])[:_QUERY_KBS_PER_KB_KEEP])
+
+    if not merged_results:
+        return SearchOutputSchema(status="insufficient", reason="no_results", kb_id="").model_dump()
+
+    queried_kb_ids = ",".join(target_kb_id for _, target_kb_id in targets)
+    return SearchOutputSchema(status="ok", kb_id=queried_kb_ids, results=merged_results).model_dump()
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=OpenKBDocumentInput)
@@ -496,10 +582,11 @@ def get_common_kb_tools() -> list:
 
     返回 6 个通用工具：
     - list_kbs: 列出用户可访问的知识库
-    - get_mindmap: 获取指定知识库的思维导图
     - query_kb: 在指定知识库中检索
+    - query_kbs: 在多个知识库中并行检索
     - find_kb_document: 在指定文件内定位关键词或正则模式
     - open_kb_document: 按 file_id 分段打开知识库文档
     - search_file: 搜索知识库中的文件
     """
-    return [list_kbs, get_mindmap, query_kb, find_kb_document, open_kb_document, search_file]
+    # 思维导图 get_mindmap 已停用，不装配给模型（前端入口已隐藏）
+    return [list_kbs, query_kb, query_kbs, find_kb_document, open_kb_document, search_file]

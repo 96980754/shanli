@@ -22,9 +22,7 @@ class KnowledgeCategoryRepository:
 
     async def get_by_id(self, category_id: int) -> KnowledgeBaseCategory | None:
         async with pg_manager.get_async_session_context() as session:
-            result = await session.execute(
-                select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id)
-            )
+            result = await session.execute(select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id))
             return result.scalar_one_or_none()
 
     async def get_by_normalized_name(self, name: str) -> KnowledgeBaseCategory | None:
@@ -44,9 +42,7 @@ class KnowledgeCategoryRepository:
 
     async def update(self, category_id: int, data: dict[str, Any]) -> KnowledgeBaseCategory | None:
         async with pg_manager.get_async_session_context() as session:
-            result = await session.execute(
-                select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id)
-            )
+            result = await session.execute(select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id))
             category = result.scalar_one_or_none()
             if category is None:
                 return None
@@ -65,9 +61,7 @@ class KnowledgeCategoryRepository:
 
     async def delete(self, category_id: int) -> bool:
         async with pg_manager.get_async_session_context() as session:
-            result = await session.execute(
-                select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id)
-            )
+            result = await session.execute(select(KnowledgeBaseCategory).where(KnowledgeBaseCategory.id == category_id))
             category = result.scalar_one_or_none()
             if category is None:
                 return False

@@ -25,9 +25,7 @@ class KnowledgeCategoryService:
         categories = await self.repository.list_all()
         items = []
         for category in categories:
-            usage_count = (
-                await self.repository.count_knowledge_bases(category.id) if include_usage_count else None
-            )
+            usage_count = await self.repository.count_knowledge_bases(category.id) if include_usage_count else None
             items.append(self.serialize(category, usage_count=usage_count))
         return items
 

@@ -11,14 +11,19 @@ from yuxi.storage.postgres.models_knowledge import (
     KnowledgeGraphEntity,
 )
 from yuxi.utils.datetime_utils import utc_now
+
 PUBLISH_TASK_STATUS_PENDING = "pending"
 PUBLISH_TASK_STATUS_PROCESSING = "processing"
 PUBLISH_TASK_STATUS_SUCCEEDED = "succeeded"
 PUBLISH_TASK_STATUS_FAILED = "failed"
 PUBLISH_TASK_STATUS_DEAD_LETTER = "dead_letter"
+
+
 def build_publish_identity(conflict_id: str, expected_version: int) -> tuple[str, str]:
     digest = hashlib.sha256(f"{conflict_id}:{expected_version}".encode()).hexdigest()
     return f"publish_{digest[:32]}", f"resolution_{digest[:28]}"
+
+
 class KnowledgePublishRepository:
     async def get_task(self, *, kb_id: str, task_id: str) -> KnowledgeConflictPublishTask | None:
         async with pg_manager.get_async_session_context() as session:
@@ -28,6 +33,7 @@ class KnowledgePublishRepository:
                     KnowledgeConflictPublishTask.task_id == task_id,
                 )
             )
+
     async def get_task_for_conflict(self, *, kb_id: str, conflict_id: str) -> KnowledgeConflictPublishTask | None:
         async with pg_manager.get_async_session_context() as session:
             return await session.scalar(
@@ -39,6 +45,7 @@ class KnowledgePublishRepository:
                 .order_by(KnowledgeConflictPublishTask.expected_version.desc())
                 .limit(1)
             )
+
     async def list_recoverable_task_ids(self, *, limit: int = 100) -> list[str]:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -64,6 +71,7 @@ class KnowledgePublishRepository:
                 .limit(max(limit, 0))
             )
             return list(result.scalars().all())
+
     async def claim(self, task_id: str, *, lease_seconds: int) -> KnowledgeConflictPublishTask | None:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -109,6 +117,7 @@ class KnowledgePublishRepository:
                 conflict.publish_error = None
             await session.flush()
             return task
+
     async def load_authoritative_payload(self, task_id: str) -> dict[str, Any] | None:
         async with pg_manager.get_async_session_context() as session:
             task = await session.scalar(
@@ -140,6 +149,7 @@ class KnowledgePublishRepository:
                 "assertion": assertion,
                 "entity": entity,
             }
+
     async def mark_target_succeeded(self, task_id: str, target: str) -> None:
         if target not in {"neo4j", "vector"}:
             raise ValueError("unsupported publish target")
@@ -153,6 +163,7 @@ class KnowledgePublishRepository:
                 raise LookupError("publish task not found")
             setattr(task, f"{target}_status", PUBLISH_TASK_STATUS_SUCCEEDED)
             task.updated_at = utc_now()
+
     async def mark_stale(self, task_id: str) -> None:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -169,6 +180,7 @@ class KnowledgePublishRepository:
             task.lease_expires_at = None
             task.completed_at = now
             task.updated_at = now
+
     async def mark_succeeded(self, task_id: str) -> bool:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -223,6 +235,7 @@ class KnowledgePublishRepository:
             task.completed_at = now
             task.updated_at = now
             return True
+
     async def mark_failed(self, task_id: str, *, error_code: str, message: str) -> str:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -251,6 +264,7 @@ class KnowledgePublishRepository:
                 conflict.publish_error = message
                 conflict.updated_at = now
             return task.status
+
     async def retry(self, *, kb_id: str, conflict_id: str) -> KnowledgeConflictPublishTask | None:
         now = utc_now()
         async with pg_manager.get_async_session_context() as session:
@@ -291,6 +305,7 @@ class KnowledgePublishRepository:
             conflict.publish_error = None
             conflict.updated_at = now
             return task
+
     async def list_published_assertions(self, *, kb_id: str, assertion_ids: list[str]) -> list[KnowledgeAssertion]:
         if not assertion_ids:
             return []

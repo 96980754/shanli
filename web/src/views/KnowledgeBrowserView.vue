@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Folder } from 'lucide-vue-next'
 import { documentBrowseApi, databaseApi } from '@/apis/knowledge_api'
 import PageHeader from '@/components/shared/PageHeader.vue'
 
@@ -32,7 +33,29 @@ const search = async () => {
   } finally { loading.value = false }
 }
 
-const browseDirectory = (kbId) => router.push({ path: '/workspace', query: { kb_id: kbId } })
+// filename 是完整相对路径（如 定位资料-证书/C10—UN38.3的报告证书/xxx.pdf），目录路径 = 去掉最后一个 / 段
+const folderPathOf = (filename = '') => {
+  const index = filename.lastIndexOf('/')
+  return index === -1 ? '' : filename.slice(0, index)
+}
+
+// 搜索/热门文档/分类入口统一跳转到知识库文件浏览，并定位到目标目录。
+// 真实文件夹（is_folder）走 folder_id 深链（parent_id 树）；文件走 path 路径型虚拟目录；
+// 知识库分类卡片项（无 filename/is_folder）进入知识库根层。
+const browseDirectory = (item) => {
+  if (item?.is_folder) {
+    router.push({
+      path: `/extensions/knowledgebase/${item.kb_id}`,
+      query: { folder_id: item.file_id }
+    })
+    return
+  }
+  const folderPath = folderPathOf(item?.filename)
+  router.push({
+    path: `/extensions/knowledgebase/${item.kb_id}`,
+    query: folderPath ? { path: folderPath } : undefined
+  })
+}
 
 onMounted(async () => {
   const [databaseResponse, hotResponse] = await Promise.all([databaseApi.getAccessibleDatabases(), documentBrowseApi.hot()])
@@ -55,19 +78,37 @@ onMounted(async () => {
           </a-space>
           <a-list :loading="loading" :data-source="documents" class="document-list">
             <template #renderItem="{ item }">
-              <a-list-item><a-list-item-meta :title="item.filename" :description="`${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`" /><template #actions><a @click="browseDirectory(item.kb_id)">打开目录</a></template></a-list-item>
+              <a-list-item>
+                <a-list-item-meta>
+                  <template #title>
+                    <span class="result-title">
+                      <Folder v-if="item.is_folder" :size="14" class="folder-icon" />
+                      {{ item.filename }}
+                      <a-tag v-if="item.is_folder" class="folder-tag">文件夹</a-tag>
+                    </span>
+                  </template>
+                  <template #description>
+                    {{
+                      item.is_folder
+                        ? `${item.kb_name} · 文件夹`
+                        : `${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`
+                    }}
+                  </template>
+                </a-list-item-meta>
+                <template #actions><a @click="browseDirectory(item)">打开目录</a></template>
+              </a-list-item>
             </template>
           </a-list>
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="8">
-        <a-card title="热门文档" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item.kb_id)">{{ item.filename }}</a><span>{{ item.view_count }} 次浏览</span></a-list-item></template></a-list></a-card>
-        <a-card title="知识库分类 / 目录" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item.kb_id)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
+        <a-card title="热门文档" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.filename }}</a><span>{{ item.view_count }} 次浏览</span></a-list-item></template></a-list></a-card>
+        <a-card title="知识库分类 / 目录" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
       </a-col>
     </a-row>
   </div>
 </template>
 
 <style scoped lang="less">
-.filters { width: 100%; } .filters :deep(.ant-input), .filters :deep(.ant-picker) { min-width: 180px; } .document-list { margin-top: 16px; } .side-card { margin-top: 16px; } .side-card:first-child { margin-top: 0; } .side-card .ant-list-item { display: flex; justify-content: space-between; gap: 12px; }
+.filters { width: 100%; } .filters :deep(.ant-input), .filters :deep(.ant-picker) { min-width: 180px; } .document-list { margin-top: 16px; } .side-card { margin-top: 16px; } .side-card:first-child { margin-top: 0; } .side-card .ant-list-item { display: flex; justify-content: space-between; gap: 12px; } .result-title { display: inline-flex; align-items: center; gap: 6px; } .folder-icon { color: var(--main-color); flex-shrink: 0; } .folder-tag { margin-inline-end: 0; font-size: 12px; line-height: 18px; }
 </style>

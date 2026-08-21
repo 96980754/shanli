@@ -583,7 +583,6 @@
         <ShareConfigForm
           ref="shareConfigFormRef"
           v-model="draftShareConfig"
-          :auto-select-user-dept="true"
           :allowed-access-levels="pendingDraft.allowed_access_levels || ['user']"
         />
       </div>

@@ -11,6 +11,8 @@ from yuxi.storage.postgres.models_knowledge import (
     KnowledgeGraphEntity,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
+
+
 class KnowledgeConflictRepository:
     async def get_entity(self, *, kb_id: str, entity_id: str) -> KnowledgeGraphEntity | None:
         async with pg_manager.get_async_session_context() as session:
@@ -21,6 +23,7 @@ class KnowledgeConflictRepository:
                 )
             )
             return result.scalar_one_or_none()
+
     async def list_entities(self, *, kb_id: str, entity_type: str) -> list[KnowledgeGraphEntity]:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
@@ -32,12 +35,14 @@ class KnowledgeConflictRepository:
                 .order_by(KnowledgeGraphEntity.id.asc())
             )
             return list(result.scalars().all())
+
     async def create_assertion(self, data: dict[str, Any]) -> KnowledgeAssertion:
         async with pg_manager.get_async_session_context() as session:
             assertion = KnowledgeAssertion(**data)
             session.add(assertion)
             await session.flush()
             return assertion
+
     async def update_assertion_link(
         self,
         *,
@@ -58,6 +63,7 @@ class KnowledgeConflictRepository:
             assertion.updated_at = utc_now_naive()
             await session.flush()
             return assertion
+
     async def create_link_candidates(self, rows: list[dict[str, Any]]) -> list[EntityLinkCandidate]:
         if not rows:
             return []
@@ -66,12 +72,14 @@ class KnowledgeConflictRepository:
             session.add_all(records)
             await session.flush()
             return records
+
     async def create_conflict(self, data: dict[str, Any]) -> KnowledgeConflict:
         async with pg_manager.get_async_session_context() as session:
             conflict = KnowledgeConflict(**data)
             session.add(conflict)
             await session.flush()
             return conflict
+
     async def get_assertion(self, *, kb_id: str, assertion_id: str) -> KnowledgeAssertion | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
@@ -81,6 +89,7 @@ class KnowledgeConflictRepository:
                 )
             )
             return result.scalar_one_or_none()
+
     async def list_published_assertions(
         self,
         *,
@@ -100,6 +109,7 @@ class KnowledgeConflictRepository:
                 select(KnowledgeAssertion).where(*conditions).order_by(KnowledgeAssertion.created_at.asc())
             )
             return list(result.scalars().all())
+
     async def list_conflicts(
         self,
         *,
@@ -116,6 +126,7 @@ class KnowledgeConflictRepository:
                 .order_by(KnowledgeConflict.created_at.desc(), KnowledgeConflict.id.desc())
             )
             return list(result.scalars().all())
+
     async def get_conflict(self, *, kb_id: str, conflict_id: str) -> KnowledgeConflict | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
@@ -125,6 +136,7 @@ class KnowledgeConflictRepository:
                 )
             )
             return result.scalar_one_or_none()
+
     async def list_link_candidates(self, *, kb_id: str) -> list[EntityLinkCandidate]:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
@@ -133,6 +145,7 @@ class KnowledgeConflictRepository:
                 .order_by(EntityLinkCandidate.created_at.desc(), EntityLinkCandidate.id.desc())
             )
             return list(result.scalars().all())
+
     async def reclassify_linked_conflict(
         self,
         *,
@@ -191,6 +204,7 @@ class KnowledgeConflictRepository:
                 candidate.resolved_at = now
             await session.flush()
             return conflict, assertion
+
     async def resolve(
         self,
         *,
@@ -290,6 +304,7 @@ class KnowledgeConflictRepository:
                 await self._ensure_publish_task(session, conflict, assertion)
             await session.flush()
             return conflict, assertion, entity
+
     async def _ensure_publish_task(self, session, conflict, assertion) -> KnowledgeConflictPublishTask:
         task_id, resolution_id = build_publish_identity(conflict.conflict_id, conflict.version)
         task = await session.scalar(

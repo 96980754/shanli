@@ -130,6 +130,49 @@ async def test_admin_can_manage_knowledge_databases(test_client, admin_headers, 
     assert update_response.json()["database"]["description"] == "Updated by pytest"
 
 
+async def test_update_database_embedding_model_spec(test_client, admin_headers, knowledge_database):
+    """运行时可切换嵌入模型（内外同款 bge-m3 向量兼容的前提）。"""
+    kb_id = knowledge_database["kb_id"]
+    assert knowledge_database["embedding_model_spec"] == "siliconflow-cn:Pro/BAAI/bge-m3"
+
+    update_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}",
+        json={
+            "name": knowledge_database["name"],
+            "description": "Updated embedding spec",
+            "embedding_model_spec": "siliconflow-cn:BAAI/bge-m3",
+        },
+        headers=admin_headers,
+    )
+    assert update_response.status_code == 200, update_response.text
+    assert update_response.json()["database"]["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+
+    get_response = await test_client.get(f"/api/knowledge/databases/{kb_id}", headers=admin_headers)
+    assert get_response.status_code == 200, get_response.text
+    assert get_response.json()["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+
+    # 未随请求提交的字段保持原值（model_fields_set 语义）
+    omit_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}",
+        json={"name": knowledge_database["name"], "description": "No spec in body"},
+        headers=admin_headers,
+    )
+    assert omit_response.status_code == 200, omit_response.text
+    assert omit_response.json()["database"]["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+
+    # 非法 spec → 400
+    bad_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}",
+        json={
+            "name": knowledge_database["name"],
+            "description": "Bad spec",
+            "embedding_model_spec": "no-such-provider:no-model",
+        },
+        headers=admin_headers,
+    )
+    assert bad_response.status_code == 400, bad_response.text
+
+
 async def test_document_exists_returns_false_for_missing_relative_path(test_client, admin_headers, knowledge_database):
     kb_id = knowledge_database["kb_id"]
     filename = f"google_drive/shared_drives/engineering/serving-runtime/dsid_{uuid.uuid4().hex}__missing-playbook.txt"

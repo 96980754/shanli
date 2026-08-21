@@ -43,9 +43,10 @@
       </span>
 
       <!-- 来源按钮 - 使用 flex-grow 占据剩余空间并右对齐 -->
-      <div v-if="hasSources && showKey('sources')" class="sources-spacer"></div>
+      <!-- 发生过知识检索即显示按钮（拒答时点开为空），纯聊天不显示 -->
+      <div v-if="showSourceButton && showKey('sources')" class="sources-spacer"></div>
       <span
-        v-if="hasSources && showKey('sources')"
+        v-if="showSourceButton && showKey('sources')"
         class="item btn sources-btn"
         :class="{ expanded: isSourcesExpanded }"
         @click="toggleSources"
@@ -104,6 +105,7 @@ import {
   ChevronDown
 } from 'lucide-vue-next'
 import { agentApi } from '@/apis'
+import { MessageProcessor } from '@/utils/messageProcessor'
 import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
 
@@ -129,6 +131,7 @@ const msg = ref(props.message)
 // Sources state
 const isSourcesExpanded = ref(false)
 
+// 展示全部知识库来源（已按相关度降序排好），不做条数截断
 const knowledgeChunks = computed(() =>
   Array.isArray(props.sources?.knowledgeChunks) ? props.sources.knowledgeChunks : []
 )
@@ -138,7 +141,16 @@ const webSources = computed(() =>
 
 const hasSources = computed(() => knowledgeChunks.value.length > 0 || webSources.value.length > 0)
 
-const sourceCount = computed(() => knowledgeChunks.value.length + webSources.value.length)
+// 发生过知识检索（含拒答轮次）即显示来源按钮；纯聊天无来源无活动则不显示
+const showSourceButton = computed(
+  () => hasSources.value || Boolean(props.sources?.knowledgeActivity)
+)
+
+// 「来源 N」按去重后的文档数计：同一文档在多个知识库命中时只算 1，与面板卡片数一致
+const knowledgeDocCount = computed(
+  () => MessageProcessor.groupKnowledgeChunksByDocument(knowledgeChunks.value).length
+)
+const sourceCount = computed(() => knowledgeDocCount.value + webSources.value.length)
 
 const toggleSources = () => {
   isSourcesExpanded.value = !isSourcesExpanded.value

@@ -157,11 +157,11 @@ def _service(record=None):
     "record",
     [
         _file(is_active=False),
-        _file(confirmed_at=None),
         _file(status=FileStatus.ERROR_INDEXING),
+        _file(markdown_file=None),
     ],
 )
-async def test_generation_only_accepts_active_confirmed_indexed_document(record):
+async def test_generation_only_accepts_active_indexed_document(record):
     service, _repo, _index = _service(record)
     with pytest.raises(QANotFound):
         await service.generate_drafts(
@@ -169,6 +169,24 @@ async def test_generation_only_accepts_active_confirmed_indexed_document(record)
             file_id="file-1",
             operator_id="user-1",
         )
+@pytest.mark.asyncio
+async def test_generation_accepts_indexed_document_without_confirmation():
+    """普通上传的已入库文档（未走清洗确认流程，confirmed_at=None）也可生成 QA 草稿。"""
+    service, qa_repo, _index = _service(_file(confirmed_at=None))
+    result = await service.generate_drafts(
+        kb_id="kb-1",
+        file_id="file-1",
+        operator_id="user-1",
+    )
+    assert result["status"] == "generated"
+    assert result["items"]
+@pytest.mark.asyncio
+async def test_list_marks_indexed_unconfirmed_document_confirmable():
+    """普通已入库文档（confirmed_at=None）的 QA 列表 confirmable 为真，生成的 QA 可确认并投影到检索。"""
+    service, _qa_repo, _index = _service(_file(confirmed_at=None, chunk_count=3))
+    result = await service.list(kb_id="kb-1", file_id="file-1")
+    assert result["confirmable"] is True
+    assert result["draft_mode"] is False
 @pytest.mark.asyncio
 async def test_draft_mode_requires_pending_cleaning_draft():
     service, _repo, _index = _service(_file(status=FileStatus.WAITING_CONFIRMATION))

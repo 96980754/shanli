@@ -88,8 +88,15 @@ async def generate_testset_jsonl(
     size: int,
     judge_llm: Any,
     embedding_model: Any,
+    concurrency: int = 16,
 ) -> list[dict[str, Any]]:
-    """从知识库 chunks 生成 size 条 QA 测试集，返回 JSONL 行列表。"""
+    """从知识库 chunks 生成 size 条 QA 测试集，返回 JSONL 行列表。
+
+    concurrency 传给 RAGAS RunConfig.max_workers：transform 阶段（摘要/主题/实体提取）
+    与 QA 合成阶段并发执行，显著缩短大批量生成耗时；默认 16 与 ragas RunConfig 默认一致。
+    """
+    from ragas.run_config import RunConfig
+
     chunks = await load_kb_chunks(kb_id)
     if not chunks:
         raise ValueError(f"知识库 {kb_id} 没有已入库的文本 chunks，无法生成测试集")
@@ -99,7 +106,8 @@ async def generate_testset_jsonl(
 
     generator = build_testset_generator(judge_llm, embedding_model)
     documents = chunks_to_langchain_documents(chunks)
-    testset = _generate_prechunked_testset(generator, documents, size)
+    run_config = RunConfig(max_workers=max(1, concurrency))
+    testset = _generate_prechunked_testset(generator, documents, size, run_config=run_config)
 
     # chunk 内容 → 知识库 chunk_id，用于把样本的 reference_contexts 反查为真实 chunk_id
     content_index = {
@@ -113,7 +121,7 @@ async def generate_testset_jsonl(
     return rows
 
 
-def _generate_prechunked_testset(generator: Any, documents: list[Any], size: int) -> Any:
+def _generate_prechunked_testset(generator: Any, documents: list[Any], size: int, *, run_config: Any) -> Any:
     """把已入库 chunks 视为预切分文档，走 RAGAS 生成链路。
 
     不能用 generate_with_langchain_docs：它对 DOCUMENT 节点套用 default_transforms，
@@ -122,8 +130,9 @@ def _generate_prechunked_testset(generator: Any, documents: list[Any], size: int
     即使不崩溃，也可能因分箱选择偏差产出 0 场景。
     这里把 chunks 建成 CHUNK 节点并套用 default_transforms_for_prechunked，
     跳过标题切分与分箱，直接在每个 chunk 上提取摘要/主题/实体后生成 QA。
+    run_config（RAGAS RunConfig）透传给 apply_transforms 与 generate，
+    控制 transform/合成阶段的并发（max_workers）。
     """
-    from ragas.run_config import RunConfig
     from ragas.testset.graph import KnowledgeGraph, Node, NodeType
     from ragas.testset.transforms import apply_transforms, default_transforms_for_prechunked
 
@@ -136,9 +145,9 @@ def _generate_prechunked_testset(generator: Any, documents: list[Any], size: int
     ]
     kg = KnowledgeGraph(nodes=nodes)
     transforms = default_transforms_for_prechunked(llm=generator.llm, embedding_model=generator.embedding_model)
-    apply_transforms(kg, transforms, run_config=RunConfig())
+    apply_transforms(kg, transforms, run_config=run_config)
     generator.knowledge_graph = kg
-    return generator.generate(testset_size=size, raise_exceptions=True)
+    return generator.generate(testset_size=size, run_config=run_config, raise_exceptions=True)
 
 
 def _sample_to_jsonl(sample: Any, *, content_index: dict[str, str] | None = None) -> dict[str, Any]:

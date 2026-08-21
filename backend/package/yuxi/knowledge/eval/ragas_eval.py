@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -68,16 +69,29 @@ class RagasEmbeddingAdapter:
         self.run_config = run_config
 
 
-def build_judge_llm(model_spec: str, *, bypass_n: bool = True) -> Any:
+def build_judge_llm(
+    model_spec: str,
+    *,
+    bypass_n: bool = True,
+    run_config: Any = None,
+    cache: Any = None,
+) -> Any:
     """构建 ragas judge LLM：系统 load_chat_model 结果经 LangchainLLMWrapper 包装。
 
     bypass_n=True 规避部分 OpenAI 兼容提供商（如 deepseek）拒绝 n!=1 的问题。
+    run_config / cache 透传给 LangchainLLMWrapper：cache 提供 DiskCacheBackend 时，
+    相同 prompt 的 LLM 调用命中磁盘缓存，重跑测试集可跳过全部 LLM 调用。
     """
     from yuxi.agents.models import load_chat_model
 
     from ragas.llms import LangchainLLMWrapper
 
-    return LangchainLLMWrapper(load_chat_model(model_spec), bypass_n=bypass_n)
+    return LangchainLLMWrapper(
+        load_chat_model(model_spec),
+        run_config=run_config,
+        cache=cache,
+        bypass_n=bypass_n,
+    )
 
 
 def build_embedding_adapter(model_spec: str) -> Any:
@@ -163,42 +177,52 @@ async def run_ragas_evaluation(
     embedding_adapter: Any | None = None,
     *,
     with_embedding_metrics: bool = False,
+    concurrency: int = 1,
 ) -> dict[str, Any]:
     """对一批问题执行 RAGAS 评估。
 
     questions: [{"query", "gold_chunk_ids"?, "gold_answer"?}, ...]
     返回聚合指标 + 每题明细（含 RAGAS 分 + 系统自带的检索/答案分交叉校验）。
+
+    concurrency: 同时评估的题目数。RAGAS 每题内部对 chunk 的 LLM 判断是串行的
+    （single_turn 路径不使用 RunConfig.max_workers），并发题目是单轮提速的主要杠杆；
+    共享 judge LLM 的并发调用由 LangChain/tenacity 保证安全。默认 1 保持串行。
     """
     metrics = build_ragas_metrics(judge_llm, embedding_adapter, with_embedding_metrics=with_embedding_metrics)
 
     has_gold_chunks = any(q.get("gold_chunk_ids") for q in questions)
     has_gold_answers = any(q.get("gold_answer") for q in questions)
 
-    per_item: list[dict[str, Any]] = []
-    for index, q in enumerate(questions):
-        result = await evaluate_question(
-            kb_instance=kb_instance,
-            kb_id=kb_id,
-            question_data=q,
-            retrieval_config=retrieval_config,
-            has_gold_chunks=has_gold_chunks,
-            has_gold_answers=has_gold_answers,
-            judge_llm=None,  # 答案生成走简化链路，RAGAS 用自己的 judge 评估
-            select_model_fn=_select_model,
-        )
-        rag_scores = await score_sample(
-            _sample_from_question_data(q, result["detail"]["retrieved_chunks"], result["detail"]["generated_answer"]),
-            metrics,
-        )
-        per_item.append(
-            {
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def _evaluate_one(index: int, q: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            result = await evaluate_question(
+                kb_instance=kb_instance,
+                kb_id=kb_id,
+                question_data=q,
+                retrieval_config=retrieval_config,
+                has_gold_chunks=has_gold_chunks,
+                has_gold_answers=has_gold_answers,
+                judge_llm=None,  # 答案生成走简化链路，RAGAS 用自己的 judge 评估
+                select_model_fn=_select_model,
+            )
+            rag_scores = await score_sample(
+                _sample_from_question_data(
+                    q, result["detail"]["retrieved_chunks"], result["detail"]["generated_answer"]
+                ),
+                metrics,
+            )
+            return {
                 "index": index,
                 "query": q["query"],
                 "ragas_metrics": rag_scores,
                 "answer_scores": result["answer_scores"],
                 "retrieval_scores": result["retrieval_scores"],
             }
-        )
+
+    # gather 保序；任一题异常会随 gather 抛出（与串行版 fail-fast 语义一致）
+    per_item = list(await asyncio.gather(*[_evaluate_one(i, q) for i, q in enumerate(questions)]))
 
     metric_names = [m.name for m in metrics]
     aggregate = {}

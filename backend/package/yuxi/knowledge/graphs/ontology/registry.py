@@ -649,7 +649,7 @@ def compile_ontology_prompt(ontology: OntologySpec) -> str:
         "4. 新抽取的证据关联统一使用 SUPPORTED_BY，不要生成历史兼容关系 HAS_EVIDENCE。\n"
         "5. 禁止创建列表之外的实体类型、关系类型或属性。\n"
         "6. 文本中没有符合 Ontology 的事实时，返回空 entities 和 relations。\n"
-        "7. 禁止把口语指代/指示代词（如\"这台\"\"该\"\"此\"\"那\"\"其\"\"本\"等 + 名词）抽为实体；"
+        '7. 禁止把口语指代/指示代词（如"这台""该""此""那""其""本"等 + 名词）抽为实体；'
         "实体 text 必须是文本中真实、具体、可独立指称的名称（如具体型号、产品名、技术名），"
         "指代原文实际所指的具体实体时，直接用该实体的名称，不用指代词。"
     )
@@ -1018,8 +1018,7 @@ def _normalize_properties(
             value_type = _required_text(definition, "type", context=context).lower()
             if value_type not in _ALLOWED_PROPERTY_TYPES:
                 raise ValueError(
-                    f"{context}.type 不支持: {value_type}，"
-                    f"可用类型: {', '.join(sorted(_ALLOWED_PROPERTY_TYPES))}"
+                    f"{context}.type 不支持: {value_type}，可用类型: {', '.join(sorted(_ALLOWED_PROPERTY_TYPES))}"
                 )
             unit = definition.get("unit")
             if unit is not None and not isinstance(unit, str):

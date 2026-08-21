@@ -21,6 +21,7 @@ from pymilvus import (
     utility,
 )
 
+from yuxi.config.app import resolve_embedding_model, resolve_reranker_model
 from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
@@ -369,7 +370,7 @@ class MilvusKB(KnowledgeBase):
         if not (metadata := self.databases_meta.get(kb_id)):
             raise ValueError(f"Database {kb_id} not found")
 
-        embedding_model_spec = metadata.get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(metadata.get("embedding_model_spec"))
         if not embedding_model_spec:
             raise ValueError(f"Embedding model spec not found for database {kb_id}")
 
@@ -525,7 +526,7 @@ class MilvusKB(KnowledgeBase):
         escaped_id = self._escape_milvus_string_literal(vector_id)
         await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
         content = f"问题：{question}\n答案：{answer}"
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
         embeddings = await embedding_function([content])
         collection.insert(
@@ -737,7 +738,7 @@ class MilvusKB(KnowledgeBase):
         if not collection:
             raise ValueError(f"Failed to get Milvus collection for {kb_id}")
 
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
 
         file_meta = await self._load_file_meta(kb_id, file_id)
@@ -869,7 +870,7 @@ class MilvusKB(KnowledgeBase):
         if not collection:
             raise ValueError(f"Failed to get Milvus collection for {kb_id}")
 
-        embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+        embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
         embedding_function = self._get_embedding_function(embedding_model_spec)
 
         # 处理默认参数
@@ -1020,8 +1021,10 @@ class MilvusKB(KnowledgeBase):
 
             output_fields = ["content", "chunk_id", "file_id", "chunk_index"]
             retrieved_chunks: list[dict] = []
+            # 主检索的 query embedding 供图谱路径复用（search_mode=keyword 时无 embedding，为 None）
+            query_embedding: list | None = None
             if search_mode == "vector":
-                embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+                embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
                 embedding_function = self._get_embedding_function(embedding_model_spec, sync=True)
                 query_embedding = await _run_milvus_query_io(embedding_function, [query_text])
 
@@ -1076,7 +1079,7 @@ class MilvusKB(KnowledgeBase):
 
                 logger.debug(f"Milvus BM25 query response: {len(retrieved_chunks)} chunks found")
             else:
-                embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+                embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
                 embedding_function = self._get_embedding_function(embedding_model_spec, sync=True)
                 query_embedding = await _run_milvus_query_io(embedding_function, [query_text])
                 bm25_top_k = int(merged_kwargs.get("bm25_top_k", recall_top_k))
@@ -1121,7 +1124,9 @@ class MilvusKB(KnowledgeBase):
                 logger.debug(f"Milvus hybrid query response: {len(retrieved_chunks)} chunks found")
 
             if use_graph_retrieval:
-                graph_chunks = await self._retrieve_graph_chunks(query_text, kb_id, retrieved_chunks, merged_kwargs)
+                graph_chunks = await self._retrieve_graph_chunks(
+                    query_text, kb_id, retrieved_chunks, merged_kwargs, query_embedding=query_embedding
+                )
                 if graph_chunks:
                     graph_weight = float(merged_kwargs.get("graph_weight", 1.0))
                     retrieved_chunks = self._fuse_chunk_rankings(retrieved_chunks, graph_chunks, graph_weight)
@@ -1151,13 +1156,8 @@ class MilvusKB(KnowledgeBase):
             if not use_reranker:
                 return retrieved_chunks[:final_top_k]
 
-            # 使用重排序模型
-            reranker_model = merged_kwargs.get("reranker_model")
-            if not reranker_model:
-                raise ValueError(
-                    "Reranker model must be specified when use_reranker=True. "
-                    "Please provide reranker_model in query parameters."
-                )
+            # 使用重排序模型；未显式指定时跟随设置-基本设置的全局默认 reranker。
+            reranker_model = resolve_reranker_model(merged_kwargs.get("reranker_model"))
 
             try:
                 from yuxi.models.rerank import get_reranker
@@ -1197,12 +1197,13 @@ class MilvusKB(KnowledgeBase):
         kb_id: str,
         base_chunks: list[dict],
         query_params: dict[str, Any],
+        query_embedding: list | None = None,
     ) -> list[dict]:
         try:
             from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
             from yuxi.knowledge.graphs.milvus_graph_vector_store import MilvusGraphVectorStore
 
-            embedding_model_spec = self.databases_meta[kb_id].get("embedding_model_spec")
+            embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
             if not embedding_model_spec:
                 return []
 
@@ -1212,6 +1213,10 @@ class MilvusKB(KnowledgeBase):
             graph_max_nodes = max(int(query_params.get("graph_max_nodes", 10000)), 1)
 
             vector_store = await _run_milvus_query_io(MilvusGraphVectorStore)
+            # 主检索（vector/hybrid 分支）已对同一 query 编过 embedding，注入图谱缓存复用，
+            # 三路子检索直接命中已完成 Future，不再调用外部 embedding API。
+            if query_embedding is not None:
+                vector_store.seed_query_embedding(query_text, embedding_model_spec, query_embedding)
             entity_hits, triple_hits, assertion_hits = await asyncio.gather(
                 vector_store.search_entities(
                     kb_id=kb_id,

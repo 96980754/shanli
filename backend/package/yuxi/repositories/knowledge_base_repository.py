@@ -27,9 +27,7 @@ class KnowledgeBaseRepository:
             result = await session.execute(statement)
             return list(result.all())
 
-    async def get_by_kb_id_with_category(
-        self, kb_id: str
-    ) -> tuple[KnowledgeBase, KnowledgeBaseCategory] | None:
+    async def get_by_kb_id_with_category(self, kb_id: str) -> tuple[KnowledgeBase, KnowledgeBaseCategory] | None:
         async with pg_manager.get_async_session_context() as session:
             result = await session.execute(
                 select(KnowledgeBase, KnowledgeBaseCategory)

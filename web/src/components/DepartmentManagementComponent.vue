@@ -39,6 +39,67 @@
             :pagination="false"
             class="department-table"
           >
+            <template #expandedRowRender="{ record }">
+              <div class="team-section">
+                <div class="team-section-header">
+                  <span class="team-section-title">团队</span>
+                  <a-button
+                    type="dashed"
+                    size="small"
+                    class="add-team-btn lucide-icon-btn"
+                    @click="showAddTeamModal(record)"
+                  >
+                    <template #icon><Plus :size="14" /></template>
+                    新建团队
+                  </a-button>
+                </div>
+                <div v-if="(teamsByDepartment[record.id] || []).length === 0" class="team-empty">
+                  暂无团队
+                </div>
+                <div v-else class="team-list">
+                  <div v-for="team in teamsByDepartment[record.id]" :key="team.id" class="team-row">
+                    <Users :size="14" class="team-row-icon" />
+                    <span class="team-name">{{ team.name }}</span>
+                    <a-tag v-if="team.is_default" color="blue">默认</a-tag>
+                    <span class="team-count">{{ team.user_count ?? 0 }} 人</span>
+                    <span class="team-actions">
+                      <a-tooltip title="管理成员">
+                        <a-button
+                          type="text"
+                          size="small"
+                          class="action-btn lucide-icon-btn"
+                          @click="showManageMembers(record, team)"
+                        >
+                          <UserPlus :size="14" />
+                        </a-button>
+                      </a-tooltip>
+                      <a-tooltip title="编辑团队">
+                        <a-button
+                          type="text"
+                          size="small"
+                          class="action-btn lucide-icon-btn"
+                          @click="showEditTeamModal(record, team)"
+                        >
+                          <SquarePen :size="14" />
+                        </a-button>
+                      </a-tooltip>
+                      <a-tooltip title="删除团队">
+                        <a-button
+                          type="text"
+                          size="small"
+                          danger
+                          :disabled="team.is_default"
+                          class="action-btn lucide-icon-btn"
+                          @click="confirmDeleteTeam(record, team)"
+                        >
+                          <Trash2 :size="14" />
+                        </a-button>
+                      </a-tooltip>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </template>
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
                 <div class="department-name">
@@ -171,14 +232,78 @@
         </template>
       </a-form>
     </a-modal>
+
+    <!-- 团队表单模态框 -->
+    <a-modal
+      v-model:open="teamManagement.modalVisible"
+      :title="teamManagement.modalTitle"
+      @ok="handleTeamFormSubmit"
+      :confirmLoading="teamManagement.loading"
+      @cancel="teamManagement.modalVisible = false"
+      :maskClosable="false"
+      width="480px"
+      class="department-modal"
+    >
+      <a-form layout="vertical" class="department-form">
+        <a-form-item label="团队名称" required class="form-item">
+          <a-input
+            v-model:value="teamManagement.form.name"
+            placeholder="请输入团队名称"
+            size="large"
+            :maxlength="50"
+          />
+        </a-form-item>
+
+        <a-form-item label="团队描述" class="form-item">
+          <a-textarea
+            v-model:value="teamManagement.form.description"
+            placeholder="请输入团队描述（可选）"
+            :rows="3"
+            :maxlength="255"
+            show-count
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <!-- 团队成员管理模态框 -->
+    <a-modal
+      v-model:open="memberManagement.visible"
+      :title="memberManagement.team ? `团队「${memberManagement.team.name}」成员` : '管理团队成员'"
+      @ok="handleMemberSubmit"
+      :confirmLoading="memberManagement.loading"
+      @cancel="memberManagement.visible = false"
+      :maskClosable="false"
+      width="520px"
+      class="department-modal"
+    >
+      <a-spin :spinning="memberManagement.loading">
+        <div class="member-select-wrap">
+          <a-select
+            v-model:value="memberManagement.selectedIds"
+            mode="multiple"
+            :options="memberOptions"
+            option-filter-prop="label"
+            show-search
+            placeholder="勾选该团队的用户"
+            class="member-select"
+            :maxTagCount="10"
+          />
+          <p v-if="memberManagement.team && memberManagement.team.is_default" class="help-text">
+            默认团队是未分配用户的兜底桶：勾选用户将移回默认团队（取消分配），取消勾选不改变归属。
+          </p>
+          <p v-else class="help-text">勾选用户加入该团队；取消勾选的原成员将回到本部门默认团队。</p>
+        </div>
+      </a-spin>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { reactive, onMounted, watch } from 'vue'
+import { reactive, computed, onMounted, watch } from 'vue'
 import { notification, message, Modal } from 'ant-design-vue'
-import { departmentApi, apiSuperAdminGet } from '@/apis'
-import { Plus, RefreshCw, SquarePen, Trash2 } from 'lucide-vue-next'
+import { departmentApi, apiSuperAdminGet, getUsersByDepartment } from '@/apis'
+import { Plus, RefreshCw, SquarePen, Trash2, UserPlus, Users } from 'lucide-vue-next'
 
 // 表格列定义
 const columns = [
@@ -231,19 +356,203 @@ const departmentManagement = reactive({
   }
 })
 
+// 团队管理状态
+const teamManagement = reactive({
+  loading: false,
+  modalVisible: false,
+  modalTitle: '新建团队',
+  editMode: false,
+  editTeamId: null,
+  departmentId: null,
+  form: {
+    name: '',
+    description: ''
+  }
+})
+
+// 按部门分组的团队缓存：{ [departmentId]: [team, ...] }
+const teamsByDepartment = reactive({})
+
+// 团队成员管理状态
+const memberManagement = reactive({
+  visible: false,
+  loading: false,
+  departmentId: null,
+  team: null,
+  users: [], // 部门用户（含 team_id/team_name）
+  selectedIds: [] // 勾选的用户 id
+})
+
+// 成员下拉选项：用户名（当前团队名）便于识别归属
+const memberOptions = computed(() =>
+  memberManagement.users.map((user) => ({
+    value: user.id,
+    label: user.team_name ? `${user.username}（${user.team_name}）` : user.username
+  }))
+)
+
+// 打开成员管理弹窗：拉取部门用户，预选当前团队已有成员
+const showManageMembers = async (department, team) => {
+  memberManagement.departmentId = department.id
+  memberManagement.team = team
+  memberManagement.users = []
+  memberManagement.selectedIds = []
+  memberManagement.visible = true
+  memberManagement.loading = true
+  try {
+    const users = await getUsersByDepartment(department.id)
+    memberManagement.users = users
+    memberManagement.selectedIds = users
+      .filter((user) => user.team_id === team.id)
+      .map((user) => user.id)
+  } catch (error) {
+    console.error('获取部门用户失败:', error)
+    notification.error({
+      message: '获取成员列表失败',
+      description: error.message || '请稍后重试'
+    })
+  } finally {
+    memberManagement.loading = false
+  }
+}
+
+// 保存成员：勾选的进团队，取消勾选的原成员回默认团队
+const handleMemberSubmit = async () => {
+  try {
+    memberManagement.loading = true
+    await departmentApi.updateTeamMembers(
+      memberManagement.departmentId,
+      memberManagement.team.id,
+      memberManagement.selectedIds
+    )
+    notification.success({ message: '团队成员已更新' })
+    memberManagement.visible = false
+    await fetchDepartments()
+  } catch (error) {
+    console.error('更新团队成员失败:', error)
+    notification.error({
+      message: '更新失败',
+      description: error.message || '请稍后重试'
+    })
+  } finally {
+    memberManagement.loading = false
+  }
+}
+
 // 获取部门列表
 const fetchDepartments = async () => {
   try {
     departmentManagement.loading = true
     departmentManagement.error = null
-    const departments = await departmentApi.getDepartments()
+    const [departments, teams] = await Promise.all([
+      departmentApi.getDepartments(),
+      departmentApi.getAllTeams()
+    ])
     departmentManagement.departments = departments
+    // 按部门分组团队，供展开行渲染
+    const grouped = {}
+    for (const team of teams) {
+      const deptId = String(team.department_id)
+      if (!grouped[deptId]) grouped[deptId] = []
+      grouped[deptId].push(team)
+    }
+    Object.keys(teamsByDepartment).forEach((key) => delete teamsByDepartment[key])
+    Object.assign(teamsByDepartment, grouped)
   } catch (error) {
-    console.error('获取部门列表失败:', error)
+    console.error('获取部门/团队列表失败:', error)
     departmentManagement.error = '获取部门列表失败'
   } finally {
     departmentManagement.loading = false
   }
+}
+
+// 打开新建团队模态框
+const showAddTeamModal = (department) => {
+  teamManagement.modalTitle = '新建团队'
+  teamManagement.editMode = false
+  teamManagement.editTeamId = null
+  teamManagement.departmentId = department.id
+  teamManagement.form = {
+    name: '',
+    description: ''
+  }
+  teamManagement.modalVisible = true
+}
+
+// 打开编辑团队模态框
+const showEditTeamModal = (department, team) => {
+  teamManagement.modalTitle = '编辑团队'
+  teamManagement.editMode = true
+  teamManagement.editTeamId = team.id
+  teamManagement.departmentId = department.id
+  teamManagement.form = {
+    name: team.name,
+    description: team.description || ''
+  }
+  teamManagement.modalVisible = true
+}
+
+// 处理团队表单提交
+const handleTeamFormSubmit = async () => {
+  try {
+    if (!teamManagement.form.name.trim()) {
+      notification.error({ message: '团队名称不能为空' })
+      return
+    }
+    teamManagement.loading = true
+    const payload = {
+      name: teamManagement.form.name.trim(),
+      description: teamManagement.form.description.trim() || undefined
+    }
+    if (teamManagement.editMode) {
+      await departmentApi.updateTeam(
+        teamManagement.departmentId,
+        teamManagement.editTeamId,
+        payload
+      )
+      notification.success({ message: '团队更新成功' })
+    } else {
+      await departmentApi.createTeam(teamManagement.departmentId, payload)
+      notification.success({ message: '团队创建成功' })
+    }
+    await fetchDepartments()
+    teamManagement.modalVisible = false
+  } catch (error) {
+    console.error('团队操作失败:', error)
+    notification.error({
+      message: '操作失败',
+      description: error.message || '请稍后重试'
+    })
+  } finally {
+    teamManagement.loading = false
+  }
+}
+
+// 删除团队（默认团队不可删）
+const confirmDeleteTeam = (department, team) => {
+  Modal.confirm({
+    title: '确认删除团队',
+    content: `确定要删除团队 "${team.name}" 吗？该团队下的用户会迁移到本部门默认团队。`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        teamManagement.loading = true
+        await departmentApi.deleteTeam(department.id, team.id)
+        notification.success({ message: '团队删除成功' })
+        await fetchDepartments()
+      } catch (error) {
+        console.error('删除团队失败:', error)
+        notification.error({
+          message: '删除失败',
+          description: error.message || '请稍后重试'
+        })
+      } finally {
+        teamManagement.loading = false
+      }
+    }
+  })
 }
 
 // 刷新部门列表
@@ -574,6 +883,68 @@ onMounted(() => {
         }
       }
     }
+
+    .team-section {
+      padding: 8px 16px 12px 48px;
+
+      .team-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+
+        .team-section-title {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--gray-600);
+        }
+      }
+
+      .team-empty {
+        padding: 12px;
+        text-align: center;
+        color: var(--gray-500);
+        font-size: 13px;
+      }
+
+      .team-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+
+        .team-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 10px;
+          border: 1px solid var(--gray-100);
+          border-radius: 8px;
+          background: var(--gray-25, #fafbfc);
+
+          .team-row-icon {
+            color: var(--gray-500);
+            flex-shrink: 0;
+          }
+
+          .team-name {
+            font-weight: 500;
+            color: var(--gray-900);
+          }
+
+          .team-count {
+            margin-left: auto;
+            color: var(--gray-500);
+            font-size: 12px;
+          }
+
+          .team-actions {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -629,6 +1000,14 @@ onMounted(() => {
     font-size: 12px;
     margin-top: 4px;
     line-height: 1.3;
+  }
+
+  .member-select-wrap {
+    padding: 4px 0;
+
+    .member-select {
+      width: 100%;
+    }
   }
 }
 </style>

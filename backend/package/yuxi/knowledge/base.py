@@ -7,6 +7,7 @@ import string
 from abc import ABC, abstractmethod
 from typing import Any
 
+from yuxi.config.app import resolve_embedding_model
 from yuxi.knowledge.chunking.ragflow_like.presets import ensure_chunk_defaults_in_additional_params
 from yuxi.knowledge.schemas import FindOutputSchema, FindWindowSchema, SearchResultSchema
 from yuxi.knowledge.utils import resolve_processing_params, sanitize_processing_params
@@ -108,6 +109,7 @@ class KnowledgeBase(ABC):
                     "name": meta.get("name"),
                     "description": meta.get("description"),
                     "kb_type": meta.get("kb_type"),
+                    # 存原始 spec：为空表示跟随全局默认，使用点实时 resolve，全局 embed_model 切换无需重启生效
                     "embedding_model_spec": meta.get("embedding_model_spec"),
                     "llm_model_spec": meta.get("llm_model_spec"),
                     "query_params": meta.get("query_params"),
@@ -194,6 +196,16 @@ class KnowledgeBase(ABC):
 
     @staticmethod
     def _file_meta_to_record_data(meta: dict) -> dict[str, Any]:
+        # meta 中的时间戳以 UTC ISO 字符串保存（见 _file_record_to_meta），写回数据库列时
+        # 需回转成 datetime 对象，否则 read→persist 往返会触发 asyncpg DataError。
+        def _to_dt(value: Any) -> Any:
+            if not value:
+                return None
+            try:
+                return coerce_any_to_utc_datetime(value)
+            except (TypeError, ValueError):
+                return None
+
         return {
             "kb_id": meta.get("kb_id"),
             "parent_id": meta.get("parent_id"),
@@ -201,7 +213,7 @@ class KnowledgeBase(ABC):
             "document_version": meta.get("document_version"),
             "is_current": meta.get("is_current", True),
             "supersedes_file_id": meta.get("supersedes_file_id"),
-            "activated_at": meta.get("activated_at"),
+            "activated_at": _to_dt(meta.get("activated_at")),
             "filename": meta.get("filename") or "",
             "original_filename": meta.get("original_filename"),
             "file_type": meta.get("file_type"),
@@ -224,13 +236,13 @@ class KnowledgeBase(ABC):
             "is_active": meta.get("is_active", True),
             "replacement_target_file_id": meta.get("replacement_target_file_id"),
             "previous_version_id": meta.get("previous_version_id"),
-            "superseded_at": meta.get("superseded_at"),
+            "superseded_at": _to_dt(meta.get("superseded_at")),
             "processing_stage": meta.get("processing_stage"),
             "processing_progress": int(meta.get("processing_progress") or 0),
             "processing_task_id": meta.get("processing_task_id"),
             "processing_task_attempt": int(meta.get("processing_task_attempt") or 0),
-            "processing_task_updated_at": meta.get("processing_task_updated_at"),
-            "processing_task_lease_expires_at": meta.get("processing_task_lease_expires_at"),
+            "processing_task_updated_at": _to_dt(meta.get("processing_task_updated_at")),
+            "processing_task_lease_expires_at": _to_dt(meta.get("processing_task_lease_expires_at")),
         }
 
     async def _load_file_meta(self, kb_id: str, file_id: str, *, refresh: bool = False) -> dict:
@@ -1372,6 +1384,8 @@ class KnowledgeBase(ABC):
 
         meta = self.databases_meta[kb_id].copy()
         meta["kb_id"] = kb_id
+        # 展示用有效模型：为空时实时跟随全局默认，设置页切换后无需重启即反映
+        meta["embedding_model_spec"] = resolve_embedding_model(meta.get("embedding_model_spec"))
 
         meta["stats"] = self._get_database_stats(kb_id)
         meta["row_count"] = meta["stats"].get("row_count") or meta["stats"].get("file_count") or 0
@@ -1435,6 +1449,8 @@ class KnowledgeBase(ABC):
         # Implementations should ensure they handle folder deletion gracefully (e.g. skip vector deletion)
         await self.delete_file(kb_id, folder_id)
 
+    _VIRTUAL_FOLDER_PREFIX = "__virtual_folder__:"
+
     async def move_file(self, kb_id: str, file_id: str, new_parent_id: str | None) -> dict:
         """
         Move a file or folder to a new parent folder.
@@ -1442,14 +1458,22 @@ class KnowledgeBase(ABC):
         Args:
             kb_id: Database ID
             file_id: File/Folder ID to move
-            new_parent_id: New parent folder ID (None for root)
+            new_parent_id: New parent folder ID、虚拟目录 ID 或 None（根目录）。
+                虚拟目录形如 ``__virtual_folder__:{parent_ref}:{path_prefix}/``，是按文件名路径前缀
+                聚合的只读导航节点（无 DB 记录），移入它需要改写 ``filename`` 的路径前缀而非写
+                ``parent_id``；真实文件夹/根目录仍走 ``parent_id``，文件名收敛为纯文件名。
 
         Returns:
             dict: Updated metadata
         """
+        from yuxi.repositories.knowledge_file_repository import normalize_document_filename
+
         meta = await self._load_file_meta(kb_id, file_id)
 
-        # Basic cycle detection for folders
+        if new_parent_id and new_parent_id.startswith(self._VIRTUAL_FOLDER_PREFIX):
+            return await self._move_file_to_virtual_folder(kb_id, file_id, meta, new_parent_id)
+
+        # 真实文件夹或根目录：目标以真实记录承载，先做文件夹环路/类型校验
         if meta.get("is_folder") and new_parent_id:
             # Check if new_parent_id is a child of file_id (or is file_id itself)
             if new_parent_id == file_id:
@@ -1469,7 +1493,39 @@ class KnowledgeBase(ABC):
             if not parent_meta.get("is_folder"):
                 raise ValueError("Parent is not a folder")
 
+        # 目标为真实文件夹或根目录时文件名一律收敛为 basename：真实文件夹内文件以相对名存储，
+        # 保留路径前缀会污染展示并派生多余的虚拟子目录
         meta["parent_id"] = new_parent_id
+        meta["filename"] = (meta.get("filename") or "").rsplit("/", 1)[-1]
+        meta["normalized_name"] = normalize_document_filename(meta["filename"])
+        await self._persist_file_meta(file_id, meta)
+        return meta
+
+    async def _move_file_to_virtual_folder(
+        self, kb_id: str, file_id: str, meta: dict, virtual_folder_id: str
+    ) -> dict:
+        """把文件移入虚拟目录：改写 filename 路径前缀（虚拟目录由文件名路径前缀聚合，无 DB 记录）。"""
+        from yuxi.repositories.knowledge_file_repository import normalize_document_filename
+
+        if meta.get("is_folder"):
+            raise ValueError("Cannot move a folder into a virtual folder")
+
+        parts = virtual_folder_id.split(":", 2)
+        if len(parts) < 3 or not parts[2].endswith("/"):
+            raise ValueError(f"Invalid virtual folder target: {virtual_folder_id}")
+        parent_ref, path_prefix = parts[1], parts[2]
+
+        # 虚拟目录的 id 内嵌父上下文：root=根目录（parent_id 置空），否则为真实文件夹（parent_id 落库）
+        new_parent_id = None if parent_ref == "root" else parent_ref
+        if new_parent_id:
+            parent_meta = await self._load_file_meta(kb_id, new_parent_id)
+            if not parent_meta.get("is_folder"):
+                raise ValueError(f"Parent is not a folder: {parent_ref}")
+
+        basename = (meta.get("filename") or "").rsplit("/", 1)[-1]
+        meta["parent_id"] = new_parent_id
+        meta["filename"] = path_prefix + basename
+        meta["normalized_name"] = normalize_document_filename(meta["filename"])
         await self._persist_file_meta(file_id, meta)
         return meta
 
@@ -1549,6 +1605,8 @@ class KnowledgeBase(ABC):
         description: str,
         llm_model_spec: str | None = None,
         update_llm_model_spec: bool = False,
+        embedding_model_spec: str | None = None,
+        update_embedding_model_spec: bool = False,
     ) -> dict:
         """
         更新数据库
@@ -1558,6 +1616,9 @@ class KnowledgeBase(ABC):
             name: 新名称
             description: 新描述
             llm_model_spec: LLM 模型 spec（可选）
+            update_llm_model_spec: 是否同步更新 llm_model_spec 到内存 meta
+            embedding_model_spec: 嵌入模型 spec（可选）
+            update_embedding_model_spec: 是否同步更新 embedding_model_spec 到内存 meta
 
         Returns:
             更新后的数据库信息
@@ -1569,6 +1630,8 @@ class KnowledgeBase(ABC):
         self.databases_meta[kb_id]["description"] = description
         if update_llm_model_spec:
             self.databases_meta[kb_id]["llm_model_spec"] = llm_model_spec
+        if update_embedding_model_spec:
+            self.databases_meta[kb_id]["embedding_model_spec"] = embedding_model_spec
 
         return self.get_database_info(kb_id)
 
@@ -1608,6 +1671,7 @@ class KnowledgeBase(ABC):
                 "name": kb.name,
                 "description": kb.description,
                 "kb_type": kb.kb_type,
+                # 存原始 spec：为空表示跟随全局默认，使用点实时 resolve，全局 embed_model 切换无需重启生效
                 "embedding_model_spec": kb.embedding_model_spec,
                 "llm_model_spec": kb.llm_model_spec,
                 "query_params": kb.query_params or self._get_default_query_params(kb.kb_id),

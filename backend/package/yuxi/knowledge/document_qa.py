@@ -1,4 +1,5 @@
 """Validation and provider-backed generation for document QA pairs."""
+
 from __future__ import annotations
 import asyncio
 import hashlib
@@ -7,21 +8,32 @@ import re
 import unicodedata
 from typing import Any
 from yuxi.models import select_model
+
 QA_GENERATOR_VERSION = "1.0"
 _SPACE_RE = re.compile(r"\s+")
 _QUESTION_PUNCTUATION_RE = re.compile(r"[?？]+$")
 _URL_RE = re.compile(r"https?://[^\s)>]+")
 _NUMBER_RE = re.compile(r"\b\d+(?:[.,/_-]\d+)*\b")
 _MODEL_RE = re.compile(r"\b[A-Z][A-Z0-9]*(?:[-_/][A-Za-z0-9.]+)+\b")
+
+
 class QAValidationError(ValueError):
     """Raised when a QA pair cannot be grounded in its source chunks."""
+
+
 class QAProviderUnavailable(RuntimeError):
     """Raised when document QA generation has no configured provider."""
+
+
 def normalize_question(question: str) -> str:
     normalized = _SPACE_RE.sub(" ", unicodedata.normalize("NFKC", str(question))).strip().casefold()
     return _QUESTION_PUNCTUATION_RE.sub("", normalized).strip()
+
+
 def question_hash(question: str) -> str:
     return hashlib.sha256(normalize_question(question).encode("utf-8")).hexdigest()
+
+
 def _assert_fact_subset(answer: str, evidence: str) -> None:
     checks = (
         (_MODEL_RE, "答案包含证据中不存在的型号或版本"),
@@ -37,6 +49,8 @@ def _assert_fact_subset(answer: str, evidence: str) -> None:
         }
         if missing:
             raise QAValidationError(message)
+
+
 def normalize_and_validate_qa(
     payload: dict[str, Any],
     source_chunks: dict[str, str],
@@ -76,6 +90,8 @@ def normalize_and_validate_qa(
         "source_chunk_ids": source_chunk_ids,
         "evidence": normalized_evidence,
     }
+
+
 def _extract_json(value: str) -> list[dict[str, Any]]:
     text = value.strip()
     if text.startswith("```"):
@@ -90,8 +106,11 @@ def _extract_json(value: str) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise QAValidationError("模型输出必须包含 qas 数组")
     return [item for item in payload if isinstance(item, dict)]
+
+
 class DocumentQAGenerator:
     """Generate QA drafts through the existing configurable model boundary."""
+
     async def generate(
         self,
         chunks: list[Any],
@@ -169,6 +188,8 @@ class DocumentQAGenerator:
         if not results:
             raise QAValidationError("模型没有生成可验证的 QA")
         return results
+
+
 __all__ = [
     "DocumentQAGenerator",
     "QAProviderUnavailable",

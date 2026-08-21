@@ -35,6 +35,11 @@ class MilvusGraphVectorStore:
         self.milvus_uri = os.getenv("MILVUS_URI") or "http://localhost:19530"
         self.milvus_db = os.getenv("MILVUS_DB") or "yuxi"
         self.connection_alias = f"milvus_graph_{hashstr(self.milvus_uri, 6)}"
+        # 查询级 embedding 缓存：检索路径每次查询新建本实例（见 milvus._retrieve_graph_chunks），
+        # 故实例生命周期 = 单次查询，缓存随查询结束自动回收，无需清理。
+        # 键 = (embedding_model_spec, query_text)，值 = 共享的 embedding awaitable
+        # （未完成时为 asyncio.Task，已注入主检索结果为 completed Future）。
+        self._query_embedding_tasks: dict[tuple[str, str], asyncio.Future] = {}
         self._init_connection()
 
     def _init_connection(self) -> None:
@@ -158,6 +163,35 @@ class MilvusGraphVectorStore:
         batch_size = int(getattr(model, "batch_size", 40) or 40)
         return partial(model.abatch_encode, batch_size=batch_size)
 
+    def seed_query_embedding(self, query_text: str, embedding_model_spec: str, query_embedding: list) -> None:
+        """注入主检索已算好的 query embedding，供图谱子检索直接复用。
+
+        主检索（aquery 的 vector/hybrid 分支）已对同一 query 做过一次 embedding
+        （batch_encode），其结果与 abatch_encode 同源同向量；把它以已完成 Future
+        的形式放入查询级缓存，三路子检索 await 时立即返回，不再调用外部模型。
+        仅当主检索已产出 embedding 时调用（search_mode=keyword 时跳过）。
+        """
+        key = (embedding_model_spec, query_text)
+        future = asyncio.get_running_loop().create_future()
+        future.set_result(query_embedding)
+        self._query_embedding_tasks[key] = future
+
+    async def _embed_query_text(self, query_text: str, embedding_model_spec: str) -> list:
+        """对 query 做图谱向量检索所需的 embedding，同一查询只调用一次外部模型。
+
+        实体/三元组/审核断言三路子检索共享同一查询文本，且在本实例内并发执行；
+        用实例级缓存去重，避免对同一句 query 重复调用外部 embedding API。
+        首次调用创建任务并缓存，后续调用 await 同一任务；若主检索已通过
+        seed_query_embedding 注入结果，则直接命中已完成 Future，零外部调用。
+        """
+        key = (embedding_model_spec, query_text)
+        task = self._query_embedding_tasks.get(key)
+        if task is None:
+            embed = self._get_embedding_function(embedding_model_spec)
+            task = asyncio.create_task(embed([query_text]))
+            self._query_embedding_tasks[key] = task
+        return await task
+
     async def _search_graph_collection(
         self,
         *,
@@ -169,8 +203,7 @@ class MilvusGraphVectorStore:
     ) -> list[dict[str, Any]]:
         if top_k <= 0:
             return []
-        embed = self._get_embedding_function(embedding_model_spec)
-        query_embedding = await embed([query_text])
+        query_embedding = await self._embed_query_text(query_text, embedding_model_spec)
         return await _run_milvus_query_io(
             self._search_graph_collection_sync,
             collection_name,
@@ -354,8 +387,7 @@ class MilvusGraphVectorStore:
         )
         if not has_collection or top_k <= 0:
             return []
-        embed = self._get_embedding_function(embedding_model_spec)
-        query_embedding = await embed([query_text])
+        query_embedding = await self._embed_query_text(query_text, embedding_model_spec)
         return await _run_milvus_query_io(
             self._search_graph_collection_sync,
             collection_name,

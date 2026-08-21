@@ -1,0 +1,219 @@
+{
+  "disclaimer": "本报告基于简化评估链路（复用 evaluate_question），不代表生产 Agent 最终表现。",
+  "metrics": {
+    "faithfulness": 0.47218045112781953,
+    "context_precision": 0.8182935678979496,
+    "context_recall": 0.8019822282980178
+  },
+  "items": [
+    {
+      "index": 0,
+      "query": "电子围栏最多可以创建多少个？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9129251700549855,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 1,
+      "query": "如何创建和配置电子围栏？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.691666666649375,
+        "context_recall": 0.8
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 2,
+      "query": "如何查看终端的历史轨迹回放？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 3,
+      "query": "如何设置终端定时上报位置？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.5533333333222666,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 4,
+      "query": "终端支持哪些定位方式（GPS/北斗/基站）？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9467813051041186,
+        "context_recall": 0.75
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 5,
+      "query": "终端定位不准确，如何排查？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.841225749549736,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 6,
+      "query": "终端定位漂移严重，如何排查？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.8333333333333334
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 7,
+      "query": "终端 GPS 信号弱，如何改善？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.737755102030277,
+        "context_recall": 0.3333333333333333
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 8,
+      "query": "终端上报了位置但调度台不显示，如何排查？",
+      "ragas_metrics": {
+        "faithfulness": 0.3,
+        "context_precision": 0.19999999998,
+        "context_recall": 0.6
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 9,
+      "query": "F10 终端支持哪些定位上报周期配置？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.16666666665,
+        "context_recall": 0.3333333333333333
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 10,
+      "query": "在安防行业，我们的产品能怎么用？用在什么地方，解决什么问题？",
+      "ragas_metrics": {
+        "faithfulness": 0.9166666666666666,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.875
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 11,
+      "query": "在化工园区，如何用我们的产品实现人员定位和紧急报警？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.9888888888779013,
+        "context_recall": 0.9090909090909091
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 12,
+      "query": "在矿山井下，产品如何解决通信和人员管理问题？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9888888888779013,
+        "context_recall": 0.8333333333333334
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 13,
+      "query": "在物流行业，产品如何应用于车辆调度和货物跟踪？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.9888888888779013,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 14,
+      "query": "在电力巡检场景，如何用产品做巡检人员定位与调度？",
+      "ragas_metrics": {
+        "faithfulness": 0.9166666666666666,
+        "context_precision": 0.9282627865858059,
+        "context_recall": 0.9285714285714286
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 15,
+      "query": "在建筑工地，如何实现人员考勤、定位和安全报警？",
+      "ragas_metrics": {
+        "faithfulness": 0.9523809523809523,
+        "context_precision": 0.9467813051041186,
+        "context_recall": 0.625
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 16,
+      "query": "定位功能如何部署？需要什么配置的服务器？",
+      "ragas_metrics": {
+        "faithfulness": 1.0,
+        "context_precision": 0.8701388888780122,
+        "context_recall": 0.6666666666666666
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 17,
+      "query": "如何配置定位服务器和终端定位参数？",
+      "ragas_metrics": {
+        "faithfulness": 0.0,
+        "context_precision": 0.7853741496486443,
+        "context_recall": 1.0
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    },
+    {
+      "index": 18,
+      "query": "客户是化工园区，需要防爆终端+人员定位+电子围栏，请给出整体解决方案（Word 文档输出）？",
+      "ragas_metrics": {
+        "faithfulness": 0.8857142857142857,
+        "context_precision": 0.99999999999,
+        "context_recall": 0.75
+      },
+      "answer_score": null,
+      "answer_reasoning": null
+    }
+  ]
+}

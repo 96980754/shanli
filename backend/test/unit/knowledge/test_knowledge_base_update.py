@@ -1,5 +1,8 @@
 import asyncio
 import types
+from datetime import datetime
+
+import pytest
 
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
 from yuxi.knowledge.base import KnowledgeBase
@@ -204,6 +207,34 @@ async def test_update_database_clears_llm_spec_when_field_is_explicit(tmp_path):
 
     assert result["llm_model_spec"] is None
     assert kb.databases_meta["db"]["llm_model_spec"] is None
+
+
+async def test_update_database_keeps_embedding_spec_when_field_is_omitted(tmp_path):
+    kb = make_kb(tmp_path)
+    kb.databases_meta["db"]["embedding_model_spec"] = "siliconflow-cn:BAAI/bge-m3"
+
+    result = kb.update_database("db", "New name", "New description")
+    await asyncio.sleep(0)
+
+    assert result["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+    assert kb.databases_meta["db"]["embedding_model_spec"] == "siliconflow-cn:BAAI/bge-m3"
+
+
+async def test_update_database_switches_embedding_model_in_memory(tmp_path):
+    kb = make_kb(tmp_path)
+    kb.databases_meta["db"]["embedding_model_spec"] = "siliconflow-cn:BAAI/bge-m3"
+
+    result = kb.update_database(
+        "db",
+        "New name",
+        "New description",
+        embedding_model_spec="local:BAAI/bge-m3",
+        update_embedding_model_spec=True,
+    )
+    await asyncio.sleep(0)
+
+    assert result["embedding_model_spec"] == "local:BAAI/bge-m3"
+    assert kb.databases_meta["db"]["embedding_model_spec"] == "local:BAAI/bge-m3"
 
 
 def test_get_database_info_returns_persisted_content_stats(tmp_path):
@@ -430,3 +461,93 @@ async def test_repair_missing_file_stats_skips_unindexed_files(tmp_path, monkeyp
         "file-uploaded",
         "file-parsed",
     }
+
+
+def test_file_meta_to_record_data_coerces_iso_timestamps_to_datetime():
+    # 回归：移动文件 read→persist 往返。_file_record_to_meta 把 DB 时间戳序列化为 UTC ISO 字符串，
+    # _file_meta_to_record_data 若原样写回 TIMESTAMPTZ 列会触发 asyncpg DataError
+    # （"invalid input for query argument ... expected a datetime"）。
+    meta = {
+        "file_id": "f1",
+        "filename": "a.docx",
+        "activated_at": "2026-08-18T20:45:33.092021Z",
+        "superseded_at": None,
+        "processing_task_updated_at": "2026-08-18T21:00:00.000000Z",
+        "processing_task_lease_expires_at": "2026-08-18T22:00:00.000000Z",
+    }
+    data = KnowledgeBase._file_meta_to_record_data(meta)
+    assert isinstance(data["activated_at"], datetime)
+    assert isinstance(data["processing_task_updated_at"], datetime)
+    assert isinstance(data["processing_task_lease_expires_at"], datetime)
+    assert data["superseded_at"] is None
+
+
+class MoveSpy(FakeKnowledgeBase):
+    """move_file 单测探针：拦截读写，不触库。"""
+
+    def __init__(self, files: dict[str, dict], tmp_path):
+        super().__init__(str(tmp_path))
+        self._files = files
+        self.persisted: list[tuple[str, dict]] = []
+
+    async def _load_file_meta(self, kb_id: str, file_id: str, *, refresh: bool = False) -> dict:
+        return dict(self._files[file_id])
+
+    async def _persist_file_meta(self, file_id: str, meta: dict) -> None:
+        self._files[file_id] = dict(meta)
+        self.persisted.append((file_id, dict(meta)))
+
+
+def _file_meta(file_id: str, name: str, *, parent_id=None, is_folder=False) -> dict:
+    return {"file_id": file_id, "kb_id": "kb", "filename": name, "parent_id": parent_id, "is_folder": is_folder}
+
+
+async def test_move_file_into_virtual_folder_rewrites_filename(tmp_path):
+    # 回归：最初 400 场景——目标是路径型虚拟目录（__virtual_folder__:root:xxx/），
+    # 现改写 filename 路径前缀（poc资料/MNO/xxx.docx）而非写 parent_id
+    spy = MoveSpy({"f1": _file_meta("f1", "POCSTARS定位产品介绍话术-海外版.docx")}, tmp_path)
+    out = await spy.move_file("kb", "f1", "__virtual_folder__:root:poc资料/MNO/")
+    assert out["filename"] == "poc资料/MNO/POCSTARS定位产品介绍话术-海外版.docx"
+    assert out["parent_id"] is None
+    assert out["normalized_name"] == "poc资料/mno/pocstars定位产品介绍话术-海外版.docx"
+    assert spy.persisted[-1][0] == "f1"
+
+
+async def test_move_file_out_of_virtual_path_back_to_root(tmp_path):
+    spy = MoveSpy({"f1": _file_meta("f1", "poc资料/MNO/POCSTARS定位产品介绍话术-海外版.docx")}, tmp_path)
+    out = await spy.move_file("kb", "f1", None)
+    assert out["filename"] == "POCSTARS定位产品介绍话术-海外版.docx"
+    assert out["parent_id"] is None
+
+
+async def test_move_file_into_real_folder_strips_path_prefix(tmp_path):
+    # 从虚拟路径目录移入真实文件夹：文件名收敛为 basename，parent_id 落真实文件夹
+    spy = MoveSpy(
+        {
+            "f1": _file_meta("f1", "poc资料/MNO/POCSTARS定位产品介绍话术-海外版.docx"),
+            "folder-real": _file_meta("folder-real", "销售话术", is_folder=True),
+        },
+        tmp_path,
+    )
+    out = await spy.move_file("kb", "f1", "folder-real")
+    assert out["filename"] == "POCSTARS定位产品介绍话术-海外版.docx"
+    assert out["parent_id"] == "folder-real"
+
+
+async def test_move_file_into_virtual_folder_under_real_folder_sets_parent(tmp_path):
+    # 虚拟目录 id 内嵌真实文件夹父上下文（__virtual_folder__:{folder}:{prefix}/）：parent_id 落库
+    spy = MoveSpy(
+        {"f1": _file_meta("f1", "a.docx"), "folder-real": _file_meta("folder-real", "资料", is_folder=True)},
+        tmp_path,
+    )
+    out = await spy.move_file("kb", "f1", "__virtual_folder__:folder-real:sub/")
+    assert out["filename"] == "sub/a.docx"
+    assert out["parent_id"] == "folder-real"
+
+
+async def test_move_file_rejects_virtual_target_for_folder_and_bad_id(tmp_path):
+    spy = MoveSpy({"folder-a": _file_meta("folder-a", "a", is_folder=True)}, tmp_path)
+    with pytest.raises(ValueError):
+        await spy.move_file("kb", "folder-a", "__virtual_folder__:root:sub/")
+    with pytest.raises(ValueError):
+        await spy.move_file("kb", "folder-a", "__virtual_folder__:root:sub")  # 缺尾部斜杠
