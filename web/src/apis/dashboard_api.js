@@ -1,4 +1,10 @@
-import { apiAdminGet, apiSuperAdminGet, apiSuperAdminPatch } from './base'
+import {
+  apiAdminGet,
+  apiSuperAdminGet,
+  apiSuperAdminPatch,
+  apiSuperAdminPost,
+  apiSuperAdminPut
+} from './base'
 
 /**
  * Dashboard API模块
@@ -57,6 +63,25 @@ export const dashboardApi = {
     if (params.agent_id) queryParams.append('agent_id', params.agent_id)
 
     return apiAdminGet(`/api/dashboard/feedbacks?${queryParams.toString()}`)
+  },
+
+  getFeedbackTuningContext: (feedbackId) =>
+    apiSuperAdminGet(`/api/dashboard/feedbacks/${feedbackId}/tuning-context`),
+
+  saveFeedbackQaPair: (feedbackId, data) =>
+    apiSuperAdminPut(`/api/dashboard/feedbacks/${feedbackId}/qa-pair`, data),
+
+  /**
+   * 获取反馈汇总和点踩原因分布
+   * @param {Object} params - 查询参数
+   * @param {string} params.agent_id - 智能体ID过滤
+   * @returns {Promise<Object>} - 反馈统计信息
+   */
+  getFeedbackSummary: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.agent_id) queryParams.append('agent_id', params.agent_id)
+    const query = queryParams.toString()
+    return apiAdminGet(`/api/dashboard/feedback-summary${query ? `?${query}` : ''}`)
   },
 
   // ========== 新增并行API接口 ==========
@@ -141,5 +166,11 @@ export const dashboardApi = {
   getKnowledgeGap: (gapId) => apiSuperAdminGet(`/api/dashboard/knowledge-gaps/${gapId}`),
 
   updateKnowledgeGap: (gapId, data) =>
-    apiSuperAdminPatch(`/api/dashboard/knowledge-gaps/${gapId}`, data)
+    apiSuperAdminPatch(`/api/dashboard/knowledge-gaps/${gapId}`, data),
+
+  searchKnowledgeGapAnswer: (gapId) =>
+    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/web-search`, {}),
+
+  saveKnowledgeGapQaPair: (gapId, data) =>
+    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/save-qa`, data)
 }

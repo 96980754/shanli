@@ -17,9 +17,11 @@ from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LAR
 from .sandbox import ProvisionerSandboxBackend
 from .skills_backend import SelectedSkillsReadonlyBackend
 
-# query_kb / query_kbs 的结构化检索结果（含 kb_id/file_id/源文件名）是问答来源与原文下载的数据来源，
-# 若被卸载成文件占位文本，历史会话将丢失可提取的来源，因此与 open_kb_document 一样豁免。
-_TOOL_RESULT_EVICTION_EXEMPT_TOOLS = frozenset({"read_file", "open_kb_document", "query_kb", "query_kbs"})
+# 知识检索工具的结构化结果是问答来源与原文下载的数据来源；多产品调研结果还承担综合上下文。
+# 若被卸载成文件占位文本，后续回答将丢失证据和来源关联，因此与 open_kb_document 一样豁免。
+_TOOL_RESULT_EVICTION_EXEMPT_TOOLS = frozenset(
+    {"read_file", "open_kb_document", "query_kb", "query_kbs", "research_industry_products"}
+)
 
 
 def _coerce_glob_result(result) -> GlobResult:

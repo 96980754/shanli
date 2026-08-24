@@ -107,7 +107,8 @@ export const agentApi = {
       image_content: data.image_content || null,
       model_spec: data.model_spec || null,
       resume: data.resume ?? null,
-      created_by_run_id: data.created_by_run_id || null
+      created_by_run_id: data.created_by_run_id || null,
+      industry_solution: data.industry_solution || null
     }),
 
   /**
@@ -172,6 +173,23 @@ export const multimodalApi = {
 
     return apiRequest(
       '/api/chat/image/upload',
+      {
+        method: 'POST',
+        body: formData
+      },
+      true
+    )
+  }
+}
+
+export const transcriptionApi = {
+  transcribe: (audioBlob, language = '') => {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'recording.webm')
+    if (language) formData.append('language', language)
+
+    return apiRequest(
+      '/api/chat/transcriptions',
       {
         method: 'POST',
         body: formData

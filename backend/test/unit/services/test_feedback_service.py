@@ -103,3 +103,27 @@ async def test_submit_message_feedback_skips_langfuse_without_trace_id(monkeypat
     assert result["rating"] == "dislike"
     assert result["reason"] == "不相关"
     assert calls == []
+
+
+def test_parse_feedback_reason_with_detail():
+    assert svc.parse_feedback_reason("答案有误\n测试反馈原因统计") == {
+        "reason_code": "answer_incorrect",
+        "reason_label": "答案有误",
+        "reason_detail": "测试反馈原因统计",
+    }
+
+
+def test_parse_feedback_reason_without_detail():
+    assert svc.parse_feedback_reason("信息过时") == {
+        "reason_code": "outdated",
+        "reason_label": "信息过时",
+        "reason_detail": None,
+    }
+
+
+def test_parse_feedback_reason_keeps_legacy_free_text():
+    assert svc.parse_feedback_reason("旧版自由文本原因") == {
+        "reason_code": None,
+        "reason_label": "历史反馈",
+        "reason_detail": "旧版自由文本原因",
+    }

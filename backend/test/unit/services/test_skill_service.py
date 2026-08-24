@@ -284,6 +284,7 @@ def test_knowledge_base_builtin_skill_spec():
     assert {slug: spec["enabled"] for slug, spec in specs.items()} == {
         "image-gen": False,
         "deep-research": False,
+        "industry-solution": True,
         "knowledge-base": True,
         "mysql-reporter": False,
     }
@@ -300,6 +301,16 @@ def test_knowledge_base_builtin_skill_spec():
         "search_file",
     ]
     assert (knowledge_base["source_dir"] / "SKILL.md").exists()
+
+    industry_solution = specs["industry-solution"]
+    assert industry_solution["skill_dependencies"] == ["knowledge-base"]
+    assert industry_solution["tool_dependencies"] == [
+        "list_kbs",
+        "research_industry_products",
+        "export_industry_solution_docx",
+        "present_artifacts",
+    ]
+    assert (industry_solution["source_dir"] / "SKILL.md").exists()
 
 
 def test_mysql_reporter_builtin_skill_spec_replaces_reporter_and_deep_reporter():

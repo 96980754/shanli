@@ -24,7 +24,9 @@ from yuxi.services.agent_run_service import (
     get_agent_run_view,
     stream_agent_run_events,
 )
+from yuxi.services.curated_qa_run_service import try_create_curated_qa_run
 from yuxi.services.input_message_service import build_chat_input_message
+from yuxi.services.industry_solution_service import IndustrySolutionRequest
 from yuxi.storage.postgres.models_business import User
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
@@ -62,6 +64,7 @@ class AgentRunCreate(BaseModel):
     model_spec: str | None = Field(None, description="可选，对话级模型覆盖，优先级高于智能体配置")
     resume: Any | None = Field(None, description="可选，恢复时传给 LangGraph 的输入载荷，非布尔值")
     created_by_run_id: str | None = Field(None, description="可选，创建本 run 的父 run ID；resume 时为被恢复的 run ID")
+    industry_solution: IndustrySolutionRequest | None = Field(None, description="可选，结构化多产品行业解决方案请求")
 
 
 def _backend_info(info: dict) -> dict:
@@ -260,12 +263,29 @@ async def create_agent_run(
 ):
     input_message = None
     if payload.resume is None and payload.query:
-        input_message = build_chat_input_message(payload.query, payload.image_content)
+        input_message = build_chat_input_message(
+            payload.query,
+            payload.image_content,
+            industry_solution=payload.industry_solution.model_dump() if payload.industry_solution else None,
+        )
+
+    meta = dict(payload.meta or {})
+    if input_message is not None and payload.resume is None:
+        curated_run = await try_create_curated_qa_run(
+            input_message=input_message,
+            agent_slug=payload.agent_slug,
+            thread_id=payload.thread_id,
+            meta=meta,
+            current_uid=str(current_user.uid),
+            db=db,
+        )
+        if curated_run is not None:
+            return curated_run
     return await create_agent_run_view(
         input_message=input_message,
         agent_slug=payload.agent_slug,
         thread_id=payload.thread_id,
-        meta=dict(payload.meta or {}),
+        meta=meta,
         model_spec=payload.model_spec,
         current_uid=str(current_user.uid),
         db=db,

@@ -69,6 +69,21 @@
                 </a-select>
               </div>
             </div>
+            <div class="col-item">
+              <div class="setting-label">
+                {{ items?.transcription_model?.des || '默认语音转写模型' }}
+              </div>
+              <div class="setting-content">
+                <ModelSelectorComponent
+                  :model_spec="configStore.config?.transcription_model"
+                  model-type="transcription"
+                  :show-status="false"
+                  clearable
+                  placeholder="请选择语音转写模型"
+                  @select-model="handleTranscriptionModelSelect"
+                />
+              </div>
+            </div>
           </div>
         </template>
       </div>
@@ -216,6 +231,10 @@ const handleFastModelSelect = (spec) => {
   if (typeof spec === 'string' && spec) {
     configStore.setConfigValue('fast_model', spec)
   }
+}
+
+const handleTranscriptionModelSelect = (spec) => {
+  configStore.setConfigValue('transcription_model', spec || null)
 }
 
 const handleContentGuardModelSelect = (spec) => {

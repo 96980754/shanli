@@ -18,6 +18,11 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 async def test_chat_endpoints_require_authentication(test_client):
     assert (await test_client.get("/api/chat/threads")).status_code == 401
     assert (await test_client.get("/api/agent")).status_code == 401
+    response = await test_client.post(
+        "/api/chat/transcriptions",
+        files={"file": ("recording.webm", b"audio", "audio/webm")},
+    )
+    assert response.status_code == 401
 
 
 async def test_image_upload_composites_transparent_png_pixels_on_white(test_client, admin_headers):

@@ -1279,6 +1279,10 @@ onBeforeUnmount(() => {
 // 公开方法供父组件调用
 defineExpose({
   focus: () => inputRef.value?.focus(),
+  insertTextAtSelection: (text) => {
+    const value = String(text || '')
+    if (value) replaceCurrentRawSelection(value)
+  },
   closeOptions: () => {
     optionsExpanded.value = false
   }

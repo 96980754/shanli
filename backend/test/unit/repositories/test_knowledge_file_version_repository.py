@@ -20,6 +20,14 @@ class ScalarResult:
         return SimpleNamespace(all=lambda: self._scalars)
 
 
+class RowResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
 class CandidateSession:
     def __init__(self, current, *, existing_candidate=None, latest_version=2):
         self.current = current
@@ -320,3 +328,82 @@ async def test_activate_candidate_backfills_legacy_current_anchor():
     # 激活时补齐旧版锚点，激活后 list_versions 仍能拉全版本链
     assert current.logical_document_id == "file-v1"
     assert current.document_version == 1
+
+
+@pytest.mark.asyncio
+async def test_list_version_chains_batches_logical_versions(monkeypatch):
+    current = SimpleNamespace(
+        file_id="file-v2",
+        kb_id="kb-1",
+        logical_document_id="logical-1",
+        previous_version_id=None,
+    )
+    history = SimpleNamespace(
+        file_id="file-v1",
+        kb_id="kb-1",
+        logical_document_id="logical-1",
+        previous_version_id=None,
+    )
+    session = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                ScalarResult(scalars=[current]),
+                ScalarResult(scalars=[current, history]),
+            ]
+        )
+    )
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    chains = await KnowledgeFileRepository().list_version_chains_for_current_files(
+        kb_id="kb-1",
+        file_ids=["file-v2", "file-v2"],
+    )
+
+    assert [record.file_id for record in chains["file-v2"]] == ["file-v2", "file-v1"]
+    assert session.execute.await_count == 2
+    current_query = str(session.execute.call_args_list[0].args[0])
+    assert "knowledge_files.is_current IS true" in current_query
+    assert "knowledge_files.is_active IS true" in current_query
+
+
+@pytest.mark.asyncio
+async def test_list_version_chains_batches_replacement_history(monkeypatch):
+    current = SimpleNamespace(
+        file_id="file-v2",
+        kb_id="kb-1",
+        logical_document_id=None,
+        previous_version_id="file-v1",
+    )
+    history = SimpleNamespace(
+        file_id="file-v1",
+        kb_id="kb-1",
+        logical_document_id=None,
+        previous_version_id=None,
+    )
+    session = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                ScalarResult(scalars=[current]),
+                RowResult([("file-v2", history)]),
+            ]
+        )
+    )
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    chains = await KnowledgeFileRepository().list_version_chains_for_current_files(
+        kb_id="kb-1",
+        file_ids=["file-v2"],
+    )
+
+    assert [record.file_id for record in chains["file-v2"]] == ["file-v2", "file-v1"]
+    assert session.execute.await_count == 2

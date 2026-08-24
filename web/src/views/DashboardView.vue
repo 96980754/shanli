@@ -8,6 +8,8 @@
       <StatsOverviewComponent :basic-stats="basicStats" @open-feedback="handleOpenFeedback" />
     </div>
 
+    <FeedbackSummaryComponent />
+
     <!-- Grid布局的主要内容区域 -->
     <div class="dashboard-grid">
       <!-- 调用统计模块 - 占据2x1网格 -->
@@ -69,6 +71,7 @@ import AgentStatsComponent from '@/components/dashboard/AgentStatsComponent.vue'
 import CallStatsComponent from '@/components/dashboard/CallStatsComponent.vue'
 import StatsOverviewComponent from '@/components/dashboard/StatsOverviewComponent.vue'
 import FeedbackModalComponent from '@/components/dashboard/FeedbackModalComponent.vue'
+import FeedbackSummaryComponent from '@/components/dashboard/FeedbackSummaryComponent.vue'
 
 // 组件引用
 const feedbackModal = ref(null)

@@ -18,7 +18,7 @@ from yuxi.models.providers.repository import (
 )
 from yuxi.storage.postgres.models_business import ModelProvider
 
-VALID_MODEL_TYPES = {"chat", "embedding", "rerank"}
+VALID_MODEL_TYPES = {"chat", "embedding", "rerank", "transcription"}
 VALID_MODEL_SOURCES = {"manual", "remote"}
 VALID_PROVIDER_TYPES = {"openai", "anthropic", "gemini", "openrouter"}
 _PROVIDER_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{1,99}$")
@@ -45,7 +45,7 @@ def _normalize_model_item(model: dict[str, Any]) -> dict[str, Any]:
 
     model_type = str(model.get("type") or "unknown").strip()
     if model_type not in VALID_MODEL_TYPES:
-        raise ValueError(f"启用模型 {model_id} 的 type 必须是 chat、embedding 或 rerank")
+        raise ValueError(f"启用模型 {model_id} 的 type 必须是 chat、embedding、rerank 或 transcription")
 
     # source 区分手动添加 vs 远端拉取，用于跳过远端清单存在性的视觉警告。
     source = str(model.get("source") or "remote").strip()
@@ -399,6 +399,13 @@ async def test_model_status_by_spec(spec: str) -> dict:
                 "status": "available" if success else "unavailable",
                 "message": "连接正常" if success else message,
                 "model_type": "rerank",
+            }
+        if info.model_type == "transcription":
+            return {
+                "spec": spec,
+                "status": "unsupported",
+                "message": "请通过语音输入进行实际转写验证",
+                "model_type": "transcription",
             }
 
         from yuxi.models.chat import select_model
