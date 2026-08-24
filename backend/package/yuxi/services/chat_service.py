@@ -928,6 +928,9 @@ async def stream_agent_chat(
         uid=uid,
         run_id=meta.get("run_id"),
         request_id=meta.get("request_id"),
+        # 沙箱作用域：与下方 langgraph_config 的 scope 解析保持一致，缺省回退 thread_id。
+        file_thread_id=meta.get("file_thread_id") or thread_id,
+        skills_thread_id=meta.get("skills_thread_id") or thread_id,
     )
     _apply_model_override(input_context, meta)
     _apply_subagent_runtime_context(input_context, meta)
@@ -1251,6 +1254,8 @@ async def stream_agent_resume(
         uid=uid,
         run_id=meta.get("run_id"),
         request_id=meta.get("request_id"),
+        file_thread_id=meta.get("file_thread_id") or thread_id,
+        skills_thread_id=meta.get("skills_thread_id") or thread_id,
     )
     _apply_model_override(input_context, meta)
     context = _build_agent_context(agent, input_context)

@@ -153,6 +153,8 @@ async def test_activate_candidate_restores_done_status(candidate_status):
     assert archived is current
     assert activated is candidate
     assert current.is_current is False
+    assert current.is_active is False, "旧版应归档为 inactive，不再参与检索/图谱/统计"
+    assert current.superseded_at is not None, "旧版应记录 superseded_at"
     assert candidate.is_current is True
     assert candidate.status == "done"
     assert candidate.error_message is None

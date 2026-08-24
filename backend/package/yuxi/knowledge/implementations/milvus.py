@@ -1453,8 +1453,11 @@ class MilvusKB(KnowledgeBase):
         await self.refresh_database_stats(kb_id)
 
     async def delete_file(self, kb_id: str, file_id: str) -> None:
-        """删除文件（包括元数据）"""
-        # 先删除 Milvus 中的 chunks 数据
+        """删除文件（包括元数据），并级联清理指向它的未完成版本/替换候选。"""
+        # 先清理候选与当前文件的 chunks（Milvus + PG），避免删除当前版本后留下孤儿向量
+        candidate_ids = await KnowledgeFileRepository().list_pending_candidate_file_ids(file_id=file_id)
+        for candidate_id in candidate_ids:
+            await self.delete_file_chunks_only(kb_id, candidate_id)
         await self.delete_file_chunks_only(kb_id, file_id)
 
         await KnowledgeFileRepository().delete(file_id)

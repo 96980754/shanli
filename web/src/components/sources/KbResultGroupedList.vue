@@ -45,6 +45,14 @@
               <Download v-else :size="14" />
               <span>下载原文</span>
             </button>
+            <button
+              class="file-action-btn"
+              @click.stop="openVersionHistory(fileGroup)"
+              title="查看历史版本"
+            >
+              <History :size="14" />
+              <span>历史版本</span>
+            </button>
           </div>
         </div>
 
@@ -90,17 +98,32 @@
       :kb-id="fileDetailKbId"
       :file-id="fileDetailFileId"
     />
+
+    <DocumentVersionHistoryModal
+      v-model:open="versionHistoryOpen"
+      :kb-id="versionHistoryKbId"
+      :file-id="versionHistoryFileId"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { FileText, ChevronRight, ChevronDown, Download, Eye, LoaderCircle } from 'lucide-vue-next'
+import {
+  FileText,
+  ChevronRight,
+  ChevronDown,
+  Download,
+  Eye,
+  History,
+  LoaderCircle
+} from 'lucide-vue-next'
 import { documentApi } from '@/apis/knowledge_api'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import KbChunkDetailModal from './KbChunkDetailModal.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
+import DocumentVersionHistoryModal from '@/components/DocumentVersionHistoryModal.vue'
 
 const props = defineProps({
   chunks: {
@@ -124,6 +147,9 @@ const selectedChunkIndex = ref(null)
 const fileDetailOpen = ref(false)
 const fileDetailKbId = ref('')
 const fileDetailFileId = ref('')
+const versionHistoryOpen = ref(false)
+const versionHistoryKbId = ref('')
+const versionHistoryFileId = ref('')
 const downloadingFileKey = ref('')
 
 const resolveChunks = (input) => {
@@ -215,6 +241,12 @@ const openFileDetail = (fileGroup) => {
   fileDetailKbId.value = fileGroup.kb_id || ''
   fileDetailFileId.value = fileGroup.file_id || ''
   fileDetailOpen.value = Boolean(fileDetailKbId.value && fileDetailFileId.value)
+}
+
+const openVersionHistory = (fileGroup) => {
+  versionHistoryKbId.value = fileGroup.kb_id || ''
+  versionHistoryFileId.value = fileGroup.file_id || ''
+  versionHistoryOpen.value = Boolean(versionHistoryKbId.value && versionHistoryFileId.value)
 }
 
 const getFileKey = (fileGroup) => `${fileGroup.kb_id}::${fileGroup.file_id}`

@@ -2776,10 +2776,10 @@ async def create_folder(
 async def move_document(
     kb_id: str,
     doc_id: str,
-    new_parent_id: str | None = Body(..., embed=True),
+    new_parent_id: str | None = Body(None, embed=True),
     current_user: User = Depends(get_admin_user),
 ):
-    """移动文件或文件夹"""
+    """移动文件或文件夹；new_parent_id 为 null 表示移动到知识库根目录"""
     logger.debug(f"Move document {doc_id} to {new_parent_id} in {kb_id}")
     try:
         await _ensure_database_supports_documents(kb_id, "文件移动")
