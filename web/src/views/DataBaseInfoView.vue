@@ -256,13 +256,6 @@
             />
           </div>
 
-          <div
-            v-if="isMilvus && userStore.isAdmin && activeTab === 'product-images'"
-            class="tab-panel"
-          >
-            <ProductReferenceImagePanel v-if="kbId" :kb-id="kbId" />
-          </div>
-
           <div v-if="activeTab === 'permissions'" class="tab-panel">
             <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" :database="database" />
           </div>
@@ -412,7 +405,6 @@ import {
   FileText,
   FolderPlus,
   Hash,
-  Image as ImageIcon,
   LoaderCircle,
   Network,
   Pencil,
@@ -440,7 +432,6 @@ import QuerySection from '@/components/QuerySection.vue'
 import SearchConfigPanel from '@/components/SearchConfigPanel.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
-import ProductReferenceImagePanel from '@/components/ProductReferenceImagePanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import { databaseApi, categoryApi } from '@/apis/knowledge_api'
@@ -514,9 +505,6 @@ const tabs = computed(() => {
   }
   if (isMilvus.value && userStore.isAdmin) {
     items.push({ key: 'graph', label: '知识图谱', icon: Network })
-  }
-  if (isMilvus.value && userStore.isAdmin) {
-    items.push({ key: 'product-images', label: '产品参照图', icon: ImageIcon })
   }
   if (kbPermissions.can_grant) {
     items.push({ key: 'permissions', label: '权限设置', icon: Settings })

@@ -100,6 +100,18 @@ const router = createRouter({
       ]
     },
     {
+      path: '/product-images',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'ProductImageLibrary',
+          component: () => import('../views/ProductImageLibraryView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true }
+        }
+      ]
+    },
+    {
       path: '/model-manage',
       name: 'model-manage',
       component: AppLayout,

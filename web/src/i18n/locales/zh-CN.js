@@ -16,7 +16,8 @@ export default {
     agentManage: '智能体管理',
     dashboard: '数据总览',
     knowledgeGaps: '知识缺口',
-    knowledgeBrowser: '全库搜索'
+    knowledgeBrowser: '全库搜索',
+    productImages: '产品图库'
   },
   layout: {
     taskCenter: '任务中心',

@@ -16,7 +16,8 @@ export default {
     agentManage: 'Agent Management',
     dashboard: 'Data Overview',
     knowledgeGaps: 'Knowledge Gaps',
-    knowledgeBrowser: 'Global Search'
+    knowledgeBrowser: 'Global Search',
+    productImages: 'Product Images'
   },
   layout: {
     taskCenter: 'Task Center',

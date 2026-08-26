@@ -4141,3 +4141,39 @@ async def rebuild_product_reference_index(
     from yuxi.knowledge.product_image_index import build_product_image_index
 
     return await build_product_image_index(kb_id)
+
+
+@knowledge.get("/product-images")
+async def list_all_product_reference_images(
+    current_user: User = Depends(get_admin_user),
+):
+    """跨库聚合列出全部产品参照图（产品图库管理页使用）。
+
+    遍历 Milvus 知识库，逐库合并 MinIO 参照图与 Milvus 索引状态，返回扁平列表。
+    """
+    from yuxi.knowledge.product_image_index import ProductImageIndex
+
+    databases = (await knowledge_base.get_databases_by_uid(current_user.uid)).get("databases", [])
+    index = ProductImageIndex()
+    rows: list[dict] = []
+    for db in databases:
+        if db.get("kb_type", "milvus") != "milvus":
+            continue
+        kb_id = str(db["kb_id"])
+        images = index.list_reference_images(kb_id)
+        if not images:
+            continue
+        indexed = await index.list_indexed(kb_id)
+        public_endpoint = get_minio_client().public_endpoint
+        for item in images:
+            rows.append(
+                {
+                    "kb_id": kb_id,
+                    "kb_name": str(db.get("name") or kb_id),
+                    "product": item["product"],
+                    "object_name": item["object_name"],
+                    "image_url": f"http://{public_endpoint}/public/{item['object_name']}",
+                    "indexed": item["product"] in indexed,
+                }
+            )
+    return {"images": rows}

@@ -150,6 +150,57 @@ def test_list_product_images_merges_indexed_status(monkeypatch):
     assert images[1]["indexed"] is False
 
 
+# ── 跨库聚合列表 ───────────────────────────────────────────────────
+
+
+def test_list_all_product_images_forbidden_for_non_admin():
+    response = _build_app(role="user").get("/api/knowledge/product-images")
+    assert response.status_code == 403
+
+
+def test_list_all_product_images_aggregates_across_kbs(monkeypatch):
+    class PerKbIndex(FakeIndex):
+        def __init__(self):
+            self.by_kb = {
+                "kb_1": [{"object_name": "kb_1/product-images/产品A.jpg", "product": "产品A"}],
+                "kb_2": [{"object_name": "kb_2/product-images/产品B.jpg", "product": "产品B"}],
+            }
+            self.indexed = {"产品A"}
+
+        def list_reference_images(self, kb_id: str) -> list[dict]:
+            return self.by_kb.get(kb_id, [])
+
+    class FakeKbBase:
+        async def get_databases_by_uid(self, uid, category_id=None):
+            return {
+                "databases": [
+                    {"kb_id": "kb_1", "name": "客服知识库", "kb_type": "milvus"},
+                    {"kb_id": "kb_2", "name": "产品库", "kb_type": "milvus"},
+                    {"kb_id": "kb_3", "name": "连接器", "kb_type": "connector"},
+                ]
+            }
+
+    monkeypatch.setattr(knowledge_router, "knowledge_base", FakeKbBase())
+    _install_product_image_doubles(monkeypatch, index=PerKbIndex(), minio=FakeMinio())
+
+    response = _build_app().get("/api/knowledge/product-images")
+
+    assert response.status_code == 200, response.text
+    images = response.json()["images"]
+    assert len(images) == 2
+    assert images[0] == {
+        "kb_id": "kb_1",
+        "kb_name": "客服知识库",
+        "product": "产品A",
+        "object_name": "kb_1/product-images/产品A.jpg",
+        "image_url": "http://localhost:9000/public/kb_1/product-images/产品A.jpg",
+        "indexed": True,
+    }
+    assert images[1]["kb_id"] == "kb_2"
+    assert images[1]["kb_name"] == "产品库"
+    assert images[1]["indexed"] is False
+
+
 # ── 上传 ───────────────────────────────────────────────────────────
 
 

@@ -917,6 +917,13 @@ export const referenceImageApi = {
   },
 
   /**
+   * 跨库聚合列出全部产品参照图（产品图库管理页使用）
+   */
+  listAll: async () => {
+    return apiAdminGet('/api/knowledge/product-images')
+  },
+
+  /**
    * 上传产品参照图（每款产品一张，文件名即产品名）
    * @param {string} kbId - 知识库 ID
    * @param {Array<File>} files - 图片文件列表
