@@ -90,6 +90,43 @@
 
 旧版 `provider/model`、旧版知识库 JSON 模型字段、配置文件中的 `model_names` / `embed_model_names` / `reranker_names` 不再作为运行时模型来源。历史知识库或 Agent 配置如果仍保存旧格式，需要在界面中重新选择新版模型后保存。
 
+## 语音转写（ASR）接入
+
+聊天输入框的话筒按钮录制 WebM 音频后，调用所选语音转写模型的 OpenAI-compatible 接口（`POST {base_url}/audio/transcriptions`）转成文本，结果插入输入框由用户确认后发送，录音不持久化。接入一个 ASR 模型分两步：
+
+### 第一步：添加语音转写模型
+
+`智能体管理 → 模型供应商 → 供应商详情`：
+
+1. 确认供应商的 Provider 类型为 `openai` 或 `openrouter`——语音转写只走 OpenAI-compatible 协议，其他 Provider 类型不支持。
+2. 在「已启用模型」中「手动添加」一个模型：类型选 **transcription**，模型 ID 填供应商文档给出的语音转写模型名（也可通过「获取远程模型」从候选列表选择）。
+3. 保存并启用供应商。
+
+### 第二步：设为默认语音转写模型
+
+`设置 → 基本设置 → 语音转写模型`，选择刚添加的 `provider_id:model_id`。
+
+### SiliconFlow 示例
+
+| 项 | 值 |
+|----|-----|
+| Provider ID | `siliconflow-cn`（国际站 `siliconflow`） |
+| Base URL | `https://api.siliconflow.cn/v1` |
+| 模型 ID | `FunAudioLLM/SenseVoiceSmall`（中文效果好）或 `TeleAI/TeleSpeechASR` |
+| 模型类型 | transcription |
+
+配置完成后模型标识为 `siliconflow-cn:FunAudioLLM/SenseVoiceSmall`。
+
+> 内置 SiliconFlow 模板的能力已包含 `transcription`，在供应商详情的「手动添加」弹窗中，类型下拉即可选择 transcription，无需先在能力中勾选。
+
+### 校验与错误提示
+
+- 语音转写模型未配置 → 503「语音转写模型未配置」
+- Provider 类型不是 openai/openrouter → 503「当前语音转写 Provider 不支持 OpenAI-compatible transcription」
+- 认证失败 → 502；响应超时 → 504；接口 400/404/405 → 502「当前 Provider 不支持已配置的语音转写接口或模型」
+
+> 说明：浏览器录制固定输出 WebM（`audio/webm`）、单文件 ≤ 25 MiB，其他格式返回 415；转写请求体为 multipart form（`file` + `model`，可选 `language`），Provider 需兼容该协议。
+
 ## Ollama 支持
 
 当前版本不再内置 Ollama provider type，也不再提供 Ollama embedding 运行时适配。已有 Ollama embedding 知识库需要管理员选择新的 embedding 模型并重建索引，避免不同向量空间混用。

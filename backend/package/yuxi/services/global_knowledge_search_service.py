@@ -7,7 +7,15 @@ from typing import Any
 
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.permissions.knowledge import KnowledgePermissionService
+from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from yuxi.utils import logger
+
+# 全库搜索融合的相关性下限。不同知识库的检索模式可能不同（vector/hybrid/keyword）：
+# - vector（COSINE）与 hybrid 的 score 都是有界相似度/加权分，可直接跨库比较；
+#   但各库默认 similarity_threshold=0.2 偏低，会带出大量低相关片段，这里在全局融合时
+#   用一个更高的下限过滤"无关内容"。
+# - keyword（BM25）的 bm25_score 无上界、跨库不可比，无法套用下限，退回互惠排名融合。
+VECTOR_RELEVANCE_FLOOR = 0.35
 
 
 class GlobalKnowledgeSearchService:
@@ -54,10 +62,50 @@ class GlobalKnowledgeSearchService:
                 item = dict(result)
                 item["kb_id"] = database["kb_id"]
                 item["kb_name"] = database.get("name") or database["kb_id"]
-                # Scores from heterogeneous retrievers are not comparable. Reciprocal rank
-                # fusion keeps the existing per-KB ranking while allowing one combined list.
-                item["global_score"] = 1 / (60 + rank)
+                global_score = self._global_score(item, rank)
+                if global_score is None:
+                    continue
+                item["global_score"] = global_score
                 merged.append(item)
 
         merged.sort(key=lambda item: item["global_score"], reverse=True)
-        return merged[:limit], any(search_failed for _, _, search_failed in grouped)
+        final = merged[:limit]
+        await self._enrich_file_paths(final)
+        return final, any(search_failed for _, _, search_failed in grouped)
+
+    @staticmethod
+    def _global_score(item: dict, rank: int) -> float | None:
+        """把单库结果的原始分换算成可跨库比较的全局分；返回 None 表示过滤该片段。"""
+        # BM25 分数无上界、跨库不可比，退回互惠排名融合（保留单库内相对次序）。
+        if "bm25_score" in item:
+            return 1 / (60 + rank)
+        score = item.get("score")
+        if score is None:
+            # 无分数可用的检索结果（如自定义知识库后端），同样退回 RRF，不误杀。
+            return 1 / (60 + rank)
+        score = float(score)
+        if score < VECTOR_RELEVANCE_FLOOR:
+            return None
+        return score
+
+    @staticmethod
+    async def _enrich_file_paths(items: list[dict]) -> None:
+        """给每条结果补 file_name / file_dir，便于前端按「知识库→目录→文件」展示。"""
+        file_ids = {
+            str(item["metadata"]["file_id"])
+            for item in items
+            if item.get("metadata", {}).get("file_id")
+        }
+        if not file_ids:
+            return
+        repo = KnowledgeFileRepository()
+        records = await repo.list_by_file_ids(list(file_ids))
+        paths = await repo.build_document_display_paths(records)
+        for item in items:
+            file_id = str(item.get("metadata", {}).get("file_id") or "")
+            display = paths.get(file_id)
+            if not display:
+                continue
+            *folders, name = display.rsplit("/", 1)
+            item["file_dir"] = "/".join(folders)
+            item["file_name"] = name

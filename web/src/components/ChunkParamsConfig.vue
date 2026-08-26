@@ -25,7 +25,20 @@
         </p>
       </a-form-item>
 
-      <div class="chunk-row">
+      <div v-if="showChunkSizeOverlap || showQaSplit" class="advanced-toggle">
+        <a-button
+          type="link"
+          size="small"
+          class="advanced-btn"
+          @click="showAdvanced = !showAdvanced"
+        >
+          <ChevronRight v-if="!showAdvanced" :size="14" />
+          <ChevronDown v-else :size="14" />
+          <span>高级</span>
+        </a-button>
+      </div>
+
+      <div v-show="showAdvanced" class="chunk-row">
         <a-form-item v-if="showChunkSizeOverlap" name="chunk_token_num">
           <template #label>
             <span class="chunk-preset-label">
@@ -83,6 +96,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
+import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
 import { DEFAULT_CHUNK_PRESET_ID, isPlainObject } from '@/utils/chunkUtils'
 
@@ -113,6 +127,7 @@ const props = defineProps({
   }
 })
 
+const showAdvanced = ref(false)
 const localParams = computed(() => props.tempChunkParams)
 const fallbackParserConfig = ref({})
 const {
@@ -173,6 +188,19 @@ onMounted(() => {
   color: var(--gray-500);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.advanced-toggle {
+  margin-bottom: 8px;
+}
+
+.advanced-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--gray-600);
+  font-size: 13px;
 }
 
 .chunk-row {

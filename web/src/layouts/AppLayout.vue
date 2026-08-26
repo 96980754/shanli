@@ -12,7 +12,8 @@ import {
   MessageCirclePlus,
   CircleHelp,
   Search,
-  FolderOpen
+  FolderOpen,
+  Image as ImageIcon
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -32,6 +33,11 @@ import SettingsModal from '@/components/SettingsModal.vue'
 import ConversationNavSection from '@/components/ConversationNavSection.vue'
 import ConversationSearchModal from '@/components/ConversationSearchModal.vue'
 import GlobalKnowledgeSearchModal from '@/components/GlobalKnowledgeSearchModal.vue'
+
+// 需要被 keep-alive 缓存的页面（按组件 name 匹配）。keep-alive 本体必须保持稳定渲染，
+// 用 include 控制缓存范围——若用 v-if 切换 keep-alive，翻转时会销毁整个缓存，
+// 导致在缓存页与非缓存页间切换时反复全量重挂重量级页面。
+const KEEP_ALIVE_VIEWS = ['AgentView', 'WorkspaceView']
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -143,6 +149,17 @@ const mainList = computed(() => {
       activePaths: ['/knowledge-browser'],
       icon: FolderOpen,
       activeIcon: FolderOpen
+    })
+  }
+
+  // 产品图库（按外观检索产品的参照图，跨库管理），仅管理员可见
+  if (userStore.isAdmin) {
+    items.push({
+      name: t('nav.productImages'),
+      path: '/product-images',
+      activePaths: ['/product-images'],
+      icon: ImageIcon,
+      activeIcon: ImageIcon
     })
   }
 
@@ -432,11 +449,10 @@ provide('settingsModal', {
     <button type="button" class="mobile-sidebar-trigger" :aria-expanded="mobileSidebarOpen" aria-label="打开导航菜单" @click="toggleMobileSidebar">
       <PanelLeftOpen size="22" />
     </button>
-    <router-view v-slot="{ Component, route }" id="app-router-view">
-      <keep-alive v-if="route.meta.keepAlive !== false">
+    <router-view v-slot="{ Component }" id="app-router-view">
+      <keep-alive :include="KEEP_ALIVE_VIEWS">
         <component :is="Component" />
       </keep-alive>
-      <component :is="Component" v-else />
     </router-view>
 
     <ConversationSearchModal

@@ -9,6 +9,7 @@ from yuxi.knowledge.eval.ragas_testset_gen import (
     LangchainEmbeddingsAdapter,
     _resolve_gold_chunk_ids,
     _sample_to_jsonl,
+    cap_chunks,
     chunks_to_langchain_documents,
     write_testset_jsonl,
 )
@@ -52,6 +53,42 @@ def test_chunks_to_langchain_documents():
 def test_chunks_to_langchain_documents_skips_empty():
     docs = chunks_to_langchain_documents([{"chunk_id": "c1", "content": ""}])
     assert docs == []
+
+
+def _fake_chunks(by_file: dict[str, int]) -> list[dict]:
+    chunks = []
+    for fid, n in by_file.items():
+        for i in range(n):
+            chunks.append({"chunk_id": f"{fid}_chunk_{i}", "file_id": fid, "content": f"text {fid} {i}"})
+    return chunks
+
+
+def test_cap_chunks_unchanged_when_within_cap():
+    chunks = _fake_chunks({"f1": 3, "f2": 2})
+    assert cap_chunks(chunks, 10) == chunks
+
+
+def test_cap_chunks_bounds_total_and_covers_files():
+    chunks = _fake_chunks({"f1": 80, "f2": 15, "f3": 5})
+    out = cap_chunks(chunks, 10)
+
+    assert len(out) <= len(chunks)
+    assert set(c["file_id"] for c in out) == {"f1", "f2", "f3"}  # 每个文件至少 1 条
+    assert len(set(c["chunk_id"] for c in out)) == len(out)  # 无重复
+
+
+def test_cap_chunks_samples_evenly_within_file():
+    chunks = _fake_chunks({"f1": 6})
+    out = cap_chunks(chunks, 3)
+    assert [c["chunk_id"] for c in out] == ["f1_chunk_0", "f1_chunk_2", "f1_chunk_4"]
+
+
+def test_cap_chunks_strictly_within_cap_when_rounding_overshoots():
+    # 每文件配额四舍五入可能使总配额 > cap（如 508 个单 chunk 文件、cap 500），须回剪
+    chunks = _fake_chunks({f"f{i:03d}": 1 for i in range(508)})
+    out = cap_chunks(chunks, 500)
+    assert len(out) == 500
+    assert len(set(c["file_id"] for c in out)) == len(out)  # 每文件仅 1 条，无重复
 
 
 class _FakeSample:

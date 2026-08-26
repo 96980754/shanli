@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 
 from yuxi.storage.postgres.models_business import Base
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
@@ -24,6 +24,8 @@ class CuratedQAPair(Base):
     question = Column(Text, nullable=False)
     normalized_question = Column(Text, nullable=False)
     question_hash = Column(String(64), nullable=False, index=True)
+    # 问题向量（JSON 数组），用于语义召回；懒回填，缺失时按需计算落库
+    question_embedding = Column(JSON, nullable=True)
     answer = Column(Text, nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
 

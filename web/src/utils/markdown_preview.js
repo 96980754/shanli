@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { createHighlighter } from 'shiki'
 import yaml from 'js-yaml'
 import { escapeHtml } from '@/utils/html'
+import { rewriteMinioImageUrls } from '@/utils/minioUrl'
 import { normalizeCodeLanguage } from '@/utils/file_preview'
 import { renderSvgBlocks } from './svgRenderer'
 import { renderHtmlPreviewBlocks } from './htmlPreviewRenderer'
@@ -212,9 +213,10 @@ export const renderMarkdown = async (content, { theme = 'github-light' } = {}) =
       sanitizeHtml: sanitizeHtmlPreviewSrcdoc
     })
     const svgContent = renderSvgBlocks(htmlPreviewContent)
+    const minioRewritten = rewriteMinioImageUrls(svgContent)
     const themeName = normalizeTheme(theme)
-    const needsHighlight = hasCodeFence(svgContent)
-    const cacheKey = `${needsHighlight ? themeName : 'plain'}\u0000${svgContent}`
+    const needsHighlight = hasCodeFence(minioRewritten)
+    const cacheKey = `${needsHighlight ? themeName : 'plain'}\u0000${minioRewritten}`
     const cachedHtml = getCachedHtml(cacheKey)
     if (cachedHtml !== undefined) return cachedHtml
 
@@ -224,7 +226,7 @@ export const renderMarkdown = async (content, { theme = 'github-light' } = {}) =
     }
 
     const md = await getRenderer(themeName, needsHighlight)
-    const html = DOMPurify.sanitize(md.render(svgContent), {
+    const html = DOMPurify.sanitize(md.render(minioRewritten), {
       ADD_TAGS: ['input'],
       ADD_ATTR: [
         'class',

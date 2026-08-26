@@ -14,7 +14,10 @@ from yuxi.agents.backends.sandbox.paths import (
 from yuxi.agents.toolkits.kbs.tools import retrieve_kbs
 from yuxi.agents.toolkits.registry import tool
 from yuxi.services.industry_solution_service import (
+    MAX_PRODUCTS,
+    MIN_PRODUCTS,
     IndustrySolutionRequest,
+    _normalize_product_names,
     build_retrieval_query,
     normalize_source,
     render_solution_docx,
@@ -43,7 +46,13 @@ def _matches_product(result: dict[str, Any], product: str) -> bool:
 
 
 class ProductResearchInput(IndustrySolutionRequest):
+    products: list[str] = Field(min_length=MIN_PRODUCTS, max_length=MAX_PRODUCTS)
     kb_ids: list[str] = Field(min_length=1, max_length=20, description="本次研究使用的知识库 kb_id")
+
+    @field_validator("products")
+    @classmethod
+    def normalize_products(cls, products: list[str]) -> list[str]:
+        return _normalize_product_names(products, min_products=MIN_PRODUCTS)
 
 
 class SolutionSource(BaseModel):
@@ -78,7 +87,7 @@ class ExportIndustrySolutionInput(BaseModel):
     @field_validator("products")
     @classmethod
     def normalize_products(cls, products: list[str]) -> list[str]:
-        return IndustrySolutionRequest(industry="export", requirement="export", products=products).products
+        return _normalize_product_names(products, min_products=MIN_PRODUCTS)
 
 
 @tool(

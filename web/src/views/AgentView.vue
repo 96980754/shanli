@@ -92,6 +92,9 @@
 </template>
 
 <script setup>
+// keep-alive 按组件名匹配缓存（见 AppLayout.vue 的 KEEP_ALIVE_VIEWS）
+defineOptions({ name: 'AgentView' })
+
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'

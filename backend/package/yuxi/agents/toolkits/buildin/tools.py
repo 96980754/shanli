@@ -218,6 +218,70 @@ async def ocr_parse_file(file_path: str, runtime: ToolRuntime, ocr_engine: str |
     }
 
 
+def _extract_user_image_data_uri(runtime: ToolRuntime) -> str | None:
+    """从运行时状态的消息里取最近一张用户图片的 data URI（无则返回 None）。"""
+    state = getattr(runtime, "state", None) or {}
+    messages = state.get("messages") if isinstance(state, dict) else getattr(state, "messages", None)
+    if not messages:
+        return None
+    for message in reversed(list(messages)):
+        if getattr(message, "type", None) != "human":
+            continue
+        content = getattr(message, "content", None)
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            image_url = part.get("image_url")
+            url = image_url.get("url") if isinstance(image_url, dict) else str(image_url or "")
+            if isinstance(url, str) and url.startswith("data:image/"):
+                return url
+    return None
+
+
+class ProductImageSearchInput(BaseModel):
+    """Search product reference images in the knowledge base by appearance."""
+
+    query_text: str = Field(default="", description="可选的文字描述，用于补充/限定检索意图")
+
+
+PRODUCT_IMAGE_SEARCH_DESCRIPTION = """按产品图片外观检索知识库中的产品参照图，返回外观最相近的产品候选。
+
+适用场景：用户上传的产品图片上无铭牌/型号文字、或属于贴牌产品时，无法直接读出型号。
+此工具把当前用户图片与知识库中已建索引的产品参照图做外观相似度匹配，返回外观相近的产品候选（含所属知识库、产品名、相似度）。
+
+注意事项：
+1. 必须已有用户上传的图片（取当前对话中最新一张用户图片）。
+2. 参照图由运营在知识库中维护（MinIO public/{kb_id}/product-images/{产品名}.jpg）并建立索引后才有效；
+   无索引时返回空列表。
+3. 返回的是外观候选，最终型号请与用户确认后再定，不要仅凭相似度直接断定型号。
+"""
+
+
+@tool(
+    category="buildin",
+    tags=["产品识别", "图片"],
+    display_name="按外观检索产品",
+    description=PRODUCT_IMAGE_SEARCH_DESCRIPTION,
+    args_schema=ProductImageSearchInput,
+)
+async def search_product_image(query_text: str = "", runtime: ToolRuntime = None) -> dict:
+    """按产品图片外观检索知识库中的产品参照图，返回外观最相近的产品候选。"""
+    data_uri = _extract_user_image_data_uri(runtime)
+    if not data_uri:
+        return {"error": "当前对话中没有可用的用户图片，无法按外观检索产品。", "matches": []}
+
+    from yuxi.knowledge.product_image_index import ProductImageIndex
+
+    try:
+        matches = await ProductImageIndex().search(data_uri, top_k=5)
+    except Exception as exc:
+        logger.error(f"search_product_image 检索失败: {exc}")
+        return {"error": f"产品参照图检索失败：{exc}", "matches": []}
+    return {"query_text": query_text, "matches": matches}
+
+
 def _resolve_ocr_source_path(file_path: str, runtime: ToolRuntime) -> tuple[str, str, Path]:
     """Resolve a sandbox virtual path to a host file inside the Agent-visible user-data roots."""
     from yuxi.agents.backends.sandbox.paths import get_virtual_path_prefix, resolve_virtual_path

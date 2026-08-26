@@ -144,6 +144,7 @@
               </div>
 
               <AgentInputArea
+                ref="agentInputAreaRef"
                 v-model="userInput"
                 :is-loading="isProcessing"
                 :disabled="!currentAgent"
@@ -159,11 +160,17 @@
                 <template #actions-left-extra>
                   <IndustrySolutionButton
                     :disabled="!currentAgent || isProcessing || sendDisabled"
-                    @generate="handleIndustrySolutionGenerate"
+                    :active="industrySolutionMode"
+                    @toggle="handleIndustrySolutionToggle"
                   />
                   <slot name="input-actions-left" :has-active-thread="!!currentChatId"></slot>
                 </template>
                 <template #actions-right-extra>
+                  <OutputFormatSelector
+                    :value="currentOutputFormat"
+                    :disabled="!currentAgent || isProcessing || sendDisabled"
+                    @select-format="handleFormatSelect"
+                  />
                   <div class="input-model-selector">
                     <ModelSelectorComponent
                       :model_spec="currentModelSpec"
@@ -595,6 +602,7 @@ import {
 import AgentInputArea from '@/components/AgentInputArea.vue'
 import IndustrySolutionButton from '@/components/IndustrySolutionButton.vue'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
+import OutputFormatSelector from '@/components/OutputFormatSelector.vue'
 import AgentMessageComponent from '@/components/AgentMessageComponent.vue'
 import RefsComponent from '@/components/RefsComponent.vue'
 import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
@@ -623,7 +631,6 @@ import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { enrichTaskToolCalls, parseToolCallArgs } from '@/components/ToolCallingResult/toolRegistry'
 import { getConversationDisplayItems } from '@/utils/messageGrouping'
 import { makeChildThreadId } from '@/utils/subagentThread'
-import { buildIndustrySolutionQuery } from '@/utils/industrySolution'
 
 // ==================== PROPS & EMITS ====================
 const props = defineProps({
@@ -645,6 +652,9 @@ const { threads, currentThreadId, currentThread } = storeToRefs(chatThreadsStore
 
 // ==================== LOCAL CHAT & UI STATE ====================
 const userInput = ref('')
+const agentInputAreaRef = ref(null)
+// 「行业方案」按钮为开关：开启后发送内容作为行业方案请求，再次点击关闭
+const industrySolutionMode = ref(false)
 const sendCooldownActive = ref(false)
 let sendCooldownTimer = null
 // 随机选择一个打招呼索引（保持稳定，随语言响应式重渲染）
@@ -980,6 +990,22 @@ const handleModelSelect = (spec) => {
     } else {
       delete selectedModelByThread[currentChatId.value || DRAFT_MODEL_KEY]
     }
+  }
+}
+
+// ==================== 对话级输出格式覆盖 ====================
+// 按线程记忆用户选择的输出格式；未选择时使用默认（不指定格式）。
+const DRAFT_OUTPUT_FORMAT_KEY = '__draft__'
+const selectedOutputFormatByThread = reactive({})
+const currentOutputFormat = computed(
+  () => selectedOutputFormatByThread[currentChatId.value || DRAFT_OUTPUT_FORMAT_KEY] || 'default'
+)
+const handleFormatSelect = (value) => {
+  const key = currentChatId.value || DRAFT_OUTPUT_FORMAT_KEY
+  if (value && value !== 'default') {
+    selectedOutputFormatByThread[key] = value
+  } else {
+    delete selectedOutputFormatByThread[key]
   }
 }
 
@@ -2472,10 +2498,14 @@ const selectThreadFromRoute = async (threadId) => {
 }
 
 const handleSendMessage = async ({ image, industrySolution } = {}) => {
-  const text = industrySolution
-    ? buildIndustrySolutionQuery(industrySolution)
-    : userInput.value.trim()
+  const text = userInput.value.trim()
   const imageContent = image?.imageContent || null
+  // 行业方案开关开启时：把输入框内容作为需求整体组装为结构化请求，
+  // 行业/产品可留空，由后端技能从需求描述中识别产品；模式保持到再次点击关闭
+  let activeIndustrySolution = industrySolution || null
+  if (industrySolutionMode.value && text) {
+    activeIndustrySolution = { industry: '', requirement: text, products: [] }
+  }
   if (
     (!text && !image) ||
     !currentAgent.value ||
@@ -2495,7 +2525,7 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
       message.error('创建对话失败，请重试')
       return
     }
-    // 新建线程：把草稿态的模型选择迁移到真实线程，避免选择丢失
+    // 新建线程：把草稿态的模型/输出格式选择迁移到真实线程，避免选择丢失
     const draftModelSpec = selectedModelByThread[DRAFT_MODEL_KEY]
     if (draftModelSpec) {
       if (!selectedModelByThread[threadId]) {
@@ -2503,13 +2533,18 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
       }
       delete selectedModelByThread[DRAFT_MODEL_KEY]
     }
+    const draftOutputFormat = selectedOutputFormatByThread[DRAFT_OUTPUT_FORMAT_KEY]
+    if (draftOutputFormat) {
+      if (!selectedOutputFormatByThread[threadId]) {
+        selectedOutputFormatByThread[threadId] = draftOutputFormat
+      }
+      delete selectedOutputFormatByThread[DRAFT_OUTPUT_FORMAT_KEY]
+    }
   }
   // 仅当用户显式选择过模型才下发覆盖；否则传 null，由后端使用智能体配置的模型
   const modelSpec = selectedModelByThread[threadId] || null
 
-  if (!industrySolution) {
-    userInput.value = ''
-  }
+  userInput.value = ''
 
   await nextTick()
   scrollController.scrollToBottom(true)
@@ -2574,7 +2609,8 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
       },
       image_content: imageContent,
       model_spec: modelSpec,
-      industry_solution: industrySolution || null
+      industry_solution: activeIndustrySolution,
+      output_format: currentOutputFormat.value
     })
     const runId = runResp?.run_id
     if (!runId) {
@@ -2591,8 +2627,15 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
   }
 }
 
-const handleIndustrySolutionGenerate = async (payload) => {
-  await handleSendMessage({ industrySolution: payload })
+const handleIndustrySolutionToggle = async () => {
+  industrySolutionMode.value = !industrySolutionMode.value
+  if (industrySolutionMode.value) {
+    message.info('word产品方案模式已开启：直接输入需求发送即可，再次点击按钮关闭')
+    await nextTick()
+    agentInputAreaRef.value?.focus()
+  } else {
+    message.info('word产品方案模式已关闭')
+  }
 }
 
 // 发送或中断

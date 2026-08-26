@@ -435,6 +435,59 @@ const run = () => {
   const boldFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(pathChunks, boldCitedAnswer)
   assert.deepEqual(boldFiltered.map((c) => c.file_id).sort(), ['p1', 'p2', 'p3'])
 
+  // 回归（conv 714）：模型答完在「**来源**：」列表后用空行另起提问句
+  //（如「需要我进一步检索该机型的认证证书信息（如 CE、RoHS、IEC62133 等）吗？」），
+  // 提问句不是引用，不应被当成文档名；否则 citation core「rohs」会子串命中文件名含 RoHS 的
+  // 证书文件（对讲机 RoHS2.0证书.pdf），来源面板只显示无关证书、覆盖掉真正的依据文档
+  // 与真实输出（conv 714 msg 7680）同形：路径用反引号包裹 + 空行后接提问句
+  const trailingQuestionAnswer =
+    '**来源：**\n' +
+    '- `poc资料/主推机型规格和彩页/主推终端产品规格书20260118.xlsx`（E600 条目）\n' +
+    '- `poc资料/主推机型规格和彩页/产品彩页和规格/E600 Brochure.pdf`\n\n' +
+    '需要我进一步检索该机型的认证证书信息（如 CE、RoHS、IEC62133 等）吗？'
+  const trailingCites = MessageProcessor.extractCitationNames(trailingQuestionAnswer)
+  assert.equal(trailingCites.some((n) => /RoHS|IEC62133|认证证书/.test(n)), false)
+  assert.equal(
+    trailingCites.includes('poc资料/主推机型规格和彩页/主推终端产品规格书20260118.xlsx'),
+    true
+  )
+  assert.equal(
+    trailingCites.includes('poc资料/主推机型规格和彩页/产品彩页和规格/E600 Brochure.pdf'),
+    true
+  )
+  // 端到端：混入 RoHS 证书 chunk 时，面板只保留真正被引用的 E600 规格书 + 彩页
+  const rohsCertChunks = [
+    {
+      kb_id: 'kb',
+      file_id: 'r1',
+      content: 'c',
+      metadata: { source: 'UNIB24061148HC-01 对讲机 RoHS2.0证书.pdf', chunk_id: 'cr1' }
+    },
+    {
+      kb_id: 'kb',
+      file_id: 'r2',
+      content: 'c',
+      metadata: { source: 'UNIB24061148HR-01 对讲机 RoHS2.0英文报告.pdf', chunk_id: 'cr2' }
+    },
+    {
+      kb_id: 'kb',
+      file_id: 'e1',
+      content: '规格',
+      metadata: { source: '主推终端产品规格书20260118.xlsx', chunk_id: 'ce1' }
+    },
+    {
+      kb_id: 'kb',
+      file_id: 'e2',
+      content: '彩页',
+      metadata: { source: 'E600 Brochure.pdf', chunk_id: 'ce2' }
+    }
+  ]
+  const trailingFiltered = MessageProcessor.filterKnowledgeChunksByAnswer(
+    rohsCertChunks,
+    trailingQuestionAnswer
+  )
+  assert.deepEqual(trailingFiltered.map((c) => c.file_id).sort(), ['e1', 'e2'])
+
   // ---- 来源面板回归：find_kb_document / search_file 定位结果纳入来源 ----
   // 对话 a297b81d 场景：query_kbs 召回为空，但模型通过 find_kb_document 定位到文件，
   // 这些「定位到的文档」也应进入来源面板（此前只认 query_kb/query_kbs，来源面板为空）。
@@ -535,6 +588,88 @@ const run = () => {
   // 前端据此保留来源按钮，避免「定位到了文档但不显示来源」
   assert.equal(MessageProcessor.hasKnowledgeRetrieval(locateConv), true)
   assert.equal(MessageProcessor.hasKnowledgeRetrieval(fallbackConv), true)
+
+  // ---- 来源面板回归：open_kb_document 按行窗口读文档原文，也应纳入来源 ----
+  // conv 714 场景：query_kbs 召回未命中，模型通过 open_kb_document 逐窗口读取规格书/彩页
+  // 原文作答，前端此前不收集该工具，导致真正依据的文档不出现在来源面板；
+  // 后端已随窗口返回 source（文件显示名），来源名优先取 source，缺失时回退同轮 search_file 解析
+  const openWindow = {
+    kb_id: 'kb-poc',
+    file_id: 'file-a473a2',
+    start_line: 1,
+    end_line: 40,
+    total_lines: 120,
+    offset: 0,
+    window_size: 40,
+    has_more_before: false,
+    has_more_after: true,
+    next_offset: 40,
+    content: '1: E600 产品介绍\n2: 参数表\n'
+  }
+  // 后端返回 source：来源名直接用文件显示名，无需同轮 search_file 兜底
+  const openSourceConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'open_kb_document',
+            tool_call_result: {
+              content: JSON.stringify({ ...openWindow, source: 'E600 Brochure.pdf' })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const openSourceChunks = MessageProcessor.extractKnowledgeChunksFromConversation(openSourceConv, [])
+  assert.equal(openSourceChunks.length, 1)
+  assert.equal(openSourceChunks[0].metadata.source, 'E600 Brochure.pdf')
+  assert.equal(openSourceChunks[0].kb_id, 'kb-poc')
+  assert.equal(openSourceChunks[0].file_id, 'file-a473a2')
+  // open_kb_document 与 find_kb_document 同级，视为发生过检索，来源按钮保留
+  assert.equal(MessageProcessor.hasKnowledgeRetrieval(openSourceConv), true)
+
+  // 后端未返回 source：由同轮 search_file 结果解析文件名，缺失时回退 file_id
+  const openFallbackConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'search_file',
+            tool_call_result: {
+              content: JSON.stringify({
+                files: [
+                  {
+                    kb_id: 'kb-poc',
+                    kb_name: 'poc-资料',
+                    file_id: 'file-a473a2',
+                    filename: 'poc资料/主推机型规格和彩页/产品彩页和规格/E600 Brochure.pdf',
+                    file_type: 'pdf'
+                  }
+                ],
+                total: 1
+              })
+            }
+          },
+          {
+            name: 'open_kb_document',
+            tool_call_result: { content: JSON.stringify({ ...openWindow, source: '' }) }
+          }
+        ]
+      }
+    ]
+  }
+  const openFallbackChunks = MessageProcessor.extractKnowledgeChunksFromConversation(
+    openFallbackConv,
+    []
+  )
+  // 1 个 search_file 定位卡片 + 1 个读取窗口
+  assert.equal(openFallbackChunks.length, 2)
+  const openWin = openFallbackChunks.find((c) => c.content.startsWith('1: E600'))
+  assert.equal(openWin.metadata.source, 'poc资料/主推机型规格和彩页/产品彩页和规格/E600 Brochure.pdf')
+  assert.equal(openWin.kb_name, 'poc-资料')
 
   // 同一文档跨多库命中（bug1）：来源面板分组与「来源 N」计数按文档名去重，避免重复卡片
   const duplicateDocChunks = [

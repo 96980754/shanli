@@ -268,6 +268,24 @@ export class MessageProcessor {
               fileInfo?.kb_name
             )
           }
+        } else if (toolName === 'open_kb_document') {
+          // open_kb_document：模型按行窗口读取文档原文作为回答依据，同样进入来源面板；
+          // 来源名优先取后端返回的 source（文件显示名），缺失时由同轮 search_file 结果解析
+          if (!parsed || typeof parsed.kb_id !== 'string' || typeof parsed.content !== 'string')
+            continue
+          const fileInfo = fileInfoMap.get(parsed.file_id)
+          const source = parsed.source || fileInfo?.filename || parsed.file_id
+          appendChunk(
+            {
+              kb_id: parsed.kb_id,
+              file_id: parsed.file_id,
+              content: parsed.content,
+              metadata: { file_id: parsed.file_id }
+            },
+            null,
+            source,
+            fileInfo?.kb_name
+          )
         }
       }
     }
@@ -298,7 +316,8 @@ export class MessageProcessor {
           toolName === 'query_kbs' ||
           toolName === 'find_kb_document' ||
           toolName === 'search_file' ||
-          toolName === 'research_industry_products'
+          toolName === 'research_industry_products' ||
+          toolName === 'open_kb_document'
         ) {
           return true
         }
@@ -433,6 +452,11 @@ export class MessageProcessor {
       // 文档清单在句号处结束，句号后的补充说明（如"如需进一步…请告知"）不属于引用
       const periodIdx = section.indexOf('。')
       if (periodIdx !== -1) section = section.slice(0, periodIdx)
+      // 文档清单是连续一段：以「- / * / 数字」列出的路径清单后若出现空行再接散文/提问句
+      //（如「需要我进一步检索…吗？」），说明清单已结束，空行后的句子不是引用，应截断，
+      // 避免把提问句里的「RoHS / IEC62133」误当成被引用的文档名混入来源面板
+      const paraBreak = section.search(/\n\s*\n(?![ \t]*(?:-|\*|•|\d+[.、]))/)
+      if (paraBreak !== -1) section = section.slice(0, paraBreak)
       // 跳过引导语（"**：以上内容依据知识库中以下材料整理——" 或 "："）
       const dashIdx = section.indexOf('——')
       const colonIdx = section.indexOf('：')
@@ -442,7 +466,7 @@ export class MessageProcessor {
       // 以顿号/逗号/括号/换行切分文档名；括号内的分组名（如"定位资料"）也切成候选，
       // 匹配不上任何文件时自然被忽略，不会进入来源面板
       for (const token of section.split(/[、，,；;()（）\n|]+/)) {
-        const name = token.replace(/[*•-]/g, '').trim()
+        const name = token.replace(/[*•\-`]/g, '').trim()
         if (name) names.push(name)
       }
     }

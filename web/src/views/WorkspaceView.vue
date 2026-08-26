@@ -196,6 +196,9 @@
 </template>
 
 <script setup>
+// keep-alive 按组件名匹配缓存（见 AppLayout.vue 的 KEEP_ALIVE_VIEWS）
+defineOptions({ name: 'WorkspaceView' })
+
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'

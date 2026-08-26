@@ -92,6 +92,43 @@ async def test_search_documents_includes_folders(monkeypatch):
         assert "is_folder" in lowered, "SELECT 应包含 is_folder 以返回文件夹结果"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("search_type", "expect_chunk_join", "expect_folder_branch"),
+    [
+        ("filename", False, False),
+        ("folder", False, True),
+        ("content", True, False),
+    ],
+)
+async def test_search_documents_search_type_modes(
+    monkeypatch, search_type, expect_chunk_join, expect_folder_branch
+):
+    """三种搜索方式的 SQL 结构：filename 不 join chunk、folder 走目录匹配分支、content 才 join chunk。"""
+    session = _RecordingSession()
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    results, total = await KnowledgeFileRepository().search_documents(
+        kb_ids=["kb-1"], keyword="证书", search_type=search_type, page=1, page_size=10
+    )
+
+    assert results == []
+    assert total == 0
+    for sql in session.compiled:
+        lowered = sql.lower()
+        assert ("knowledge_chunks" in lowered) is expect_chunk_join, (
+            f"search_type={search_type}: content 模式才应 join knowledge_chunks"
+        )
+        assert ("is_folder is true" in lowered) is expect_folder_branch, (
+            f"search_type={search_type}: folder 模式才应匹配真实文件夹名"
+        )
+
+
 class _ScalarResult:
     def __init__(self, row):
         self._row = row

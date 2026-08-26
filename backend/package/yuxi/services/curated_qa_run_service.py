@@ -18,6 +18,8 @@ from yuxi.services.agent_run_service import (
 )
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.run_queue_service import append_run_stream_event
+from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
+from yuxi.utils import logger
 
 
 def _run_response(run) -> dict[str, Any]:
@@ -28,6 +30,54 @@ def _run_response(run) -> dict[str, Any]:
         "request_id": run.request_id,
         "stream_url": f"/api/agent/runs/{run.id}/events",
     }
+
+
+async def _semantic_match_curated_qa(
+    qa_repo: CuratedQARepository, agent_slug: str, question: str
+) -> CuratedQAPair | None:
+    """精确匹配未命中时，按语义相近召回人工问答对；匹配失败只降级不阻断。"""
+    try:
+        from yuxi.services.curated_qa_semantic_matcher import CuratedQASemanticMatcher
+
+        return await CuratedQASemanticMatcher(qa_repo).find_match(agent_slug=agent_slug, question=question)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("人工问答对语义匹配失败，走正常流程: %s", exc)
+        return None
+
+
+async def _compose_answer_from_reference(model_spec: str, question: str, qa_pair: CuratedQAPair) -> str:
+    """以人工确认的问答对为参考，让大模型按用户问题原意组织回答。
+
+    语义命中的问题表述与原问题不同，直接顶出原答案会显得答非所问；引导模型
+    基于参考组织回答，同时明确要求参考不相关时如实拒答，避免编造。
+    """
+    from yuxi.models.chat import select_model
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是企业知识库助手。请以提供的参考材料为基础回答用户问题；"
+                "如果参考材料与问题不相关或不足以回答，请如实说明未检索到相关依据，不要编造。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"用户问题：{question}\n\n"
+                f"参考材料（管理员人工确认的问答）：\n"
+                f"问：{qa_pair.question}\n答：{qa_pair.answer}"
+            ),
+        },
+    ]
+    try:
+        response = await select_model(model_spec).call(messages, stream=False)
+        composed = str((response and response.content) or "").strip()
+        if composed:
+            return composed
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("人工问答对语义命中的引导生成失败，退回原答案: %s", exc)
+    return qa_pair.answer
 
 
 def _eligible_for_curated_qa(input_message: AgentRunInputMessage, meta: dict) -> bool:
@@ -49,15 +99,24 @@ async def try_create_curated_qa_run(
     current_uid: str,
     db: AsyncSession,
 ) -> dict[str, Any] | None:
-    """精确命中人工 QA 时直接完成 run；未命中返回 None 继续普通 Agent 流程。"""
+    """命中人工 QA 时直接完成 run；未命中返回 None 继续普通 Agent 流程。
+
+    精确命中直接输出人工确认的原答案；语义命中（表述相近但字符不同）不直接顶出
+    原答案，而是以人工答案为参考让大模型按用户问题原意组织回答（answer_source=
+    curated_qa_semantic），避免改述问题得到答非所问的死板复述。
+    """
     meta = dict(meta or {})
     if not _eligible_for_curated_qa(input_message, meta):
         return None
 
     qa_repo = CuratedQARepository(db)
     qa_pair = await qa_repo.get_exact(agent_slug=agent_slug, question=input_message.content)
+    answer_source = "curated_qa"
     if qa_pair is None:
-        return None
+        qa_pair = await _semantic_match_curated_qa(qa_repo, agent_slug, input_message.content)
+        if qa_pair is None:
+            return None
+        answer_source = "curated_qa_semantic"
 
     request_id = str(meta.get("request_id") or uuid.uuid4())
     scope = await prepare_agent_run_creation_scope(
@@ -73,7 +132,12 @@ async def try_create_curated_qa_run(
         return _run_response(scope.existing_run)
 
     resolved_model_spec = resolve_agent_run_model_spec(None, scope.agent_item, scope.agent_backend)
-    input_metadata: dict[str, Any] = {"request_id": request_id, "answer_source": "curated_qa"}
+    answer_text = (
+        await _compose_answer_from_reference(resolved_model_spec, input_message.content, qa_pair)
+        if answer_source == "curated_qa_semantic"
+        else qa_pair.answer
+    )
+    input_metadata: dict[str, Any] = {"request_id": request_id, "answer_source": answer_source}
     if raw_message := input_message.raw_message():
         input_metadata["raw_message"] = raw_message
     if source := meta.get("source"):
@@ -93,7 +157,7 @@ async def try_create_curated_qa_run(
         request_id=request_id,
         conversation_id=scope.conversation.id,
         run_type="chat",
-        input_payload={"model_spec": resolved_model_spec, "answer_source": "curated_qa", "curated_qa_id": qa_pair.id},
+        input_payload={"model_spec": resolved_model_spec, "answer_source": answer_source, "curated_qa_id": qa_pair.id},
         persisted_input_message=persisted_input_message,
     )
     if not created:
@@ -108,15 +172,15 @@ async def try_create_curated_qa_run(
         "id": stream_message_id,
         "type": "ai",
         "role": "assistant",
-        "content": qa_pair.answer,
-        "answer_source": "curated_qa",
+        "content": answer_text,
+        "answer_source": answer_source,
         "curated_qa_id": qa_pair.id,
         "human_confirmed": True,
     }
     assistant_message = await ConversationRepository(db).add_message_by_thread_id(
         thread_id=thread_id,
         role="assistant",
-        content=qa_pair.answer,
+        content=answer_text,
         message_type="text",
         extra_metadata=answer_metadata,
         run_id=run.id,
@@ -136,7 +200,7 @@ async def try_create_curated_qa_run(
         "agent_slug": agent_slug,
         "thread_id": thread_id,
         "uid": str(current_uid),
-        "answer_source": "curated_qa",
+        "answer_source": answer_source,
         "curated_qa_id": qa_pair.id,
     }
     init_chunk = {
@@ -155,13 +219,13 @@ async def try_create_curated_qa_run(
     }
     loading_chunk = {
         "request_id": request_id,
-        "response": qa_pair.answer,
+        "response": answer_text,
         "thread_id": thread_id,
         "status": "loading",
         "stream_event": {
             "type": "message_delta",
             "message_id": stream_message_id,
-            "content": qa_pair.answer,
+            "content": answer_text,
             "thread_id": thread_id,
             "namespace": [],
         },

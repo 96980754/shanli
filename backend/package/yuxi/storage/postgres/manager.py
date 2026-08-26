@@ -311,6 +311,8 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_error TEXT",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS enrichment_possibly_outdated BOOLEAN NOT NULL DEFAULT FALSE",
             "CREATE INDEX IF NOT EXISTS ix_knowledge_files_enrichment_status ON knowledge_files(enrichment_status)",
+            # 人工问答对语义召回：问题向量（懒回填，缺失时按需计算落库）
+            "ALTER TABLE IF EXISTS curated_qa_pairs ADD COLUMN IF NOT EXISTS question_embedding JSONB",
             """
             CREATE TABLE IF NOT EXISTS document_qa_pairs (
                 id SERIAL PRIMARY KEY,

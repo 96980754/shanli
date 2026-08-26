@@ -108,7 +108,8 @@ export const agentApi = {
       model_spec: data.model_spec || null,
       resume: data.resume ?? null,
       created_by_run_id: data.created_by_run_id || null,
-      industry_solution: data.industry_solution || null
+      industry_solution: data.industry_solution || null,
+      output_format: data.output_format || 'default'
     }),
 
   /**
@@ -185,7 +186,9 @@ export const multimodalApi = {
 export const transcriptionApi = {
   transcribe: (audioBlob, language = '') => {
     const formData = new FormData()
-    formData.append('file', audioBlob, 'recording.webm')
+    // iOS 录制的是 MP4 容器；转写 Provider 按文件名后缀判定格式，MP4 家族统一用 .m4a
+    const isMp4Family = /audio\/(mp4|x-m4a|m4a|mp4a-latm)/.test(audioBlob.type || '')
+    formData.append('file', audioBlob, isMp4Family ? 'recording.m4a' : 'recording.webm')
     if (language) formData.append('language', language)
 
     return apiRequest(

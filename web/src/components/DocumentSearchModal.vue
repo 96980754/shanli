@@ -12,7 +12,7 @@
   >
     <a-input-search
       v-model:value="keyword"
-      placeholder="搜索文件名或文档内容"
+      placeholder="搜索文件名"
       allow-clear
       class="document-search-input"
     />

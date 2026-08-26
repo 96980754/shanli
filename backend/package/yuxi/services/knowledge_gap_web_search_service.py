@@ -24,6 +24,11 @@ class KnowledgeGapWebSearchService:
         api_key = str(os.getenv("TAVILY_API_KEY") or "").strip()
         if not api_key:
             raise ValueError("未配置 TAVILY_API_KEY，暂时无法联网补答")
+        # 占位注释（如 "# 获取搜索服务的 api key 请访问 ..."）能通过“非空”判断，但会作为
+        # Authorization: Bearer 头触发 httpx 的 ascii 编码错误，把 500 误报成联网失败。
+        # 校验 key 必须是单个纯 ASCII token，否则给出清晰配置错误。
+        if api_key.startswith("#") or not api_key.isascii() or any(ch.isspace() for ch in api_key):
+            raise ValueError("TAVILY_API_KEY 配置无效（疑似占位或含非 ASCII/空白），请在 .env 配置真实 API Key")
         return AsyncTavilyClient(api_key=api_key)
 
     @staticmethod
@@ -117,7 +122,12 @@ class KnowledgeGapWebSearchService:
         await session.commit()
         await session.refresh(qa_pair)
 
+        gap_dict = updated_gap.to_dict() if updated_gap else None
+        if gap_dict is not None:
+            # 刚保存了问答对，has_answer 必然为真（assistant_message_id 缺失时除外）
+            gap_dict["has_answer"] = bool(gap.assistant_message_id)
+
         return {
             "qa_pair": qa_pair.to_dict(),
-            "gap": updated_gap.to_dict() if updated_gap else None,
+            "gap": gap_dict,
         }

@@ -59,6 +59,7 @@
         :content="parsedData.content"
         code-copy
         class="message-md"
+        @img-click="onMarkdownImgClick"
       />
 
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
@@ -256,6 +257,10 @@ const openImagePreview = (src, alt = '') => {
   if (!src) return
   imagePreview.value = { visible: true, src, alt }
   window.addEventListener('keydown', handleImagePreviewKeydown)
+}
+
+const onMarkdownImgClick = ({ src, alt }) => {
+  openImagePreview(src, alt)
 }
 
 const closeImagePreview = () => {

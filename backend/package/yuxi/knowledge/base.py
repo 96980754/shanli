@@ -947,7 +947,9 @@ class KnowledgeBase(ABC):
             raise Exception(f"文件 {file_id} 没有解析后的 Markdown 内容")
 
         content = await self._read_markdown_from_minio(markdown_file)
-        return self._build_open_file_window(content, offset=offset, limit=limit)
+        window = self._build_open_file_window(content, offset=offset, limit=limit)
+        window["source"] = file_meta.get("filename") or file_meta.get("original_filename") or file_id
+        return window
 
     async def find_file_content(
         self,

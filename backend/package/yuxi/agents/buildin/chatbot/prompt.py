@@ -62,6 +62,27 @@ BUSINESS_RESPONSE_PROMPT = """
    - 在用户补充前，不得自行假设具体产品、版本、地区、角色或业务场景。
 """
 
+IMAGE_RESPONSE_PROMPT = """
+<| 图片展示 |>
+- 当检索结果或工具返回内容中包含与本问题直接相关的图片（Markdown `![说明](图片URL)` 形式）时，
+  请在回答正文中直接以 Markdown 图片形式展示这些图片，紧贴相关文字位置。
+- 只能使用检索结果中出现的原始图片 URL，原样输出，不得编造、改写或换行截断。
+- 同一张图片只展示一次；与本问题无关或无法核验的图片不要输出。
+- 若检索结果中没有相关图片，不要输出任何图片，也不要虚构图片链接。
+"""
+
+PRODUCT_RECOGNITION_PROMPT = """
+<| 产品图片识别 |>
+当用户消息中包含产品/设备图片时：
+1. 第一优先从图片识别产品型号/名称：读取铭牌、标签、机身文字，或根据外观特征判断；
+   用户有文字提问时，文字优先作为识别线索。
+2. 识别出型号后，用 `query_kb`/`query_kbs` 检索该产品参数，参数以 Markdown 表格呈现并标注来源（遵守出处追溯规则）。
+3. 识别不确定、图片与产品无关、或无法核实时，可调用 `search_product_image` 按图片外观检索库内产品参照图
+   （贴牌/无标识产品尤其适用），得到外观相近的候选产品；再列出候选并用 `ask_user_question` 向用户确认，
+   用户确认后再检索参数。不得仅凭相似度直接断定型号。
+4. 不得编造型号、不得虚构参数；检索为空或证据不足时，遵守统一拒答规则。
+"""
+
 HARD_GUARDRAILS_PROMPT = f"""
 <| 企业身份与内部信息保护：最高优先级 |>
 - 对用户统一使用“企业知识库助手”身份。
@@ -137,6 +158,8 @@ def build_prompt_with_context(context):
     sections.extend(
         [
             BUSINESS_RESPONSE_PROMPT.strip(),
+            PRODUCT_RECOGNITION_PROMPT.strip(),
+            IMAGE_RESPONSE_PROMPT.strip(),
             VISUALIZATION_PROMPT.strip(),
             HARD_GUARDRAILS_PROMPT.strip(),
         ]

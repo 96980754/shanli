@@ -10,6 +10,10 @@ LLM 基于这些片段生成参考答案，写入原 JSONL 的 gold_answer 字�
 用法（api-dev 容器内）:
   docker exec -w /app/scripts/eval_datasets api-dev python generate_gold_answers.py \
       --kb kb_0368jjmecb --file loc.jsonl [--model deepseek:deepseek-v4-flash] [--limit 3]
+
+跨库模式（对齐 Agent 的跨库检索行为，合并多库 top chunks 生成参考答案）:
+  docker exec -w /app/scripts/eval_datasets api-dev python generate_gold_answers.py \
+      --file testset_95.jsonl --kbs kb_3cm2gz6tyb,kb_mvng8u1201,kb_0368jjmecb,...
 """
 from __future__ import annotations
 
@@ -57,7 +61,8 @@ def build_gold_prompt(query: str, retrieved_chunks: list[dict], max_docs: int = 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="为验证集生成 RAGAS 参考答案")
-    parser.add_argument("--kb", required=True, help="知识库 ID")
+    parser.add_argument("--kb", help="知识库 ID（单库模式，与 --kbs 二选一）")
+    parser.add_argument("--kbs", help="跨库模式：逗号分隔的多个知识库 ID，合并各库 top chunks 生成参考答案")
     parser.add_argument("--file", required=True, help="JSONL 文件路径（相对 eval_datasets 目录或绝对路径）")
     parser.add_argument("--model", help="生成参考答案的模型 spec（默认系统 default_model）")
     parser.add_argument("--limit", type=int, help="只处理前 N 题（冒烟用）")
@@ -107,17 +112,24 @@ async def run(args: argparse.Namespace) -> int:
         print("无法确定生成模型，请用 --model 指定", file=sys.stderr)
         return 1
 
-    kb_instance = await knowledge_base.aget_kb(args.kb)
-    if kb_instance is None:
-        print(f"知识库不存在: {args.kb}", file=sys.stderr)
+    if not (args.kb or args.kbs):
+        print("需要 --kb（单库）或 --kbs（跨库）", file=sys.stderr)
         return 1
-    await kb_instance._load_metadata()
-    retrieval_config = await resolve_retrieval_config(args.kb, kb_instance)
-    # 注入可用 answer 模型：aquery 内部用 answer_llm 生成答案，
-    # 否则会落到库配置里未注册的模型（如 MiniMax）而报错，与 ragas_eval 的注入保持一致。
-    retrieval_config.setdefault("answer_llm", model_spec)
+    kb_ids = [args.kb] if args.kb else [k.strip() for k in args.kbs.split(",") if k.strip()]
+    kb_map: dict[str, tuple] = {}
+    for kb_id in kb_ids:
+        inst = await knowledge_base.aget_kb(kb_id)
+        if inst is None:
+            print(f"知识库不存在: {kb_id}", file=sys.stderr)
+            return 1
+        await inst._load_metadata()
+        cfg = await resolve_retrieval_config(kb_id, inst)
+        # 注入可用 answer 模型：aquery 内部用 answer_llm 生成答案，
+        # 否则会落到库配置里未注册的模型（如 MiniMax）而报错，与 ragas_eval 的注入保持一致。
+        cfg.setdefault("answer_llm", model_spec)
+        kb_map[kb_id] = (inst, cfg)
     llm = select_model(model_spec=model_spec)
-    print(f"库 {args.kb} | 模型 {model_spec} | 检索配置 final_top_k={retrieval_config.get('final_top_k')}", flush=True)
+    print(f"检索库: {', '.join(kb_map)} | 模型 {model_spec} | 跨库={len(kb_map) > 1}", flush=True)
 
     lines = path.read_text(encoding="utf-8").strip().splitlines()
     if args.limit:
@@ -134,10 +146,23 @@ async def run(args: argparse.Namespace) -> int:
             continue
         gold = ""
         try:
-            result = await kb_instance.aquery(query, args.kb, **retrieval_config)
-            _, chunks = normalize_query_result(result)
-            if chunks:
-                gold = await call_with_retry(llm, build_gold_prompt(query, chunks))
+            chunks: list[dict] = []
+            for kb_id, (inst, cfg) in kb_map.items():
+                result = await inst.aquery(query, kb_id, **cfg)
+                _, kb_chunks = normalize_query_result(result)
+                chunks.extend(kb_chunks)
+            # 跨库可能重复命中同一片段：按正文前缀去重
+            seen: set[str] = set()
+            uniq: list[dict] = []
+            for c in chunks:
+                key = (c.get("content") or "")[:80]
+                if key and key not in seen:
+                    seen.add(key)
+                    uniq.append(c)
+            if uniq:
+                # 跨库合并上下文较大，放宽 prompt 的片段上限（单库仍 10）
+                max_docs = 30 if len(kb_map) > 1 else 10
+                gold = await call_with_retry(llm, build_gold_prompt(query, uniq, max_docs=max_docs))
         except Exception as e:
             logger.error(f"第 {item.get('index', i)} 题生成失败: {e}")
         item["gold_answer"] = gold

@@ -47,10 +47,7 @@
           {{ formatFullDateTime(record.last_seen_at) }}
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-space size="small">
-            <a-button type="link" @click="openWebSearch(record)">联网补答</a-button>
-            <a-button type="link" @click="openUpdate(record)">处理</a-button>
-          </a-space>
+          <a-button type="link" @click="openAnswer(record)">补答</a-button>
         </template>
       </template>
     </a-table>
@@ -70,25 +67,13 @@
         <a-descriptions-item label="处理备注">{{ detail.resolution_note || '-' }}</a-descriptions-item>
       </a-descriptions>
       <a-space v-if="detail" direction="vertical" class="drawer-actions">
-        <a-button type="primary" block @click="openWebSearch(detail)">联网补答并保存问答对</a-button>
-        <a-button block @click="openUpdate(detail)">更新处理状态</a-button>
+        <a-button type="primary" block @click="openAnswer(detail)">补答并保存问答对</a-button>
       </a-space>
     </a-drawer>
 
-    <a-modal v-model:open="updateOpen" title="处理知识缺口" @ok="submitUpdate" :confirm-loading="updating">
-      <a-form layout="vertical">
-        <a-form-item label="处理状态">
-          <a-select v-model:value="updateForm.status" :options="editableStatusOptions" />
-        </a-form-item>
-        <a-form-item label="处理备注">
-          <a-textarea v-model:value="updateForm.resolution_note" :rows="5" :maxlength="2000" show-count />
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
     <a-modal
       v-model:open="webSearchOpen"
-      title="联网补答"
+      title="人工补答"
       width="760px"
       ok-text="确认并保存问答对"
       cancel-text="取消"
@@ -100,8 +85,8 @@
         type="info"
         show-icon
         class="web-search-alert"
-        message="联网结果仅供管理员审核"
-        description="候选答案不会自动进入普通问答。请核对来源并编辑确认，保存后同一智能体再次收到相同问题时才会优先使用人工确认答案。"
+        message="可直接输入答案，也可联网搜索生成草稿"
+        description="保存的答案会作为人工问答对，同一智能体再次收到相同问题时才优先使用，不会自动进入普通问答。"
       />
 
       <a-form layout="vertical">
@@ -111,7 +96,7 @@
 
         <div class="web-search-toolbar">
           <span class="web-search-agent">Agent：{{ webSearchGap?.agent_slug || '-' }}</span>
-          <a-button :loading="webSearching" @click="runWebSearch">重新联网搜索</a-button>
+          <a-button :loading="webSearching" @click="runWebSearch">联网搜索生成草稿</a-button>
         </div>
 
         <div v-if="webSearching" class="web-search-loading">
@@ -126,7 +111,7 @@
               :rows="8"
               :maxlength="20000"
               show-count
-              placeholder="联网结果会作为候选答案填入，请核对来源后编辑确认"
+              placeholder="可直接输入答案；点击上方「联网搜索生成草稿」可自动生成候选后编辑"
             />
           </a-form-item>
 
@@ -161,7 +146,6 @@ const statusOptions = [
   { label: '已解决', value: 'resolved' },
   { label: '已忽略', value: 'ignored' }
 ]
-const editableStatusOptions = statusOptions.slice(1)
 const reasonOptions = [
   { label: '全部原因', value: '' },
   { label: '无可用知识库', value: 'no_enabled_knowledge_base' },
@@ -180,17 +164,13 @@ const columns = [
 ]
 
 const loading = ref(false)
-const updating = ref(false)
 const items = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const detailOpen = ref(false)
-const updateOpen = ref(false)
 const detail = ref(null)
-const updatingId = ref(null)
 const filters = reactive({ query: '', status: '', reason: '' })
-const updateForm = reactive({ status: 'processing', resolution_note: '' })
 
 const webSearchOpen = ref(false)
 const webSearching = ref(false)
@@ -254,34 +234,11 @@ async function openDetail(gapId) {
   }
 }
 
-function openUpdate(record) {
-  updatingId.value = record.id
-  updateForm.status = record.status
-  updateForm.resolution_note = record.resolution_note || ''
-  updateOpen.value = true
-}
-
-async function submitUpdate() {
-  updating.value = true
-  try {
-    const response = await dashboardApi.updateKnowledgeGap(updatingId.value, updateForm)
-    message.success('处理状态已更新')
-    updateOpen.value = false
-    if (detail.value?.id === response.item.id) detail.value = response.item
-    await loadGaps()
-  } catch (error) {
-    message.error(error?.message || '更新知识缺口失败')
-  } finally {
-    updating.value = false
-  }
-}
-
-function openWebSearch(record) {
+function openAnswer(record) {
   webSearchGap.value = { ...record }
   webAnswer.value = ''
   webSources.value = []
   webSearchOpen.value = true
-  runWebSearch()
 }
 
 async function runWebSearch() {
@@ -295,8 +252,8 @@ async function runWebSearch() {
       message.warning('联网检索完成，但未生成候选答案，请结合来源人工填写')
     }
   } catch (error) {
-    console.error('联网补答失败', error)
-    message.error(error?.message || '联网补答失败')
+    console.error('联网搜索生成草稿失败', error)
+    message.error(error?.message || '联网搜索生成草稿失败')
   } finally {
     webSearching.value = false
   }

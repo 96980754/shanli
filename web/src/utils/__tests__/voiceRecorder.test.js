@@ -68,9 +68,52 @@ const createHarness = ({ getUserMedia, transcribe } = {}) => {
   }
 }
 
+// 模拟 iOS Safari：不支持 webm，只支持 MP4 容器
+class IosMediaRecorder {
+  static isTypeSupported(type) {
+    return type.startsWith('audio/mp4')
+  }
+
+  constructor(stream, options) {
+    this.stream = stream
+    this.mimeType = options.mimeType
+    this.state = 'inactive'
+  }
+
+  start() {
+    this.state = 'recording'
+  }
+
+  stop() {
+    this.state = 'inactive'
+    this.ondataavailable?.({ data: new Blob(['mp4-audio'], { type: this.mimeType }) })
+    queueMicrotask(() => this.onstop?.())
+  }
+}
+
 const run = async () => {
   assert.equal(selectRecordingMimeType(FakeMediaRecorder), 'audio/webm;codecs=opus')
   assert.equal(selectRecordingMimeType(null), '')
+
+  // iOS：webm 不可用时回落 MP4，且录音产物为 MP4 容器
+  assert.equal(selectRecordingMimeType(IosMediaRecorder), 'audio/mp4;codecs=mp4a.40.2')
+  let iosBlobType = ''
+  const ios = createVoiceRecorder({
+    mediaDevices: { getUserMedia: async () => ({ getTracks: () => [new FakeTrack()] }) },
+    MediaRecorderClass: IosMediaRecorder,
+    transcribe: async (blob) => {
+      iosBlobType = blob.type
+      return { text: 'iOS 语音' }
+    },
+    onTranscript: () => {},
+    onError: () => {}
+  })
+  assert.equal(await ios.start(), true)
+  assert.equal(ios.state, 'recording')
+  assert.equal(ios.stop(), true)
+  await nextTurn()
+  assert.equal(iosBlobType, 'audio/mp4;codecs=mp4a.40.2')
+  assert.equal(ios.state, 'idle')
 
   const success = createHarness()
   assert.equal(await success.recorder.start(), true)

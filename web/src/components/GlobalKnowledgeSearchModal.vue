@@ -37,7 +37,12 @@ const createHandoff = async () => {
     <a-list v-if="results.length" class="results" :data-source="results" item-layout="vertical">
       <template #renderItem="{ item }">
         <a-list-item>
-          <a-list-item-meta :title="item.kb_name" :description="item.file_name || item.filename || '知识库片段'" />
+          <a-list-item-meta :title="item.kb_name">
+            <template #description>
+              <div v-if="item.file_dir" class="file-dir">{{ item.file_dir }}</div>
+              <div class="file-name">{{ item.file_name || item.filename || '知识库片段' }}</div>
+            </template>
+          </a-list-item-meta>
           <div class="content">{{ item.content || item.text }}</div>
         </a-list-item>
       </template>
@@ -50,4 +55,6 @@ const createHandoff = async () => {
 <style scoped lang="less">
 .results { margin-top: 16px; max-height: 420px; overflow-y: auto; }
 .content { white-space: pre-wrap; color: var(--text-color-secondary); }
+.file-dir { color: var(--text-color-secondary); font-size: 12px; }
+.file-name { color: var(--text-color); font-weight: 500; }
 </style>

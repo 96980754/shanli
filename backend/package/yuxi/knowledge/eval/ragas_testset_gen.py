@@ -55,9 +55,56 @@ def build_langchain_embeddings(model_spec: str) -> Any:
 
 
 async def load_kb_chunks(kb_id: str) -> list[dict[str, Any]]:
-    """读取知识库已入库的 chunks，返回 [{"chunk_id", "content"}]。"""
+    """读取知识库已入库的 chunks，返回 [{"chunk_id", "file_id", "content"}]。"""
     chunks = await KnowledgeChunkRepository().list_by_kb_id(kb_id)
-    return [{"chunk_id": c.chunk_id, "content": c.content} for c in chunks if c.content]
+    return [
+        {"chunk_id": c.chunk_id, "file_id": c.file_id, "content": c.content} for c in chunks if c.content
+    ]
+
+
+def cap_chunks(chunks: list[dict[str, Any]], max_chunks: int) -> list[dict[str, Any]]:
+    """按文件均摊地把 chunks 采样到 max_chunks 以内，保证跨文件覆盖。
+
+    RAGAS 的 NERExtractor/主题提取等 transform 会遍历全部 chunk，大库（数千 chunks）
+    的 NER 成本随 chunk 数线性增长。生成测试集前按文件比例采样，把大库的
+    transform 成本约束到可控范围，同时保留各文件的代表性内容。
+    返回结果严格不超过 max_chunks；文件数超过 max_chunks 时保留 chunk 数最多的
+    max_chunks 个文件。
+    """
+    if len(chunks) <= max_chunks:
+        return chunks
+
+    by_file: dict[str, list[dict[str, Any]]] = {}
+    for c in chunks:
+        by_file.setdefault(c.get("file_id") or "unknown", []).append(c)
+    if len(by_file) > max_chunks:  # cap 小于文件数时，保留 chunk 数最多的 max_chunks 个文件
+        by_file = dict(sorted(by_file.items(), key=lambda kv: -len(kv[1]))[:max_chunks])
+    total = sum(len(flist) for flist in by_file.values())
+
+    # 每文件配额按 chunk 数比例向下取整（总和天然 ≤ cap），剩余额度从最大文件补齐。
+    # 不用 round：各文件配额四舍五入会溢出 cap，无法保证严格上界。
+    remaining = max_chunks
+    per_file = {}
+    for fid, flist in by_file.items():
+        quota = max(1, int(max_chunks * len(flist) / total))
+        per_file[fid] = min(quota, len(flist))
+        remaining -= per_file[fid]
+    for fid in sorted(per_file, key=lambda f: -len(by_file[f])):
+        if remaining <= 0:
+            break
+        headroom = len(by_file[fid]) - per_file[fid]
+        take = min(headroom, remaining)
+        per_file[fid] += take
+        remaining -= take
+
+    selected: list[dict[str, Any]] = []
+    for fid, flist in by_file.items():
+        quota = per_file[fid]
+        # 均匀取 sample：从文件内 chunk 序列等间距抽样
+        step = len(flist) / quota
+        for i in range(quota):
+            selected.append(flist[int(i * step)])
+    return selected
 
 
 def chunks_to_langchain_documents(chunks: list[dict[str, Any]]) -> list[Any]:
@@ -89,19 +136,23 @@ async def generate_testset_jsonl(
     judge_llm: Any,
     embedding_model: Any,
     concurrency: int = 16,
+    max_chunks: int = 500,
 ) -> list[dict[str, Any]]:
     """从知识库 chunks 生成 size 条 QA 测试集，返回 JSONL 行列表。
 
     concurrency 传给 RAGAS RunConfig.max_workers：transform 阶段（摘要/主题/实体提取）
     与 QA 合成阶段并发执行，显著缩短大批量生成耗时；默认 16 与 ragas RunConfig 默认一致。
+    max_chunks 限制喂给生成器的 chunk 数（按文件均摊采样）：大库 NER transform 成本
+    随 chunk 数线性增长，cap 后约束到可控范围。
     """
     from ragas.run_config import RunConfig
 
     chunks = await load_kb_chunks(kb_id)
     if not chunks:
         raise ValueError(f"知识库 {kb_id} 没有已入库的文本 chunks，无法生成测试集")
+    chunks = cap_chunks(chunks, max_chunks=max(1, max_chunks))
     if size > len(chunks):
-        logger.warning(f"size={size} 大于 chunks 数量 {len(chunks)}，按 {len(chunks)} 生成")
+        logger.warning(f"size={size} 大于 chunk 采样数 {len(chunks)}，按 {len(chunks)} 生成")
         size = len(chunks)
 
     generator = build_testset_generator(judge_llm, embedding_model)

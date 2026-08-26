@@ -5,6 +5,7 @@ import time
 import traceback
 import uuid
 from datetime import datetime
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
@@ -1206,6 +1207,7 @@ async def export_database(
 async def search_documents_across_knowledge_bases(
     kb_id: str | None = Query(None),
     keyword: str | None = Query(None, max_length=200),
+    search_type: Literal["filename", "folder", "content"] = "filename",
     updated_from: datetime | None = Query(None),
     updated_to: datetime | None = Query(None),
     publisher: str | None = Query(None, max_length=64),
@@ -1213,7 +1215,10 @@ async def search_documents_across_knowledge_bases(
     page_size: int = Query(30, ge=1, le=100),
     current_user: User = Depends(get_required_user),
 ):
-    """Search current document metadata across browsable knowledge bases or one manageable knowledge base."""
+    """Search current document metadata across browsable knowledge bases or one manageable knowledge base.
+
+    search_type: filename=只按文件名匹配；folder=按目录路径匹配；content=按正文关键词匹配。
+    """
     if kb_id:
         await _require_kb_permission(current_user, kb_id, "can_manage")
         await _ensure_database_supports_documents(kb_id, "文档版本目标搜索")
@@ -1224,6 +1229,7 @@ async def search_documents_across_knowledge_bases(
     items, total = await KnowledgeFileRepository().search_documents(
         kb_ids=kb_ids,
         keyword=keyword,
+        search_type=search_type,
         updated_from=updated_from,
         updated_to=updated_to,
         created_by=publisher,
@@ -4003,3 +4009,161 @@ async def preview_uploaded_file(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return _preview_response(data)
+
+
+# ── 产品参照图管理 ──────────────────────────────────────────────────
+# 参照图约定：MinIO public/{kb_id}/product-images/{产品名}.jpg（每款产品一张，文件名即产品名）。
+# 上传/删除只动 MinIO；索引重建由「重建索引」端点手动触发（调用视觉特征模型，有 API 成本）。
+_REFERENCE_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+_MAX_REFERENCE_IMAGE_SIZE = 20 * 1024 * 1024
+
+
+def _normalize_reference_product_name(filename: str) -> str:
+    """从上传文件名提取产品名（去扩展名/路径），并拒绝会破坏 Milvus 表达式的字符。"""
+    product = os.path.splitext(os.path.basename(filename or ""))[0].strip()
+    if not product:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    if any(char in product for char in ('"', "\\", "/")):
+        raise HTTPException(status_code=400, detail="产品名不能包含引号、反斜杠或斜杠")
+    return product
+
+
+async def _require_product_image_kb(current_user: User, kb_id: str) -> None:
+    """参照图端点统一鉴权：管理员 + 库管理权限 + 知识库存在且支持文档。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "产品参照图管理")
+
+
+@knowledge.get("/databases/{kb_id}/product-images")
+async def list_product_reference_images(
+    kb_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """列出知识库的产品参照图及每张图的索引状态。"""
+    await _require_product_image_kb(current_user, kb_id)
+
+    from yuxi.knowledge.product_image_index import ProductImageIndex
+
+    index = ProductImageIndex()
+    images = index.list_reference_images(kb_id)
+    indexed = await index.list_indexed(kb_id)
+    public_endpoint = get_minio_client().public_endpoint
+    return {
+        "images": [
+            {
+                "product": item["product"],
+                "object_name": item["object_name"],
+                "image_url": f"http://{public_endpoint}/public/{item['object_name']}",
+                "indexed": item["product"] in indexed,
+            }
+            for item in images
+        ]
+    }
+
+
+@knowledge.post("/databases/{kb_id}/product-images")
+async def upload_product_reference_images(
+    kb_id: str,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_admin_user),
+):
+    """上传产品参照图（每款产品一张，文件名即产品名）。只写入 MinIO，不自动重建索引。"""
+    await _require_product_image_kb(current_user, kb_id)
+
+    # public 桶匿名读策略可能被覆盖，写入前重设，避免前端直读 403
+    get_minio_client().ensure_bucket_exists("public")
+
+    uploaded: list[dict[str, str]] = []
+    for file in files:
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        if ext not in _REFERENCE_IMAGE_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的图片格式：{file.filename or ''}（仅支持 jpg/jpeg/png/webp/bmp）",
+            )
+        product = _normalize_reference_product_name(file.filename or "")
+        try:
+            data = await read_upload_with_limit(
+                file,
+                max_size_bytes=_MAX_REFERENCE_IMAGE_SIZE,
+                too_large_message="参照图过大，单张限 20 MB 以内",
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+        object_name = f"{kb_id}/product-images/{product}{ext}"
+        image_url = await aupload_file_to_minio("public", object_name, data)
+        uploaded.append({"product": product, "object_name": object_name, "image_url": image_url})
+    return {"images": uploaded}
+
+
+@knowledge.delete("/databases/{kb_id}/product-images/{product_name}")
+async def delete_product_reference_image(
+    kb_id: str,
+    product_name: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """删除单个产品参照图：MinIO 对象与 Milvus 特征向量一并清理。"""
+    await _require_product_image_kb(current_user, kb_id)
+
+    from yuxi.knowledge.product_image_index import ProductImageIndex
+
+    index = ProductImageIndex()
+    target = next(
+        (item for item in index.list_reference_images(kb_id) if item["product"] == product_name),
+        None,
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"参照图不存在：{product_name}")
+    await get_minio_client().adelete_file("public", target["object_name"])
+    await index.delete_image(kb_id, product_name)
+    return {"product": product_name, "deleted": True}
+
+
+@knowledge.post("/databases/{kb_id}/product-images/rebuild")
+async def rebuild_product_reference_index(
+    kb_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """为知识库重建产品参照图索引（调用视觉特征模型批量向量化，幂等）。"""
+    await _require_product_image_kb(current_user, kb_id)
+
+    from yuxi.knowledge.product_image_index import build_product_image_index
+
+    return await build_product_image_index(kb_id)
+
+
+@knowledge.get("/product-images")
+async def list_all_product_reference_images(
+    current_user: User = Depends(get_admin_user),
+):
+    """跨库聚合列出全部产品参照图（产品图库管理页使用）。
+
+    遍历 Milvus 知识库，逐库合并 MinIO 参照图与 Milvus 索引状态，返回扁平列表。
+    """
+    from yuxi.knowledge.product_image_index import ProductImageIndex
+
+    databases = (await knowledge_base.get_databases_by_uid(current_user.uid)).get("databases", [])
+    index = ProductImageIndex()
+    rows: list[dict] = []
+    for db in databases:
+        if db.get("kb_type", "milvus") != "milvus":
+            continue
+        kb_id = str(db["kb_id"])
+        images = index.list_reference_images(kb_id)
+        if not images:
+            continue
+        indexed = await index.list_indexed(kb_id)
+        public_endpoint = get_minio_client().public_endpoint
+        for item in images:
+            rows.append(
+                {
+                    "kb_id": kb_id,
+                    "kb_name": str(db.get("name") or kb_id),
+                    "product": item["product"],
+                    "object_name": item["object_name"],
+                    "image_url": f"http://{public_endpoint}/public/{item['object_name']}",
+                    "indexed": item["product"] in indexed,
+                }
+            )
+    return {"images": rows}
