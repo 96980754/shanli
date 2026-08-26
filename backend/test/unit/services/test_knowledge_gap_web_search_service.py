@@ -65,6 +65,29 @@ def test_build_client_requires_tavily_api_key(monkeypatch):
         KnowledgeGapWebSearchService._build_client()
 
 
+@pytest.mark.parametrize(
+    "bad_key",
+    [
+        "# 获取搜索服务的 api key 请访问 https://tavily.com",
+        "tvly-中文占位",
+        "tvly-abc def",
+    ],
+)
+def test_build_client_rejects_placeholder_or_non_ascii_key(monkeypatch, bad_key):
+    monkeypatch.setenv("TAVILY_API_KEY", bad_key)
+
+    with pytest.raises(ValueError, match="配置无效"):
+        KnowledgeGapWebSearchService._build_client()
+
+
+def test_build_client_accepts_real_ascii_key(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "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")
+
+    client = KnowledgeGapWebSearchService._build_client()
+
+    assert client is not None
+
+
 @pytest.mark.asyncio
 async def test_save_answer_creates_curated_qa_and_resolves_gap(monkeypatch):
     gap = _gap()
@@ -107,4 +130,5 @@ async def test_save_answer_creates_curated_qa_and_resolves_gap(monkeypatch):
     assert "https://example.com/source" in update_kwargs["resolution_note"]
     assert result["qa_pair"]["id"] == 13
     assert result["gap"]["status"] == "resolved"
+    assert result["gap"]["has_answer"] is True
     session.commit.assert_awaited_once()

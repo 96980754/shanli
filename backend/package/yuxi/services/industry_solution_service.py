@@ -21,37 +21,54 @@ _TRAILING_REFERENCES_RE = re.compile(
 )
 
 
-class IndustrySolutionRequest(BaseModel):
-    industry: str = Field(min_length=1, max_length=120)
-    requirement: str = Field(min_length=1, max_length=2_000)
-    products: list[str] = Field(min_length=MIN_PRODUCTS, max_length=MAX_PRODUCTS)
+def _normalize_product_names(products: list[str], *, min_products: int) -> list[str]:
+    """去重、去空白并校验产品名长度；去重后不足 min_products 则报错。"""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for product in products:
+        name = str(product or "").strip()
+        if not name:
+            continue
+        if len(name) > MAX_PRODUCT_NAME_LENGTH:
+            raise ValueError(f"产品名称不能超过 {MAX_PRODUCT_NAME_LENGTH} 个字符")
+        key = name.casefold()
+        if key not in seen:
+            seen.add(key)
+            normalized.append(name)
+    if len(normalized) < min_products:
+        raise ValueError(f"至少需要 {min_products} 个不同产品")
+    return normalized
 
-    @field_validator("industry", "requirement")
+
+class IndustrySolutionRequest(BaseModel):
+    """行业方案入口请求。
+
+    前端「直接在输入框输入需求」的模式下，行业与产品都可留空，由技能从需求
+    描述中识别产品并逐一检索；需求必填。真正执行分产品检索/导出时使用
+    ProductResearchInput / ExportIndustrySolutionInput 保持产品数量严格。
+    """
+
+    industry: str = Field(default="", max_length=120)
+    requirement: str = Field(min_length=1, max_length=2_000)
+    products: list[str] = Field(default_factory=list, max_length=MAX_PRODUCTS)
+
+    @field_validator("industry")
     @classmethod
-    def normalize_text(cls, value: str) -> str:
-        value = value.strip()
+    def normalize_industry(cls, value: str) -> str:
+        return str(value or "").strip()
+
+    @field_validator("requirement")
+    @classmethod
+    def normalize_requirement(cls, value: str) -> str:
+        value = str(value or "").strip()
         if not value:
-            raise ValueError("内容不能为空")
+            raise ValueError("需求不能为空")
         return value
 
     @field_validator("products")
     @classmethod
     def normalize_products(cls, products: list[str]) -> list[str]:
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for product in products:
-            name = str(product or "").strip()
-            if not name:
-                continue
-            if len(name) > MAX_PRODUCT_NAME_LENGTH:
-                raise ValueError(f"产品名称不能超过 {MAX_PRODUCT_NAME_LENGTH} 个字符")
-            key = name.casefold()
-            if key not in seen:
-                seen.add(key)
-                normalized.append(name)
-        if len(normalized) < MIN_PRODUCTS:
-            raise ValueError(f"至少需要 {MIN_PRODUCTS} 个不同产品")
-        return normalized
+        return _normalize_product_names(products, min_products=0)
 
 
 def build_retrieval_query(*, product: str, industry: str, requirement: str) -> str:

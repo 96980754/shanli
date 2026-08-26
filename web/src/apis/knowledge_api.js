@@ -904,6 +904,50 @@ export const fileApi = {
 }
 
 // =============================================================================
+// === 产品参照图分组（图搜参数：MinIO public/{kb_id}/product-images/） ===
+// =============================================================================
+
+export const referenceImageApi = {
+  /**
+   * 列出知识库的产品参照图及索引状态
+   * @param {string} kbId - 知识库 ID
+   */
+  list: async (kbId) => {
+    return apiAdminGet(`/api/knowledge/databases/${kbId}/product-images`)
+  },
+
+  /**
+   * 上传产品参照图（每款产品一张，文件名即产品名）
+   * @param {string} kbId - 知识库 ID
+   * @param {Array<File>} files - 图片文件列表
+   */
+  upload: async (kbId, files) => {
+    const formData = new FormData()
+    files.forEach((file) => formData.append('files', file))
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/product-images`, formData)
+  },
+
+  /**
+   * 删除单个产品参照图（含 Milvus 特征向量）
+   * @param {string} kbId - 知识库 ID
+   * @param {string} product - 产品名
+   */
+  remove: async (kbId, product) => {
+    return apiAdminDelete(
+      `/api/knowledge/databases/${kbId}/product-images/${encodeURIComponent(product)}`
+    )
+  },
+
+  /**
+   * 重建知识库产品参照图索引（调用视觉特征模型批量向量化）
+   * @param {string} kbId - 知识库 ID
+   */
+  rebuild: async (kbId) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/product-images/rebuild`, {})
+  }
+}
+
+// =============================================================================
 // === 知识库类型分组 ===
 // =============================================================================
 

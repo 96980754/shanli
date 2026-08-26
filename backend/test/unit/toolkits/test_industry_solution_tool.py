@@ -80,13 +80,25 @@ async def test_research_industry_products_retrieves_each_product_and_keeps_sourc
     assert [source["reference"] for source in result["sources"]] == [1, 2]
 
 
-@pytest.mark.parametrize(
-    "products",
-    [[], ["产品A"], ["产品A", " 产品A "], [f"产品-{index}" for index in range(6)]],
-)
-def test_industry_solution_request_rejects_invalid_products(products):
+def test_industry_solution_request_accepts_empty_industry_and_products():
+    # 前端「直接在输入框输入需求」模式：行业与产品可留空，仅需求必填
+    request = IndustrySolutionRequest(industry="", requirement="统一管理终端", products=[])
+    assert request.industry == ""
+    assert request.products == []
+
+
+def test_industry_solution_request_rejects_empty_requirement():
+    with pytest.raises(ValidationError, match="需求不能为空"):
+        IndustrySolutionRequest(industry="制造业", requirement="  ", products=[])
+
+
+def test_industry_solution_request_rejects_too_many_products():
     with pytest.raises(ValidationError):
-        IndustrySolutionRequest(industry="制造业", requirement="降本增效", products=products)
+        IndustrySolutionRequest(
+            industry="制造业",
+            requirement="降本增效",
+            products=[f"产品-{index}" for index in range(6)],
+        )
 
 
 def test_industry_solution_request_normalizes_products():
@@ -96,6 +108,18 @@ def test_industry_solution_request_normalizes_products():
     assert request.industry == "制造业"
     assert request.requirement == "降本增效"
     assert request.products == ["产品A", "产品B"]
+
+
+@pytest.mark.parametrize("products", [[], ["产品A"], ["产品A", " 产品A "]])
+def test_product_research_input_rejects_less_than_two_products(products):
+    # 工具执行层仍要求至少 2 个不同产品，避免检索无产品依据
+    with pytest.raises(ValidationError):
+        industry_tools.ProductResearchInput(
+            industry="制造业",
+            requirement="降本增效",
+            products=products,
+            kb_ids=["kb-1"],
+        )
 
 
 def test_structured_request_is_preserved_and_injected_into_model_context():

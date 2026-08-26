@@ -9,7 +9,22 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text, union_all, update
+from sqlalchemy import (
+    ARRAY,
+    DateTime,
+    String,
+    and_,
+    case,
+    cast,
+    func,
+    lateral,
+    literal,
+    or_,
+    select,
+    text,
+    union_all,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
@@ -471,6 +486,7 @@ class KnowledgeFileRepository:
         *,
         kb_ids: list[str],
         keyword: str | None = None,
+        search_type: str = "filename",
         updated_from=None,
         updated_to=None,
         created_by: str | None = None,
@@ -479,6 +495,19 @@ class KnowledgeFileRepository:
     ) -> tuple[list[dict], int]:
         if not kb_ids:
             return [], 0
+        # 搜索方式：filename=只按文件名（路径末段）匹配；folder=按文件夹名匹配返回文件夹；content=按正文匹配
+        if search_type not in {"filename", "folder", "content"}:
+            search_type = "filename"
+        if search_type == "folder":
+            return await self._search_folders(
+                kb_ids=kb_ids,
+                keyword=(keyword or "").strip(),
+                updated_from=updated_from,
+                updated_to=updated_to,
+                created_by=(created_by or "").strip(),
+                page=max(page, 1),
+                page_size=min(max(page_size, 1), 100),
+            )
         filters = [
             KnowledgeFile.kb_id.in_(kb_ids),
             KnowledgeFile.is_current.is_(True),
@@ -486,12 +515,19 @@ class KnowledgeFileRepository:
         if keyword and keyword.strip():
             escaped = keyword.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{escaped.lower()}%"
-            filters.append(
-                or_(
-                    func.lower(KnowledgeFile.filename).like(pattern, escape="\\"),
-                    func.lower(KnowledgeChunk.content).like(pattern, escape="\\"),
+            if search_type == "content":
+                filters.append(func.lower(KnowledgeChunk.content).like(pattern, escape="\\"))
+            else:
+                filters.append(
+                    or_(
+                        # filename 可能是完整相对路径（如 目录/子目录/xxx.pdf），只匹配最后一段
+                        # （文件名本身），避免命中祖先目录路径前缀导致整目录文件被带出。
+                        func.lower(func.regexp_replace(KnowledgeFile.filename, "^.*/", "")).like(
+                            pattern, escape="\\"
+                        ),
+                        func.lower(func.coalesce(KnowledgeFile.original_filename, "")).like(pattern, escape="\\"),
+                    )
                 )
-            )
         if updated_from:
             filters.append(KnowledgeFile.updated_at >= updated_from)
         if updated_to:
@@ -499,24 +535,24 @@ class KnowledgeFileRepository:
         if created_by and created_by.strip():
             filters.append(KnowledgeFile.created_by == created_by.strip())
 
-        statement = (
-            select(
-                KnowledgeFile.file_id,
-                KnowledgeFile.kb_id,
-                KnowledgeFile.filename,
-                KnowledgeFile.file_type,
-                KnowledgeFile.status,
-                KnowledgeFile.is_folder,
-                KnowledgeFile.created_by,
-                KnowledgeFile.updated_at,
-                KnowledgeFile.created_at,
-                KnowledgeFile.view_count,
-                User.username.label("publisher_name"),
-            )
-            .outerjoin(User, User.uid == KnowledgeFile.created_by)
-            .outerjoin(KnowledgeChunk, KnowledgeChunk.file_id == KnowledgeFile.file_id)
-            .where(*filters)
-            .group_by(
+        statement = select(
+            KnowledgeFile.file_id,
+            KnowledgeFile.kb_id,
+            KnowledgeFile.filename,
+            KnowledgeFile.file_type,
+            KnowledgeFile.status,
+            KnowledgeFile.is_folder,
+            KnowledgeFile.created_by,
+            KnowledgeFile.updated_at,
+            KnowledgeFile.created_at,
+            KnowledgeFile.view_count,
+            User.username.label("publisher_name"),
+        ).outerjoin(User, User.uid == KnowledgeFile.created_by)
+        if search_type == "content":
+            # 正文匹配需要 join chunk 并去重（一个文件多个 chunk），其余模式单文件单行无需分组
+            statement = statement.outerjoin(
+                KnowledgeChunk, KnowledgeChunk.file_id == KnowledgeFile.file_id
+            ).group_by(
                 KnowledgeFile.file_id,
                 KnowledgeFile.kb_id,
                 KnowledgeFile.filename,
@@ -529,7 +565,7 @@ class KnowledgeFileRepository:
                 KnowledgeFile.view_count,
                 User.username,
             )
-        )
+        statement = statement.where(*filters)
         normalized_page_size = min(max(page_size, 1), 100)
         async with pg_manager.get_async_session_context() as session:
             total = int((await session.execute(select(func.count()).select_from(statement.subquery()))).scalar_one())
@@ -537,6 +573,110 @@ class KnowledgeFileRepository:
                 statement.order_by(KnowledgeFile.updated_at.desc(), KnowledgeFile.file_id.asc())
                 .offset((max(page, 1) - 1) * normalized_page_size)
                 .limit(normalized_page_size)
+            )
+            return [dict(row) for row in result.mappings().all()], total
+
+    async def _search_folders(
+        self,
+        *,
+        kb_ids: list[str],
+        keyword: str,
+        updated_from=None,
+        updated_to=None,
+        created_by: str = "",
+        page: int = 1,
+        page_size: int = 30,
+    ) -> tuple[list[dict], int]:
+        """文件夹搜索：按文件夹名匹配，返回去重后的文件夹（真实文件夹 + 路径派生虚拟目录）。
+
+        虚拟目录从文件路径的全部祖先段派生：文件 `a/b/c.pdf` 隐含目录 `a`、`a/b`，
+        每个目录用其名字（末段）参与匹配；目录路径去重返回一次，避免一个目录把其中全部文件带出。
+        真实文件夹（is_folder）的 filename 即文件夹名，按自身名匹配。
+        """
+        base_filters = [
+            KnowledgeFile.kb_id.in_(kb_ids),
+            KnowledgeFile.is_current.is_(True),
+        ]
+        if updated_from:
+            base_filters.append(KnowledgeFile.updated_at >= updated_from)
+        if updated_to:
+            base_filters.append(KnowledgeFile.updated_at <= updated_to)
+        if created_by:
+            base_filters.append(KnowledgeFile.created_by == created_by)
+
+        segs = cast(
+            func.string_to_array(func.regexp_replace(KnowledgeFile.filename, "/[^/]*$", ""), "/"), ARRAY(String)
+        )
+        path_base = (
+            select(
+                KnowledgeFile.kb_id.label("kb_id"),
+                segs.label("segs"),
+                KnowledgeFile.updated_at.label("updated_at"),
+                KnowledgeFile.created_at.label("created_at"),
+                KnowledgeFile.created_by.label("created_by"),
+                KnowledgeFile.view_count.label("view_count"),
+            )
+            .where(*base_filters, KnowledgeFile.filename.like("%/%"))
+            .subquery()
+        )
+        # 对每个文件的目录段序列，按深度 1..cardinality 横向展开，得到全部祖先目录
+        depth = func.generate_series(literal(1), func.cardinality(path_base.c.segs)).label("depth")
+        derived = lateral(select(depth))
+        dir_path = func.array_to_string(path_base.c.segs[1 : derived.c.depth], "/")
+        folder_name = path_base.c.segs[derived.c.depth]
+        virtual_select = (
+            select(
+                (literal("__virtual_folder__:") + path_base.c.kb_id + literal(":") + dir_path).label("file_id"),
+                path_base.c.kb_id.label("kb_id"),
+                dir_path.label("filename"),
+                literal("folder").label("file_type"),
+                literal("done").label("status"),
+                literal(True).label("is_folder"),
+                literal(True).label("is_virtual_folder"),
+                func.count().label("virtual_children_count"),
+                func.max(path_base.c.updated_at).label("updated_at"),
+                func.max(path_base.c.created_at).label("created_at"),
+                func.max(path_base.c.created_by).label("created_by"),
+                func.max(path_base.c.view_count).label("view_count"),
+            )
+            .select_from(path_base, derived)
+            .group_by(path_base.c.kb_id, dir_path)
+        )
+
+        real_select = (
+            select(
+                KnowledgeFile.file_id,
+                KnowledgeFile.kb_id,
+                KnowledgeFile.filename,
+                KnowledgeFile.file_type,
+                KnowledgeFile.status,
+                KnowledgeFile.is_folder,
+                literal(False).label("is_virtual_folder"),
+                literal(0).label("virtual_children_count"),
+                KnowledgeFile.updated_at,
+                KnowledgeFile.created_at,
+                KnowledgeFile.created_by,
+                KnowledgeFile.view_count,
+            )
+            .where(KnowledgeFile.is_folder.is_(True), *base_filters)
+        )
+
+        if keyword:
+            escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped.lower()}%"
+            virtual_select = virtual_select.where(func.lower(folder_name).like(pattern, escape="\\"))
+            real_select = real_select.where(
+                func.lower(func.coalesce(KnowledgeFile.filename, "")).like(pattern, escape="\\")
+            )
+
+        folders = union_all(real_select, virtual_select).subquery()
+        async with pg_manager.get_async_session_context() as session:
+            total = int((await session.execute(select(func.count()).select_from(folders))).scalar_one())
+            result = await session.execute(
+                select(folders)
+                .order_by(func.lower(folders.c.filename).asc(), folders.c.file_id.asc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
             return [dict(row) for row in result.mappings().all()], total
 

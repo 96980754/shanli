@@ -280,7 +280,7 @@ async def test_preview_requires_search_permission(monkeypatch):
 
     assert exc_info.value.status_code == 403
     assert service.calls == [
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_search")
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_search")
     ]
     preview.assert_not_awaited()
 
@@ -305,7 +305,7 @@ async def test_preview_uses_scoped_service_and_hides_provider_error(monkeypatch)
     assert exc_info.value.detail == "回答模型暂时不可用，请检查知识库模型配置"
     assert "secret" not in exc_info.value.detail
     assert service.calls == [
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_search")
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_search")
     ]
     preview.assert_awaited_once_with(
         kb_id="kb-1",
@@ -333,8 +333,8 @@ async def test_source_versions_requires_view_and_download_permissions(monkeypatc
 
     assert result == {"items": []}
     assert service.calls == [
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_view"),
-        ({"uid": "viewer", "role": "user", "department_id": 1}, "kb-1", "can_download"),
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_view"),
+        ({"uid": "viewer", "role": "user", "department_id": 1, "team_id": None}, "kb-1", "can_download"),
     ]
     list_for_current_files.assert_awaited_once_with(
         kb_id="kb-1",
@@ -383,6 +383,7 @@ async def test_scoped_document_search_only_queries_requested_database(monkeypatc
     search.assert_awaited_once_with(
         kb_ids=["kb-1"],
         keyword="spec",
+        search_type="filename",
         updated_from=None,
         updated_to=None,
         created_by="owner",
@@ -423,6 +424,7 @@ async def test_unscoped_document_search_keeps_browsable_database_scope(monkeypat
     search.assert_awaited_once_with(
         kb_ids=["kb-1", "kb-2"],
         keyword="guide",
+        search_type="filename",
         updated_from=None,
         updated_to=None,
         created_by=None,

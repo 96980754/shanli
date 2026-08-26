@@ -9,6 +9,22 @@ from typing import Any
 from langchain.messages import HumanMessage
 
 
+OUTPUT_FORMAT_INSTRUCTIONS: dict[str, str] = {
+    "table": (
+        "请优先使用 Markdown 表格呈现主要信息（表头 + 行列），避免大段叙述；"
+        "若内容确实不适合表格，先说明原因再按合适方式回答。"
+    ),
+    "steps": (
+        "请优先使用编号步骤（1、2、3…）组织回答，逐步展开、不遗漏关键步骤；"
+        "若内容确实不适合步骤式，先说明原因再按合适方式回答。"
+    ),
+    "list": (
+        "请优先使用项目符号列表组织要点，每行一个要点；"
+        "若内容确实不适合列表式，先说明原因再按合适方式回答。"
+    ),
+}
+
+
 @dataclass(frozen=True)
 class AgentRunInputMessage:
     content: str
@@ -34,6 +50,7 @@ def build_chat_input_message(
     image_content: str | None = None,
     *,
     industry_solution: dict[str, Any] | None = None,
+    output_format: str = "default",
 ) -> AgentRunInputMessage:
     model_query = query
     extra_metadata: dict[str, Any] = {}
@@ -47,6 +64,14 @@ def build_chat_input_message(
             "请使用 industry-solution 技能严格按结构化请求生成方案和 Word 交付物。"
         )
         extra_metadata["industry_solution"] = industry_solution
+
+    if output_format and output_format != "default":
+        instruction = OUTPUT_FORMAT_INSTRUCTIONS.get(output_format)
+        if instruction:
+            model_query = (
+                f"{model_query}\n\n<output_format>\n{instruction}\n</output_format>\n请严格遵守该输出格式。"
+            )
+            extra_metadata["output_format"] = output_format
 
     if image_content:
         langchain_message = HumanMessage(

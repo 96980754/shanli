@@ -107,6 +107,7 @@ class OpenInputSchema(BaseModel):
 class OpenOutputSchema(BaseModel):
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
     file_id: str = Field(description="文件 ID")
+    source: str = Field(default="", description="文件显示名（文件名或原始文件名），供来源面板归因")
     start_line: int = Field(description="窗口起始行号，1-based；空结果为 0")
     end_line: int = Field(description="窗口结束行号，1-based；空结果为 0")
     total_lines: int = Field(description="文件总行数")

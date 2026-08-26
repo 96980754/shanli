@@ -256,6 +256,13 @@
             />
           </div>
 
+          <div
+            v-if="isMilvus && userStore.isAdmin && activeTab === 'product-images'"
+            class="tab-panel"
+          >
+            <ProductReferenceImagePanel v-if="kbId" :kb-id="kbId" />
+          </div>
+
           <div v-if="activeTab === 'permissions'" class="tab-panel">
             <KnowledgePermissionPanel v-if="kbId" :kb-id="kbId" :database="database" />
           </div>
@@ -392,7 +399,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
@@ -405,6 +412,7 @@ import {
   FileText,
   FolderPlus,
   Hash,
+  Image as ImageIcon,
   LoaderCircle,
   Network,
   Pencil,
@@ -418,11 +426,21 @@ import { message, Modal } from 'ant-design-vue'
 import FileTable from '@/components/FileTable.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 import FileUploadModal from '@/components/FileUploadModal.vue'
-import KnowledgeGraphSection from '@/components/KnowledgeGraphSection.vue'
+// 图谱区重（g6/sigma/graphology），懒加载：仅在打开「图谱」Tab 时才拉取渲染，
+// 避免进入知识库详情页就同步解析大 chunk 造成切换卡顿。
+const KnowledgeGraphSection = defineAsyncComponent({
+  loader: () => import('@/components/KnowledgeGraphSection.vue'),
+  loadingComponent: {
+    setup() {
+      return () => h('div', { class: 'graph-section-loading' }, '图谱加载中…')
+    }
+  }
+})
 import QuerySection from '@/components/QuerySection.vue'
 import SearchConfigPanel from '@/components/SearchConfigPanel.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
+import ProductReferenceImagePanel from '@/components/ProductReferenceImagePanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
 import { databaseApi, categoryApi } from '@/apis/knowledge_api'
@@ -496,6 +514,9 @@ const tabs = computed(() => {
   }
   if (isMilvus.value && userStore.isAdmin) {
     items.push({ key: 'graph', label: '知识图谱', icon: Network })
+  }
+  if (isMilvus.value && userStore.isAdmin) {
+    items.push({ key: 'product-images', label: '产品参照图', icon: ImageIcon })
   }
   if (kbPermissions.can_grant) {
     items.push({ key: 'permissions', label: '权限设置', icon: Settings })
@@ -999,6 +1020,12 @@ onMounted(() => {
 <style lang="less" scoped>
 @import '@/assets/css/extensions.less';
 @import '@/assets/css/extension-detail.less';
+
+.graph-section-loading {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text-color-secondary, #8c8c8c);
+}
 
 .database-info-container {
   .detail-content-wrapper {

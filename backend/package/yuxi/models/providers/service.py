@@ -245,6 +245,15 @@ async def ensure_builtin_model_providers_in_db(db: AsyncSession) -> None:
         provider_id = provider_def["provider_id"]
         existing_provider = existing_ids.get(provider_id)
         if existing_provider:
+            # 内置 provider 只做能力合并（模板新增能力时补进存量记录，只加不减），
+            # 保证新增能力（如 transcription）对已存在的内置供应商生效，不覆盖管理员编辑。
+            template_caps = provider_def.get("capabilities") or []
+            if existing_provider.is_builtin and template_caps:
+                merged_caps = sorted(set(existing_provider.capabilities or []) | set(template_caps))
+                if merged_caps != (existing_provider.capabilities or []):
+                    existing_provider.capabilities = merged_caps
+                    existing_provider.updated_by = "system"
+                    await db.flush()
             if not existing_provider.enabled_models and provider_def.get("enabled_models"):
                 existing_provider.enabled_models = _normalize_model_list(provider_def["enabled_models"])
                 existing_provider.capabilities = provider_def.get("capabilities") or existing_provider.capabilities

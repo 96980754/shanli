@@ -358,9 +358,16 @@ def _tool_output_as_dict(output: Any) -> dict[str, Any] | None:
 
 
 def _requires_knowledge_preflight(agent_backend_id: str, query: str) -> bool:
-    return agent_backend_id == "ChatbotAgent" and query.strip().lower().strip(
-        "，。！？!?、 "
-    ) not in {"你好", "您好", "嗨", "hi", "hello", "在吗", "在么"}
+    return agent_backend_id == "ChatbotAgent" and query.strip().lower().strip("，。！？!?、 ") not in {
+        "你好",
+        "您好",
+        "嗨",
+        "hi",
+        "hello",
+        "在吗",
+        "在么",
+    }
+
 
 @dataclass
 class _KnowledgeEvidenceTracker:
@@ -401,6 +408,7 @@ class _KnowledgeEvidenceTracker:
             and not self.has_evidence
             and not self.failed
         )
+
 
 def _stream_event_response(event: dict[str, Any]) -> str:
     if event.get("type") != "message_delta":
@@ -1060,9 +1068,10 @@ async def stream_agent_chat(
         await db.commit()
 
         # 先构建 langgraph_config
-        if _requires_knowledge_preflight(agent_item.backend_id, query):
+        if not image_content and _requires_knowledge_preflight(agent_item.backend_id, query):
             try:
                 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+
                 results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
                 if not results and not incomplete:
                     refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"

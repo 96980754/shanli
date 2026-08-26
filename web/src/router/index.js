@@ -38,13 +38,13 @@ const router = createRouter({
           path: '',
           name: 'AgentComp',
           component: () => import('../views/AgentView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { requiresAuth: true }
         },
         {
           path: ':thread_id',
           name: 'AgentCompWithThreadId',
           component: () => import('../views/AgentView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { requiresAuth: true }
         }
       ]
     },
@@ -57,7 +57,7 @@ const router = createRouter({
           path: '',
           name: 'WorkspaceComp',
           component: () => import('../views/WorkspaceView.vue'),
-          meta: { keepAlive: true, requiresAuth: true, requiresWorkspaceAccess: true }
+          meta: { requiresAuth: true, requiresWorkspaceAccess: true }
         }
       ]
     },
@@ -70,7 +70,7 @@ const router = createRouter({
           path: '',
           name: 'DashboardComp',
           component: () => import('../views/DashboardView.vue'),
-          meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
+          meta: { requiresAuth: true, requiresSuperAdmin: true }
         }
       ]
     },
@@ -83,7 +83,7 @@ const router = createRouter({
           path: '',
           name: 'KnowledgeGapsComp',
           component: () => import('../views/KnowledgeGapsView.vue'),
-          meta: { keepAlive: false, requiresAuth: true, requiresSuperAdmin: true }
+          meta: { requiresAuth: true, requiresSuperAdmin: true }
         }
       ]
     },
@@ -95,7 +95,7 @@ const router = createRouter({
           path: '',
           name: 'KnowledgeBrowser',
           component: () => import('../views/KnowledgeBrowserView.vue'),
-          meta: { keepAlive: false, requiresAuth: true }
+          meta: { requiresAuth: true }
         }
       ]
     },
@@ -108,7 +108,7 @@ const router = createRouter({
           path: '',
           name: 'ModelManageComp',
           component: () => import('../views/ModelManageView.vue'),
-          meta: { keepAlive: false, requiresAuth: true }
+          meta: { requiresAuth: true }
         }
       ]
     },
@@ -122,7 +122,6 @@ const router = createRouter({
           name: 'ExtensionsComp',
           component: () => import('../views/ExtensionsView.vue'),
           meta: {
-            keepAlive: false,
             requiresAuth: true
           },
           children: [
@@ -131,7 +130,6 @@ const router = createRouter({
               name: 'ExtensionKnowledgeBaseDetail',
               component: () => import('../views/DataBaseInfoView.vue'),
               meta: {
-                keepAlive: false,
                 requiresAuth: true
               }
             },
@@ -140,7 +138,6 @@ const router = createRouter({
               name: 'ExtensionSkillDetail',
               component: () => import('../components/extensions/SkillDetailView.vue'),
               meta: {
-                keepAlive: false,
                 requiresAuth: true,
                 requiresAdmin: true
               }

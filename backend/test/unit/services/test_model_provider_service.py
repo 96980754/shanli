@@ -122,6 +122,40 @@ def test_normalize_remote_model_uses_endpoint_model_type():
 
 
 @pytest.mark.asyncio
+async def test_ensure_builtin_merges_template_capabilities_into_existing(monkeypatch):
+    """存量内置 provider 能力与模板合并（只加不减），使 transcription 对已存在记录生效。"""
+    from yuxi.models.providers import service as provider_service
+
+    class ExistingProvider:
+        provider_id = "siliconflow-cn"
+        is_builtin = True
+        enabled_models = [{"id": "deepseek-ai/DeepSeek-V4-Flash", "type": "chat"}]
+        capabilities = ["chat", "embedding", "rerank"]
+        updated_by = "admin"
+
+    provider = ExistingProvider()
+    flushed = []
+
+    class FakeSession:
+        async def flush(self):
+            flushed.append(provider.updated_by)
+
+    async def fake_list(db):
+        return [provider]
+
+    async def fake_create(db, data):
+        return None
+
+    monkeypatch.setattr(provider_service, "list_model_providers", fake_list)
+    monkeypatch.setattr(provider_service, "create_model_provider", fake_create)
+
+    await provider_service.ensure_builtin_model_providers_in_db(FakeSession())
+
+    assert provider.capabilities == ["chat", "embedding", "rerank", "transcription"]
+    assert flushed == ["system"]
+
+
+@pytest.mark.asyncio
 async def test_fetch_remote_models_loads_embedding_only_when_capability_enabled(monkeypatch):
     calls = []
 
@@ -180,7 +214,7 @@ def test_builtin_siliconflow_provider_includes_default_runnable_models():
     provider = next(item for item in BUILTIN_PROVIDERS if item["provider_id"] == "siliconflow-cn")
     models = {model["id"]: model for model in provider["enabled_models"]}
 
-    assert provider["capabilities"] == ["chat", "embedding", "rerank"]
+    assert provider["capabilities"] == ["chat", "embedding", "rerank", "transcription"]
     assert provider["embedding_base_url"] == "https://api.siliconflow.cn/v1/embeddings"
     assert provider["rerank_base_url"] == "https://api.siliconflow.cn/v1/rerank"
     assert models["Pro/BAAI/bge-m3"]["type"] == "embedding"

@@ -32,6 +32,8 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['img-click'])
+
 const themeStore = useThemeStore()
 const shikiTheme = computed(() => (themeStore.isDark ? 'github-dark' : 'github-light'))
 const previewRef = ref(null)
@@ -360,6 +362,12 @@ watch(
 const handleMarkdownAction = async (e) => {
   const target = e.target instanceof Element ? e.target : e.target?.parentElement
   if (!target) return
+
+  const img = target.closest('img')
+  if (img) {
+    emit('img-click', { src: img.currentSrc || img.src, alt: img.alt || '' })
+    return
+  }
 
   const codeCopyBtn = target.closest('.markdown-code-copy-btn')
   if (codeCopyBtn) {

@@ -75,19 +75,25 @@ def build_judge_llm(
     bypass_n: bool = True,
     run_config: Any = None,
     cache: Any = None,
+    max_tokens: int | None = None,
 ) -> Any:
     """构建 ragas judge LLM：系统 load_chat_model 结果经 LangchainLLMWrapper 包装。
 
     bypass_n=True 规避部分 OpenAI 兼容提供商（如 deepseek）拒绝 n!=1 的问题。
     run_config / cache 透传给 LangchainLLMWrapper：cache 提供 DiskCacheBackend 时，
     相同 prompt 的 LLM 调用命中磁盘缓存，重跑测试集可跳过全部 LLM 调用。
+    max_tokens 透传给 load_chat_model：测试集生成/评分需要较长输出时，覆盖
+    API 默认上限，避免 finish_reason="length" 被 ragas 判为 LLMDidNotFinish。
     """
     from yuxi.agents.models import load_chat_model
 
     from ragas.llms import LangchainLLMWrapper
 
+    kwargs: dict[str, Any] = {}
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
     return LangchainLLMWrapper(
-        load_chat_model(model_spec),
+        load_chat_model(model_spec, **kwargs),
         run_config=run_config,
         cache=cache,
         bypass_n=bypass_n,

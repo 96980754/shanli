@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.context import filter_config_by_role
 from yuxi.repositories.agent_repository import (
@@ -25,9 +23,11 @@ from yuxi.services.agent_run_service import (
     stream_agent_run_events,
 )
 from yuxi.services.curated_qa_run_service import try_create_curated_qa_run
-from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.services.industry_solution_service import IndustrySolutionRequest
+from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.storage.postgres.models_business import User
+
+from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -65,6 +65,9 @@ class AgentRunCreate(BaseModel):
     resume: Any | None = Field(None, description="可选，恢复时传给 LangGraph 的输入载荷，非布尔值")
     created_by_run_id: str | None = Field(None, description="可选，创建本 run 的父 run ID；resume 时为被恢复的 run ID")
     industry_solution: IndustrySolutionRequest | None = Field(None, description="可选，结构化多产品行业解决方案请求")
+    output_format: Literal["default", "table", "steps", "list"] = Field(
+        "default", description="可选，本次回答输出格式：table=表格；steps=步骤；list=列表；default=不指定"
+    )
 
 
 def _backend_info(info: dict) -> dict:
@@ -262,11 +265,12 @@ async def create_agent_run(
     db: AsyncSession = Depends(get_db),
 ):
     input_message = None
-    if payload.resume is None and payload.query:
+    if payload.resume is None and (payload.query or payload.image_content):
         input_message = build_chat_input_message(
             payload.query,
             payload.image_content,
             industry_solution=payload.industry_solution.model_dump() if payload.industry_solution else None,
+            output_format=payload.output_format,
         )
 
     meta = dict(payload.meta or {})

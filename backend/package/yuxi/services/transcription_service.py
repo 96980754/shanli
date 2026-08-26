@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
@@ -84,6 +85,7 @@ async def transcribe_audio(upload: UploadFile, *, language: str | None = None) -
         if normalized_language:
             request["language"] = normalized_language
 
+        start = time.monotonic()
         try:
             async with _create_transcription_client(model_info) as client:
                 response = await client.audio.transcriptions.create(**request)
@@ -110,6 +112,11 @@ async def transcribe_audio(upload: UploadFile, *, language: str | None = None) -
         except Exception as exc:
             logger.warning(f"ASR Provider request failed: {type(exc).__name__}")
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="语音转写失败，请稍后重试") from exc
+        finally:
+            logger.info(
+                f"ASR transcription: {len(audio_bytes)} bytes, "
+                f"mime={content_type}, elapsed={time.monotonic() - start:.2f}s"
+            )
 
         text = str(_response_value(response, "text") or "").strip()
         if not text:
