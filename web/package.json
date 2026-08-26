@@ -16,6 +16,8 @@
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
     "@antv/g6": "^5.1.1",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@sigma/edge-curve": "^3.1.0",
     "@sigma/node-border": "^3.0.0",
     "@vscode/markdown-it-katex": "^1.1.2",
@@ -45,6 +47,7 @@
     "vue-router": "^5.0.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@eslint/js": "^10.0.1",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/eslint-config-prettier": "^10.2.0",
