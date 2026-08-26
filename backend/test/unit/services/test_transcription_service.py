@@ -100,6 +100,37 @@ async def test_transcribe_rejects_non_webm_and_closes_upload():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "audio/mp4",
+        "audio/mp4;codecs=mp4a.40.2",
+        "audio/x-m4a",
+        "audio/m4a",
+        "audio/mp4a-latm",
+    ],
+)
+async def test_transcribe_accepts_mp4_family_and_forwards_m4a_filename(monkeypatch, content_type):
+    captured = _install_provider(monkeypatch)
+
+    await transcription_service.transcribe_audio(_upload(content_type=content_type))
+
+    # 转写 Provider 按文件名后缀判定格式，MP4 家族统一派生为 .m4a（.mp4 后缀实测 500）
+    assert captured["file"][0] == "recording.m4a"
+    assert captured["file"][2] == content_type.split(";", 1)[0].strip().lower()
+
+
+@pytest.mark.asyncio
+async def test_transcribe_webm_forwards_webm_filename(monkeypatch):
+    captured = _install_provider(monkeypatch)
+
+    await transcription_service.transcribe_audio(_upload())
+
+    assert captured["file"][0] == "recording.webm"
+    assert captured["file"][2] == "audio/webm"
+
+
+@pytest.mark.asyncio
 async def test_transcribe_rejects_oversized_file(monkeypatch):
     monkeypatch.setattr(transcription_service, "MAX_TRANSCRIPTION_FILE_SIZE_BYTES", 3)
     upload = _upload(b"1234")

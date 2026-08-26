@@ -9,7 +9,13 @@ export class VoiceRecorderError extends Error {
 
 export const selectRecordingMimeType = (MediaRecorderClass) => {
   if (!MediaRecorderClass) return ''
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm']
+  // Chrome/Edge/Android 优先 webm；iOS Safari 不支持 webm，回落 MP4 容器（AAC 编码）
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4'
+  ]
   return candidates.find((type) => MediaRecorderClass.isTypeSupported?.(type)) || ''
 }
 

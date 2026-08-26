@@ -10,7 +10,25 @@ from yuxi.utils.logging_config import logger
 from yuxi.utils.upload_utils import read_upload_with_limit
 
 MAX_TRANSCRIPTION_FILE_SIZE_BYTES = 25 * 1024 * 1024
-SUPPORTED_TRANSCRIPTION_MIME_TYPES = frozenset({"audio/webm"})
+SUPPORTED_TRANSCRIPTION_MIME_TYPES = frozenset(
+    {
+        "audio/webm",
+        # iOS WKWebView / Safari 的 MediaRecorder 只能录 MP4 容器（AAC），需一并放行
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/m4a",
+        "audio/mp4a-latm",
+    }
+)
+# 转发给转写 Provider 时使用的文件名后缀。实测 SiliconFlow 按文件名后缀判定音频格式：
+# 同一份 AAC 音频用 .mp4 后缀返回 500，用 .m4a 后缀则正常，因此 MP4 家族统一派生为 .m4a。
+_AUDIO_EXTENSION = {
+    "audio/webm": "webm",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "audio/mp4a-latm": "m4a",
+}
 OPENAI_COMPATIBLE_PROVIDER_TYPES = frozenset({"openai", "openrouter"})
 
 
@@ -62,7 +80,7 @@ async def transcribe_audio(upload: UploadFile, *, language: str | None = None) -
     content_type = str(upload.content_type or "").split(";", 1)[0].strip().lower()
     try:
         if content_type not in SUPPORTED_TRANSCRIPTION_MIME_TYPES:
-            raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="仅支持 WebM 录音")
+            raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="仅支持 WebM / M4A 录音")
 
         try:
             audio_bytes = await read_upload_with_limit(
@@ -77,9 +95,10 @@ async def transcribe_audio(upload: UploadFile, *, language: str | None = None) -
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="录音内容为空")
 
         model_info = _resolve_transcription_model()
+        filename = f"recording.{_AUDIO_EXTENSION.get(content_type, 'webm')}"
         request: dict[str, Any] = {
             "model": model_info.model_id,
-            "file": (upload.filename or "recording.webm", audio_bytes, content_type),
+            "file": (filename, audio_bytes, content_type),
         }
         normalized_language = str(language or "").strip()
         if normalized_language:
