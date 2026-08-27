@@ -875,3 +875,37 @@ async def test_mindmap_permissions(test_client, standard_user, knowledge_databas
         headers=standard_user["headers"],
     )
     _assert_forbidden_response(forbidden_generate)
+
+
+async def test_move_folder_to_root_accepts_null_parent(
+    test_client, admin_headers, knowledge_database
+):
+    """移动到根目录时 new_parent_id 传 null 不应被 body 校验拒绝（回归 body.new_parent_id: Field required）"""
+    kb_id = knowledge_database["kb_id"]
+
+    create_response = await test_client.post(
+        f"/api/knowledge/databases/{kb_id}/folders",
+        json={"folder_name": f"sub_{uuid.uuid4().hex[:8]}", "parent_id": None},
+        headers=admin_headers,
+    )
+    assert create_response.status_code == 200, create_response.text
+    folder_id = create_response.json()["file_id"]
+
+    # 显式传 null 移动到根目录：修复前必填 Body(...) 把 null 当作缺失 → 422
+    move_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{folder_id}/move",
+        json={"new_parent_id": None},
+        headers=admin_headers,
+    )
+    assert move_response.status_code == 200, move_response.text
+    assert move_response.json()["parent_id"] is None
+
+    # 移动到真实文件夹路径不受影响（可选项校验仍在）
+    move_back_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{folder_id}/move",
+        json={"new_parent_id": folder_id},
+        headers=admin_headers,
+    )
+    assert move_back_response.status_code == 400
+    assert "into itself" in move_back_response.json()["detail"]
+

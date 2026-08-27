@@ -152,8 +152,25 @@ class DocumentVersionService:
         try:
             kb = await self.kb_repo.get_by_kb_id(kb_id)
             config = ((kb.additional_params or {}).get(GRAPH_CONFIG_KEY) if kb else None) or {}
+            base_metadata = {
+                "old_filename": getattr(old_file, "filename", None),
+                "old_document_version": getattr(old_file, "document_version", None),
+                "candidate_filename": candidate.filename,
+                "candidate_document_version": candidate.document_version,
+                "extraction_schema_version": 2,
+            }
             if not config.get("locked"):
-                raise ValueError("知识库未配置可用于版本验证的知识图谱")
+                # 未配置图谱时没有可比对的断言，跳过变更分析并自动启用新版
+                # （对齐 changelog 设计：未配置图谱时则明确提示已跳过冲突检测并自动启用新版；
+                # 与 detect_conflicts 的 not_configured 语义一致，不应让版本更新硬失败）。
+                return await self._record_skipped_analysis(
+                    kb_id=kb_id,
+                    report_id=report_id,
+                    candidate=candidate,
+                    old_file_id=old_file_id,
+                    candidate_file_id=candidate_file_id,
+                    base_metadata=base_metadata,
+                )
             graph_service = MilvusGraphService()
             if context is not None:
                 await context.set_progress(65, "抽取新旧版本知识断言")
@@ -163,14 +180,10 @@ class DocumentVersionService:
             ontology = load_conflict_ontology(extractor_options)
             analysis = analyze_document_changes(old_chunks, new_chunks, ontology)
             metadata = {
-                "old_filename": getattr(old_file, "filename", None),
-                "old_document_version": getattr(old_file, "document_version", None),
-                "candidate_filename": candidate.filename,
-                "candidate_document_version": candidate.document_version,
+                **base_metadata,
                 "ontology_registry_id": extractor_options.get("ontology_registry_id"),
                 "ontology_version": extractor_options.get("ontology_version"),
                 "ontology_digest": extractor_options.get("ontology_digest"),
-                "extraction_schema_version": 2,
             }
             async with pg_manager.get_async_session_context() as session:
                 report, _ = await self.validation_repo.replace_for_candidate(
@@ -216,6 +229,56 @@ class DocumentVersionService:
                     session=session,
                 )
             return {"status": "failed", "items": [], "message": str(exc), "report_id": report_id}
+
+    async def _record_skipped_analysis(
+        self,
+        *,
+        kb_id: str,
+        report_id: str,
+        candidate: KnowledgeFile,
+        old_file_id: str,
+        candidate_file_id: str,
+        base_metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """未配置知识图谱时跳过变更分析：写一条 auto_accepted 报告并自动启用新版。
+
+        没有图谱就没有可比对的断言，跳过是预期行为（对齐 changelog 设计：
+        “未配置图谱时则明确提示已跳过冲突检测并自动启用新版”）。激活路径只在图谱
+        locked 时才发布文件级图谱，因此这里不产生任何图谱副作用。
+        """
+        summary = {
+            "item_count": 0,
+            "new_count": 0,
+            "changed_count": 0,
+            "removed_count": 0,
+            "conflict_count": 0,
+            "inconclusive": False,
+            "skip_reason": "graph_not_configured",
+            "message": "知识库未配置知识图谱，已跳过知识变更分析与冲突检测，自动启用新版",
+        }
+        analysis = {"status": "auto_accepted", "items": [], "summary": summary}
+        async with pg_manager.get_async_session_context() as session:
+            report, _ = await self.validation_repo.replace_for_candidate(
+                report_id=report_id,
+                kb_id=kb_id,
+                logical_document_id=str(candidate.logical_document_id),
+                old_file_id=old_file_id,
+                candidate_file_id=candidate_file_id,
+                status="auto_accepted",
+                summary=summary,
+                items=[],
+                session=session,
+                report_metadata=base_metadata,
+            )
+            await self.conflict_repo.replace_for_candidate(
+                kb_id=kb_id,
+                logical_document_id=str(candidate.logical_document_id),
+                old_file_id=old_file_id,
+                new_file_id=candidate_file_id,
+                conflicts=[],
+                session=session,
+            )
+        return analysis | {"report_id": report.report_id}
 
     async def detect_conflicts(
         self,

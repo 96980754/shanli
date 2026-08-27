@@ -27,7 +27,12 @@ from yuxi.knowledge.graphs.milvus_graph_service import (
 )
 from yuxi.knowledge.parser.unified import SUPPORTED_FILE_EXTENSIONS, Parser, is_supported_file_extension
 from yuxi.knowledge.runtime import knowledge_base
-from yuxi.knowledge.utils import calculate_content_hash, is_minio_url, parse_minio_url
+from yuxi.knowledge.utils import (
+    calculate_content_hash,
+    is_minio_url,
+    parse_minio_url,
+    sanitize_processing_error,
+)
 from yuxi.knowledge.utils.office_content import extract_office_content
 from yuxi.knowledge.utils.office_writer import (
     markdown_to_blocks,
@@ -2845,10 +2850,10 @@ async def create_folder(
 async def move_document(
     kb_id: str,
     doc_id: str,
-    new_parent_id: str | None = Body(..., embed=True),
+    new_parent_id: str | None = Body(None, embed=True),
     current_user: User = Depends(get_admin_user),
 ):
-    """移动文件或文件夹"""
+    """移动文件或文件夹；new_parent_id 为 null 表示移动到知识库根目录"""
     logger.debug(f"Move document {doc_id} to {new_parent_id} in {kb_id}")
     try:
         await _ensure_database_supports_documents(kb_id, "文件移动")
@@ -3881,21 +3886,6 @@ async def delete_document_qa(
         )
     except Exception as error:  # noqa: BLE001
         _raise_qa_http_error(error)
-
-
-@knowledge.post("/databases/{kb_id}/documents/{file_id}/replacement-cleanup/retry")
-async def retry_replacement_cleanup(
-    kb_id: str,
-    file_id: str,
-    current_user: User = Depends(get_required_user),
-):
-    """重新提交已完成版本切换但清理失败的替换任务。"""
-    await _require_kb_permission(current_user, kb_id, "can_manage")
-    await _ensure_database_supports_documents(kb_id, "替换清理重试")
-    service = DocumentIngestionService()
-    record = await service.file_repository.get_by_file_id(file_id)
-    if record is None or record.kb_id != kb_id:
-        raise HTTPException(status_code=404, detail="文档不存在")
 
 
 @knowledge.get("/databases/{kb_id}/conflicts")

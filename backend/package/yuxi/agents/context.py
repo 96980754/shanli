@@ -91,6 +91,8 @@ async def build_agent_input_context(
     uid: str,
     run_id: str | None = None,
     request_id: str | None = None,
+    file_thread_id: str | None = None,
+    skills_thread_id: str | None = None,
 ) -> dict:
     input_context = dict(agent_config or {})
     agent_context = await asyncio.to_thread(_load_workspace_agent_context, thread_id, uid)
@@ -99,7 +101,16 @@ async def build_agent_input_context(
         base_prompt = str(input_context.get("system_prompt") or "").rstrip()
         input_context["system_prompt"] = f"{base_prompt}\n\n{agent_context}" if base_prompt else agent_context
 
-    input_context.update({"uid": uid, "thread_id": thread_id, "run_id": run_id, "request_id": request_id})
+    input_context.update(
+        {
+            "uid": uid,
+            "thread_id": thread_id,
+            "run_id": run_id,
+            "request_id": request_id,
+            "file_thread_id": file_thread_id,
+            "skills_thread_id": skills_thread_id,
+        }
+    )
     return input_context
 
 
@@ -162,6 +173,16 @@ class BaseContext:
     request_id: str | None = field(
         default=None,
         metadata={"name": "请求 ID", "configurable": False, "hide": True},
+    )
+
+    file_thread_id: str | None = field(
+        default=None,
+        metadata={"name": "文件线程ID", "configurable": False, "hide": True},
+    )
+
+    skills_thread_id: str | None = field(
+        default=None,
+        metadata={"name": "Skills线程ID", "configurable": False, "hide": True},
     )
 
     system_prompt: str = field(

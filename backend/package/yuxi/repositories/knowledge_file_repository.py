@@ -459,7 +459,11 @@ class KnowledgeFileRepository:
                 current.document_version = 1
 
         now = utc_now_naive()
+        # 归档旧版：与替换流程 switch_active_version 一致，旧版不再参与检索/图谱/统计，
+        # 否则会出现 is_current=false 但 is_active=true 的半归档记录（同 Bug2 孤儿问题同构）
         current.is_current = False
+        current.is_active = False
+        current.superseded_at = now
         current.updated_by = operator_id
         current.updated_at = now
         candidate.is_current = True
@@ -782,7 +786,7 @@ class KnowledgeFileRepository:
                     KnowledgeFile.kb_id == kb_id,
                     KnowledgeFile.is_folder.is_(False),
                     self._parent_condition(parent_id),
-                    KnowledgeFile.is_active.is_(True),
+                    KnowledgeFile.is_current.is_(True),
                     or_(
                         KnowledgeFile.normalized_name == normalized_filename,
                         and_(
@@ -1889,11 +1893,49 @@ class KnowledgeFileRepository:
             return result.scalar_one_or_none()
 
     async def delete(self, file_id: str) -> None:
+        """删除文件记录，并级联清理指向它的未完成版本/替换候选。
+
+        版本候选（supersedes_file_id）与替换候选（replacement_target_file_id）在
+        被替换的当前版本删除后若不清理，会留下 is_current=false 但 is_active 的
+        孤儿记录：列表不可见，却仍会被重复上传检测按文件名/is_active 匹配到，
+        导致“知识库中没有该文档却提示重复”。
+        """
         async with pg_manager.get_async_session_context() as session:
+            pending = list(
+                (
+                    await session.execute(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.is_current.is_(False),
+                            or_(
+                                KnowledgeFile.supersedes_file_id == file_id,
+                                KnowledgeFile.replacement_target_file_id == file_id,
+                            ),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for record in pending:
+                await session.delete(record)
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.file_id == file_id))
             record = result.scalar_one_or_none()
             if record is not None:
                 await session.delete(record)
+
+    async def list_pending_candidate_file_ids(self, *, file_id: str) -> list[str]:
+        """列出指向某文件的未完成版本/替换候选 file_id（删除时用于级联清理 chunks）。"""
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile.file_id).where(
+                    KnowledgeFile.is_current.is_(False),
+                    or_(
+                        KnowledgeFile.supersedes_file_id == file_id,
+                        KnowledgeFile.replacement_target_file_id == file_id,
+                    ),
+                )
+            )
+            return [row[0] for row in result.all()]
 
     async def delete_by_kb_id(self, kb_id: str) -> None:
         async with pg_manager.get_async_session_context() as session:

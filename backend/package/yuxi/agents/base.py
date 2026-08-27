@@ -181,7 +181,14 @@ class BaseAgent:
 
         # 构建配置：LangGraph 会自动从 checkpointer 恢复 state
         input_config = {
-            "configurable": {"thread_id": context.thread_id, "uid": context.uid},
+            "configurable": {
+                "thread_id": context.thread_id,
+                "uid": context.uid,
+                # 沙箱作用域写入运行时 config：预冷与工具执行命中同一沙箱容器。
+                # 缺省回退 thread_id（行为不变）；显式指定（如基准脚本固定 bench-sandbox）则全轮复用。
+                "file_thread_id": getattr(context, "file_thread_id", None) or context.thread_id,
+                "skills_thread_id": getattr(context, "skills_thread_id", None) or context.thread_id,
+            },
             "recursion_limit": _recursion_limit_from_context(context, DEFAULT_MAX_EXECUTION_STEPS),
         }
 
@@ -208,7 +215,14 @@ class BaseAgent:
         logger.debug(f"stream_with_state: {context=}")
 
         input_config = {
-            "configurable": {"thread_id": context.thread_id, "uid": context.uid},
+            "configurable": {
+                "thread_id": context.thread_id,
+                "uid": context.uid,
+                # 沙箱作用域写入运行时 config：预冷与工具执行命中同一沙箱容器。
+                # 缺省回退 thread_id（行为不变）；显式指定（如基准脚本固定 bench-sandbox）则全轮复用。
+                "file_thread_id": getattr(context, "file_thread_id", None) or context.thread_id,
+                "skills_thread_id": getattr(context, "skills_thread_id", None) or context.thread_id,
+            },
             "recursion_limit": _recursion_limit_from_context(context, DEFAULT_MAX_EXECUTION_STEPS),
         }
 
@@ -287,7 +301,14 @@ class BaseAgent:
 
         # 构建配置
         input_config = {
-            "configurable": {"thread_id": context.thread_id, "uid": context.uid},
+            "configurable": {
+                "thread_id": context.thread_id,
+                "uid": context.uid,
+                # 沙箱作用域写入运行时 config：预冷与工具执行命中同一沙箱容器。
+                # 缺省回退 thread_id（行为不变）；显式指定（如基准脚本固定 bench-sandbox）则全轮复用。
+                "file_thread_id": getattr(context, "file_thread_id", None) or context.thread_id,
+                "skills_thread_id": getattr(context, "skills_thread_id", None) or context.thread_id,
+            },
             "recursion_limit": _recursion_limit_from_context(context, DEFAULT_MAX_EXECUTION_STEPS),
         }
 

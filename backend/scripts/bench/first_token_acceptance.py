@@ -45,6 +45,13 @@ warnings.filterwarnings("ignore")
 
 from loguru import logger as loguru_logger
 
+
+def _is_benign_milvus_fallback(record) -> bool:
+    """Milvus 库选择失败后的默认库回退是既定行为（数据本就落在默认库），
+    在基准脚本里属已知噪音，不进入输出；其余告警/错误照常显示。"""
+    return "operation failed, using default" not in record["message"]
+
+
 # loguru 在 import yuxi 时已挂上 DEBUG 级控制台 handler，生产链路 INFO/DEBUG 日志
 # 会混进输出污染逐轮性能数据。演示脚本只关心性能报告：收掉默认 handler，仅保留一条
 # stderr 的 WARNING+ 输出，真实告警/错误仍可见。
@@ -52,6 +59,7 @@ loguru_logger.remove()
 loguru_logger.add(
     sys.stderr,
     level="WARNING",
+    filter=_is_benign_milvus_fallback,
     format="<level>{level}</level> <cyan>{file}:{line}</cyan>: <level>{message}</level>",
     colorize=False,
     enqueue=False,
@@ -302,7 +310,7 @@ def _fmt_stat_cells(stats: dict) -> str:
 
 def write_markdown(report: dict, md_path: Path) -> None:
     L = [
-        "# 智知库（YUXI）系统首 token 验收展示报告",
+        "# 系统首 token 验收展示报告",
         "",
         f"> 被测配置：agent=`{report['agent_slug']}`  rounds={report['rounds']}  query=`{report['query'][:50]}…`",
         "> 验收口径：暖态（去首轮冷启动）首 token p50 **< 1000ms**；对外口径「首 token ≈ 0.5s」",

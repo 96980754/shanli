@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from transformers import AutoModel, AutoModelForSequenceClassification, AutoTokenizer
 
 app = FastAPI(title="Local Inference")
@@ -36,16 +36,40 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float16 if device == "cuda" else torch.float32
 print(f"[init] device={device} dtype={dtype}", flush=True)
 
+# 嵌入模型：启动必需，先加载完再起服务（缓存健康时秒级）。
 t0 = time.perf_counter()
 _embed_tokenizer = AutoTokenizer.from_pretrained(EMBED_MODEL)
 _embed_model = AutoModel.from_pretrained(
     EMBED_MODEL, torch_dtype=dtype, use_safetensors=True
 ).to(device).eval()
-_rerank_tokenizer = AutoTokenizer.from_pretrained(RERANK_MODEL)
-_rerank_model = AutoModelForSequenceClassification.from_pretrained(
-    RERANK_MODEL, torch_dtype=dtype, use_safetensors=True
-).to(device).eval()
-print(f"[init] models loaded in {time.perf_counter() - t0:.1f}s", flush=True)
+print(f"[init] embed model loaded in {time.perf_counter() - t0:.1f}s", flush=True)
+
+# 精排模型后台懒加载：其 safetensors 权重损坏时会从 HF 限速重下（实测可达 16 分钟），
+# 若像以前一样在启动时同步加载，会把整个嵌入服务拖死。改为后台线程加载：失败或缓慢
+# 只影响 /v1/rerank（首次调用等待加载、失败返回 503），/v1/embeddings 始终可用。
+_rerank_loaded = threading.Event()
+_rerank_load_error: Exception | None = None
+_rerank_tokenizer = None
+_rerank_model = None
+
+
+def _load_rerank() -> None:
+    global _rerank_model, _rerank_tokenizer, _rerank_load_error
+    try:
+        t0 = time.perf_counter()
+        _rerank_tokenizer = AutoTokenizer.from_pretrained(RERANK_MODEL)
+        _rerank_model = AutoModelForSequenceClassification.from_pretrained(
+            RERANK_MODEL, torch_dtype=dtype, use_safetensors=True
+        ).to(device).eval()
+        print(f"[init] rerank model loaded in {time.perf_counter() - t0:.1f}s", flush=True)
+    except Exception as e:  # noqa: BLE001
+        _rerank_load_error = e
+        print(f"[init] rerank model load failed: {e}", flush=True)
+    finally:
+        _rerank_loaded.set()
+
+
+threading.Thread(target=_load_rerank, daemon=True, name="rerank-loader").start()
 
 
 def _embed(texts: list[str]) -> np.ndarray:
@@ -99,6 +123,11 @@ async def embeddings(req: Request):
 @app.post("/v1/rerank")
 async def rerank(req: Request):
     body = await req.json()
+    # 等后台精排模型加载完成（含失败）。wait 在线程里执行，不阻塞事件循环，嵌入请求不受影响。
+    if not _rerank_loaded.is_set():
+        await asyncio.to_thread(_rerank_loaded.wait)
+    if _rerank_load_error is not None:
+        raise HTTPException(status_code=503, detail=f"rerank model unavailable: {_rerank_load_error}")
     query = body["query"]
     docs = list(body["documents"])
     max_len = int(body.get("max_chunks_per_doc", 512))

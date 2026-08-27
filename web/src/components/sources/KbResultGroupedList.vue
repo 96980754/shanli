@@ -5,7 +5,11 @@
     </div>
 
     <div class="kb-results" v-if="normalizedChunks.length > 0">
-      <div v-for="fileGroup in fileGroupList" :key="fileGroup.key || getFileKey(fileGroup)" class="file-group">
+      <div
+        v-for="fileGroup in fileGroupList"
+        :key="fileGroup.key || getFileKey(fileGroup)"
+        class="file-group"
+      >
         <div
           class="file-header"
           :class="{ expanded: expandedFiles.has(getFileKey(fileGroup)) }"
