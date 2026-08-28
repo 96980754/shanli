@@ -1,5 +1,9 @@
 {
   "appId": "com.yuxi.knowledge",
   "appName": "AI 知识库",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "url": "https://39.105.10.183",
+    "cleartext": false
+  }
 }

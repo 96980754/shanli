@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 信任服务器自签证书：APK 通过 https 访问 39.105.10.183 时使用 res/raw/server_cert.crt 完成 TLS 校验 -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">39.105.10.183</domain>
+        <trust-anchors>
+            <certificates src="@raw/server_cert" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
