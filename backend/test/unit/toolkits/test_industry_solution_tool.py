@@ -266,6 +266,56 @@ def test_render_solution_docx_replaces_model_generated_reference_list():
     assert chat_markdown.endswith("[1] A - `A手册`")
 
 
+def test_render_solution_docx_has_whitepaper_layout():
+    document_bytes, _ = render_solution_docx(
+        title="智慧园区行业解决方案",
+        industry="智慧园区",
+        products=["产品A", "产品B"],
+        content=(
+            "# 1. 总体方案\n\n产品协同能力说明。[1]\n\n"
+            "## 1.1 系统架构\n\n| 层级 | 能力 |\n| --- | --- |\n| 决策层 | 统一决策 |"
+        ),
+        sources=[{"reference": 1, "product": "产品A", "title": "产品A手册"}],
+    )
+    document = Document(io.BytesIO(document_bytes))
+    paragraph_texts = [paragraph.text for paragraph in document.paragraphs]
+
+    # 两节：封面 + 目录/正文
+    assert len(document.sections) == 2
+    # 纸型对齐甲方白皮书案例：A4 + 1.81/2.00cm 边距（新增节继承，检查首节）
+    section = document.sections[0]
+    assert section.page_width.twips == 11906  # 21.0cm
+    assert section.page_height.twips == 16838  # 29.7cm
+    assert section.left_margin.twips == 1026  # 1.81cm
+    assert section.top_margin.twips == 1134  # 2.00cm
+    # 封面含标题；正文以「方案概述」章节开头（标题不再单独出现在正文）
+    document_text = "\n".join(paragraph_texts)
+    assert "智慧园区行业解决方案" in document_text
+    assert "方案概述" in document_text
+    # POCSTARS 品牌：封面 logo + 公司名；版权信息/免责声明页；文末 AI 生成提示
+    assert document.inline_shapes  # 封面 logo 图片
+    assert "善理通益信息科技（深圳）有限公司" in document_text
+    assert "版权信息" in document_text
+    assert "免责声明" in document_text
+    assert "请注意，本内容由AI生成。" in document_text
+    # 目录域 + 打开时自动更新域
+    assert any("TOC" in paragraph._p.xml for paragraph in document.paragraphs)
+    assert "updateFields" in document.settings.element.xml
+    # 页眉 = 方案标题，页脚含 PAGE 域
+    header_text = document.sections[1].header.paragraphs[0].text
+    assert header_text == "智慧园区行业解决方案"
+    assert "PAGE" in document.sections[1].footer.paragraphs[0]._p.xml
+    # 标题强调色
+    heading1 = next(paragraph for paragraph in document.paragraphs if paragraph.style.name == "Heading 1")
+    assert str(heading1.style.font.color.rgb) == "333399"
+    # 表格表头 #333399 填充 + 白字加粗
+    assert document.tables
+    header_cell = document.tables[0].rows[0].cells[0]
+    assert "333399" in header_cell._tc.xml
+    assert header_cell.paragraphs[0].runs[0].bold
+    assert str(header_cell.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
+
+
 def test_docx_filename_is_sanitized():
     filename = sanitize_docx_filename("../../智慧园区:方案\\报告")
     assert filename == "智慧园区-方案-报告.docx"

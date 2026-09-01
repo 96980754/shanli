@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from yuxi.knowledge.utils.office_writer import markdown_to_blocks, write_docx
+from yuxi.knowledge.utils.office_writer import markdown_to_blocks, write_whitepaper_docx
 
 MIN_PRODUCTS = 2
 MAX_PRODUCTS = 5
@@ -143,16 +144,26 @@ def render_solution_docx(
         reference_lines.append(line)
 
     chat_markdown = f"{normalized_content}\n\n" + "\n\n".join(reference_lines)
+    # 标题在封面上展示；正文以「方案概述」章节开头，避免二级标题先于一级标题的层级倒挂。
     document_markdown = (
-        f"# {str(title or '行业解决方案').strip()}\n\n"
-        f"## 行业 / 场景\n\n{industry}\n\n"
-        f"## 选用产品\n\n{', '.join(products)}\n\n"
-        f"{chat_markdown}"
+        f"# 方案概述\n\n## 行业 / 场景\n\n{industry}\n\n## 选用产品\n\n{', '.join(products)}\n\n{chat_markdown}"
     )
-    return write_docx(
+    today = date.today()
+    document_title = str(title or "行业解决方案").strip()
+    cover = {
+        "label": "行业解决方案",
+        "title": document_title,
+        "industry": industry,
+        "products": "、".join(products),
+        "date": f"{today.year}年{today.month}月{today.day}日",
+    }
+    document_bytes = write_whitepaper_docx(
         markdown_to_blocks(document_markdown),
+        cover=cover,
+        header_text=document_title,
         font_name=INDUSTRY_SOLUTION_FONT,
-    ), chat_markdown
+    )
+    return document_bytes, chat_markdown
 
 
 def sanitize_docx_filename(value: str) -> str:
