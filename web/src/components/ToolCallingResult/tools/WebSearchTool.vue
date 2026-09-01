@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall" :hide-params="true">
     <template #header>
       <div class="sep-header">
-        <span class="note">网络搜索</span>
+        <span class="note">{{ $t('toolCall.webSearch.title') }}</span>
         <span class="separator" v-if="query">|</span>
         <span class="description">{{ query }}</span>
       </div>
@@ -19,7 +19,7 @@
         </div>
 
         <div v-else class="no-results">
-          <p>未找到相关搜索结果</p>
+          <p>{{ $t('toolCall.webSearch.noResults') }}</p>
         </div>
       </div>
     </template>

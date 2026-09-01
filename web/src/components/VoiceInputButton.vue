@@ -6,7 +6,7 @@
         type="text"
         class="voice-button"
         :disabled="disabled"
-        aria-label="开始语音输入"
+        :aria-label="t('voice.start')"
         @mousedown.prevent
         @click="startRecording"
       >
@@ -15,11 +15,11 @@
     </a-tooltip>
 
     <div v-if="state === 'recording'" class="recording-controls">
-      <span class="recording-label"><span class="recording-dot"></span>正在录音</span>
+      <span class="recording-label"><span class="recording-dot"></span>{{ $t('voice.recording') }}</span>
       <a-button
         type="text"
         class="voice-button stop-button"
-        aria-label="停止录音"
+        :aria-label="t('voice.stop')"
         @mousedown.prevent
         @click="stopRecording"
       >
@@ -28,7 +28,7 @@
       <a-button
         type="text"
         class="voice-button"
-        aria-label="取消录音"
+        :aria-label="t('voice.cancel')"
         @mousedown.prevent
         @click="cancelRecording"
       >
@@ -38,7 +38,7 @@
 
     <div v-if="state === 'transcribing'" class="transcribing-label" aria-live="polite">
       <LoaderCircle :size="15" class="spin" />
-      <span>转写中</span>
+      <span>{{ $t('voice.transcribing') }}</span>
     </div>
   </div>
 </template>
@@ -46,6 +46,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { LoaderCircle, Mic, Square, X } from 'lucide-vue-next'
 
 import { transcriptionApi } from '@/apis/agent_api'
@@ -58,19 +59,20 @@ const emit = defineEmits(['transcript'])
 
 const state = ref('idle')
 const lastError = ref('')
+const { t } = useI18n()
 
 const formatError = (error) => {
-  if (error?.code === 'unsupported') return '当前浏览器不支持 WebM 录音'
-  if (error?.code === 'empty') return '没有录到有效音频，请重试'
-  if (error?.code === 'empty-transcript') return '未识别到语音内容，请重试'
-  if (error?.cause?.name === 'NotAllowedError') return '麦克风权限被拒绝，请在浏览器设置中允许访问'
-  if (error?.cause?.name === 'NotFoundError') return '未检测到可用麦克风'
-  if (error?.cause?.name === 'NotReadableError') return '麦克风暂时不可用，可能正被其他应用占用'
-  if (error?.code === 'permission-failed') return '麦克风权限被拒绝，请在浏览器设置中允许访问'
+  if (error?.code === 'unsupported') return t('voice.errUnsupported')
+  if (error?.code === 'empty') return t('voice.errEmpty')
+  if (error?.code === 'empty-transcript') return t('voice.errEmptyTranscript')
+  if (error?.cause?.name === 'NotAllowedError') return t('voice.errPermissionDenied')
+  if (error?.cause?.name === 'NotFoundError') return t('voice.errNoMic')
+  if (error?.cause?.name === 'NotReadableError') return t('voice.errMicUnavailable')
+  if (error?.code === 'permission-failed') return t('voice.errPermissionDenied')
   if (error?.code === 'transcription-failed') {
-    return error.cause?.message || '语音转写失败，请稍后重试'
+    return error.cause?.message || t('voice.errTranscription')
   }
-  return '录音失败，请稍后重试'
+  return t('voice.errRecording')
 }
 
 const recorder = createVoiceRecorder({
@@ -88,7 +90,7 @@ const recorder = createVoiceRecorder({
   }
 })
 
-const tooltip = computed(() => lastError.value || '语音输入')
+const tooltip = computed(() => lastError.value || t('voice.input'))
 
 const startRecording = () => {
   if (!props.disabled) void recorder.start()

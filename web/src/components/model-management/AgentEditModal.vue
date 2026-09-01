@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import {
   Bot,
@@ -27,6 +28,7 @@ const props = defineProps({
 
 const emit = defineEmits(['saved'])
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const agentStore = useAgentStore()
 
@@ -59,12 +61,12 @@ const normalizeAgent = (agent) => {
 }
 
 const agentModalMenuItems = computed(() => {
-  const items = [{ key: 'basic', label: '基本信息', icon: Info }]
+  const items = [{ key: 'basic', label: t('agentCfg.basicInfo'), icon: Info }]
   if (editingAgentId.value) {
     items.push(
-      { key: 'model', label: '模型配置', icon: SlidersHorizontal },
-      { key: 'tools', label: '工具配置', icon: Wrench },
-      { key: 'other', label: '其他配置', icon: Settings2 }
+      { key: 'model', label: t('agentCfg.modelConfig'), icon: SlidersHorizontal },
+      { key: 'tools', label: t('agentCfg.toolsConfig'), icon: Wrench },
+      { key: 'other', label: t('agentCfg.otherConfig'), icon: Settings2 }
     )
   }
   return items
@@ -104,16 +106,18 @@ const getAgentShareAllowedLevels = () => {
   return userStore.isAdmin ? ['global', 'department', 'user'] : ['user']
 }
 
-const agentModalTitle = computed(() => (editingAgentId.value ? '编辑智能体' : '新增智能体'))
+const agentModalTitle = computed(() =>
+  t(editingAgentId.value ? 'agentCfg.editAgent' : 'agentCfg.addAgent')
+)
 const agentPreviewDefaultIcon = computed(() =>
   editingAgentId.value ? generatePixelAvatar(editingAgentId.value) : ''
 )
-const agentPreviewName = computed(() => agentForm.name || editingAgentId.value || '智能体')
+const agentPreviewName = computed(() => agentForm.name || editingAgentId.value || t('agentCfg.agent'))
 const selectedBackendOption = computed(() =>
   props.backendOptions.find((backend) => backend.value === agentForm.backend_id)
 )
 const selectedBackendLabel = computed(
-  () => selectedBackendOption.value?.label || agentForm.backend_id || '未选择'
+  () => selectedBackendOption.value?.label || agentForm.backend_id || t('agentCfg.notSelected')
 )
 const selectedBackendIcon = computed(() => {
   const backendText = `${agentForm.backend_id} ${selectedBackendLabel.value}`.toLowerCase()
@@ -154,7 +158,7 @@ const openEdit = async (agent) => {
 
   const detail = await agentStore.fetchAgentDetail(agentId, true)
   if (!detail?.can_manage) {
-    message.warning('当前智能体不可编辑')
+    message.warning(t('agentCfg.agentNotEditable'))
     return
   }
 
@@ -188,12 +192,12 @@ const closeAgentModal = async () => {
 
 const beforeAgentIconUpload = (file) => {
   if (!file.type.startsWith('image/')) {
-    message.error('只能上传图片文件')
+    message.error(t('agentCfg.imageOnly'))
     return false
   }
 
   if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
-    message.error(`图片大小不能超过 ${MAX_IMAGE_UPLOAD_SIZE_MB}MB`)
+    message.error(t('agentCfg.imageSizeLimit', { size: MAX_IMAGE_UPLOAD_SIZE_MB }))
     return false
   }
 
@@ -206,9 +210,9 @@ const uploadAgentIcon = async (file) => {
   try {
     const data = await userApi.uploadImage(file)
     agentForm.icon = data.image_url || data.url || ''
-    message.success('图标上传成功')
+    message.success(t('agentCfg.iconUploaded'))
   } catch (error) {
-    message.error(error.message || '图标上传失败')
+    message.error(error.message || t('agentCfg.iconUploadFailed'))
   } finally {
     agentIconUploading.value = false
   }
@@ -234,7 +238,7 @@ const buildAgentPayload = () => {
 const saveAgent = async () => {
   if (!agentForm.name.trim()) {
     agentModalActiveTab.value = 'basic'
-    message.error('请填写智能体名称')
+    message.error(t('agentCfg.agentNameRequired'))
     return
   }
 
@@ -264,16 +268,16 @@ const saveAgent = async () => {
       const updated = await agentStore.updateAgentProfile(editingAgentId.value, payload)
       agentStore.originalAgentConfig = { ...agentStore.agentConfig }
       emit('saved', { mode: 'edit', agent: updated })
-      message.success('智能体已保存')
+      message.success(t('agentCfg.agentSaved'))
     } else {
       const created = await agentStore.createAgent(payload)
       emit('saved', { mode: 'create', agent: normalizeAgent(created) })
-      message.success('智能体已创建')
+      message.success(t('agentCfg.agentCreated'))
     }
     showAgentModal.value = false
     await restoreChatAgentSelectionIfNeeded()
   } catch (error) {
-    message.error(error.message || '保存智能体失败')
+    message.error(error.message || t('agentCfg.saveAgentFailed'))
   } finally {
     saving.value = false
   }
@@ -300,9 +304,9 @@ defineExpose({
       <div class="agent-modal-titlebar">
         <span class="agent-modal-title">{{ agentModalTitle }}</span>
         <div class="agent-modal-actions">
-          <a-button :disabled="saving" @click="closeAgentModal">取消</a-button>
+          <a-button :disabled="saving" @click="closeAgentModal">{{ $t('common.cancel') }}</a-button>
           <a-button type="primary" :loading="saving" @click="saveAgent">
-            {{ agentStore.hasConfigChanges ? '保存（有修改）' : '保存' }}
+            {{ agentStore.hasConfigChanges ? $t('agentCfg.saveWithChanges') : $t('common.save') }}
           </a-button>
         </div>
       </div>
@@ -314,7 +318,11 @@ defineExpose({
         'create-mode': !editingAgentId
       }"
     >
-      <aside v-if="showAgentModalSidebar" class="agent-modal-sidebar" aria-label="智能体配置分组">
+      <aside
+        v-if="showAgentModalSidebar"
+        class="agent-modal-sidebar"
+        :aria-label="$t('agentCfg.configGroups')"
+      >
         <button
           v-for="item in agentModalMenuItems"
           :key="item.key"
@@ -334,7 +342,7 @@ defineExpose({
       <div class="agent-modal-main">
         <section v-show="agentModalActiveTab === 'basic'" class="agent-modal-section">
           <div class="agent-profile-header">
-            <div class="agent-icon-preview" aria-label="智能体图标、名称与后端">
+            <div class="agent-icon-preview" :aria-label="$t('agentCfg.iconNameBackend')">
               <div class="agent-profile-main">
                 <a-upload
                   :show-upload-list="false"
@@ -358,13 +366,13 @@ defineExpose({
                       kind="agent"
                       :size="56"
                       shape="rounded"
-                      :alt="`${agentForm.name || '智能体'}图标`"
+                      :alt="$t('agentCfg.agentIconAlt', { name: agentForm.name || $t('agentCfg.agent') })"
                       class="agent-icon-preview-avatar"
                     />
                     <div class="agent-icon-mask">
                       <RefreshCw v-if="agentIconUploading" :size="16" class="spinning" />
                       <Upload v-else :size="16" />
-                      <span>{{ agentForm.icon ? '更换图标' : '上传图标' }}</span>
+                      <span>{{ agentForm.icon ? $t('agentCfg.changeIcon') : $t('agentCfg.uploadIcon') }}</span>
                     </div>
                   </div>
                 </a-upload>
@@ -374,16 +382,16 @@ defineExpose({
                     v-model="agentForm.name"
                     class="agent-inline-name-input"
                     type="text"
-                    placeholder="点击输入智能体名称"
-                    aria-label="智能体名称"
+                    :placeholder="$t('agentCfg.agentNamePlaceholder')"
+                    :aria-label="$t('agentCfg.agentName')"
                   />
                   <input
                     v-if="!editingAgentId"
                     v-model="agentForm.slug"
                     class="agent-inline-slug-input"
                     type="text"
-                    placeholder="标识可选，留空自动生成"
-                    aria-label="智能体标识"
+                    :placeholder="$t('agentCfg.slugPlaceholder')"
+                    :aria-label="$t('agentCfg.agentSlug')"
                   />
                   <span v-else class="agent-inline-slug">{{
                     agentForm.slug || editingAgentId
@@ -393,13 +401,13 @@ defineExpose({
               <div
                 class="agent-backend-summary"
                 :class="{ editable: !editingAgentId }"
-                aria-label="智能体后端"
+                :aria-label="$t('agentCfg.agentBackend')"
               >
                 <span class="agent-backend-icon">
                   <component :is="selectedBackendIcon" :size="16" />
                 </span>
                 <div class="agent-backend-text">
-                  <span class="agent-backend-label">智能体后端</span>
+                  <span class="agent-backend-label">{{ $t('agentCfg.agentBackend') }}</span>
                   <a-select
                     v-if="!editingAgentId"
                     v-model:value="agentForm.backend_id"
@@ -414,19 +422,19 @@ defineExpose({
           </div>
           <div class="modal-form">
             <label class="form-label full-width">
-              <span>描述</span>
+              <span>{{ $t('agentCfg.description') }}</span>
               <a-textarea
                 v-model:value="agentForm.description"
                 class="agent-description-textarea"
                 :rows="3"
-                placeholder="可选"
+                :placeholder="$t('agentCfg.optional')"
               />
             </label>
           </div>
 
           <div v-if="canEditAgentShareConfig" class="share-config-block">
             <div class="section-heading">
-              <span>共享权限</span>
+              <span>{{ $t('agentCfg.sharePermission') }}</span>
             </div>
             <ShareConfigForm
               ref="agentShareConfigFormRef"

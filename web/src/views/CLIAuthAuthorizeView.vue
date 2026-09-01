@@ -2,8 +2,8 @@
   <main class="cli-auth-view">
     <section class="cli-auth-panel">
       <div class="cli-auth-header">
-        <p class="eyebrow">AI知识库 CLI</p>
-        <h1>确认命令行登录</h1>
+        <p class="eyebrow">{{ $t('auth.cliTitle') }}</p>
+        <h1>{{ $t('auth.confirmCliLogin') }}</h1>
       </div>
 
       <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon />
@@ -14,8 +14,8 @@
         <a-result
           v-if="approved"
           status="success"
-          title="已授权"
-          sub-title="可以关闭此页面并回到终端。"
+          :title="$t('auth.authorized')"
+          :sub-title="$t('auth.canCloseAndReturn')"
         />
 
         <div v-else class="session-summary">
@@ -23,25 +23,25 @@
           <a-alert
             type="warning"
             show-icon
-            message="请确认这是你本人发起的命令行登录"
-            description="确认后将以你当前的身份创建一个 API Key 并返回给终端。若不是你本人发起，请勿确认并关闭此页面。"
+            :message="$t('auth.confirmCliSelfInitiated')"
+            :description="$t('auth.cliApiKeyDescription')"
           />
           <dl>
             <div>
-              <dt>凭据名称</dt>
-              <dd>{{ session?.key_name || 'AI知识库 CLI' }}</dd>
+              <dt>{{ $t('auth.credentialName') }}</dt>
+              <dd>{{ session?.key_name || $t('auth.cliTitle') }}</dd>
             </div>
             <div>
-              <dt>状态</dt>
+              <dt>{{ $t('common.status') }}</dt>
               <dd>{{ session?.status || '-' }}</dd>
             </div>
             <div>
-              <dt>过期时间</dt>
+              <dt>{{ $t('auth.expiresAt') }}</dt>
               <dd>{{ session?.expires_at || '-' }}</dd>
             </div>
           </dl>
           <a-button type="primary" size="large" :loading="approving" @click="approveSession">
-            确认授权
+            {{ $t('auth.confirmAuthorize') }}
           </a-button>
         </div>
       </template>
@@ -51,10 +51,12 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { authApi } from '@/apis/auth_api'
 
 const route = useRoute()
+const { t } = useI18n()
 const loading = ref(true)
 const approving = ref(false)
 const approved = ref(false)
@@ -69,7 +71,7 @@ const userCode = computed(() =>
 
 async function loadSession() {
   if (!userCode.value) {
-    errorMessage.value = '缺少 CLI 授权码'
+    errorMessage.value = t('auth.missingCliCode')
     loading.value = false
     return
   }
@@ -77,7 +79,7 @@ async function loadSession() {
     loading.value = true
     session.value = await authApi.getCLIAuthSession(userCode.value)
   } catch (error) {
-    errorMessage.value = error.message || '获取 CLI 授权会话失败'
+    errorMessage.value = error.message || t('auth.fetchCliSessionFailed')
   } finally {
     loading.value = false
   }
@@ -89,7 +91,7 @@ async function approveSession() {
     await authApi.approveCLIAuthSession(userCode.value)
     approved.value = true
   } catch (error) {
-    errorMessage.value = error.message || '确认 CLI 授权失败'
+    errorMessage.value = error.message || t('auth.confirmCliAuthFailed')
   } finally {
     approving.value = false
   }

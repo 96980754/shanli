@@ -2,15 +2,15 @@
   <div class="agent-env-settings">
     <div class="header-section">
       <div class="header-content">
-        <div class="section-title">沙盒环境变量</div>
+        <div class="section-title">{{ $t('agentCfg.sandboxEnvTitle') }}</div>
         <p class="section-description">
-          配置当前用户的 Agent 沙盒环境变量。新建沙盒时会注入这些变量，并覆盖同名全局 sandbox.env。
+          {{ $t('agentCfg.sandboxEnvDescription') }}
         </p>
       </div>
       <div class="header-actions">
         <a-button class="lucide-icon-btn" :loading="loading" @click="loadAgentEnv">
           <template #icon><RefreshCw :size="16" :class="{ spin: loading }" /></template>
-          刷新
+          {{ $t('common.refresh') }}
         </a-button>
         <a-button type="primary" :loading="saving" @click="saveAgentEnv">
           {{ saveButtonText }}
@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <div class="env-tip">保存后仅对新建沙盒生效，已运行沙盒不会热更新。</div>
+    <div class="env-tip">{{ $t('agentCfg.sandboxEnvTip') }}</div>
 
     <a-spin :spinning="loading">
       <McpEnvEditor
@@ -34,10 +34,13 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { RefreshCw } from 'lucide-vue-next'
 import { agentEnvApi } from '@/apis/agent_env_api'
 import McpEnvEditor from '@/components/McpEnvEditor.vue'
+
+const { t } = useI18n()
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const MAX_ENV_COUNT = 200
@@ -72,7 +75,9 @@ const savedEnvKeys = computed(() => Object.keys(lastSavedEnv.value || {}))
 const hasUnsavedChanges = computed(
   () => !isSameEnv(normalizeEnv(draftEnv.value), lastSavedEnv.value)
 )
-const saveButtonText = computed(() => (hasUnsavedChanges.value ? '保存（有修改）' : '保存'))
+const saveButtonText = computed(() =>
+  hasUnsavedChanges.value ? t('agentCfg.saveWithChanges') : t('common.save')
+)
 
 const updateDraftEnv = (value) => {
   const nextEnv = normalizeEnv(value)
@@ -84,21 +89,21 @@ const updateDraftEnv = (value) => {
 const validateEnv = (env) => {
   const entries = Object.entries(env)
   if (entries.length > MAX_ENV_COUNT) {
-    message.error(`环境变量数量不能超过 ${MAX_ENV_COUNT} 个`)
+    message.error(t('agentCfg.envMaxCount', { count: MAX_ENV_COUNT }))
     return false
   }
 
   for (const [key, value] of entries) {
     if (key.length > MAX_ENV_KEY_LENGTH) {
-      message.error(`环境变量名长度不能超过 ${MAX_ENV_KEY_LENGTH}`)
+      message.error(t('agentCfg.envKeyMaxLength', { length: MAX_ENV_KEY_LENGTH }))
       return false
     }
     if (!ENV_KEY_PATTERN.test(key)) {
-      message.error(`环境变量名 ${key} 格式不正确`)
+      message.error(t('agentCfg.envKeyInvalid', { key }))
       return false
     }
     if (value.length > MAX_ENV_VALUE_LENGTH) {
-      message.error(`环境变量 ${key} 的值过长`)
+      message.error(t('agentCfg.envValueTooLong', { key }))
       return false
     }
   }
@@ -114,7 +119,7 @@ const loadAgentEnv = async () => {
     lastSavedEnv.value = env
     editorRevision.value += 1
   } catch (error) {
-    message.error(error.message || '加载环境变量失败')
+    message.error(error.message || t('agentCfg.loadEnvFailed'))
   } finally {
     loading.value = false
   }
@@ -124,7 +129,7 @@ const saveAgentEnv = async () => {
   const env = normalizeEnv(draftEnv.value)
   if (!validateEnv(env)) return
   if (isSameEnv(env, lastSavedEnv.value)) {
-    message.info('环境变量未变化')
+    message.info(t('agentCfg.envUnchanged'))
     return
   }
 
@@ -134,9 +139,9 @@ const saveAgentEnv = async () => {
     draftEnv.value = env
     lastSavedEnv.value = env
     editorRevision.value += 1
-    message.success('环境变量已保存')
+    message.success(t('agentCfg.envSaved'))
   } catch (error) {
-    message.error(error.message || '保存环境变量失败')
+    message.error(error.message || t('agentCfg.saveEnvFailed'))
   } finally {
     saving.value = false
   }

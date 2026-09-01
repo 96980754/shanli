@@ -3,14 +3,14 @@
     <!-- 入库/重新入库参数配置模态框 -->
     <a-modal
       v-model:open="indexConfigModalVisible"
-      :title="indexConfigModalTitle"
+      :title="t(indexConfigModalTitle)"
       :confirm-loading="indexConfigModalLoading"
       width="600px"
       @cancel="handleIndexConfigCancel"
     >
       <template #footer>
-        <a-button key="back" @click="handleIndexConfigCancel">取消</a-button>
-        <a-button key="submit" type="primary" @click="handleIndexConfigConfirm">确定</a-button>
+        <a-button key="back" @click="handleIndexConfigCancel">{{ $t('common.cancel') }}</a-button>
+        <a-button key="submit" type="primary" @click="handleIndexConfigConfirm">{{ $t('common.ok') }}</a-button>
       </template>
       <div class="index-params">
         <a-alert
@@ -18,7 +18,7 @@
           class="index-pending-alert"
           type="info"
           show-icon
-          :message="`将提交 ${pendingIndexTotalText} 个待入库文件，任务会在后台按批处理，可在任务中心查看进度。`"
+          :message="t('fileTable.pendingIndexAlert', { count: pendingIndexTotalText })"
         />
         <ChunkParamsConfig
           :temp-chunk-params="indexParams"
@@ -71,14 +71,28 @@
     <!-- 新建文件夹模态框 -->
     <a-modal
       v-model:open="createFolderModalVisible"
-      title="新建文件夹"
+      :title="t('fileTable.newFolderTitle')"
       :confirm-loading="createFolderLoading"
       @ok="handleCreateFolder"
     >
       <a-input
         v-model:value="newFolderName"
-        placeholder="请输入文件夹名称"
+        :placeholder="t('fileTable.folderNamePlaceholder')"
         @pressEnter="handleCreateFolder"
+      />
+    </a-modal>
+
+    <!-- 重命名模态框（文件/文件夹/虚拟目录通用） -->
+    <a-modal
+      v-model:open="renameModalVisible"
+      :title="renameRow?.is_folder ? t('fileTable.renameFolder') : t('fileTable.renameFile')"
+      :confirm-loading="renameLoading"
+      @ok="handleRenameConfirm"
+    >
+      <a-input
+        v-model:value="renameName"
+        :placeholder="t('fileTable.newNamePlaceholder')"
+        @pressEnter="handleRenameConfirm"
       />
     </a-modal>
 
@@ -87,7 +101,7 @@
          第二次打开会残留上次展开的虚拟目录（空展开、不再触发懒加载），这里强制每次全新挂载 -->
     <a-modal
       v-model:open="moveModalVisible"
-      title="移动文件"
+      :title="t('fileTable.moveFileTitle')"
       :confirm-loading="moveSubmitting"
       :destroy-on-close="true"
       @ok="handleMoveConfirm"
@@ -99,7 +113,7 @@
           @click="onMoveTargetSelect(null)"
         >
           <FolderInput :size="14" />
-          <span>根目录（不移动到任何文件夹）</span>
+          <span>{{ $t('fileTable.moveRootOption') }}</span>
         </div>
         <a-tree
           class="move-folder-tree"
@@ -110,7 +124,7 @@
           @select="onMoveTreeSelect"
         />
         <p v-if="!moveTreeData.length" class="move-empty-hint">
-          暂无可选文件夹，可直接移动到根目录
+          {{ $t('fileTable.noMovableFolder') }}
         </p>
       </div>
     </a-modal>
@@ -133,7 +147,7 @@
       @page-change="handleTablePageChange"
     >
       <template #breadcrumb-suffix>
-        <span v-if="isFilteredView" class="file-breadcrumb-filter">筛选结果</span>
+        <span v-if="isFilteredView" class="file-breadcrumb-filter">{{ $t('fileTable.filterResult') }}</span>
       </template>
 
       <template #toolbar-actions>
@@ -144,13 +158,13 @@
                 type="text"
                 class="panel-action-btn"
                 :class="{ active: statusFilter !== 'all' }"
-                title="筛选状态"
+                :title="t('fileTable.filterStatus')"
               >
                 <template #icon><Filter size="16" /></template>
               </a-button>
               <template #overlay>
                 <a-menu :selectedKeys="[statusFilter]" @click="handleStatusMenuClick">
-                  <a-menu-item key="all">全部状态</a-menu-item>
+                  <a-menu-item key="all">{{ $t('fileTable.allStatus') }}</a-menu-item>
                   <a-menu-item v-for="opt in statusOptions" :key="opt.value">
                     {{ opt.label }}
                   </a-menu-item>
@@ -161,7 +175,7 @@
             <a-button
               type="text"
               @click="toggleSelectionMode"
-              title="多选"
+              :title="t('fileTable.multiSelect')"
               class="panel-action-btn"
               :class="{ active: isSelectionMode }"
             >
@@ -175,7 +189,7 @@
             :overlayStyle="{ minWidth: '220px' }"
             overlayClassName="panel-overflow-popover"
           >
-            <a-button type="text" class="panel-action-btn overflow-trigger" title="更多">
+            <a-button type="text" class="panel-action-btn overflow-trigger" :title="t('fileTable.more')">
               <template #icon><MoreHorizontal size="16" /></template>
             </a-button>
             <template #overlay>
@@ -187,18 +201,18 @@
                     @click="handleRefresh"
                   >
                     <RotateCw size="16" :class="{ spin: refreshing }" />
-                    <span>刷新</span>
+                    <span>{{ $t('common.refresh') }}</span>
                   </div>
 
                   <a-dropdown trigger="click" placement="bottomLeft">
                     <div class="overflow-action-item" :class="{ active: statusFilter !== 'all' }">
                       <Filter size="16" />
-                      <span>筛选</span>
+                      <span>{{ $t('fileTable.filter') }}</span>
                       <span class="overflow-action-hint">{{ currentStatusLabel }}</span>
                     </div>
                     <template #overlay>
                       <a-menu :selectedKeys="[statusFilter]" @click="handleStatusMenuClick">
-                        <a-menu-item key="all">全部状态</a-menu-item>
+                        <a-menu-item key="all">{{ $t('fileTable.allStatus') }}</a-menu-item>
                         <a-menu-item v-for="opt in statusOptions" :key="opt.value">
                           {{ opt.label }}
                         </a-menu-item>
@@ -212,7 +226,7 @@
                     @click="toggleSelectionMode"
                   >
                     <CheckSquare size="16" />
-                    <span>多选</span>
+                    <span>{{ $t('fileTable.multiSelect') }}</span>
                   </div>
                 </div>
               </div>
@@ -230,7 +244,7 @@
               @change="onSelectAllChange"
               style="margin-right: 8px"
             />
-            <span>{{ selectedRowKeys.length }} 项</span>
+            <span>{{ t('fileTable.selectedCount', { count: selectedRowKeys.length }) }}</span>
           </div>
           <div style="display: flex; gap: 2px">
             <a-button
@@ -241,7 +255,7 @@
               :disabled="!canBatchParse"
               :icon="h(FileText, { size: 16 })"
             >
-              批量解析
+              {{ $t('fileTable.batchParse') }}
             </a-button>
             <a-button
               v-if="props.canManage"
@@ -251,7 +265,7 @@
               :disabled="!canBatchIndex"
               :icon="h(Database, { size: 16 })"
             >
-              批量入库
+              {{ $t('fileTable.batchIndex') }}
             </a-button>
             <a-button
               v-if="props.canDelete"
@@ -262,7 +276,7 @@
               :disabled="!canBatchDelete"
               :icon="h(Trash2, { size: 16 })"
             >
-              批量删除
+              {{ $t('fileTable.batchDelete') }}
             </a-button>
           </div>
         </div>
@@ -328,7 +342,6 @@
       <template #row-actions="{ row }">
         <div class="table-row-actions">
           <a-popover
-            v-if="!row.is_virtual_folder"
             placement="bottomRight"
             trigger="click"
             overlayClassName="file-action-popover"
@@ -336,7 +349,18 @@
           >
             <template #content>
               <div class="file-action-list">
-                <template v-if="row.is_folder">
+                <template v-if="row.is_virtual_folder">
+                  <a-button
+                    v-if="props.canManage"
+                    type="text"
+                    block
+                    @click="openRenameModal(row)"
+                  >
+                    <template #icon><component :is="h(Pencil)" size="14" /></template>
+                    {{ $t('conversation.rename') }}
+                  </a-button>
+                </template>
+                <template v-else-if="row.is_folder">
                   <a-button
                     v-if="props.canUpload"
                     type="text"
@@ -344,7 +368,11 @@
                     @click="showCreateFolderModal(row.file_id)"
                   >
                     <template #icon><component :is="h(FolderPlus)" size="14" /></template>
-                    新建子文件夹
+                    {{ $t('fileTable.newSubFolder') }}
+                  </a-button>
+                  <a-button v-if="props.canManage" type="text" block @click="openRenameModal(row)">
+                    <template #icon><component :is="h(Pencil)" size="14" /></template>
+                    {{ $t('conversation.rename') }}
                   </a-button>
                   <a-button
                     v-if="props.canDelete"
@@ -354,7 +382,7 @@
                     @click="handleDeleteFolder(row)"
                   >
                     <template #icon><component :is="h(Trash2)" size="14" /></template>
-                    删除文件夹
+                    {{ $t('fileTable.deleteFolder') }}
                   </a-button>
                 </template>
                 <template v-else>
@@ -366,7 +394,7 @@
                     :disabled="lock || !canDownloadFile(row)"
                   >
                     <template #icon><component :is="h(Download)" size="14" /></template>
-                    下载文件
+                    {{ $t('fileTable.downloadFile') }}
                   </a-button>
 
                   <!-- Parse Action -->
@@ -378,7 +406,7 @@
                     :disabled="lock"
                   >
                     <template #icon><component :is="h(FileText)" size="14" /></template>
-                    {{ getFilePrimaryAction(row)?.label || '解析文件' }}
+                    {{ getFilePrimaryAction(row)?.label || $t('fileTable.parseFile') }}
                   </a-button>
 
                   <!-- Index Action -->
@@ -390,7 +418,7 @@
                     :disabled="lock"
                   >
                     <template #icon><component :is="h(Database)" size="14" /></template>
-                    {{ getFilePrimaryAction(row)?.label || '入库' }}
+                    {{ getFilePrimaryAction(row)?.label || $t('fileTable.index') }}
                   </a-button>
 
                   <!-- Reindex Action -->
@@ -402,13 +430,19 @@
                     :disabled="lock"
                   >
                     <template #icon><component :is="h(RotateCw)" size="14" /></template>
-                    重新入库
+                    {{ $t('fileTable.reindex') }}
                   </a-button>
 
                   <!-- 移动到其它文件夹（后端 PUT /documents/{id}/move，new_parent_id 空值=根目录） -->
                   <a-button v-if="props.canManage" type="text" block @click="openMoveModal(row)">
                     <template #icon><component :is="h(FolderInput)" size="14" /></template>
-                    移动到
+                    {{ $t('fileTable.moveTo') }}
+                  </a-button>
+
+                  <!-- 重命名（后端 PUT /documents/{id}/rename，只传叶子名） -->
+                  <a-button v-if="props.canManage" type="text" block @click="openRenameModal(row)">
+                    <template #icon><component :is="h(Pencil)" size="14" /></template>
+                    {{ $t('conversation.rename') }}
                   </a-button>
 
                   <a-button
@@ -418,7 +452,7 @@
                     @click="openVersionHistory(row)"
                   >
                     <template #icon><component :is="h(History)" size="14" /></template>
-                    版本历史
+                    {{ $t('fileTable.versionHistory') }}
                   </a-button>
 
                   <!-- 清洗预览 / 信息增强 / QA 知识对（PR12 吸收） -->
@@ -429,15 +463,15 @@
                     @click="openCleaningPreview(row)"
                   >
                     <template #icon><Sparkles :size="14" /></template>
-                    清洗预览
+                    {{ $t('fileTable.cleaningPreview') }}
                   </a-button>
                   <a-button v-if="props.canManage" type="text" block @click="openEnrichment(row)">
                     <template #icon><FileText :size="14" /></template>
-                    信息增强
+                    {{ $t('fileTable.enrichment') }}
                   </a-button>
                   <a-button v-if="props.canManage" type="text" block @click="openDocumentQA(row)">
                     <template #icon><HelpCircle :size="14" /></template>
-                    QA 知识对
+                    {{ $t('docModal.qaPairs') }}
                   </a-button>
                   <a-button
                     v-if="props.canManage"
@@ -446,7 +480,7 @@
                     @click="conflictModalVisible = true"
                   >
                     <template #icon><AlertTriangle :size="14" /></template>
-                    冲突审核
+                    {{ $t('fileTable.conflictReview') }}
                   </a-button>
 
                   <a-button
@@ -458,14 +492,13 @@
                     :disabled="!canDeleteFile(row, lock)"
                   >
                     <template #icon><component :is="h(Trash2)" size="14" /></template>
-                    删除文件
+                    {{ $t('fileTable.deleteFile') }}
                   </a-button>
                 </template>
               </div>
             </template>
             <a-button type="text" :icon="h(Ellipsis)" class="action-trigger-btn" />
           </a-popover>
-          <span v-else class="action-placeholder"></span>
         </div>
       </template>
     </FileBrowserTable>
@@ -474,6 +507,7 @@
 
 <script setup>
 import { ref, computed, h, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { message, Modal } from 'ant-design-vue'
@@ -514,7 +548,8 @@ import {
   History,
   Sparkles,
   HelpCircle,
-  AlertTriangle
+  AlertTriangle,
+  Pencil
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -524,6 +559,7 @@ const props = defineProps({
   canManage: { type: Boolean, default: true }
 })
 
+const { t } = useI18n()
 const store = useDatabaseStore()
 const route = useRoute()
 const versionModalVisible = ref(false)
@@ -618,7 +654,7 @@ const fileBreadcrumbItems = computed(() =>
   folderBreadcrumbs.value.map((item, index) => ({
     ...item,
     key: item.file_id || `root-${index}`,
-    name: item.filename || '全部文件'
+    name: item.filename || t('fileTable.allFiles')
   }))
 )
 const isFilteredView = computed(() => Boolean(store.fileBrowser.recursive))
@@ -691,6 +727,40 @@ const showCreateFolderModal = (parentId = null) => {
   createFolderModalVisible.value = true
 }
 
+// 重命名相关
+const renameModalVisible = ref(false)
+const renameLoading = ref(false)
+const renameRow = ref(null) // 被重命名的文件/文件夹
+const renameName = ref('')
+
+const openRenameModal = (record) => {
+  closePopover(record.file_id)
+  renameRow.value = record
+  // 取叶子名 prefill：普通视图 filename 已是叶子，递归/筛选视图可能是完整路径
+  renameName.value = String(record.filename || '').split('/').pop()
+  renameModalVisible.value = true
+}
+
+const handleRenameConfirm = async () => {
+  const newName = (renameName.value || '').trim()
+  if (!newName) {
+    message.warning(t('fileTable.newNamePlaceholder'))
+    return
+  }
+  if (!renameRow.value) return
+  renameLoading.value = true
+  try {
+    await store.renameFile(renameRow.value.file_id, newName)
+    renameModalVisible.value = false
+    renameRow.value = null
+    message.success(t('fileTable.renameSuccess'))
+  } catch {
+    // 错误 toast 已由 store 抛出
+  } finally {
+    renameLoading.value = false
+  }
+}
+
 // 移动到其它文件夹
 const moveModalVisible = ref(false)
 const moveSubmitting = ref(false)
@@ -758,7 +828,7 @@ const handleMoveConfirm = async () => {
   try {
     await store.moveFile(movingRow.value.file_id, moveTargetId.value)
     moveModalVisible.value = false
-    message.success('文件移动成功')
+    message.success(t('fileTable.moveSuccess'))
   } catch {
     // 错误 toast 已由 store 抛出
   } finally {
@@ -791,19 +861,19 @@ const toggleSelectionMode = () => {
 
 const handleCreateFolder = async () => {
   if (!newFolderName.value.trim()) {
-    message.warning('请输入文件夹名称')
+    message.warning(t('fileTable.folderNamePlaceholder'))
     return
   }
 
   createFolderLoading.value = true
   try {
     await documentApi.createFolder(store.kbId, newFolderName.value, currentParentId.value)
-    message.success('创建成功')
+    message.success(t('fileTable.createSuccess'))
     createFolderModalVisible.value = false
     handleRefresh()
   } catch (error) {
     console.error(error)
-    message.error('创建失败: ' + (error.message || '未知错误'))
+    message.error(t('fileTable.createFailed', { msg: error.message || t('common.unknownError') }))
   } finally {
     createFolderLoading.value = false
   }
@@ -812,7 +882,7 @@ const handleCreateFolder = async () => {
 // 入库/重新入库参数配置相关
 const indexConfigModalVisible = ref(false)
 const indexConfigModalLoading = computed(() => store.state.chunkLoading)
-const indexConfigModalTitle = ref('入库参数配置')
+const indexConfigModalTitle = ref('fileTable.indexParamsConfig')
 
 const createDefaultIndexParams = () => ({
   chunk_preset_id: '',
@@ -842,7 +912,7 @@ const tablePagination = computed(() => ({
   pageSize: store.fileBrowser.pageSize,
   total: store.fileBrowser.total,
   showSizeChanger: true,
-  showTotal: (total) => `共 ${total} 项`,
+  showTotal: (total) => t('common.totalItems', { total }),
   pageSizeOptions,
   hideOnSinglePage: true
 }))
@@ -859,9 +929,9 @@ const statusFilter = ref('all')
 const statusOptions = FILE_STATUS_FILTER_OPTIONS
 
 // 紧凑表格列定义
-const columnsCompact = [
+const columnsCompact = computed(() => [
   {
-    title: '文件名',
+    title: t('fileTable.fileName'),
     dataIndex: 'filename',
     key: 'filename',
     ellipsis: true,
@@ -874,7 +944,7 @@ const columnsCompact = [
     sortDirections: ['ascend', 'descend']
   },
   {
-    title: '状态',
+    title: t('common.status'),
     dataIndex: 'status',
     key: 'status',
     width: 104,
@@ -884,19 +954,19 @@ const columnsCompact = [
     sortDirections: ['ascend', 'descend']
   },
   {
-    title: '时间',
+    title: t('fileTable.time'),
     dataIndex: 'created_at',
     key: 'created_at',
     width: 180,
     sorter: (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0),
     sortDirections: ['ascend', 'descend']
   },
-  { title: '操作', key: 'action', dataIndex: 'file_id', width: 64, align: 'center' }
-]
+  { title: t('fileTable.actions'), key: 'action', dataIndex: 'file_id', width: 64, align: 'center' }
+])
 
 // 空状态文本
 const emptyText = computed(() => {
-  return '暂无文件'
+  return t('fileTable.noFiles')
 })
 
 // 计算是否可以批量删除
@@ -976,14 +1046,14 @@ const handleDeleteFile = (fileId) => {
 const handleDeleteFolder = (record) => {
   closePopover(record.file_id)
   Modal.confirm({
-    title: '删除文件夹',
-    content: `确定要删除文件夹 "${record.filename}" 及其包含的所有内容吗？`,
-    okText: '确认',
-    cancelText: '取消',
+    title: t('fileTable.deleteFolder'),
+    content: t('fileTable.deleteFolderContent', { name: record.filename }),
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
     onOk: async () => {
       try {
         await store.deleteFile(record.file_id)
-        message.success('删除成功')
+        message.success(t('common.deleteSuccess'))
       } catch {
         // Error handled in store but we can add extra handling if needed
       }
@@ -1002,7 +1072,7 @@ const handleBatchParse = async () => {
   })
 
   if (validKeys.length === 0) {
-    message.warning('没有可解析的文件')
+    message.warning(t('fileTable.noParsableFile'))
     return
   }
 
@@ -1017,7 +1087,7 @@ const handleBatchIndex = async () => {
   })
 
   if (validKeys.length === 0) {
-    message.warning('没有可入库的文件')
+    message.warning(t('fileTable.noIndexableFile'))
     return
   }
 
@@ -1025,19 +1095,19 @@ const handleBatchIndex = async () => {
   isBatchIndexOperation.value = true
   isPendingIndexOperation.value = false
   pendingIndexTotal.value = 0
-  indexConfigModalTitle.value = '批量入库参数配置'
+  indexConfigModalTitle.value = 'fileTable.batchIndexParamsConfig'
   indexConfigModalVisible.value = true
 }
 
 const startPendingIndex = (count = 0) => {
   if (lock.value) {
-    message.warning('当前有文件处理中，请稍后再试')
+    message.warning(t('fileTable.processingBusy'))
     return false
   }
 
   const total = Number(count || 0)
   if (total <= 0) {
-    message.info('没有待入库文档')
+    message.info(t('fileTable.noPendingIndexDocs'))
     return false
   }
 
@@ -1045,7 +1115,7 @@ const startPendingIndex = (count = 0) => {
   isBatchIndexOperation.value = false
   isPendingIndexOperation.value = true
   pendingIndexTotal.value = total
-  indexConfigModalTitle.value = '待入库文件参数配置'
+  indexConfigModalTitle.value = 'fileTable.pendingIndexParamsConfig'
   resetIndexParams()
   indexConfigModalVisible.value = true
   return true
@@ -1053,7 +1123,7 @@ const startPendingIndex = (count = 0) => {
 
 const openFileDetail = (record) => {
   if (!canOpenFileDetail(record)) {
-    message.error('文件未处理完成，请稍后再试')
+    message.error(t('fileTable.fileNotReady'))
     return
   }
   store.openFileDetail(record.file_id)
@@ -1064,7 +1134,7 @@ const handleDownloadFile = async (record) => {
   const kbId = store.kbId
   if (!kbId) {
     console.error('无法获取数据库ID，数据库ID:', store.kbId, '记录:', record)
-    message.error('无法获取数据库ID，请刷新页面后重试')
+    message.error(t('fileTable.cannotGetKbId'))
     return
   }
 
@@ -1114,7 +1184,7 @@ const handleDownloadFile = async (record) => {
     window.URL.revokeObjectURL(url)
   } catch (error) {
     console.error('下载文件时出错:', error)
-    const errorMessage = error.message || '下载失败，请稍后重试'
+    const errorMessage = error.message || t('fileTable.downloadFailedRetry')
     message.error(errorMessage)
   }
 }
@@ -1171,7 +1241,7 @@ const handleIndexFile = async (record) => {
   isBatchIndexOperation.value = false
   isPendingIndexOperation.value = false
   pendingIndexTotal.value = 0
-  indexConfigModalTitle.value = '入库参数配置'
+  indexConfigModalTitle.value = 'fileTable.indexParamsConfig'
 
   const processingParams = await loadRecordProcessingParams(record)
   resetIndexParams(processingParams)
@@ -1185,7 +1255,7 @@ const handleReindexFile = async (record) => {
   isBatchIndexOperation.value = false
   isPendingIndexOperation.value = false
   pendingIndexTotal.value = 0
-  indexConfigModalTitle.value = '重新入库参数配置'
+  indexConfigModalTitle.value = 'fileTable.reindexParamsConfig'
 
   const processingParams = await loadRecordProcessingParams(record)
   resetIndexParams(processingParams)
@@ -1218,7 +1288,7 @@ const handleIndexConfigConfirm = async () => {
     }
   } catch (error) {
     console.error('入库失败:', error)
-    const errorMessage = error.message || '入库失败，请稍后重试'
+    const errorMessage = error.message || t('fileTable.indexFailedRetry')
     message.error(errorMessage)
   }
 }
@@ -1263,10 +1333,10 @@ const formatFileTableTime = (value) => {
 
   const oneYearAgo = parseToShanghai(Date.now()).subtract(1, 'year')
   if (parsed.isAfter(oneYearAgo)) {
-    return parsed.format('MM月DD日 HH:mm:ss')
+    return parsed.format(t('fileTable.timeFormatRecent'))
   }
 
-  return parsed.format('YYYY年MM月DD日')
+  return parsed.format(t('fileTable.timeFormatOlder'))
 }
 
 // 导入工具函数

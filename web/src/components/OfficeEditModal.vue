@@ -1,17 +1,17 @@
 <template>
   <a-modal
     :open="visible"
-    :title="editingType === 'xlsx' ? '编辑 Excel 单元格' : '编辑 Word 文字'"
+    :title="editingType === 'xlsx' ? $t('office.editExcelTitle') : $t('office.editWordTitle')"
     width="900px"
     @ok="handleSave"
     @cancel="handleCancel"
     :confirm-loading="saving"
-    ok-text="确认并入库"
-    cancel-text="取消"
+    :ok-text="$t('office.confirmAndStore')"
+    :cancel-text="$t('common.cancel')"
   >
     <div v-if="loading" class="office-loading">
       <a-spin size="small" />
-      <span>加载文档内容...</span>
+      <span>{{ $t('office.loadingContent') }}</span>
     </div>
 
     <div v-else-if="error" class="office-error">{{ error }}</div>
@@ -23,7 +23,7 @@
           <a-input
             v-model:value="block.text"
             class="office-heading"
-            placeholder="标题"
+            :placeholder="$t('office.headingPlaceholder')"
           />
         </template>
         <template v-else-if="block.kind === 'table'">
@@ -72,14 +72,17 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
   kbId: { type: String, default: null },
-  docId: { type: String, default: null },   // 已入库文档（可选）
-  filePath: { type: String, default: '' }, // 已上传未入库的 MinIO URL（可选）
+  docId: { type: String, default: null },   // 已入库文档（可选） // i18n-ignore
+  filePath: { type: String, default: '' }, // 已上传未入库的 MinIO URL（可选） // i18n-ignore
   filename: { type: String, default: '' }
 })
 const emit = defineEmits(['update:visible', 'success', 'writeback'])
@@ -106,8 +109,8 @@ const loadContent = async () => {
       sheets.value = (data.sheets || []).map((s) => JSON.parse(JSON.stringify(s)))
     }
   } catch (e) {
-    console.error('加载 Office 内容失败:', e)
-    error.value = e?.message || '加载文档内容失败'
+    console.error(t('office.loadFailedLog'), e)
+    error.value = e?.message || t('office.loadFailed')
   } finally {
     loading.value = false
   }
@@ -141,17 +144,17 @@ const handleSave = async () => {
     if (props.filePath) {
       const res = await documentApi.officeWriteback(props.kbId, payload)
       emit('writeback', res)
-      message.success('编辑内容已生成，确认入库即可')
+      message.success(t('office.generatedReadyToStore'))
     } else {
       // docId 模式：编辑已入库文档，写回并重新入库
       const res = await documentApi.saveEditedDocument(props.kbId, props.docId, payload)
-      message.success(res?.message || '文档已更新并重新入库')
+      message.success(res?.message || t('office.documentUpdated'))
     }
     emit('update:visible', false)
     emit('success')
   } catch (e) {
-    console.error('保存编辑后文档失败:', e)
-    message.error(e?.message || '保存失败')
+    console.error(t('office.saveFailedLog'), e)
+    message.error(e?.message || t('common.saveFailed'))
   } finally {
     saving.value = false
   }

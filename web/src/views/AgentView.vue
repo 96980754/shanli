@@ -257,7 +257,7 @@ const handleAgentSwitch = async (agentId, hasActiveThread) => {
     await agentStore.selectAgent(agentId)
     agentDropdownOpen.value = false
   } catch (error) {
-    console.error('切换智能体出错:', error)
+    console.error('切换智能体出错:', error) // i18n-ignore
     message.error(t('agent.errors.switchFailed'))
   }
 }
@@ -272,7 +272,7 @@ const handleAgentSaved = async () => {
 const openAgentManagement = async () => {
   agentDropdownOpen.value = false
   if (!selectedAgentId.value) {
-    message.warning('请先选择智能体')
+    message.warning(t('agent.errors.selectAgentFirst'))
     return
   }
   try {

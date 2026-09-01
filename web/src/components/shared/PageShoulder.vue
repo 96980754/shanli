@@ -20,12 +20,13 @@
 </template>
 
 <script setup>
+import { i18n } from '@/i18n'
 import { Search } from 'lucide-vue-next'
 
 const searchModel = defineModel('search', { type: String, default: '' })
 
 defineProps({
-  searchPlaceholder: { type: String, default: '搜索...' }
+  searchPlaceholder: { type: String, default: () => i18n.global.t('layout.searchPlaceholder') }
 })
 </script>
 

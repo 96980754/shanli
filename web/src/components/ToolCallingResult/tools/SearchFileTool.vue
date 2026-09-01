@@ -4,7 +4,7 @@
       <div class="sep-header">
         <span class="note">Search File</span>
         <span class="separator" v-if="kbNameLabel">|</span>
-        <span class="description" v-if="kbNameLabel">知识库: {{ kbNameLabel }}</span>
+        <span class="description" v-if="kbNameLabel">{{ $t('toolCall.kbLabel', { name: kbNameLabel }) }}</span>
         <span class="separator" v-if="queryLabel">|</span>
         <span class="description" v-if="queryLabel">{{ queryLabel }}</span>
       </div>
@@ -16,10 +16,10 @@
       </div>
       <div v-else class="search-file-result">
         <div class="result-count">
-          共 {{ resultData(resultContent).total }} 个文件<span
+          {{ $t('toolCall.searchFile.totalFiles', { total: resultData(resultContent).total }) }}<span
             v-if="resultData(resultContent).has_more"
             class="more-hint"
-            >（仅展示前 {{ resultData(resultContent).files.length }} 个）</span
+            >{{ $t('toolCall.searchFile.showFirst', { count: resultData(resultContent).files.length }) }}</span
           >
         </div>
         <div v-if="resultData(resultContent).files.length" class="file-list">
@@ -33,7 +33,7 @@
             <span class="file-name" :title="file.filename">{{ file.filename }}</span>
           </div>
         </div>
-        <div v-else class="empty-result">未找到匹配的文件</div>
+        <div v-else class="empty-result">{{ $t('toolCall.searchFile.noMatch') }}</div>
       </div>
       <FileDetailModal v-model:open="modalOpen" :kb-id="selectedKbId" :file-id="selectedFileId" />
     </template>

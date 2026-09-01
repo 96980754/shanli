@@ -3,14 +3,14 @@
     <!-- 头部区域 -->
     <div class="header-section">
       <div class="header-content">
-        <div class="section-title">部门管理</div>
-        <p class="section-description">管理系统部门，部门下的用户会被隔离管理。</p>
+        <div class="section-title">{{ $t('deptMgmt.title') }}</div>
+        <p class="section-description">{{ $t('deptMgmt.description') }}</p>
       </div>
       <div class="header-actions">
         <a-button
           @click="handleRefresh"
           :loading="departmentManagement.refreshing"
-          title="刷新"
+          :title="$t('common.refresh')"
           class="refresh-btn lucide-icon-btn"
         >
           <template #icon
@@ -19,7 +19,7 @@
         </a-button>
         <a-button type="primary" @click="showAddDepartmentModal" class="add-btn lucide-icon-btn">
           <template #icon><Plus :size="16" /></template>
-          添加部门
+          {{ $t('deptMgmt.addDepartment') }}
         </a-button>
       </div>
     </div>
@@ -42,7 +42,7 @@
             <template #expandedRowRender="{ record }">
               <div class="team-section">
                 <div class="team-section-header">
-                  <span class="team-section-title">团队</span>
+                  <span class="team-section-title">{{ $t('deptMgmt.team') }}</span>
                   <a-button
                     type="dashed"
                     size="small"
@@ -50,20 +50,22 @@
                     @click="showAddTeamModal(record)"
                   >
                     <template #icon><Plus :size="14" /></template>
-                    新建团队
+                    {{ $t('deptMgmt.createTeam') }}
                   </a-button>
                 </div>
                 <div v-if="(teamsByDepartment[record.id] || []).length === 0" class="team-empty">
-                  暂无团队
+                  {{ $t('deptMgmt.noTeams') }}
                 </div>
                 <div v-else class="team-list">
                   <div v-for="team in teamsByDepartment[record.id]" :key="team.id" class="team-row">
                     <Users :size="14" class="team-row-icon" />
                     <span class="team-name">{{ team.name }}</span>
-                    <a-tag v-if="team.is_default" color="blue">默认</a-tag>
-                    <span class="team-count">{{ team.user_count ?? 0 }} 人</span>
+                    <a-tag v-if="team.is_default" color="blue">{{ $t('deptMgmt.default') }}</a-tag>
+                    <span class="team-count">
+                      {{ $t('deptMgmt.userCount', { count: team.user_count ?? 0 }) }}
+                    </span>
                     <span class="team-actions">
-                      <a-tooltip title="管理成员">
+                      <a-tooltip :title="$t('deptMgmt.manageMembers')">
                         <a-button
                           type="text"
                           size="small"
@@ -73,7 +75,7 @@
                           <UserPlus :size="14" />
                         </a-button>
                       </a-tooltip>
-                      <a-tooltip title="编辑团队">
+                      <a-tooltip :title="$t('deptMgmt.editTeam')">
                         <a-button
                           type="text"
                           size="small"
@@ -83,7 +85,7 @@
                           <SquarePen :size="14" />
                         </a-button>
                       </a-tooltip>
-                      <a-tooltip title="删除团队">
+                      <a-tooltip :title="$t('deptMgmt.deleteTeam')">
                         <a-button
                           type="text"
                           size="small"
@@ -110,11 +112,11 @@
                 <span class="description-text">{{ record.description || '-' }}</span>
               </template>
               <template v-if="column.key === 'userCount'">
-                <span>{{ record.user_count ?? 0 }} 人</span>
+                <span>{{ $t('deptMgmt.userCount', { count: record.user_count ?? 0 }) }}</span>
               </template>
               <template v-if="column.key === 'action'">
                 <a-space>
-                  <a-tooltip title="编辑部门">
+                  <a-tooltip :title="$t('deptMgmt.editDepartment')">
                     <a-button
                       type="text"
                       size="small"
@@ -124,7 +126,7 @@
                       <SquarePen :size="14" />
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="删除部门">
+                  <a-tooltip :title="$t('deptMgmt.deleteDepartment')">
                     <a-button
                       type="text"
                       size="small"
@@ -143,7 +145,7 @@
         </template>
 
         <div v-else class="empty-state">
-          <a-empty description="暂无部门数据" />
+          <a-empty :description="$t('deptMgmt.noDepartments')" />
         </div>
       </a-spin>
     </div>
@@ -160,19 +162,19 @@
       class="department-modal"
     >
       <a-form layout="vertical" class="department-form">
-        <a-form-item label="部门名称" required class="form-item">
+        <a-form-item :label="$t('deptMgmt.departmentName')" required class="form-item">
           <a-input
             v-model:value="departmentManagement.form.name"
-            placeholder="请输入部门名称"
+            :placeholder="$t('deptMgmt.departmentNamePlaceholder')"
             size="large"
             :maxlength="50"
           />
         </a-form-item>
 
-        <a-form-item label="部门描述" class="form-item">
+        <a-form-item :label="$t('deptMgmt.departmentDescription')" class="form-item">
           <a-textarea
             v-model:value="departmentManagement.form.description"
-            placeholder="请输入部门描述（可选）"
+            :placeholder="$t('deptMgmt.departmentDescriptionPlaceholder')"
             :rows="3"
             :maxlength="255"
             show-count
@@ -182,14 +184,12 @@
         <a-divider v-if="!departmentManagement.editMode" />
 
         <template v-if="!departmentManagement.editMode">
-          <p class="admin-section-hint">
-            创建部门时必须同时创建管理员，该管理员将负责管理本部门用户
-          </p>
+          <p class="admin-section-hint">{{ $t('deptMgmt.adminRequiredHint') }}</p>
 
-          <a-form-item label="管理员UID" required class="form-item">
+          <a-form-item :label="$t('deptMgmt.adminUid')" required class="form-item">
             <a-input
               v-model:value="departmentManagement.form.adminUid"
-              placeholder="请输入管理员UID（3-20位字母/数字/下划线）"
+              :placeholder="$t('deptMgmt.adminUidPlaceholder')"
               size="large"
               :maxlength="20"
               @blur="checkAdminUid"
@@ -197,31 +197,31 @@
             <div v-if="departmentManagement.form.uidError" class="error-text">
               {{ departmentManagement.form.uidError }}
             </div>
-            <div v-else class="help-text">此 UID 将用于登录</div>
+            <div v-else class="help-text">{{ $t('deptMgmt.uidForLogin') }}</div>
           </a-form-item>
 
-          <a-form-item label="密码" required class="form-item">
+          <a-form-item :label="$t('login.label.password')" required class="form-item">
             <a-input-password
               v-model:value="departmentManagement.form.adminPassword"
-              placeholder="请输入管理员密码"
+              :placeholder="$t('deptMgmt.adminPasswordPlaceholder')"
               size="large"
               :maxlength="50"
             />
           </a-form-item>
 
-          <a-form-item label="确认密码" required class="form-item">
+          <a-form-item :label="$t('login.label.confirmPassword')" required class="form-item">
             <a-input-password
               v-model:value="departmentManagement.form.adminConfirmPassword"
-              placeholder="请再次输入密码"
+              :placeholder="$t('login.validation.confirmRequired')"
               size="large"
               :maxlength="50"
             />
           </a-form-item>
 
-          <a-form-item label="手机号（可选）" class="form-item">
+          <a-form-item :label="$t('deptMgmt.adminPhoneOptional')" class="form-item">
             <a-input
               v-model:value="departmentManagement.form.adminPhone"
-              placeholder="请输入手机号（可用于登录）"
+              :placeholder="$t('deptMgmt.adminPhonePlaceholder')"
               size="large"
               :maxlength="11"
             />
@@ -245,19 +245,19 @@
       class="department-modal"
     >
       <a-form layout="vertical" class="department-form">
-        <a-form-item label="团队名称" required class="form-item">
+        <a-form-item :label="$t('deptMgmt.teamName')" required class="form-item">
           <a-input
             v-model:value="teamManagement.form.name"
-            placeholder="请输入团队名称"
+            :placeholder="$t('deptMgmt.teamNamePlaceholder')"
             size="large"
             :maxlength="50"
           />
         </a-form-item>
 
-        <a-form-item label="团队描述" class="form-item">
+        <a-form-item :label="$t('deptMgmt.teamDescription')" class="form-item">
           <a-textarea
             v-model:value="teamManagement.form.description"
-            placeholder="请输入团队描述（可选）"
+            :placeholder="$t('deptMgmt.teamDescriptionPlaceholder')"
             :rows="3"
             :maxlength="255"
             show-count
@@ -269,7 +269,7 @@
     <!-- 团队成员管理模态框 -->
     <a-modal
       v-model:open="memberManagement.visible"
-      :title="memberManagement.team ? `团队「${memberManagement.team.name}」成员` : '管理团队成员'"
+      :title="memberModalTitle"
       @ok="handleMemberSubmit"
       :confirmLoading="memberManagement.loading"
       @cancel="memberManagement.visible = false"
@@ -285,14 +285,14 @@
             :options="memberOptions"
             option-filter-prop="label"
             show-search
-            placeholder="勾选该团队的用户"
+            :placeholder="$t('deptMgmt.selectTeamMembersPlaceholder')"
             class="member-select"
             :maxTagCount="10"
           />
           <p v-if="memberManagement.team && memberManagement.team.is_default" class="help-text">
-            默认团队是未分配用户的兜底桶：勾选用户将移回默认团队（取消分配），取消勾选不改变归属。
+            {{ $t('deptMgmt.defaultTeamHint') }}
           </p>
-          <p v-else class="help-text">勾选用户加入该团队；取消勾选的原成员将回到本部门默认团队。</p>
+          <p v-else class="help-text">{{ $t('deptMgmt.teamMemberHint') }}</p>
         </div>
       </a-spin>
     </a-modal>
@@ -301,38 +301,41 @@
 
 <script setup>
 import { reactive, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { notification, message, Modal } from 'ant-design-vue'
 import { departmentApi, apiSuperAdminGet, getUsersByDepartment } from '@/apis'
 import { Plus, RefreshCw, SquarePen, Trash2, UserPlus, Users } from 'lucide-vue-next'
 
+const { t } = useI18n()
+
 // 表格列定义
-const columns = [
+const columns = computed(() => [
   {
-    title: '部门名称',
+    title: t('deptMgmt.departmentName'),
     dataIndex: 'name',
     key: 'name',
     width: 200
   },
   {
-    title: '描述',
+    title: t('deptMgmt.descriptionColumn'),
     dataIndex: 'description',
     key: 'description',
     ellipsis: true
   },
   {
-    title: '用户数量',
+    title: t('deptMgmt.userCountColumn'),
     dataIndex: 'user_count',
     key: 'userCount',
     width: 100,
     align: 'center'
   },
   {
-    title: '操作',
+    title: t('deptMgmt.actions'),
     key: 'action',
     width: 120,
     align: 'center'
   }
-]
+])
 
 // 部门管理状态
 const departmentManagement = reactive({
@@ -341,7 +344,7 @@ const departmentManagement = reactive({
   departments: [],
   error: null,
   modalVisible: false,
-  modalTitle: '添加部门',
+  modalTitle: t('deptMgmt.addDepartment'),
   editMode: false,
   editDepartmentId: null,
   form: {
@@ -360,7 +363,7 @@ const departmentManagement = reactive({
 const teamManagement = reactive({
   loading: false,
   modalVisible: false,
-  modalTitle: '新建团队',
+  modalTitle: t('deptMgmt.createTeam'),
   editMode: false,
   editTeamId: null,
   departmentId: null,
@@ -387,8 +390,16 @@ const memberManagement = reactive({
 const memberOptions = computed(() =>
   memberManagement.users.map((user) => ({
     value: user.id,
-    label: user.team_name ? `${user.username}（${user.team_name}）` : user.username
+    label: user.team_name
+      ? t('deptMgmt.memberOptionLabel', { username: user.username, teamName: user.team_name })
+      : user.username
   }))
+)
+
+const memberModalTitle = computed(() =>
+  memberManagement.team
+    ? t('deptMgmt.teamMemberTitle', { name: memberManagement.team.name })
+    : t('deptMgmt.manageTeamMembers')
 )
 
 // 打开成员管理弹窗：拉取部门用户，预选当前团队已有成员
@@ -406,10 +417,10 @@ const showManageMembers = async (department, team) => {
       .filter((user) => user.team_id === team.id)
       .map((user) => user.id)
   } catch (error) {
-    console.error('获取部门用户失败:', error)
+    console.error(t('deptMgmt.fetchDeptUsersFailedLog'), error)
     notification.error({
-      message: '获取成员列表失败',
-      description: error.message || '请稍后重试'
+      message: t('deptMgmt.fetchMembersFailed'),
+      description: error.message || t('settings.retryLater')
     })
   } finally {
     memberManagement.loading = false
@@ -425,14 +436,14 @@ const handleMemberSubmit = async () => {
       memberManagement.team.id,
       memberManagement.selectedIds
     )
-    notification.success({ message: '团队成员已更新' })
+    notification.success({ message: t('deptMgmt.teamMembersUpdated') })
     memberManagement.visible = false
     await fetchDepartments()
   } catch (error) {
-    console.error('更新团队成员失败:', error)
+    console.error(t('deptMgmt.updateTeamMembersFailedLog'), error)
     notification.error({
-      message: '更新失败',
-      description: error.message || '请稍后重试'
+      message: t('deptMgmt.updateFailed'),
+      description: error.message || t('settings.retryLater')
     })
   } finally {
     memberManagement.loading = false
@@ -459,8 +470,8 @@ const fetchDepartments = async () => {
     Object.keys(teamsByDepartment).forEach((key) => delete teamsByDepartment[key])
     Object.assign(teamsByDepartment, grouped)
   } catch (error) {
-    console.error('获取部门/团队列表失败:', error)
-    departmentManagement.error = '获取部门列表失败'
+    console.error(t('userMgmt.fetchDeptTeamFailed'), error)
+    departmentManagement.error = t('deptMgmt.fetchDepartmentsFailed')
   } finally {
     departmentManagement.loading = false
   }
@@ -468,7 +479,7 @@ const fetchDepartments = async () => {
 
 // 打开新建团队模态框
 const showAddTeamModal = (department) => {
-  teamManagement.modalTitle = '新建团队'
+  teamManagement.modalTitle = t('deptMgmt.createTeam')
   teamManagement.editMode = false
   teamManagement.editTeamId = null
   teamManagement.departmentId = department.id
@@ -481,7 +492,7 @@ const showAddTeamModal = (department) => {
 
 // 打开编辑团队模态框
 const showEditTeamModal = (department, team) => {
-  teamManagement.modalTitle = '编辑团队'
+  teamManagement.modalTitle = t('deptMgmt.editTeam')
   teamManagement.editMode = true
   teamManagement.editTeamId = team.id
   teamManagement.departmentId = department.id
@@ -496,7 +507,7 @@ const showEditTeamModal = (department, team) => {
 const handleTeamFormSubmit = async () => {
   try {
     if (!teamManagement.form.name.trim()) {
-      notification.error({ message: '团队名称不能为空' })
+      notification.error({ message: t('deptMgmt.teamNameRequired') })
       return
     }
     teamManagement.loading = true
@@ -510,18 +521,18 @@ const handleTeamFormSubmit = async () => {
         teamManagement.editTeamId,
         payload
       )
-      notification.success({ message: '团队更新成功' })
+      notification.success({ message: t('deptMgmt.teamUpdated') })
     } else {
       await departmentApi.createTeam(teamManagement.departmentId, payload)
-      notification.success({ message: '团队创建成功' })
+      notification.success({ message: t('deptMgmt.teamCreated') })
     }
     await fetchDepartments()
     teamManagement.modalVisible = false
   } catch (error) {
-    console.error('团队操作失败:', error)
+    console.error(t('deptMgmt.teamOperationFailedLog'), error)
     notification.error({
-      message: '操作失败',
-      description: error.message || '请稍后重试'
+      message: t('common.operationFailed'),
+      description: error.message || t('settings.retryLater')
     })
   } finally {
     teamManagement.loading = false
@@ -531,22 +542,22 @@ const handleTeamFormSubmit = async () => {
 // 删除团队（默认团队不可删）
 const confirmDeleteTeam = (department, team) => {
   Modal.confirm({
-    title: '确认删除团队',
-    content: `确定要删除团队 "${team.name}" 吗？该团队下的用户会迁移到本部门默认团队。`,
-    okText: '删除',
+    title: t('deptMgmt.confirmDeleteTeamTitle'),
+    content: t('deptMgmt.confirmDeleteTeamContent', { name: team.name }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         teamManagement.loading = true
         await departmentApi.deleteTeam(department.id, team.id)
-        notification.success({ message: '团队删除成功' })
+        notification.success({ message: t('deptMgmt.teamDeleted') })
         await fetchDepartments()
       } catch (error) {
-        console.error('删除团队失败:', error)
+        console.error(t('deptMgmt.deleteTeamFailedLog'), error)
         notification.error({
-          message: '删除失败',
-          description: error.message || '请稍后重试'
+          message: t('deptMgmt.deleteFailed'),
+          description: error.message || t('settings.retryLater')
         })
       } finally {
         teamManagement.loading = false
@@ -561,10 +572,10 @@ const handleRefresh = async () => {
   departmentManagement.refreshing = true
   try {
     await fetchDepartments()
-    message.success('刷新成功')
+    message.success(t('settings.refreshSuccess'))
   } catch (error) {
-    console.error('刷新失败:', error)
-    message.error('刷新失败')
+    console.error(t('settings.refreshFail'), error)
+    message.error(t('settings.refreshFail'))
   } finally {
     departmentManagement.refreshing = false
   }
@@ -572,7 +583,7 @@ const handleRefresh = async () => {
 
 // 打开添加部门模态框
 const showAddDepartmentModal = () => {
-  departmentManagement.modalTitle = '添加部门'
+  departmentManagement.modalTitle = t('deptMgmt.addDepartment')
   departmentManagement.editMode = false
   departmentManagement.editDepartmentId = null
   departmentManagement.form = {
@@ -590,7 +601,7 @@ const showAddDepartmentModal = () => {
 
 // 打开编辑部门模态框
 const showEditDepartmentModal = (department) => {
-  departmentManagement.modalTitle = '编辑部门'
+  departmentManagement.modalTitle = t('deptMgmt.editDepartment')
   departmentManagement.editMode = true
   departmentManagement.editDepartmentId = department.id
   departmentManagement.form = {
@@ -621,7 +632,7 @@ watch(
   (newPhone) => {
     departmentManagement.form.phoneError = ''
     if (newPhone && !validatePhoneNumber(newPhone)) {
-      departmentManagement.form.phoneError = '请输入正确的手机号格式'
+      departmentManagement.form.phoneError = t('userMgmt.phoneFormatInvalid')
     }
   }
 )
@@ -637,12 +648,12 @@ const checkAdminUid = async () => {
 
   // 验证格式
   if (!/^[a-zA-Z0-9_]+$/.test(uid)) {
-    departmentManagement.form.uidError = 'UID只能包含字母、数字和下划线'
+    departmentManagement.form.uidError = t('deptMgmt.uidInvalid')
     return
   }
 
   if (uid.length < 3 || uid.length > 20) {
-    departmentManagement.form.uidError = 'UID长度必须在3-20个字符之间'
+    departmentManagement.form.uidError = t('deptMgmt.uidLengthInvalid')
     return
   }
 
@@ -650,10 +661,10 @@ const checkAdminUid = async () => {
   try {
     const result = await apiSuperAdminGet(`/api/auth/check-uid/${uid}`)
     if (!result.is_available) {
-      departmentManagement.form.uidError = '该UID已被使用'
+      departmentManagement.form.uidError = t('deptMgmt.uidInUse')
     }
   } catch (error) {
-    console.error('检查UID失败:', error)
+    console.error(t('deptMgmt.checkUidFailedLog'), error)
   }
 }
 
@@ -662,47 +673,47 @@ const handleDepartmentFormSubmit = async () => {
   try {
     // 验证部门名称
     if (!departmentManagement.form.name.trim()) {
-      notification.error({ message: '部门名称不能为空' })
+      notification.error({ message: t('deptMgmt.departmentNameRequired') })
       return
     }
 
     if (departmentManagement.form.name.trim().length < 2) {
-      notification.error({ message: '部门名称至少2个字符' })
+      notification.error({ message: t('deptMgmt.departmentNameMinLength') })
       return
     }
 
     // 验证管理员UID
     const adminUid = departmentManagement.form.adminUid.trim()
     if (!adminUid) {
-      notification.error({ message: '请输入管理员UID' })
+      notification.error({ message: t('deptMgmt.adminUidRequired') })
       return
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(adminUid)) {
-      notification.error({ message: 'UID只能包含字母、数字和下划线' })
+      notification.error({ message: t('deptMgmt.uidInvalid') })
       return
     }
 
     if (adminUid.length < 3 || adminUid.length > 20) {
-      notification.error({ message: 'UID长度必须在3-20个字符之间' })
+      notification.error({ message: t('deptMgmt.uidLengthInvalid') })
       return
     }
 
     if (departmentManagement.form.uidError) {
-      notification.error({ message: '管理员UID已存在或格式错误' })
+      notification.error({ message: t('deptMgmt.adminUidUnavailable') })
       return
     }
 
     // 验证密码
     if (!departmentManagement.form.adminPassword) {
-      notification.error({ message: '请输入管理员密码' })
+      notification.error({ message: t('deptMgmt.adminPasswordRequired') })
       return
     }
 
     if (
       departmentManagement.form.adminPassword !== departmentManagement.form.adminConfirmPassword
     ) {
-      notification.error({ message: '两次输入的密码不一致' })
+      notification.error({ message: t('login.validation.passwordMismatch') })
       return
     }
 
@@ -711,7 +722,7 @@ const handleDepartmentFormSubmit = async () => {
       departmentManagement.form.adminPhone &&
       !validatePhoneNumber(departmentManagement.form.adminPhone)
     ) {
-      notification.error({ message: '请输入正确的手机号格式' })
+      notification.error({ message: t('userMgmt.phoneFormatInvalid') })
       return
     }
 
@@ -723,7 +734,7 @@ const handleDepartmentFormSubmit = async () => {
         name: departmentManagement.form.name.trim(),
         description: departmentManagement.form.description.trim() || undefined
       })
-      notification.success({ message: '部门更新成功' })
+      notification.success({ message: t('deptMgmt.departmentUpdated') })
     } else {
       // 创建部门，同时创建管理员
       await departmentApi.createDepartment({
@@ -734,17 +745,17 @@ const handleDepartmentFormSubmit = async () => {
         admin_phone: departmentManagement.form.adminPhone || undefined
       })
 
-      message.success(`部门创建成功，管理员 "${adminUid}" 已创建`)
+      message.success(t('deptMgmt.departmentCreated', { uid: adminUid }))
     }
 
     // 重新获取部门列表
     await fetchDepartments()
     departmentManagement.modalVisible = false
   } catch (error) {
-    console.error('部门操作失败:', error)
+    console.error(t('deptMgmt.departmentOperationFailedLog'), error)
     notification.error({
-      message: '操作失败',
-      description: error.message || '请稍后重试'
+      message: t('common.operationFailed'),
+      description: error.message || t('settings.retryLater')
     })
   } finally {
     departmentManagement.loading = false
@@ -754,23 +765,23 @@ const handleDepartmentFormSubmit = async () => {
 // 删除部门
 const confirmDeleteDepartment = (department) => {
   Modal.confirm({
-    title: '确认删除部门',
-    content: `确定要删除部门 "${department.name}" 吗？此操作不可撤销。该部门下的用户会被迁移到默认部门，部门级配置和部门 API Key 会一并清理。`,
-    okText: '删除',
+    title: t('deptMgmt.confirmDeleteDepartmentTitle'),
+    content: t('deptMgmt.confirmDeleteDepartmentContent', { name: department.name }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         departmentManagement.loading = true
         await departmentApi.deleteDepartment(department.id)
-        notification.success({ message: '部门删除成功' })
+        notification.success({ message: t('deptMgmt.departmentDeleted') })
         // 重新获取部门列表
         await fetchDepartments()
       } catch (error) {
-        console.error('删除部门失败:', error)
+        console.error(t('deptMgmt.deleteDepartmentFailedLog'), error)
         notification.error({
-          message: '删除失败',
-          description: error.message || '请稍后重试'
+          message: t('deptMgmt.deleteFailed'),
+          description: error.message || t('settings.retryLater')
         })
       } finally {
         departmentManagement.loading = false

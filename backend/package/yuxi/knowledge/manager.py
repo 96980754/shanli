@@ -111,6 +111,13 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.move_file(kb_id, file_id, new_parent_id)
 
+    async def rename_file(self, kb_id: str, file_id: str, new_name: str) -> dict:
+        """
+        重命名文件/文件夹
+        """
+        kb_instance = await self._get_kb_for_database(kb_id)
+        return await kb_instance.rename_file(kb_id, file_id, new_name)
+
     async def _get_kb_for_database(self, kb_id: str) -> KnowledgeBase:
         """
         根据数据库ID获取对应的知识库实例

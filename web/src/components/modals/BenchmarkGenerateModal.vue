@@ -1,27 +1,27 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="自动生成评估基准"
+    :title="t('benchmark.generateModalTitle')"
     width="600px"
     :mask-closable="!generating"
     :closable="!generating"
     @cancel="handleCancel"
   >
     <a-form ref="formRef" :model="formState" :rules="rules" layout="vertical">
-      <a-form-item label="基准名称" name="name">
-        <a-input v-model:value="formState.name" placeholder="请输入评估基准名称" />
+      <a-form-item :label="t('benchmark.benchmarkNameLabel')" name="name">
+        <a-input v-model:value="formState.name" :placeholder="t('benchmark.namePlaceholder')" />
       </a-form-item>
 
-      <a-form-item label="描述" name="description">
+      <a-form-item :label="t('benchmark.descriptionLabel')" name="description">
         <a-textarea
           v-model:value="formState.description"
-          placeholder="请输入评估基准描述（可选）"
+          :placeholder="t('benchmark.descriptionPlaceholder')"
           :rows="3"
         />
       </a-form-item>
 
-      <a-form-item label="构建方式" name="generation_mode">
-        <div class="generation-mode-cards" role="radiogroup" aria-label="构建方式">
+      <a-form-item :label="t('benchmark.generationModeLabel')" name="generation_mode">
+        <div class="generation-mode-cards" role="radiogroup" :aria-label="t('benchmark.generationModeLabel')">
           <div
             v-for="option in generationModeOptions"
             :key="option.value"
@@ -52,22 +52,22 @@
       </a-form-item>
 
       <a-form-item
-        label="LLM模型配置"
+        :label="t('benchmark.llmModelConfigLabel')"
         name="llm_model_spec"
-        :rules="[{ required: true, message: '请选择LLM模型' }]"
+        :rules="[{ required: true, message: t('benchmark.selectLlmModel') }]"
       >
         <ModelSelectorComponent
           :model_spec="formState.llm_model_spec"
-          placeholder="选择用于生成问题的LLM模型"
+          :placeholder="t('benchmark.selectLlmModelPlaceholder')"
           @select-model="handleSelectLLMModel"
         />
       </a-form-item>
 
-      <a-form-item label="生成参数" name="params">
+      <a-form-item :label="t('benchmark.generationParamsLabel')" name="params">
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item
-              label="问题数量"
+              :label="t('benchmark.questionQuantityLabel')"
               name="count"
               :labelCol="{ span: 24 }"
               :wrapperCol="{ span: 24 }"
@@ -77,7 +77,7 @@
                 :min="1"
                 :max="100"
                 style="width: 100%"
-                placeholder="生成问题数量"
+                :placeholder="t('benchmark.questionQuantityPlaceholder')"
               />
             </a-form-item>
           </a-col>
@@ -85,8 +85,8 @@
             <a-form-item name="neighbors_count" :labelCol="{ span: 24 }" :wrapperCol="{ span: 24 }">
               <template #label>
                 <span class="field-label-with-help">
-                  候选 Chunk 数量
-                  <a-tooltip title="每次生成问题时参考的候选 Chunk 总数">
+                  {{ $t('benchmark.candidateChunkCountLabel') }}
+                  <a-tooltip :title="t('benchmark.candidateChunkTooltip')">
                     <CircleHelp class="help-icon" />
                   </a-tooltip>
                 </span>
@@ -96,7 +96,7 @@
                 :min="0"
                 :max="10"
                 style="width: 100%"
-                placeholder="默认 1"
+                :placeholder="t('benchmark.defaultPlaceholder', { value: 1 })"
               />
             </a-form-item>
           </a-col>
@@ -108,8 +108,8 @@
             >
               <template #label>
                 <span class="field-label-with-help">
-                  构建并发数
-                  <a-tooltip title="同时生成评估题目的 worker 数，过高可能触发模型服务限流">
+                  {{ $t('benchmark.buildConcurrencyLabel') }}
+                  <a-tooltip :title="t('benchmark.buildConcurrencyTooltip')">
                     <CircleHelp class="help-icon" />
                   </a-tooltip>
                 </span>
@@ -119,7 +119,7 @@
                 :min="1"
                 :max="20"
                 style="width: 100%"
-                placeholder="默认 10"
+                :placeholder="t('benchmark.defaultPlaceholder', { value: 10 })"
               />
             </a-form-item>
           </a-col>
@@ -131,8 +131,8 @@
             >
               <template #label>
                 <span class="field-label-with-help">
-                  每轮扩展 Chunk 数
-                  <a-tooltip title="PPR 扩散后每轮加入的最高分 Chunk 数">
+                  {{ $t('benchmark.expandChunkPerRoundLabel') }}
+                  <a-tooltip :title="t('benchmark.expandChunkTooltip')">
                     <CircleHelp class="help-icon" />
                   </a-tooltip>
                 </span>
@@ -142,7 +142,7 @@
                 :min="1"
                 :max="3"
                 style="width: 100%"
-                placeholder="默认 1"
+                :placeholder="t('benchmark.defaultPlaceholder', { value: 1 })"
               />
             </a-form-item>
           </a-col>
@@ -152,14 +152,14 @@
     <template #footer>
       <div class="benchmark-modal-footer">
         <div class="footer-actions">
-          <a-button :disabled="generating" @click="handleCancel">取消</a-button>
+          <a-button :disabled="generating" @click="handleCancel">{{ $t('common.cancel') }}</a-button>
           <a-button
             type="primary"
             :loading="generating"
             :disabled="generating"
             @click="handleGenerate"
           >
-            确定
+            {{ $t('common.ok') }}
           </a-button>
         </div>
       </div>
@@ -173,8 +173,10 @@ import { message } from 'ant-design-vue'
 import { CircleHelp, Database, Network } from 'lucide-vue-next'
 import { evaluationApi, graphBuildApi } from '@/apis/knowledge_api'
 import { useConfigStore } from '@/stores/config'
+import { useI18n } from 'vue-i18n'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 
 const props = defineProps({
@@ -217,14 +219,14 @@ const formState = reactive({
 })
 
 // 表单验证规则
-const rules = {
+const rules = computed(() => ({
   name: [
-    { required: true, message: '请输入基准名称', trigger: 'blur' },
-    { min: 2, max: 100, message: '基准名称长度应在2-100个字符之间', trigger: 'blur' }
+    { required: true, message: t('benchmark.nameRequired'), trigger: 'blur' },
+    { min: 2, max: 100, message: t('benchmark.nameLengthRange'), trigger: 'blur' }
   ],
-  count: [{ required: true, message: '请输入生成问题数量', trigger: 'blur' }],
-  concurrency_count: [{ required: true, message: '请输入构建并发数', trigger: 'blur' }]
-}
+  count: [{ required: true, message: t('benchmark.countRequired'), trigger: 'blur' }],
+  concurrency_count: [{ required: true, message: t('benchmark.concurrencyRequired'), trigger: 'blur' }]
+}))
 
 // 双向绑定visible
 const visible = computed({
@@ -237,21 +239,21 @@ const graphEnhancedDisabled = computed(() => graphIndexedChunks.value <= 0)
 const generationModeOptions = computed(() => [
   {
     value: 'vector',
-    label: '向量构建',
-    tag: '默认',
-    description: '基于向量相似度召回 chunks，稳定适用于所有知识库。',
-    helper: '适合快速生成通用评估基准。',
+    label: t('benchmark.vectorBuildLabel'),
+    tag: t('benchmark.defaultTag'),
+    description: t('benchmark.vectorBuildDesc'),
+    helper: t('benchmark.vectorBuildHelper'),
     icon: Database,
     disabled: false
   },
   {
     value: 'graph_enhanced',
-    label: '图增强构建',
-    tag: '图谱',
-    description: '在向量召回基础上结合知识图谱扩展相关 chunks。',
+    label: t('benchmark.graphEnhancedBuildLabel'),
+    tag: t('benchmark.graphTag'),
+    description: t('benchmark.graphBuildDesc'),
     helper: graphEnhancedDisabled.value
-      ? '当前知识库尚未完成图谱构建，暂不能使用图增强构建'
-      : `已构建图谱的 chunks：${graphIndexedChunks.value}`,
+      ? t('benchmark.graphBuildDisabledHelper')
+      : t('benchmark.graphBuiltChunksHelper', { count: graphIndexedChunks.value }),
     icon: Network,
     disabled: graphEnhancedDisabled.value
   }
@@ -303,18 +305,18 @@ const handleGenerate = async () => {
     const response = await evaluationApi.generateDataset(props.kbId, params)
 
     if (response.message === 'success') {
-      message.success('生成任务已提交')
+      message.success(t('benchmark.generateTaskSubmitted'))
       visible.value = false
       resetForm()
       emit('success')
     } else {
       generating.value = false
-      message.error(response.message || '生成失败')
+      message.error(response.message || t('benchmark.generateFailed'))
     }
   } catch (error) {
     console.error('生成失败:', error)
     generating.value = false
-    message.error(error?.response?.data?.detail || '生成失败')
+    message.error(error?.response?.data?.detail || t('benchmark.generateFailed'))
   }
 }
 

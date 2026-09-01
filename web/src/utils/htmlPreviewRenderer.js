@@ -1,4 +1,5 @@
 import { escapeHtml } from './html.js'
+import { i18n } from '@/i18n'
 
 export const HTML_PREVIEW_WIDTH = 800
 export const HTML_PREVIEW_HEIGHT = 360
@@ -22,9 +23,9 @@ const escapeSrcdoc = (value) => escapeHtml(value).replaceAll('\r', '').replaceAl
 const renderHtmlPreviewLoading = () =>
   renderHtmlPreviewContainer(
     [
-      `<div class="html-preview-loading-slot" aria-live="polite" aria-label="HTML 预览加载中">`,
+      `<div class="html-preview-loading-slot" aria-live="polite" aria-label="${i18n.global.t('renderer.htmlPreviewLoadingAria')}">`,
       `<div class="html-preview-loading-canvas">`,
-      `<div class="html-preview-loading-text">HTML 预览加载中...</div>`,
+      `<div class="html-preview-loading-text">${i18n.global.t('renderer.htmlPreviewLoading')}</div>`,
       `<div class="html-preview-skeleton html-preview-skeleton-title"></div>`,
       `<div class="html-preview-skeleton-grid">`,
       `<div class="html-preview-skeleton html-preview-skeleton-card"></div>`,

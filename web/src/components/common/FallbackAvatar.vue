@@ -18,7 +18,10 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getAvatarFallbackStyle, getAvatarInitials } from '@/utils/pixelAvatar'
+
+const { t } = useI18n()
 
 const props = defineProps({
   src: {
@@ -83,7 +86,7 @@ const avatarSizeStyle = computed(() => {
 })
 
 const resolvedAlt = computed(
-  () => props.alt || props.name || (props.kind === 'agent' ? '智能体头像' : '用户头像')
+  () => props.alt || props.name || (props.kind === 'agent' ? t('userInfo.agentAvatarAlt') : t('userInfo.avatarAlt'))
 )
 
 const handleImageError = () => {

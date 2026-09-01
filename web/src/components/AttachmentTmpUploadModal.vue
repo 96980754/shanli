@@ -1,9 +1,9 @@
 <template>
   <a-modal
     :open="open"
-    title="添加附件"
-    ok-text="添加附件"
-    cancel-text="取消"
+    :title="$t('upload.addAttachmentTitle')"
+    :ok-text="$t('upload.addAttachmentTitle')"
+    :cancel-text="$t('common.cancel')"
     :confirm-loading="confirming"
     :ok-button-props="{ disabled: confirmDisabled }"
     @ok="handleConfirm"
@@ -16,8 +16,8 @@
       :disabled="confirming"
       class="attachment-dropzone"
     >
-      <p class="dropzone-title">点击或拖拽文件到此处上传</p>
-      <p class="dropzone-desc">支持任意文件格式 ≤ 5 MB；PDF 和图片可选解析为 Markdown。</p>
+      <p class="dropzone-title">{{ $t('upload.attachmentClickOrDrag') }}</p>
+      <p class="dropzone-desc">{{ $t('upload.attachmentSupportedHint') }}</p>
     </a-upload-dragger>
 
     <div v-if="fileItems.length" class="attachment-list">
@@ -76,7 +76,7 @@
                     @click="handleParseMethodChange(item.localId, method)"
                   >
                     <span class="parse-method-option-header">
-                      <span class="parse-method-name">{{ methodLabels[method] || method }}</span>
+                      <span class="parse-method-name">{{ getMethodLabel(method) }}</span>
                       <span
                         class="parse-method-status"
                         :class="`status-${getMethodStatus(method)}`"
@@ -93,7 +93,9 @@
                       class="unavailable-toggle"
                       @click="toggleUnavailableParseMethods(item.localId)"
                     >
-                      <span>不可用选项（{{ getUnavailableParseMethods(item).length }}）</span>
+                      <span>
+                        {{ $t('upload.unavailableOptions', { count: getUnavailableParseMethods(item).length }) }}
+                      </span>
                       <ChevronUp v-if="item.unavailableMethodsExpanded" :size="14" />
                       <ChevronDown v-else :size="14" />
                     </button>
@@ -107,9 +109,7 @@
                         disabled
                       >
                         <span class="parse-method-option-header">
-                          <span class="parse-method-name">{{
-                            methodLabels[method] || method
-                          }}</span>
+                          <span class="parse-method-name">{{ getMethodLabel(method) }}</span>
                           <span
                             class="parse-method-status"
                             :class="`status-${getMethodStatus(method)}`"
@@ -131,7 +131,7 @@
                     :disabled="isParseDisabled(item)"
                     @click="handleStartParse(item.localId)"
                   >
-                    开始解析
+                    {{ $t('upload.startParse') }}
                   </a-button>
                 </div>
               </template>
@@ -142,7 +142,7 @@
                 :loading="item.status === 'parsing'"
                 :disabled="confirming"
               >
-                可解析
+                {{ $t('upload.parsable') }}
               </a-button>
             </a-popover>
           </div>
@@ -154,6 +154,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { ChevronDown, ChevronUp, X } from 'lucide-vue-next'
 import { threadApi } from '@/apis'
@@ -171,6 +172,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:open', 'added'])
 
+const { t } = useI18n()
+
 const configStore = useConfigStore()
 const DEFAULT_OCR_ENGINE = 'rapid_ocr'
 const fileItems = ref([])
@@ -179,7 +182,7 @@ let localIdSeed = 0
 let consumedInitialFilesKey = 0
 
 const methodLabels = {
-  disable: 'PDF 文本提取',
+  disable: 'upload.parseMethodDisable',
   rapid_ocr: 'RapidOCR',
   mineru_ocr: 'MinerU OCR',
   mineru_official: 'MinerU Official',
@@ -187,6 +190,11 @@ const methodLabels = {
   deepseek_ocr: 'DeepSeek OCR',
   paddleocr_vl_1_6: 'PaddleOCR-VL-1.6',
   paddleocr_pp_ocrv6: 'PP-OCRv6'
+}
+
+const getMethodLabel = (method) => {
+  const label = methodLabels[method] || method
+  return typeof label === 'string' && label.includes('.') ? t(label) : label
 }
 
 const ocrMethodKeys = [
@@ -206,15 +214,15 @@ const ocrHealthStatus = ref(defaultOcrHealthStatus())
 const ocrHealthChecking = ref(false)
 
 const methodStatusLabels = {
-  local: '无需 OCR',
-  healthy: '可用',
-  configured: '已配置',
-  unavailable: '不可用',
-  unhealthy: '异常',
-  timeout: '超时',
-  error: '异常',
-  checking: '检查中',
-  unknown: '状态未知'
+  local: 'upload.methodStatusNoOcr',
+  healthy: 'upload.ocrStatusHealthy',
+  configured: 'upload.ocrStatusConfigured',
+  unavailable: 'upload.ocrStatusUnavailable',
+  unhealthy: 'upload.ocrStatusAbnormal',
+  timeout: 'upload.ocrStatusTimeout',
+  error: 'upload.ocrStatusAbnormal',
+  checking: 'upload.ocrStatusChecking',
+  unknown: 'upload.ocrStatusUnknown'
 }
 
 const busy = computed(() =>
@@ -235,7 +243,7 @@ watch(
   }
 )
 
-const getErrorMessage = (error, fallback = '操作失败') => {
+const getErrorMessage = (error, fallback = t('common.operationFailed')) => {
   return error?.response?.data?.detail || error?.message || fallback
 }
 
@@ -328,7 +336,7 @@ const uploadFile = async (file) => {
   } catch (error) {
     updateItem(localId, {
       status: 'error',
-      error: getErrorMessage(error, '上传失败')
+      error: getErrorMessage(error, t('upload.uploadFailed'))
     })
   }
 }
@@ -365,26 +373,29 @@ const getMethodStatus = (method) => {
   return current?.status || 'unknown'
 }
 
-const getMethodStatusLabel = (method) => methodStatusLabels[getMethodStatus(method)] || '状态未知'
+const getMethodStatusLabel = (method) => {
+  const key = methodStatusLabels[getMethodStatus(method)]
+  return key ? t(key) : t('upload.ocrStatusUnknown')
+}
 
 const getMethodDescription = (method) => {
-  if (method === 'disable') return '使用文件内置文本层，不调用 OCR 服务'
+  if (method === 'disable') return t('upload.disableMethodDesc')
 
   const messageText = ocrHealthStatus.value?.[method]?.message
   if (messageText) return messageText
 
   const status = getMethodStatus(method)
   const fallbackMap = {
-    healthy: '服务正常',
-    configured: 'Token 已配置，将在解析时验证',
-    unavailable: '服务不可用',
-    unhealthy: '服务异常',
-    timeout: '服务检查超时',
-    error: '服务异常',
-    checking: '正在检查服务状态',
-    unknown: '服务状态未知'
+    healthy: 'upload.ocrDescHealthy',
+    configured: 'upload.ocrDescConfigured',
+    unavailable: 'upload.ocrDescUnavailable',
+    unhealthy: 'upload.ocrDescUnhealthy',
+    timeout: 'upload.ocrDescTimeout',
+    error: 'upload.ocrDescUnhealthy',
+    checking: 'upload.ocrDescChecking',
+    unknown: 'upload.ocrDescUnknown'
   }
-  return fallbackMap[status] || '服务状态未知'
+  return fallbackMap[status] ? t(fallbackMap[status]) : t('upload.ocrDescUnknown')
 }
 
 const isUnavailableParseMethod = (method) =>
@@ -449,12 +460,12 @@ const handleParse = async (item) => {
       truncated: response.truncated,
       parseMethod: response.parse_method
     })
-    message.success('附件解析完成')
+    message.success(t('upload.attachmentParseComplete'))
   } catch (error) {
     updateItem(item.localId, {
       ...clearParsedState,
       status: 'uploaded',
-      parseError: getErrorMessage(error, '解析失败')
+      parseError: getErrorMessage(error, t('upload.parseFailed'))
     })
   }
 }
@@ -491,16 +502,16 @@ const handleConfirm = async () => {
   try {
     const threadId = props.threadId || (props.ensureThread ? await props.ensureThread() : '')
     if (!threadId) {
-      message.error('创建对话失败，无法添加附件')
+      message.error(t('upload.attachCreateThreadFailed'))
       return
     }
 
     const response = await threadApi.confirmTmpThreadAttachments(threadId, attachments)
-    message.success('附件已添加')
+    message.success(t('upload.attachmentAdded'))
     emit('added', response)
     emit('update:open', false)
   } catch (error) {
-    message.error(getErrorMessage(error, '添加附件失败'))
+    message.error(getErrorMessage(error, t('upload.attachmentAddFailed')))
   } finally {
     confirming.value = false
   }
@@ -523,17 +534,17 @@ const getStatusColor = (status) => {
 
 const getStatusLabel = (status) => {
   const labelMap = {
-    uploading: '上传中',
-    uploaded: '已上传',
-    parsing: '解析中',
-    parsed: '已解析',
-    error: '失败'
+    uploading: 'upload.statusUploading',
+    uploaded: 'upload.statusUploaded',
+    parsing: 'upload.statusParsing',
+    parsed: 'upload.statusParsed',
+    error: 'common.failed'
   }
-  return labelMap[status] || status
+  return labelMap[status] ? t(labelMap[status]) : status
 }
 
 const formatFileSize = (size) => {
-  if (!Number.isFinite(size)) return '未知大小'
+  if (!Number.isFinite(size)) return t('upload.unknownSize')
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`

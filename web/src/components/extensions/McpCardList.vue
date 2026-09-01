@@ -1,12 +1,12 @@
 <template>
   <div class="mcp-cards-page extension-page-root">
-    <PageShoulder search-placeholder="搜索 MCP..." v-model:search="searchQuery">
+    <PageShoulder :search-placeholder="$t('mcp.searchMcp')" v-model:search="searchQuery">
       <template #actions>
         <a-button type="primary" @click="handleMcpAdd" class="lucide-icon-btn">
           <Plus :size="14" />
-          <span>添加 MCP</span>
+          <span>{{ $t('mcp.addButton') }}</span>
         </a-button>
-        <a-tooltip title="刷新 MCP" placement="bottom">
+        <a-tooltip :title="$t('mcp.refreshTip')" placement="bottom">
           <a-button class="lucide-icon-btn" :disabled="loading" @click="fetchServers">
             <RefreshCw :size="14" />
           </a-button>
@@ -20,19 +20,19 @@
     >
       <a-empty
         :image="false"
-        :description="searchQuery ? '无匹配 MCP' : '暂无 MCP，点击上方按钮添加'"
+        :description="searchQuery ? $t('mcp.noMatchMcp') : $t('mcp.emptyMcp')"
       />
     </div>
 
     <template v-else>
-      <div v-if="filteredEnabledServers.length" class="extension-section-header">已添加</div>
+      <div v-if="filteredEnabledServers.length" class="extension-section-header">{{ $t('mcp.group.enabled') }}</div>
       <ExtensionCardGrid v-if="filteredEnabledServers.length" :min-width="360">
         <InfoCard
           v-for="server in filteredEnabledServers"
           :key="server.slug"
           variant="mini"
           :title="formatExtensionCardTitle(server.name)"
-          :description="server.description || '暂无描述'"
+          :description="server.description || $t('common.noDescription')"
           @click="handleCardClick(server)"
         >
           <template #icon>
@@ -43,7 +43,7 @@
               type="button"
               class="mcp-card-action mcp-card-action-danger"
               :disabled="isActionLoading(server)"
-              :aria-label="server.created_by === 'system' ? '移除 MCP' : '删除 MCP'"
+              :aria-label="server.created_by === 'system' ? $t('mcp.removeMcp') : $t('mcp.deleteMcp')"
               @click.stop="handleRemoveServer(server)"
             >
               <Check :size="15" class="action-icon action-icon-check" />
@@ -53,14 +53,14 @@
         </InfoCard>
       </ExtensionCardGrid>
 
-      <div v-if="filteredDisabledServers.length" class="extension-section-header">可添加</div>
+      <div v-if="filteredDisabledServers.length" class="extension-section-header">{{ $t('mcp.group.disabled') }}</div>
       <ExtensionCardGrid v-if="filteredDisabledServers.length" :min-width="360">
         <InfoCard
           v-for="server in filteredDisabledServers"
           :key="server.slug"
           variant="mini"
           :title="formatExtensionCardTitle(server.name)"
-          :description="server.description || '暂无描述'"
+          :description="server.description || $t('common.noDescription')"
           @click="openBasicInfo(server)"
         >
           <template #icon>
@@ -71,7 +71,7 @@
               type="button"
               class="mcp-card-action"
               :disabled="isActionLoading(server)"
-              aria-label="添加 MCP"
+              :aria-label="$t('mcp.addButton')"
               @click.stop="handleSetServerEnabled(server, true)"
             >
               <Plus :size="15" class="action-icon" />
@@ -99,9 +99,9 @@
               {{ formatExtensionCardTitle(previewServer.name) }}
             </div>
             <div class="mcp-basic-info-meta">
-              <span>{{ previewServer.transport || '未知传输类型' }}</span>
+              <span>{{ previewServer.transport || $t('mcp.unknownTransport') }}</span>
               <span v-if="previewServer.created_by === 'system'" class="mcp-basic-info-tag">
-                内置
+                {{ $t('mcp.builtin') }}
               </span>
             </div>
           </div>
@@ -109,30 +109,30 @@
 
         <div class="mcp-basic-info-body">
           <div class="mcp-basic-info-row">
-            <label>描述</label>
-            <span>{{ previewServer.description || '暂无描述' }}</span>
+            <label>{{ $t('mcp.info.description') }}</label>
+            <span>{{ previewServer.description || $t('common.noDescription') }}</span>
           </div>
           <div class="mcp-basic-info-row">
-            <label>传输类型</label>
+            <label>{{ $t('mcp.info.transport') }}</label>
             <span>{{ previewServer.transport || '-' }}</span>
           </div>
           <div
             v-if="Array.isArray(previewServer.tags) && previewServer.tags.length > 0"
             class="mcp-basic-info-row"
           >
-            <label>标签</label>
+            <label>{{ $t('mcp.info.tags') }}</label>
             <span class="mcp-basic-info-tags">
               <a-tag v-for="tag in previewServer.tags" :key="tag">{{ tag }}</a-tag>
             </span>
           </div>
           <div class="mcp-basic-info-row">
-            <label>创建人</label>
+            <label>{{ $t('mcp.info.createdBy') }}</label>
             <span>{{ previewServer.created_by || '-' }}</span>
           </div>
         </div>
 
         <div class="mcp-basic-info-footer">
-          <a-button @click="closeBasicInfo">关闭</a-button>
+          <a-button @click="closeBasicInfo">{{ $t('common.close') }}</a-button>
           <a-button
             type="primary"
             class="lucide-icon-btn"
@@ -140,7 +140,7 @@
             @click="handleSetServerEnabled(previewServer, true)"
           >
             <template #icon><Plus :size="14" /></template>
-            添加
+            {{ $t('mcp.action.add') }}
           </a-button>
         </div>
       </div>
@@ -157,6 +157,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { Check, Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { mcpApi } from '@/apis/mcp_api'
@@ -167,6 +168,7 @@ import McpFormModal from './McpFormModal.vue'
 import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const loading = ref(false)
 const servers = ref([])
@@ -235,14 +237,17 @@ const handleSetServerEnabled = async (server, enabled) => {
     actionLoadingSlug.value = server.slug
     const result = await mcpApi.updateMcpServerStatus(server.slug, enabled)
     if (result.success) {
-      message.success(result.message || `MCP 已${enabled ? '添加' : '移除'}`)
+      message.success(
+        result.message ||
+          t('mcp.setEnabledSuccess', { action: enabled ? t('mcp.action.add') : t('mcp.action.remove') })
+      )
       if (enabled) closeBasicInfo()
       await fetchServers()
     } else {
-      message.error(result.message || '操作失败')
+      message.error(result.message || t('mcp.operationFail'))
     }
   } catch (err) {
-    message.error(err.message || '操作失败')
+    message.error(err.message || t('mcp.operationFail'))
   } finally {
     actionLoadingSlug.value = ''
   }
@@ -258,23 +263,23 @@ const handleRemoveServer = (server) => {
 
 const confirmDeleteServer = (server) => {
   Modal.confirm({
-    title: '确认删除 MCP',
-    content: `确定要删除 MCP "${server.name}" 吗？此操作不可撤销。`,
-    okText: '删除',
+    title: t('mcp.deleteConfirmTitle'),
+    content: t('mcp.deleteConfirmContent', { name: server.name }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         actionLoadingSlug.value = server.slug
         const result = await mcpApi.deleteMcpServer(server.slug)
         if (result.success) {
-          message.success('MCP 删除成功')
+          message.success(t('mcp.deleteSuccess'))
           await fetchServers()
         } else {
-          message.error(result.message || '删除失败')
+          message.error(result.message || t('common.deleteFailed'))
         }
       } catch (err) {
-        message.error(err.message || '删除失败')
+        message.error(err.message || t('common.deleteFailed'))
       } finally {
         actionLoadingSlug.value = ''
       }
@@ -290,7 +295,7 @@ const fetchServers = async () => {
       servers.value = result.data || []
     }
   } catch (err) {
-    message.error(err.message || '获取 MCP 列表失败')
+    message.error(err.message || t('mcp.fetchListFail'))
   } finally {
     loading.value = false
   }

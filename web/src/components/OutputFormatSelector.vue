@@ -11,7 +11,7 @@
         <a-menu-item v-for="option in formatOptions" :key="option.value" @click="handleSelect(option.value)">
           <span class="format-option">
             <component :is="option.icon" :size="14" />
-            <span>{{ option.label }}</span>
+            <span>{{ $t(option.label) }}</span>
           </span>
         </a-menu-item>
       </a-menu>
@@ -21,6 +21,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { AlignLeft, List, ListOrdered, Table } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -35,18 +36,19 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select-format'])
+const { t } = useI18n()
 
 const formatOptions = [
-  { value: 'default', label: '格式·默认', icon: AlignLeft },
-  { value: 'table', label: '格式·表格', icon: Table },
-  { value: 'steps', label: '格式·步骤', icon: ListOrdered },
-  { value: 'list', label: '格式·列表', icon: List }
+  { value: 'default', label: 'formatSel.default', icon: AlignLeft },
+  { value: 'table', label: 'formatSel.table', icon: Table },
+  { value: 'steps', label: 'formatSel.steps', icon: ListOrdered },
+  { value: 'list', label: 'formatSel.list', icon: List }
 ]
 
 const dropdownOpen = ref(false)
 
 const currentOption = computed(() => formatOptions.find((option) => option.value === props.value) || formatOptions[0])
-const currentLabel = computed(() => currentOption.value.label)
+const currentLabel = computed(() => t(currentOption.value.label))
 const currentIcon = computed(() => currentOption.value.icon)
 
 const formatSelectClasses = computed(() => ({

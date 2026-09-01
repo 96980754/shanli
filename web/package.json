@@ -10,6 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:permissions": "node src/components/__tests__/knowledgePermissionPanelHelpers.test.js",
+    "test:frontend": "for f in src/components/__tests__/*.test.js src/utils/__tests__/*.test.js; do node --import ./scripts/test-alias-register.mjs \"$f\" || exit 1; done",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "lint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/"
   },

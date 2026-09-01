@@ -1,5 +1,6 @@
 import { h } from 'vue'
 import { Database, DatabaseZap } from 'lucide-vue-next'
+import { i18n } from '@/i18n'
 
 const ICON_BASE = 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons'
 
@@ -17,7 +18,7 @@ export const brandIcons = {
 
 export const getKbTypeLabel = (type) => {
   const labels = {
-    milvus: 'AI知识库',
+    milvus: i18n.global.t('db.kbTypeMilvus'),
     dify: 'Dify',
     notion: 'Notion'
   }

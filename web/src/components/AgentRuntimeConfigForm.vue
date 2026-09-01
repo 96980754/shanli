@@ -16,12 +16,16 @@
             <a-alert
               v-if="isEmptyConfig"
               type="warning"
-              message="该智能体没有配置项"
+              :message="$t('agentCfg.noConfigItemsAlert')"
               show-icon
               class="config-alert"
             />
             <!-- 统一显示所有配置项 -->
-            <a-empty v-if="isCurrentSegmentEmpty" description="暂无配置项" class="config-empty" />
+            <a-empty
+              v-if="isCurrentSegmentEmpty"
+              :description="$t('agentCfg.noConfigItems')"
+              class="config-empty"
+            />
             <template v-for="(value, key) in filteredConfigurableItems" :key="key">
               <a-form-item :label="getConfigLabel(key, value)" :name="key" class="config-item">
                 <p v-if="value.description" class="config-description">{{ value.description }}</p>
@@ -51,7 +55,7 @@
                       {{ agentConfig[key] || getPlaceholder(key, value) }}
                     </div>
                     <div class="edit-hint">
-                      {{ isReadOnlyConfig ? '查看' : '点击查看并编辑' }}
+                      {{ isReadOnlyConfig ? $t('agentCfg.view') : $t('agentCfg.clickToEdit') }}
                     </div>
                   </div>
                 </div>
@@ -89,10 +93,12 @@
                   <!-- Case 1: <= 5 options, inline list -->
                   <div v-if="getConfigOptions(value).length <= 5" class="multi-select-cards">
                     <div class="multi-select-label">
-                      <span
-                        >已选择 {{ getSelectedCount(key) }} 项 | 共
-                        {{ getConfigOptions(value).length }} 项</span
-                      >
+                      <span>{{
+                        $t('agentCfg.selectedCountSummary', {
+                          count: getSelectedCount(key),
+                          total: getConfigOptions(value).length
+                        })
+                      }}</span>
                       <div v-if="!isReadOnlyConfig" class="label-actions">
                         <a-button
                           type="link"
@@ -101,7 +107,7 @@
                           @click="clearSelection(key)"
                           v-if="getSelectedCount(key) > 0"
                         >
-                          清空
+                          {{ $t('agentCfg.clear') }}
                         </a-button>
                         <template v-if="isToolsKind(value.kind)">
                           <a-divider type="vertical" />
@@ -112,7 +118,7 @@
                             class="inline-action-btn lucide-icon-btn"
                           >
                             <RotateCw :size="12" />
-                            刷新
+                            {{ $t('common.refresh') }}
                           </a-button>
                           <a-button
                             v-if="canNavigateToConfigPage(value.kind)"
@@ -122,7 +128,7 @@
                             class="inline-action-btn lucide-icon-btn"
                           >
                             <Settings :size="12" />
-                            配置
+                            {{ $t('agentCfg.configure') }}
                           </a-button>
                         </template>
                       </div>
@@ -163,10 +169,12 @@
                   <div v-else class="selection-container">
                     <div class="selection-summary">
                       <div class="selection-summary-info">
-                        <span class="selection-count"
-                          >已选择 {{ getSelectedCount(key) }} 项 | 共
-                          {{ getConfigOptions(value).length }} 项</span
-                        >
+                        <span class="selection-count">{{
+                          $t('agentCfg.selectedCountSummary', {
+                            count: getSelectedCount(key),
+                            total: getConfigOptions(value).length
+                          })
+                        }}</span>
 
                         <a-button
                           v-if="!isReadOnlyConfig && getSelectedCount(key) > 0"
@@ -175,7 +183,7 @@
                           class="clear-btn"
                           @click="clearSelection(key)"
                         >
-                          清空
+                          {{ $t('agentCfg.clear') }}
                         </a-button>
                       </div>
 
@@ -186,7 +194,7 @@
                         class="selection-trigger-btn"
                         @click="openSelectionModal(key)"
                       >
-                        选择...
+                        {{ $t('agentCfg.selectEllipsis') }}
                       </a-button>
                     </div>
 
@@ -246,10 +254,7 @@
                   aria-live="polite"
                 >
                   <AlertTriangle :size="14" />
-                  <span>
-                    已启用知识库，但未选择 knowledge-base Skill。Agent
-                    可能无法调用知识库检索、打开文档等工具。
-                  </span>
+                  <span>{{ $t('agentCfg.knowledgeSkillWarning') }}</span>
                 </div>
               </a-form-item>
             </template>
@@ -260,7 +265,7 @@
 
     <a-modal
       v-model:open="selectionModalOpen"
-      :title="`选择${configurableItems[currentConfigKey]?.name || '项目'}`"
+      :title="selectionModalTitle"
       :width="800"
       :footer="null"
       :maskClosable="false"
@@ -270,7 +275,7 @@
         <div class="selection-search">
           <a-input
             v-model:value="selectionSearchText"
-            placeholder="搜索..."
+            :placeholder="$t('agentCfg.searchPlaceholder')"
             allow-clear
             class="search-input"
           >
@@ -284,10 +289,10 @@
               size="small"
               @click="refreshConfigOptions(currentConfigKey, currentConfigKind)"
               class="inline-action-btn lucide-icon-btn"
-              title="刷新列表"
+              :title="$t('agentCfg.refreshList')"
             >
               <RotateCw :size="14" />
-              刷新
+              {{ $t('common.refresh') }}
             </a-button>
             <a-button
               v-if="canNavigateToConfigPage(currentConfigKind)"
@@ -295,10 +300,10 @@
               size="small"
               @click="navigateToConfigPage(currentConfigKind)"
               class="inline-action-btn lucide-icon-btn"
-              title="跳转配置"
+              :title="$t('agentCfg.goToConfig')"
             >
               <Settings :size="14" />
-              配置
+              {{ $t('agentCfg.configure') }}
             </a-button>
           </template>
         </div>
@@ -330,13 +335,15 @@
         </div>
 
         <div class="selection-modal-footer">
-          <div class="selected-count">已选择 {{ tempSelectedValues.length }} 项</div>
+          <div class="selected-count">
+            {{ $t('agentCfg.selectedCount', { count: tempSelectedValues.length }) }}
+          </div>
 
           <div class="modal-actions">
-            <a-button @click="closeSelectionModal">取消</a-button>
+            <a-button @click="closeSelectionModal">{{ $t('common.cancel') }}</a-button>
 
             <a-button v-if="!isReadOnlyConfig" type="primary" @click="confirmSelection">
-              确认
+              {{ $t('common.ok') }}
             </a-button>
           </div>
         </div>
@@ -372,14 +379,14 @@
             <template #icon>
               <RotateCcw :size="14" />
             </template>
-            恢复默认
+            {{ $t('agentCfg.restoreDefault') }}
           </a-button>
           <div class="system-prompt-modal-actions">
             <a-button @click="closeSystemPromptModal">{{
-              isReadOnlyConfig ? '关闭' : '取消'
+              isReadOnlyConfig ? $t('agentCfg.close') : $t('common.cancel')
             }}</a-button>
             <a-button v-if="!isReadOnlyConfig" type="primary" @click="saveSystemPrompt">
-              保存
+              {{ $t('common.save') }}
             </a-button>
           </div>
         </div>
@@ -390,6 +397,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { AlertTriangle, Check, Plus, Search, RotateCw, RotateCcw, Settings } from 'lucide-vue-next'
@@ -415,6 +423,7 @@ const props = defineProps({
   }
 })
 
+const { t } = useI18n()
 const agentStore = useAgentStore()
 const router = useRouter()
 
@@ -431,11 +440,11 @@ const systemPromptModalOpen = ref(false)
 const currentSystemPromptKey = ref(null)
 const systemPromptDraft = ref('')
 const currentSegment = ref('model')
-const segmentOptions = [
-  { label: '模型', value: 'model' },
-  { label: '工具', value: 'tools' },
-  { label: '其他', value: 'other' }
-]
+const segmentOptions = computed(() => [
+  { label: t('agentCfg.segmentModel'), value: 'model' },
+  { label: t('agentCfg.segmentTools'), value: 'tools' },
+  { label: t('agentCfg.segmentOther'), value: 'other' }
+])
 const activeSegment = computed(() => (props.showSegmented ? currentSegment.value : props.segment))
 const isToolResourceKind = (kind) => isDefaultAllAgentResourceKind(kind)
 const KNOWLEDGE_BASE_SKILL_SLUG = 'knowledge-base'
@@ -491,10 +500,10 @@ const refreshConfigOptions = async () => {
   if (isReadOnlyConfig.value || !selectedAgentId.value) return
   try {
     await agentStore.fetchAgentDetail(selectedAgentId.value, true)
-    message.success('配置选项已刷新')
+    message.success(t('agentCfg.configOptionsRefreshed'))
   } catch (error) {
-    console.error('刷新配置选项失败:', error)
-    message.error('刷新失败')
+    console.error(t('agentCfg.refreshConfigOptionsFailedLog'), error)
+    message.error(t('settings.refreshFail'))
   }
 }
 
@@ -548,15 +557,20 @@ const currentConfigKind = computed(() => {
   return configurableItems.value[currentConfigKey.value]?.kind
 })
 
+const selectionModalTitle = computed(() => {
+  const name = configurableItems.value[currentConfigKey.value]?.name || t('agentCfg.item')
+  return t('agentCfg.selectItemTitle', { name })
+})
+
 const systemPromptModalTitle = computed(() => {
   if (!currentSystemPromptKey.value) return 'System Prompt'
   return configurableItems.value[currentSystemPromptKey.value]?.name || currentSystemPromptKey.value
 })
 
 const systemPromptModalPlaceholder = computed(() => {
-  if (!currentSystemPromptKey.value) return '请输入系统提示词'
+  if (!currentSystemPromptKey.value) return t('agentCfg.systemPromptPlaceholder')
   const currentItem = configurableItems.value[currentSystemPromptKey.value]
-  if (!currentItem) return '请输入系统提示词'
+  if (!currentItem) return t('agentCfg.systemPromptPlaceholder')
   return getPlaceholder(currentSystemPromptKey.value, currentItem)
 })
 
@@ -614,7 +628,7 @@ const getConfigLabel = (key, value) => {
 }
 
 const getPlaceholder = (_key, value) => {
-  return `（默认: ${value.default}）`
+  return t('agentCfg.defaultPlaceholder', { value: value.default })
 }
 
 const handleModelChange = (key, spec) => {
@@ -766,7 +780,7 @@ const validateAndFilterConfig = () => {
 
       validatedConfig[key] = currentValue.filter((value) => validValues.has(String(value)))
       if (validatedConfig[key].length !== currentValue.length) {
-        console.warn(`配置项 ${key} 中包含无效选项，已自动过滤`)
+        console.warn(t('agentCfg.invalidOptionsFiltered', { key }))
       }
     }
   })

@@ -86,9 +86,9 @@ class KnowledgeGapAdminService:
         if filters.get("status"):
             self.validate_status(filters["status"])
         items, total = await KnowledgeGapRepository(session).list(**filters)
-        answered_ids = await load_answered_gap_ids(session, [item.assistant_message_id for item in items])
+        answers = await load_gap_answers(session, [item.assistant_message_id for item in items])
         return {
-            "items": [annotate_gap_has_answer(item.to_dict(), answered_ids) for item in items],
+            "items": [annotate_gap_has_answer(item.to_dict(), answers) for item in items],
             "total": total,
             "limit": filters["limit"],
             "offset": filters["offset"],
@@ -98,8 +98,8 @@ class KnowledgeGapAdminService:
         record = await KnowledgeGapRepository(session).get(gap_id)
         if record is None:
             return None
-        answered_ids = await load_answered_gap_ids(session, [record.assistant_message_id])
-        return annotate_gap_has_answer(record.to_dict(), answered_ids)
+        answers = await load_gap_answers(session, [record.assistant_message_id])
+        return annotate_gap_has_answer(record.to_dict(), answers)
 
     async def update(self, session, gap_id: int, *, status: str, resolution_note: str | None, operator_uid: str):
         record = await KnowledgeGapRepository(session).update_status(
@@ -110,29 +110,31 @@ class KnowledgeGapAdminService:
         )
         if record is None:
             return None
-        answered_ids = await load_answered_gap_ids(session, [record.assistant_message_id])
-        return annotate_gap_has_answer(record.to_dict(), answered_ids)
+        answers = await load_gap_answers(session, [record.assistant_message_id])
+        return annotate_gap_has_answer(record.to_dict(), answers)
 
 
-async def load_answered_gap_ids(session: Any, assistant_message_ids: Iterable[int | None]) -> set[int]:
-    """返回已有「知识缺口补答」问答对的 assistant_message_id 集合。
+async def load_gap_answers(session: Any, assistant_message_ids: Iterable[int | None]) -> dict[int, str]:
+    """返回已有「知识缺口补答」问答对 {assistant_message_id: answer}。
 
     has_answer 依据：同一 assistant_message_id 下存在 source_type=knowledge_gap
-    的启用问答对（由补答流程生成）。列表接口批量查询一次，避免 N+1。
+    的启用问答对（由补答流程生成），并带出已存答案供补答弹窗回显。列表接口批量查询一次，避免 N+1。
     """
     ids = {int(gap_id) for gap_id in assistant_message_ids if gap_id is not None}
     if not ids:
-        return set()
+        return {}
     result = await session.execute(
-        select(CuratedQAPair.source_message_id).where(
+        select(CuratedQAPair.source_message_id, CuratedQAPair.answer).where(
             CuratedQAPair.source_type == "knowledge_gap",
             CuratedQAPair.source_message_id.in_(ids),
             CuratedQAPair.enabled.is_(True),
         )
     )
-    return {row[0] for row in result.all()}
+    return {row[0]: row[1] for row in result.all()}
 
 
-def annotate_gap_has_answer(gap_dict: dict[str, Any], answered_ids: set[int]) -> dict[str, Any]:
-    gap_dict["has_answer"] = int(gap_dict.get("assistant_message_id") or 0) in answered_ids
+def annotate_gap_has_answer(gap_dict: dict[str, Any], answers: dict[int, str]) -> dict[str, Any]:
+    message_id = int(gap_dict.get("assistant_message_id") or 0)
+    gap_dict["has_answer"] = message_id in answers
+    gap_dict["answer"] = answers.get(message_id)
     return gap_dict

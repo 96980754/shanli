@@ -12,10 +12,13 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
 import { renderMarkdown } from '@/utils/markdown_preview'
 import { HTML_PREVIEW_MAX_HEIGHT, HTML_PREVIEW_MIN_HEIGHT } from '@/utils/htmlPreviewRenderer'
 import 'katex/dist/katex.min.css'
+
+const { t } = useI18n()
 
 const props = defineProps({
   content: {
@@ -278,9 +281,9 @@ const enhanceCodeBlocks = () => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'markdown-code-copy-btn'
-    button.textContent = '复制'
-    button.setAttribute('aria-label', '复制代码')
-    button.setAttribute('title', '复制代码')
+    button.textContent = t('markdown.copyCode')
+    button.setAttribute('aria-label', t('markdown.copyCodeAria'))
+    button.setAttribute('title', t('markdown.copyCodeAria'))
     wrapper.appendChild(button)
   })
 }
@@ -299,7 +302,7 @@ const enhanceHtmlPreviews = () => {
         : `${Date.now()}-${Math.random()}`
     }`
     iframe.className = 'html-preview-frame'
-    iframe.title = 'HTML 预览'
+    iframe.title = t('markdown.htmlPreviewTitle')
     iframe.setAttribute('sandbox', 'allow-scripts')
     iframe.setAttribute('loading', 'lazy')
     iframe.setAttribute('referrerpolicy', 'no-referrer')
@@ -500,7 +503,7 @@ const showCopiedFeedback = (btn) => {
   const originalText = btn.dataset.originalText || btn.textContent
   btn.dataset.originalText = originalText
   btn.classList.add('is-copied')
-  btn.textContent = '已复制'
+  btn.textContent = t('markdown.copiedFeedback')
   const existingTimer = copiedTimers.get(btn)
   if (existingTimer) window.clearTimeout(existingTimer)
 

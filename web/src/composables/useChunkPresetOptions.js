@@ -37,7 +37,7 @@ export const useChunkPresetOptions = () => {
         return chunkPresetOptions.value
       })
       .catch((error) => {
-        console.error('加载分块策略失败:', error)
+        console.error('加载分块策略失败:', error) // i18n-ignore
         chunkPresetOptions.value = []
         return chunkPresetOptions.value
       })

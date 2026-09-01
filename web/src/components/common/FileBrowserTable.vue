@@ -3,7 +3,7 @@
     <div class="file-browser-header">
       <div class="file-browser-path">
         <slot name="toolbar-left">
-          <nav class="file-browser-breadcrumbs" aria-label="文件路径">
+          <nav class="file-browser-breadcrumbs" :aria-label="$t('fileTree.breadcrumbAria')">
             <button
               v-for="(item, index) in resolvedBreadcrumbs"
               :key="item.key || item.path || item.name || index"
@@ -14,7 +14,7 @@
               :title="item.title || item.path || item.name"
               @click="handleBreadcrumbClick(item, index)"
             >
-              {{ item.name || rootLabel }}
+              {{ item.name || rootLabel || $t('fileTree.root') }}
             </button>
             <slot name="breadcrumb-suffix" />
           </nav>
@@ -23,12 +23,12 @@
 
       <div class="file-browser-actions">
         <slot name="toolbar-actions" />
-        <a-tooltip v-if="refreshable" title="刷新">
+        <a-tooltip v-if="refreshable" :title="$t('common.refresh')">
           <a-button
             type="text"
             class="file-browser-icon-button"
             :loading="refreshing"
-            aria-label="刷新"
+            :aria-label="$t('common.refresh')"
             @click="$emit('refresh')"
           >
             <template #icon><RotateCw :size="16" /></template>
@@ -89,7 +89,7 @@
 
       <template #emptyText>
         <slot name="empty">
-          <a-empty :description="emptyText" />
+          <a-empty :description="emptyText || $t('fileTree.empty')" />
         </slot>
       </template>
     </a-table>
@@ -112,8 +112,8 @@ const props = defineProps({
   rowClassName: { type: [String, Function], default: '' },
   pagination: { type: Object, default: null },
   selection: { type: Object, default: null },
-  emptyText: { type: String, default: '暂无文件' },
-  rootLabel: { type: String, default: '文件' },
+  emptyText: { type: String, default: '' },
+  rootLabel: { type: String, default: '' },
   refreshable: { type: Boolean, default: false },
   refreshing: { type: Boolean, default: false }
 })

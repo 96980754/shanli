@@ -3,16 +3,14 @@
     <!-- 头部区域 -->
     <div class="header-section">
       <div class="header-content">
-        <div class="section-title">用户管理</div>
-        <p class="section-description">
-          管理系统用户，请谨慎操作。删除用户后该用户将无法登录系统。
-        </p>
+        <div class="section-title">{{ $t('userMgmt.title') }}</div>
+        <p class="section-description">{{ $t('userMgmt.description') }}</p>
       </div>
       <div class="header-actions">
         <a-button
           @click="handleRefresh"
           :loading="userManagement.refreshing"
-          title="刷新"
+          :title="$t('common.refresh')"
           class="refresh-btn lucide-icon-btn"
         >
           <template #icon>
@@ -21,11 +19,11 @@
         </a-button>
         <a-button @click="openImportModal" class="lucide-icon-btn">
           <template #icon><FileUp :size="16" /></template>
-          导入用户
+          {{ $t('userMgmt.importUsers') }}
         </a-button>
         <a-button type="primary" @click="showAddUserModal" class="add-btn lucide-icon-btn">
           <template #icon><Plus :size="16" /></template>
-          添加用户
+          {{ $t('userMgmt.addUser') }}
         </a-button>
       </div>
     </div>
@@ -34,14 +32,14 @@
       <a-input
         v-model:value="userManagement.searchKeyword"
         class="search-input"
-        placeholder="搜索用户名 / ID / 手机号"
+        :placeholder="$t('userMgmt.searchPlaceholder')"
         allow-clear
       >
         <template #prefix><Search :size="16" /></template>
       </a-input>
       <div class="filter-actions">
         <a-select v-model:value="userManagement.departmentFilter" class="filter-select">
-          <a-select-option value="">全部部门</a-select-option>
+          <a-select-option value="">{{ $t('userMgmt.allDepartments') }}</a-select-option>
           <a-select-option
             v-for="dept in departmentFilterOptions"
             :key="dept.value"
@@ -51,10 +49,10 @@
           </a-select-option>
         </a-select>
         <a-select v-model:value="userManagement.roleFilter" class="filter-select">
-          <a-select-option value="">全部权限</a-select-option>
-          <a-select-option value="superadmin">超级管理员</a-select-option>
-          <a-select-option value="admin">管理员</a-select-option>
-          <a-select-option value="user">普通用户</a-select-option>
+          <a-select-option value="">{{ $t('userMgmt.allRoles') }}</a-select-option>
+          <a-select-option value="superadmin">{{ $t('user.role.superadmin') }}</a-select-option>
+          <a-select-option value="admin">{{ $t('user.role.admin') }}</a-select-option>
+          <a-select-option value="user">{{ $t('user.role.user') }}</a-select-option>
         </a-select>
       </div>
     </div>
@@ -69,7 +67,11 @@
         <div class="cards-container">
           <div v-if="filteredUsers.length === 0" class="empty-state">
             <a-empty
-              :description="userManagement.users.length === 0 ? '暂无用户数据' : '没有匹配的用户'"
+              :description="
+                userManagement.users.length === 0
+                  ? $t('userMgmt.emptyNoUsers')
+                  : $t('userMgmt.emptyNoMatch')
+              "
             />
           </div>
           <div v-else class="user-cards-grid">
@@ -116,7 +118,7 @@
                   <a-menu-item key="edit" @click.stop="showEditUserModal(user)">
                     <span class="lucide-menu-item">
                       <SquarePen :size="14" />
-                      <span>编辑用户</span>
+                      <span>{{ $t('userMgmt.editUser') }}</span>
                     </span>
                   </a-menu-item>
                   <a-menu-item
@@ -127,7 +129,7 @@
                   >
                     <span class="lucide-menu-item">
                       <Trash2 :size="14" />
-                      <span>删除用户</span>
+                      <span>{{ $t('userMgmt.deleteUser') }}</span>
                     </span>
                   </a-menu-item>
                 </a-menu>
@@ -136,15 +138,15 @@
               <template #info>
                 <div class="card-content">
                   <div class="info-item">
-                    <span class="info-label">手机号:</span>
+                    <span class="info-label">{{ $t('userMgmt.phoneInfo') }}</span>
                     <span class="info-value phone-text">{{ user.phone_number || '-' }}</span>
                   </div>
                   <div class="info-item">
-                    <span class="info-label">创建时间:</span>
+                    <span class="info-label">{{ $t('userMgmt.createdAtInfo') }}</span>
                     <span class="info-value time-text">{{ formatTime(user.created_at) }}</span>
                   </div>
                   <div class="info-item">
-                    <span class="info-label">最后登录:</span>
+                    <span class="info-label">{{ $t('userMgmt.lastLoginInfo') }}</span>
                     <span class="info-value time-text">{{ formatTime(user.last_login) }}</span>
                   </div>
                 </div>
@@ -177,10 +179,10 @@
       class="user-modal"
     >
       <a-form layout="vertical" class="user-form">
-        <a-form-item label="用户名" required class="form-item">
+        <a-form-item :label="$t('login.label.uid')" required class="form-item">
           <a-input
             v-model:value="userManagement.form.username"
-            placeholder="请输入用户名（2-20个字符）"
+            :placeholder="$t('userMgmt.usernamePlaceholder')"
             @blur="validateAndGenerateUid"
             :maxlength="20"
           />
@@ -191,15 +193,15 @@
             v-if="userManagement.form.generatedUid && !userManagement.editMode"
             class="help-text"
           >
-            登录ID：{{ userManagement.form.generatedUid }}，此ID将用于登录，根据用户名自动生成
+            {{ $t('userMgmt.uidGenerated', { uid: userManagement.form.generatedUid }) }}
           </div>
         </a-form-item>
 
         <!-- 手机号字段 -->
-        <a-form-item label="手机号" class="form-item">
+        <a-form-item :label="$t('login.label.phone')" class="form-item">
           <a-input
             v-model:value="userManagement.form.phoneNumber"
-            placeholder="请输入手机号（可选，可用于登录）"
+            :placeholder="$t('userMgmt.phonePlaceholder')"
             :maxlength="11"
           />
           <div v-if="userManagement.form.phoneError" class="error-text">
@@ -210,7 +212,7 @@
         <template v-if="userManagement.editMode">
           <div class="password-toggle">
             <a-checkbox v-model:checked="userManagement.displayPasswordFields">
-              修改密码
+              {{ $t('userMgmt.changePassword') }}
             </a-checkbox>
           </div>
         </template>
@@ -218,46 +220,69 @@
         <template v-if="!userManagement.editMode || userManagement.displayPasswordFields">
           <!-- 编辑模式勾选「修改密码」时是重置密码语义，标签/占位符用「新密码」提示，避免与创建时的初始密码混淆 -->
           <a-form-item
-            :label="userManagement.editMode ? '新密码' : '密码'"
+            :label="t(userManagement.editMode ? 'userMgmt.newPassword' : 'login.label.password')"
             required
             class="form-item"
           >
             <a-input-password
               v-model:value="userManagement.form.password"
-              :placeholder="userManagement.editMode ? '请输入新密码' : '请输入密码'"
+              :placeholder="
+                t(
+                  userManagement.editMode
+                    ? 'userMgmt.newPasswordPlaceholder'
+                    : 'login.placeholder.password'
+                )
+              "
             />
           </a-form-item>
 
           <a-form-item
-            :label="userManagement.editMode ? '确认新密码' : '确认密码'"
+            :label="
+              t(
+                userManagement.editMode
+                  ? 'userMgmt.confirmNewPassword'
+                  : 'login.label.confirmPassword'
+              )
+            "
             required
             class="form-item"
           >
             <a-input-password
               v-model:value="userManagement.form.confirmPassword"
-              :placeholder="userManagement.editMode ? '请再次输入新密码' : '请再次输入密码'"
+              :placeholder="
+                t(
+                  userManagement.editMode
+                    ? 'userMgmt.repeatNewPasswordPlaceholder'
+                    : 'login.validation.confirmRequired'
+                )
+              "
             />
           </a-form-item>
         </template>
 
         <a-form-item
           v-if="userManagement.editMode && userManagement.form.role === 'superadmin'"
-          label="角色"
+          :label="$t('userMgmt.role')"
           class="form-item"
         >
-          <a-input value="超级管理员" disabled />
-          <div class="help-text">超级管理员账户无法修改角色</div>
+          <a-input :value="$t('user.role.superadmin')" disabled />
+          <div class="help-text">{{ $t('userMgmt.superadminRoleFixed') }}</div>
         </a-form-item>
-        <a-form-item v-else label="角色" class="form-item">
+        <a-form-item v-else :label="$t('userMgmt.role')" class="form-item">
           <a-select v-model:value="userManagement.form.role">
-            <a-select-option value="user">普通用户</a-select-option>
-            <a-select-option value="admin" v-if="userStore.isSuperAdmin">管理员</a-select-option>
+            <a-select-option value="user">{{ $t('user.role.user') }}</a-select-option>
+            <a-select-option value="admin" v-if="userStore.isSuperAdmin">
+              {{ $t('user.role.admin') }}
+            </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 部门选择器（仅超级管理员可见） -->
-        <a-form-item v-if="userStore.isSuperAdmin" label="部门" class="form-item">
-          <a-select v-model:value="userManagement.form.departmentId" placeholder="请选择部门">
+        <a-form-item v-if="userStore.isSuperAdmin" :label="$t('userMgmt.department')" class="form-item">
+          <a-select
+            v-model:value="userManagement.form.departmentId"
+            :placeholder="$t('userMgmt.selectDepartment')"
+          >
             <a-select-option
               v-for="dept in departmentManagement.departments"
               :key="dept.id"
@@ -269,10 +294,10 @@
         </a-form-item>
 
         <!-- 团队选择器（仅超级管理员可见，随部门级联） -->
-        <a-form-item v-if="userStore.isSuperAdmin" label="团队" class="form-item">
+        <a-form-item v-if="userStore.isSuperAdmin" :label="$t('userMgmt.team')" class="form-item">
           <a-select
             v-model:value="userManagement.form.teamId"
-            placeholder="请选择团队"
+            :placeholder="$t('userMgmt.selectTeam')"
             allow-clear
             :disabled="!userManagement.form.departmentId"
           >
@@ -284,7 +309,7 @@
             v-if="userManagement.form.departmentId && !userManagement.form.teamId"
             class="help-text"
           >
-            未选择团队时将分配到该部门默认团队
+            {{ $t('userMgmt.teamDefaultHint') }}
           </div>
         </a-form-item>
       </a-form>
@@ -292,12 +317,12 @@
 
     <a-modal
       v-model:open="userImport.visible"
-      title="导入企业用户"
+      :title="$t('userMgmt.importEnterpriseUsers')"
       width="760px"
       :confirm-loading="userImport.importing"
       :ok-button-props="{ disabled: !userImport.preview?.valid || userImport.validating }"
-      ok-text="确认导入"
-      cancel-text="取消"
+      :ok-text="$t('userMgmt.confirmImport')"
+      :cancel-text="$t('common.cancel')"
       :mask-closable="false"
       @ok="confirmUserImport"
       @cancel="closeImportModal"
@@ -305,11 +330,11 @@
       <a-alert
         type="warning"
         show-icon
-        message="Excel 包含明文初始密码，导入后请立即安全删除或妥善保管文件。"
+        :message="$t('userMgmt.excelWarning')"
         class="import-alert"
       />
       <div class="import-toolbar">
-        <a-button @click="downloadImportTemplate">下载模板</a-button>
+        <a-button @click="downloadImportTemplate">{{ $t('userMgmt.downloadTemplate') }}</a-button>
         <a-upload
           :file-list="userImport.file ? [userImport.file] : []"
           :before-upload="selectImportFile"
@@ -317,7 +342,7 @@
           accept=".xlsx"
           :disabled="userImport.validating || userImport.importing"
         >
-          <a-button :loading="userImport.validating">选择 Excel</a-button>
+          <a-button :loading="userImport.validating">{{ $t('userMgmt.selectExcel') }}</a-button>
         </a-upload>
         <span v-if="userImport.file" class="import-filename">{{ userImport.file.name }}</span>
       </div>
@@ -327,14 +352,21 @@
           v-if="!userImport.preview.valid"
           type="error"
           show-icon
-          :message="`共 ${userImport.preview.row_count} 行，发现 ${userImport.preview.errors.length} 个问题，未导入任何用户`"
+          :message="
+            $t('userMgmt.importErrors', {
+              rows: userImport.preview.row_count,
+              problems: userImport.preview.errors.length
+            })
+          "
           class="import-alert"
         />
         <a-alert
           v-else
           type="success"
           show-icon
-          :message="`校验通过，共 ${userImport.preview.row_count} 个用户，确认后将一次性导入`"
+          :message="
+            $t('userMgmt.importValid', { count: userImport.preview.row_count })
+          "
           class="import-alert"
         />
 
@@ -361,6 +393,7 @@
 
 <script setup>
 import { reactive, onMounted, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
 import { departmentApi, authApi } from '@/apis'
@@ -380,6 +413,7 @@ import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 
 // 用户管理相关状态
@@ -394,7 +428,7 @@ const userManagement = reactive({
   pageSize: 50,
   error: null,
   modalVisible: false,
-  modalTitle: '添加用户',
+  modalTitle: t('userMgmt.addUser'),
   editMode: false,
   editUserId: null,
   form: {
@@ -436,20 +470,20 @@ const userImport = reactive({
   importing: false
 })
 
-const importErrorColumns = [
-  { title: 'Excel 行', dataIndex: 'excel_row', width: 90 },
-  { title: '字段', dataIndex: 'column', width: 150 },
-  { title: '问题', dataIndex: 'message' }
-]
+const importErrorColumns = computed(() => [
+  { title: t('userMgmt.excelRow'), dataIndex: 'excel_row', width: 90 },
+  { title: t('userMgmt.column'), dataIndex: 'column', width: 150 },
+  { title: t('userMgmt.problem'), dataIndex: 'message' }
+])
 
-const importPreviewColumns = [
-  { title: '行', dataIndex: 'excel_row', width: 70 },
-  { title: '用户名', dataIndex: 'username' },
+const importPreviewColumns = computed(() => [
+  { title: t('userMgmt.row'), dataIndex: 'excel_row', width: 70 },
+  { title: t('login.label.uid'), dataIndex: 'username' },
   { title: 'UID', dataIndex: 'uid' },
-  { title: '手机号', dataIndex: 'phone_number' },
-  { title: '角色', dataIndex: 'role', width: 90 },
-  { title: '部门', dataIndex: 'department_name' }
-]
+  { title: t('login.label.phone'), dataIndex: 'phone_number' },
+  { title: t('userMgmt.role'), dataIndex: 'role', width: 90 },
+  { title: t('userMgmt.department'), dataIndex: 'department_name' }
+])
 
 const departmentFilterOptions = computed(() => {
   const options = new Map()
@@ -472,7 +506,7 @@ const departmentFilterOptions = computed(() => {
     if (!options.has(value)) {
       options.set(value, {
         value,
-        label: departmentName || `部门 ${departmentId}`
+        label: departmentName || t('userMgmt.departmentId', { id: departmentId })
       })
     }
   })
@@ -517,7 +551,7 @@ const fetchDepartments = async () => {
     departmentManagement.departments = departments
     teamManagement.teams = teams
   } catch (error) {
-    console.error('获取部门/团队列表失败:', error)
+    console.error(t('userMgmt.fetchDeptTeamFailed'), error)
   }
 }
 
@@ -542,7 +576,7 @@ const validateAndGenerateUid = async () => {
     const result = await userStore.validateUsernameAndGenerateUid(username)
     userManagement.form.generatedUid = result.uid
   } catch (error) {
-    userManagement.form.usernameError = error.message || '用户名验证失败'
+    userManagement.form.usernameError = error.message || t('userMgmt.usernameValidateFailed')
   }
 }
 
@@ -576,7 +610,7 @@ watch(
     userManagement.form.phoneError = ''
 
     if (newPhone && !validatePhoneNumber(newPhone)) {
-      userManagement.form.phoneError = '请输入正确的手机号格式'
+      userManagement.form.phoneError = t('userMgmt.phoneFormatInvalid')
     }
   }
 )
@@ -623,8 +657,8 @@ const fetchUsers = async () => {
     userManagement.users = users
     userManagement.error = null
   } catch (error) {
-    console.error('获取用户列表失败:', error)
-    userManagement.error = '获取用户列表失败'
+    console.error(t('userMgmt.fetchUsersFailedLog'), error)
+    userManagement.error = t('userMgmt.fetchUsersFailed')
   } finally {
     userManagement.loading = false
   }
@@ -636,10 +670,10 @@ const handleRefresh = async () => {
   userManagement.refreshing = true
   try {
     await Promise.all([fetchUsers(), fetchDepartments()])
-    message.success('刷新成功')
+    message.success(t('settings.refreshSuccess'))
   } catch (error) {
-    console.error('刷新失败:', error)
-    message.error('刷新失败')
+    console.error(t('settings.refreshFail'), error)
+    message.error(t('settings.refreshFail'))
   } finally {
     userManagement.refreshing = false
   }
@@ -662,13 +696,13 @@ const downloadImportTemplate = async () => {
   try {
     await authApi.downloadUserImportTemplate()
   } catch (error) {
-    message.error(error.message || '下载模板失败')
+    message.error(error.message || t('userMgmt.downloadTemplateFailed'))
   }
 }
 
 const selectImportFile = async (file) => {
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
-    message.error('仅支持 .xlsx 文件')
+    message.error(t('userMgmt.excelFormatOnly'))
     return false
   }
   userImport.file = file
@@ -677,7 +711,7 @@ const selectImportFile = async (file) => {
   try {
     userImport.preview = await authApi.previewUserImport(file)
   } catch (error) {
-    message.error(error.message || '校验用户导入文件失败')
+    message.error(error.message || t('userMgmt.importValidateFailed'))
   } finally {
     userImport.validating = false
   }
@@ -689,7 +723,7 @@ const confirmUserImport = async () => {
   userImport.importing = true
   try {
     const result = await authApi.importUsers(userImport.file)
-    message.success(`成功导入 ${result.imported_count} 个用户`)
+    message.success(t('userMgmt.importedCount', { count: result.imported_count }))
     userImport.visible = false
     userImport.file = null
     userImport.preview = null
@@ -705,7 +739,7 @@ const confirmUserImport = async () => {
         errors_truncated: detail.errors_truncated || false
       }
     }
-    message.error(error.message || '导入用户失败')
+    message.error(error.message || t('userMgmt.importFailed'))
   } finally {
     userImport.importing = false
   }
@@ -713,7 +747,7 @@ const confirmUserImport = async () => {
 
 // 打开添加用户模态框
 const showAddUserModal = () => {
-  userManagement.modalTitle = '添加用户'
+  userManagement.modalTitle = t('userMgmt.addUser')
   userManagement.editMode = false
   userManagement.editUserId = null
   userManagement.form = {
@@ -734,7 +768,7 @@ const showAddUserModal = () => {
 
 // 打开编辑用户模态框
 const showEditUserModal = (user) => {
-  userManagement.modalTitle = '编辑用户'
+  userManagement.modalTitle = t('userMgmt.editUser')
   userManagement.editMode = true
   userManagement.editUserId = user.id
   userManagement.form = {
@@ -758,7 +792,7 @@ const handleUserFormSubmit = async () => {
   try {
     // 简单验证
     if (!userManagement.form.username.trim()) {
-      message.error('用户名不能为空')
+      message.error(t('userMgmt.usernameRequired'))
       return
     }
 
@@ -767,24 +801,24 @@ const handleUserFormSubmit = async () => {
       userManagement.form.username.trim().length < 2 ||
       userManagement.form.username.trim().length > 20
     ) {
-      message.error('用户名长度必须在 2-20 个字符之间')
+      message.error(t('userMgmt.usernameLengthInvalid'))
       return
     }
 
     // 验证手机号
     if (userManagement.form.phoneNumber && !validatePhoneNumber(userManagement.form.phoneNumber)) {
-      message.error('请输入正确的手机号格式')
+      message.error(t('userMgmt.phoneFormatInvalid'))
       return
     }
 
     if (userManagement.displayPasswordFields) {
       if (!userManagement.form.password) {
-        message.error('密码不能为空')
+        message.error(t('userMgmt.passwordRequired'))
         return
       }
 
       if (userManagement.form.password !== userManagement.form.confirmPassword) {
-        message.error('两次输入的密码不一致')
+        message.error(t('login.validation.passwordMismatch'))
         return
       }
     }
@@ -820,7 +854,7 @@ const handleUserFormSubmit = async () => {
       }
 
       await userStore.updateUser(userManagement.editUserId, updateData)
-      message.success('用户更新成功')
+      message.success(t('userMgmt.userUpdated'))
     } else {
       // 创建新用户
       const createData = {
@@ -845,15 +879,15 @@ const handleUserFormSubmit = async () => {
       }
 
       await userStore.createUser(createData)
-      message.success('用户创建成功')
+      message.success(t('userMgmt.userCreated'))
     }
 
     // 重新获取用户列表
     await fetchUsers()
     userManagement.modalVisible = false
   } catch (error) {
-    console.error('用户操作失败:', error)
-    message.error(error.message || '操作失败，请稍后重试')
+    console.error(t('userMgmt.userOperationFailed'), error)
+    message.error(error.message || t('settings.operationFailedRetry'))
   } finally {
     userManagement.loading = false
   }
@@ -863,27 +897,27 @@ const handleUserFormSubmit = async () => {
 const confirmDeleteUser = (user) => {
   // 自己不能删除自己
   if (user.id === userStore.userId) {
-    message.error('不能删除自己的账户')
+    message.error(t('userMgmt.cannotDeleteSelf'))
     return
   }
 
   // 确认对话框
   Modal.confirm({
-    title: '确认删除用户',
-    content: `确定要删除用户 "${user.username}" 吗？此操作不可撤销。`,
-    okText: '删除',
+    title: t('userMgmt.confirmDeleteTitle'),
+    content: t('userMgmt.confirmDeleteContent', { name: user.username }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         userManagement.loading = true
         await userStore.deleteUser(user.id)
-        message.success('用户删除成功')
+        message.success(t('userMgmt.userDeleted'))
         // 重新获取用户列表
         await fetchUsers()
       } catch (error) {
-        console.error('删除用户失败:', error)
-        message.error(error.message || '删除失败，请稍后重试')
+        console.error(t('userMgmt.deleteFailedLog'), error)
+        message.error(error.message || t('settings.deleteFailedRetry'))
       } finally {
         userManagement.loading = false
       }

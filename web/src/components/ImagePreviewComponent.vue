@@ -9,7 +9,7 @@
       <button
         class="remove-button"
         type="button"
-        :aria-label="`移除图片 ${imageData.originalName || ''}`"
+        :aria-label="t('imgPreview.removeImage', { name: imageData.originalName || '' })"
         @click="handleRemove"
       >
         <X :size="14" />
@@ -20,6 +20,9 @@
 
 <script setup>
 import { X } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps({
   imageData: {

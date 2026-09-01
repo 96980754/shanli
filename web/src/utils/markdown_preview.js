@@ -9,6 +9,7 @@ import { rewriteMinioImageUrls } from '@/utils/minioUrl'
 import { normalizeCodeLanguage } from '@/utils/file_preview'
 import { renderSvgBlocks } from './svgRenderer'
 import { renderHtmlPreviewBlocks } from './htmlPreviewRenderer'
+import { i18n } from '@/i18n'
 
 const markdownKatexPlugin = markdownItKatex.default || markdownItKatex
 const FRONTMATTER_MARKER = '---'
@@ -83,7 +84,9 @@ const renderFrontmatterCard = (data) => {
     .join('')
 
   return `<section class="frontmatter-card">
-    <div class="fm-body">${rows || '<div class="fm-empty">无 frontmatter 信息</div>'}</div>
+    <div class="fm-body">${
+      rows || `<div class="fm-empty">${i18n.global.t('renderer.frontmatterEmpty')}</div>`
+    }</div>
   </section>`
 }
 

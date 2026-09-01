@@ -31,9 +31,12 @@
 
 <script setup>
 import { computed, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { MessageProcessor } from '@/utils/messageProcessor'
+
+const { t } = useI18n()
 
 const props = defineProps({
   toolCall: {
@@ -59,7 +62,7 @@ const parsedArgs = computed(() => {
 
 const subagentRun = computed(() => props.toolCall.subagent_run || null)
 const subagentDisplayName = computed(
-  () => subagentRun.value?.subagent_name || props.toolCall.display_label || '子智能体'
+  () => subagentRun.value?.subagent_name || props.toolCall.display_label || t('toolCall.subagent.name')
 )
 const description = computed(
   () => parsedArgs.value.description || subagentRun.value?.description || ''
@@ -87,9 +90,9 @@ const runStatus = computed(() => {
   return 'completed'
 })
 const runStatusLabel = computed(() => {
-  if (runStatus.value === 'completed') return '已完成'
-  if (runStatus.value === 'failed') return '失败'
-  if (runStatus.value === 'running') return '运行中'
+  if (runStatus.value === 'completed') return t('toolCall.subagent.statusCompleted')
+  if (runStatus.value === 'failed') return t('common.failed')
+  if (runStatus.value === 'running') return t('toolCall.subagent.statusRunning')
   return ''
 })
 const runStatusClass = computed(() => ({

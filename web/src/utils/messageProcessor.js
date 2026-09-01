@@ -1,6 +1,8 @@
 /**
  * 消息处理工具类
  */
+import { i18n } from '@/i18n'
+
 export class MessageProcessor {
   /**
    * 将工具结果与消息合并
@@ -426,7 +428,7 @@ export class MessageProcessor {
 
     // 表格行：首格含文档特征词才视为引用行（跳过表头与分隔行）
     const docKwRe =
-      /规格书|datasheet|说明书|解决方案|白皮书|部署指南|指南|手册|工卡|一纸禅|协议|介绍|报告|规格|证书|认证|单页|资料|白皮/i
+      /规格书|datasheet|说明书|解决方案|白皮书|部署指南|指南|手册|工卡|一纸禅|协议|介绍|报告|规格|证书|认证|单页|资料|白皮/i // i18n-ignore
     for (const line of text.split('\n')) {
       const trimmed = line.trim()
       if (!(trimmed.startsWith('|') && trimmed.endsWith('|'))) continue
@@ -443,7 +445,7 @@ export class MessageProcessor {
     // 「来源」与冒号之间可能被 markdown 加粗/斜体标记隔开（如 **来源**：）；
     // 取最后一次出现（引用清单通常在回答末尾），避免命中正文散文里的「来源」二字
     const sourceRe =
-      /来源说明|依据来源|参考来源|资料来源|引用来源|参考文献|来源\s*[*_]{0,2}\s*[：:]/g
+      /来源说明|依据来源|参考来源|资料来源|引用来源|参考文献|来源\s*[*_]{0,2}\s*[：:]/g // i18n-ignore
     let sourceMatch = null
     let m
     while ((m = sourceRe.exec(text))) sourceMatch = m
@@ -507,7 +509,7 @@ export class MessageProcessor {
         item.filename ||
         item.file_id ||
         item.kb_id ||
-        '未知来源'
+        i18n.global.t('errors.unknownSource')
       const displayName = String(source).split(/[\\/]/).filter(Boolean).pop() || source
       const product = metadata.product || ''
       const groupKey = product ? `${product}::${displayName}` : displayName
@@ -613,7 +615,8 @@ export class MessageProcessor {
           dedupSet.add(url)
 
           webSources.push({
-            tool_name: toolCall?.name || toolCall?.function?.name || '网络搜索',
+            tool_name:
+              toolCall?.name || toolCall?.function?.name || i18n.global.t('errors.webSearch'),
             title,
             url,
             score: typeof item?.score === 'number' ? item.score : null,

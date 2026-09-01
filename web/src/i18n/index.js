@@ -22,7 +22,9 @@ export const i18n = createI18n({
 // 应用语言偏好：同步 vue-i18n、<html lang> 与 dayjs locale
 export function applyLocale(locale) {
   i18n.global.locale.value = locale
-  document.documentElement.setAttribute('lang', locale)
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('lang', locale)
+  }
   dayjs.locale(locale === 'en-US' ? 'en' : 'zh-cn')
 }
 

@@ -2,16 +2,16 @@
   <div class="gap-page">
     <div class="page-header">
       <div>
-        <h1>知识缺口</h1>
-        <p>查看知识库无法覆盖的用户问题，并跟踪补充处理状态。</p>
+        <h1>{{ $t('gaps.pageTitle') }}</h1>
+        <p>{{ $t('gaps.pageSubtitle') }}</p>
       </div>
-      <a-button :loading="loading" @click="loadGaps">刷新</a-button>
+      <a-button :loading="loading" @click="loadGaps">{{ $t('common.refresh') }}</a-button>
     </div>
 
     <div class="filters">
       <a-input-search
         v-model:value="filters.query"
-        placeholder="搜索问题"
+        :placeholder="t('gaps.searchPlaceholder')"
         allow-clear
         class="query-input"
         @search="applyFilters"
@@ -41,42 +41,42 @@
           {{ reasonLabel(record.reason) }}
         </template>
         <template v-else-if="column.key === 'kb_scope'">
-          <span>{{ record.kb_scope?.join(', ') || '未指定' }}</span>
+          <span>{{ record.kb_scope?.join(', ') || $t('gaps.kbScopeUnspecified') }}</span>
         </template>
         <template v-else-if="column.key === 'last_seen_at'">
           {{ formatFullDateTime(record.last_seen_at) }}
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-button type="link" @click="openAnswer(record)">补答</a-button>
+          <a-button type="link" @click="openAnswer(record)">{{ $t('gaps.answerAction') }}</a-button>
         </template>
       </template>
     </a-table>
 
-    <a-drawer v-model:open="detailOpen" title="知识缺口详情" width="520">
+    <a-drawer v-model:open="detailOpen" :title="t('gaps.detailTitle')" width="520">
       <a-descriptions v-if="detail" :column="1" bordered size="small">
-        <a-descriptions-item label="问题">{{ detail.question }}</a-descriptions-item>
-        <a-descriptions-item label="状态">{{ statusLabel(detail.status) }}</a-descriptions-item>
-        <a-descriptions-item label="拒答原因">{{ reasonLabel(detail.reason) }}</a-descriptions-item>
-        <a-descriptions-item label="出现次数">{{ detail.occurrence_count }}</a-descriptions-item>
+        <a-descriptions-item :label="t('eval.questionColumn')">{{ detail.question }}</a-descriptions-item>
+        <a-descriptions-item :label="t('common.status')">{{ statusLabel(detail.status) }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.reasonLabel')">{{ reasonLabel(detail.reason) }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.occurrenceCountLabel')">{{ detail.occurrence_count }}</a-descriptions-item>
         <a-descriptions-item label="Agent">{{ detail.agent_slug }}</a-descriptions-item>
-        <a-descriptions-item label="知识库范围">{{ detail.kb_scope?.join(', ') || '未指定' }}</a-descriptions-item>
-        <a-descriptions-item label="最近用户">{{ detail.uid || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="最近会话">{{ detail.conversation_thread_id || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="首次出现">{{ formatFullDateTime(detail.first_seen_at) }}</a-descriptions-item>
-        <a-descriptions-item label="最近出现">{{ formatFullDateTime(detail.last_seen_at) }}</a-descriptions-item>
-        <a-descriptions-item label="处理备注">{{ detail.resolution_note || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.kbScopeLabel')">{{ detail.kb_scope?.join(', ') || $t('gaps.kbScopeUnspecified') }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.recentUserLabel')">{{ detail.uid || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.recentConversationLabel')">{{ detail.conversation_thread_id || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.firstSeenLabel')">{{ formatFullDateTime(detail.first_seen_at) }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.lastSeenLabel')">{{ formatFullDateTime(detail.last_seen_at) }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.resolutionNoteLabel')">{{ detail.resolution_note || '-' }}</a-descriptions-item>
       </a-descriptions>
       <a-space v-if="detail" direction="vertical" class="drawer-actions">
-        <a-button type="primary" block @click="openAnswer(detail)">补答并保存问答对</a-button>
+        <a-button type="primary" block @click="openAnswer(detail)">{{ $t('gaps.answerAndSaveLabel') }}</a-button>
       </a-space>
     </a-drawer>
 
     <a-modal
       v-model:open="webSearchOpen"
-      title="人工补答"
+      :title="t('gaps.manualAnswerTitle')"
       width="760px"
-      ok-text="确认并保存问答对"
-      cancel-text="取消"
+      :ok-text="t('gaps.confirmAndSaveLabel')"
+      :cancel-text="t('common.cancel')"
       :confirm-loading="savingQa"
       :ok-button-props="{ disabled: webSearching || !webAnswer.trim() }"
       @ok="saveWebQa"
@@ -85,39 +85,39 @@
         type="info"
         show-icon
         class="web-search-alert"
-        message="可直接输入答案，也可联网搜索生成草稿"
-        description="保存的答案会作为人工问答对，同一智能体再次收到相同问题时才优先使用，不会自动进入普通问答。"
+        :message="t('gaps.answerAlertMessage')"
+        :description="t('gaps.answerAlertDescription')"
       />
 
       <a-form layout="vertical">
-        <a-form-item label="未覆盖问题">
+        <a-form-item :label="t('gaps.uncoveredQuestionLabel')">
           <a-textarea :value="webSearchGap?.question || ''" :rows="2" readonly />
         </a-form-item>
 
         <div class="web-search-toolbar">
-          <span class="web-search-agent">Agent：{{ webSearchGap?.agent_slug || '-' }}</span>
-          <a-button :loading="webSearching" @click="runWebSearch">联网搜索生成草稿</a-button>
+          <span class="web-search-agent">{{ $t('gaps.agentInfo', { name: webSearchGap?.agent_slug || '-' }) }}</span>
+          <a-button :loading="webSearching" @click="runWebSearch">{{ $t('gaps.webSearchGenerateLabel') }}</a-button>
         </div>
 
         <div v-if="webSearching" class="web-search-loading">
           <a-spin />
-          <span>正在联网检索并生成候选答案...</span>
+          <span>{{ $t('gaps.webSearchLoadingText') }}</span>
         </div>
 
         <template v-else>
-          <a-form-item label="人工确认答案" required>
+          <a-form-item :label="t('feedback.confirmAnswerLabel')" required>
             <a-textarea
               v-model:value="webAnswer"
               :rows="8"
               :maxlength="20000"
               show-count
-              placeholder="可直接输入答案；点击上方「联网搜索生成草稿」可自动生成候选后编辑"
+              :placeholder="t('gaps.answerPlaceholder')"
             />
           </a-form-item>
 
           <div class="source-section">
-            <div class="source-title">参考来源</div>
-            <a-empty v-if="webSources.length === 0" :image="simpleImage" description="暂无可展示来源" />
+            <div class="source-title">{{ $t('gaps.sourceTitle') }}</div>
+            <a-empty v-if="webSources.length === 0" :image="simpleImage" :description="t('gaps.noSources')" />
             <div v-else class="source-list">
               <div v-for="(source, index) in webSources" :key="`${source.url}-${index}`" class="source-item">
                 <a :href="source.url" target="_blank" rel="noopener noreferrer">
@@ -136,32 +136,35 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Empty, message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
 
-const statusOptions = [
-  { label: '全部状态', value: '' },
-  { label: '新发现', value: 'new' },
-  { label: '处理中', value: 'processing' },
-  { label: '已解决', value: 'resolved' },
-  { label: '已忽略', value: 'ignored' }
-]
-const reasonOptions = [
-  { label: '全部原因', value: '' },
-  { label: '无可用知识库', value: 'no_enabled_knowledge_base' },
-  { label: '没有检索结果', value: 'no_results' },
-  { label: '检索正文为空', value: 'empty_content' },
-  { label: '候选证据不足', value: 'insufficient_evidence' }
-]
-const columns = [
-  { title: '问题', key: 'question', width: 360 },
-  { title: '次数', dataIndex: 'occurrence_count', width: 80 },
-  { title: '原因', key: 'reason', width: 140 },
-  { title: '知识库范围', key: 'kb_scope', width: 180 },
-  { title: '状态', key: 'status', width: 100 },
-  { title: '最近出现', key: 'last_seen_at', width: 170 },
-  { title: '操作', key: 'actions', width: 150, fixed: 'right' }
-]
+const { t } = useI18n()
+
+const statusOptions = computed(() => [
+  { label: t('gaps.statusAll'), value: '' },
+  { label: t('gaps.statusNew'), value: 'new' },
+  { label: t('gaps.statusProcessing'), value: 'processing' },
+  { label: t('gaps.statusResolved'), value: 'resolved' },
+  { label: t('gaps.statusIgnored'), value: 'ignored' }
+])
+const reasonOptions = computed(() => [
+  { label: t('gaps.reasonAll'), value: '' },
+  { label: t('gaps.reasonNoEnabledKb'), value: 'no_enabled_knowledge_base' },
+  { label: t('gaps.reasonNoResults'), value: 'no_results' },
+  { label: t('gaps.reasonEmptyContent'), value: 'empty_content' },
+  { label: t('gaps.reasonInsufficientEvidence'), value: 'insufficient_evidence' }
+])
+const columns = computed(() => [
+  { title: t('eval.questionColumn'), key: 'question', width: 360 },
+  { title: t('gaps.occurrenceCountColumn'), dataIndex: 'occurrence_count', width: 80 },
+  { title: t('common.reason'), key: 'reason', width: 140 },
+  { title: t('gaps.kbScopeLabel'), key: 'kb_scope', width: 180 },
+  { title: t('common.status'), key: 'status', width: 100 },
+  { title: t('gaps.lastSeenLabel'), key: 'last_seen_at', width: 170 },
+  { title: t('gaps.actionsColumn'), key: 'actions', width: 150, fixed: 'right' }
+])
 
 const loading = ref(false)
 const items = ref([])
@@ -187,11 +190,11 @@ const pagination = computed(() => ({
   showSizeChanger: true,
   showQuickJumper: true,
   pageSizeOptions: ['10', '20', '50', '100'],
-  showTotal: (value) => `共 ${value} 条`
+  showTotal: (value) => t('gaps.totalCount', { total: value })
 }))
 
-const statusLabel = (status) => statusOptions.find((item) => item.value === status)?.label || status
-const reasonLabel = (reason) => reasonOptions.find((item) => item.value === reason)?.label || reason
+const statusLabel = (status) => statusOptions.value.find((item) => item.value === status)?.label || status
+const reasonLabel = (reason) => reasonOptions.value.find((item) => item.value === reason)?.label || reason
 const statusColor = (status) => ({ new: 'blue', processing: 'orange', resolved: 'green', ignored: 'default' })[status]
 
 async function loadGaps() {
@@ -208,7 +211,7 @@ async function loadGaps() {
     total.value = response.total || 0
   } catch (error) {
     console.error('加载知识缺口失败', error)
-    message.error(error?.message || '加载知识缺口失败')
+    message.error(error?.message || t('gaps.loadGapsFailed'))
   } finally {
     loading.value = false
   }
@@ -230,13 +233,14 @@ async function openDetail(gapId) {
     detail.value = (await dashboardApi.getKnowledgeGap(gapId)).item
     detailOpen.value = true
   } catch (error) {
-    message.error(error?.message || '加载详情失败')
+    message.error(error?.message || t('gaps.loadDetailFailed'))
   }
 }
 
 function openAnswer(record) {
   webSearchGap.value = { ...record }
-  webAnswer.value = ''
+  // 已补答过的缺口：回显已存答案（后端详情/列表带 answer 字段），便于查看或重新编辑
+  webAnswer.value = record.answer || ''
   webSources.value = []
   webSearchOpen.value = true
 }
@@ -249,11 +253,11 @@ async function runWebSearch() {
     webAnswer.value = response.draft_answer || ''
     webSources.value = Array.isArray(response.sources) ? response.sources : []
     if (!webAnswer.value) {
-      message.warning('联网检索完成，但未生成候选答案，请结合来源人工填写')
+      message.warning(t('gaps.webSearchNoDraft'))
     }
   } catch (error) {
     console.error('联网搜索生成草稿失败', error)
-    message.error(error?.message || '联网搜索生成草稿失败')
+    message.error(error?.message || t('gaps.webSearchDraftFailed'))
   } finally {
     webSearching.value = false
   }
@@ -262,7 +266,7 @@ async function runWebSearch() {
 async function saveWebQa() {
   const answer = webAnswer.value.trim()
   if (!webSearchGap.value?.id || !answer) {
-    message.warning('请先确认并填写答案')
+    message.warning(t('gaps.fillAnswerFirst'))
     return
   }
 
@@ -272,13 +276,13 @@ async function saveWebQa() {
       answer,
       sources: webSources.value
     })
-    message.success('已保存人工问答对，知识缺口已标记为已解决')
+    message.success(t('gaps.saveQaSuccess'))
     webSearchOpen.value = false
     if (detail.value?.id === response.gap?.id) detail.value = response.gap
     await loadGaps()
   } catch (error) {
     console.error('保存问答对失败', error)
-    message.error(error?.message || '保存问答对失败')
+    message.error(error?.message || t('gaps.saveQaFailed'))
   } finally {
     savingQa.value = false
   }

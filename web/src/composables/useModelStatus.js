@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { modelProviderApi } from '@/apis/system_api'
+import { i18n } from '@/i18n'
 
 /**
  * 模型状态检查 composable，供 Chat/Embedding/Rerank 模型选择器共用。
@@ -22,10 +23,17 @@ export function useModelStatus() {
 
   const getStatusTooltip = (key) => {
     const status = statusMap[key]
-    if (!status) return '状态未知'
+    if (!status) return i18n.global.t('modelStatus.statusUnknown')
     const text =
-      { available: '可用', unavailable: '不可用', error: '错误' }[status.status] || '未知'
-    return `${text}: ${status.message || '无详细信息'}`
+      {
+        available: i18n.global.t('modelStatus.available'),
+        unavailable: i18n.global.t('modelStatus.unavailable'),
+        error: i18n.global.t('modelStatus.error')
+      }[status.status] || i18n.global.t('common.unknown')
+    return i18n.global.t('modelStatus.tooltipFormat', {
+      text,
+      message: status.message || i18n.global.t('modelStatus.noDetail')
+    })
   }
 
   const checkV2Status = async (spec) => {
@@ -35,7 +43,7 @@ export function useModelStatus() {
         statusMap[spec] = response.data
       }
     } catch {
-      statusMap[spec] = { spec, status: 'error', message: '检查失败' }
+      statusMap[spec] = { spec, status: 'error', message: i18n.global.t('modelStatus.checkFailed') }
     }
   }
 

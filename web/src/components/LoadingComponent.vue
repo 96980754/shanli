@@ -9,6 +9,7 @@
 
 <script setup>
 import { defineProps } from 'vue'
+import { i18n } from '@/i18n'
 
 defineProps({
   visible: {
@@ -17,7 +18,7 @@ defineProps({
   },
   text: {
     type: String,
-    default: '加载中...'
+    default: () => i18n.global.t('common.loading')
   }
 })
 </script>

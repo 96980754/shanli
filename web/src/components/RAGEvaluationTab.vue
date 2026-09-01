@@ -5,14 +5,14 @@
       <template v-if="!selectedDataset">
         <ResourceEmptyState
           class="rag-evaluation-empty"
-          title="暂无可用评估基准"
-          description="先上传或生成评估基准，再运行 RAG 评估。"
+          :title="t('eval.noBenchmarkTitle')"
+          :description="t('eval.noBenchmarkDescription')"
           :icon="BarChart3"
         >
           <template #actions>
             <a-button type="primary" class="lucide-icon-btn" @click="$emit('switch-to-benchmarks')">
               <ClipboardList :size="16" />
-              前往基准管理
+              {{ $t('eval.goToBenchmarkMgmt') }}
             </a-button>
           </template>
         </ResourceEmptyState>
@@ -20,7 +20,7 @@
       <template v-else>
         <div class="last-evaluation-section">
           <div class="section-header">
-            <h4 class="section-title">最后一次评估</h4>
+            <h4 class="section-title">{{ $t('eval.lastEvaluationTitle') }}</h4>
             <a-dropdown
               v-model:open="evaluationDropdownOpen"
               :trigger="['click']"
@@ -33,31 +33,31 @@
                 :disabled="availableDatasets.length === 0"
                 class="lucide-icon-btn"
               >
-                开始评估
+                {{ $t('eval.startEvaluation') }}
                 <ChevronDown :size="14" />
               </a-button>
               <template #overlay>
                 <div class="evaluation-start-dropdown" @click.stop>
                   <div class="dropdown-header">
-                    <div class="dropdown-title">配置本次评估</div>
-                    <div class="dropdown-subtitle">选择评估基准与可选模型后开始评估</div>
+                    <div class="dropdown-title">{{ $t('eval.configureEvaluationTitle') }}</div>
+                    <div class="dropdown-subtitle">{{ $t('eval.configureEvaluationSubtitle') }}</div>
                   </div>
 
                   <div class="dropdown-model-fields">
-                    <a-form-item label="评估名称">
+                    <a-form-item :label="t('eval.evalNameLabel')">
                       <a-input
                         v-model:value="configForm.name"
-                        placeholder="请输入评估名称"
+                        :placeholder="t('eval.evalNamePlaceholder')"
                         :maxlength="100"
                         show-count
                       />
                     </a-form-item>
 
-                    <a-form-item label="评估基准">
+                    <a-form-item :label="t('eval.benchmarkLabel')">
                       <div class="dropdown-benchmark-row">
                         <a-select
                           v-model:value="selectedDatasetId"
-                          placeholder="请选择评估基准"
+                          :placeholder="t('eval.benchmarkPlaceholder')"
                           style="width: 100%"
                           :loading="datasetsLoading"
                           @change="onDatasetChanged"
@@ -67,7 +67,7 @@
                             :key="benchmark.dataset_id"
                             :value="benchmark.dataset_id"
                           >
-                            {{ benchmark.name }} ({{ benchmark.item_count }} 个问题)
+                            {{ $t('eval.benchmarkItemCount', { name: benchmark.name, count: benchmark.item_count }) }}
                           </a-select-option>
                         </a-select>
                         <a-button
@@ -75,7 +75,7 @@
                           :loading="datasetsLoading"
                           :icon="h(RefreshCw, { size: 16 })"
                           class="refresh-benchmarks-btn lucide-icon-btn"
-                          title="刷新评估基准列表"
+                          :title="t('eval.refreshBenchmarksTitle')"
                           @click="() => loadDatasets(true)"
                         />
                       </div>
@@ -84,8 +84,8 @@
                     <a-form-item
                       :label="
                         selectedDataset?.has_gold_answers
-                          ? '答案生成模型（可选）'
-                          : '答案生成模型（当前基准无需）'
+                          ? t('eval.answerModelLabelWith')
+                          : t('eval.answerModelLabelNoNeed')
                       "
                     >
                       <ModelSelectorComponent
@@ -101,8 +101,8 @@
                     <a-form-item
                       :label="
                         selectedDataset?.has_gold_answers
-                          ? '答案评判模型（可选）'
-                          : '答案评判模型（当前基准无需）'
+                          ? t('eval.judgeModelLabelWith')
+                          : t('eval.judgeModelLabelNoNeed')
                       "
                     >
                       <ModelSelectorComponent
@@ -127,7 +127,7 @@
                     :disabled="!selectedDataset"
                     @click="startEvaluation"
                   >
-                    开始评估
+                    {{ $t('eval.startEvaluation') }}
                   </a-button>
                 </div>
               </template>
@@ -180,28 +180,28 @@
                 </strong>
               </div>
               <div class="metric-card">
-                <span class="metric-label">耗时</span>
+                <span class="metric-label">{{ $t('eval.durationMetric') }}</span>
                 <strong>{{ formatRunDuration(latestEvaluation) }}</strong>
               </div>
               <div class="metric-card">
-                <span class="metric-label">数据量</span>
+                <span class="metric-label">{{ $t('eval.dataVolumeMetric') }}</span>
                 <strong>{{ formatRunItems(latestEvaluation) }}</strong>
               </div>
               <div class="metric-card">
-                <span class="metric-label">完成率</span>
+                <span class="metric-label">{{ $t('eval.completionRateMetric') }}</span>
                 <strong>{{ formatCompletionRate(latestEvaluation) }}</strong>
               </div>
             </div>
           </div>
 
           <div v-else class="last-evaluation-empty">
-            暂无评估记录，开始评估后会在这里展示最近一次结果。
+            {{ $t('eval.noEvaluationRecord') }}
           </div>
         </div>
 
         <div class="history-section">
           <div class="section-header">
-            <h4 class="section-title">历史评估记录</h4>
+            <h4 class="section-title">{{ $t('eval.historyTitle') }}</h4>
             <a-button
               type="text"
               size="small"
@@ -210,7 +210,7 @@
               :icon="h(RefreshCw, { size: 14 })"
               class="refresh-btn lucide-icon-btn"
             >
-              刷新
+              {{ $t('common.refresh') }}
             </a-button>
           </div>
           <a-table
@@ -230,21 +230,21 @@
                     class="history-action-link"
                     @click.prevent="viewResults(record.run_id)"
                   >
-                    查看
+                    {{ $t('common.view') }}
                   </a>
                   <a-popconfirm
-                    title="确定要删除这条评估记录吗？"
-                    description="删除后将无法恢复"
+                    :title="t('eval.deleteRecordConfirm')"
+                    :description="t('eval.deleteRecordDescription')"
                     @confirm="deleteEvaluationRecord(record.run_id)"
-                    ok-text="确定"
-                    cancel-text="取消"
+                    :ok-text="t('common.ok')"
+                    :cancel-text="t('common.cancel')"
                   >
                     <a
                       href=""
                       class="history-action-link history-action-link-danger"
                       @click.prevent
                     >
-                      删除
+                      {{ $t('common.delete') }}
                     </a>
                   </a-popconfirm>
                 </a-space>
@@ -260,12 +260,12 @@
     <div v-if="resultModalVisible" class="evaluation-detail-overlay">
       <div class="evaluation-detail-panel">
         <div class="evaluation-detail-titlebar">
-          <div class="evaluation-detail-title">评估结果 - {{ getRunName(selectedResult) }}</div>
+          <div class="evaluation-detail-title">{{ $t('eval.resultTitle', { name: getRunName(selectedResult) }) }}</div>
           <a-button
             type="text"
             size="small"
             class="lucide-icon-btn"
-            title="关闭"
+            :title="t('common.close')"
             @click="resultModalVisible = false"
           >
             <X :size="16" />
@@ -274,23 +274,23 @@
 
         <div v-if="resultsLoading" class="loading-container">
           <a-spin size="large" />
-          <p style="margin-top: 16px; color: var(--gray-600)">正在加载评估结果...</p>
+          <p style="margin-top: 16px; color: var(--gray-600)">{{ $t('eval.loadingResults') }}</p>
         </div>
 
         <div v-else-if="selectedResult && detailedResults.length > 0" class="result-detail-content">
           <div class="result-summary-bar">
             <div class="summary-items">
               <span class="summary-item summary-run-id" :title="selectedResult.run_id">
-                运行ID：{{ selectedResult.run_id }}
+                {{ $t('eval.runIdLabel', { id: selectedResult.run_id }) }}
               </span>
               <span class="summary-item">
-                状态：
+                {{ $t('eval.statusColon') }}
                 <a-tag :color="getStatusColor(selectedResult.status)">
                   {{ getStatusText(selectedResult.status) }}
                 </a-tag>
               </span>
               <span class="summary-item">
-                总体评分：
+                {{ $t('eval.overallScoreColon') }}
                 <a-tag
                   v-if="selectedResult.overall_score != null"
                   :color="getScoreTagColor(selectedResult.overall_score)"
@@ -299,14 +299,10 @@
                 </a-tag>
                 <span v-else>-</span>
               </span>
-              <span class="summary-item">总问题数：{{ selectedResult.total_items }}</span>
-              <span class="summary-item">完成数：{{ selectedResult.completed_items }}</span>
+              <span class="summary-item">{{ $t('eval.totalQuestionsColon', { count: selectedResult.total_items }) }}</span>
+              <span class="summary-item">{{ $t('eval.completedCountColon', { count: selectedResult.completed_items }) }}</span>
               <span class="summary-item">
-                总耗时：{{
-                  evaluationStats.totalDuration
-                    ? formatDuration(evaluationStats.totalDuration)
-                    : '-'
-                }}
+                {{ $t('eval.totalDurationColon', { duration: evaluationStats.totalDuration ? formatDuration(evaluationStats.totalDuration) : '-' }) }}
               </span>
             </div>
             <a-button
@@ -315,18 +311,14 @@
               @click="toggleErrorOnly"
               :class="{ 'error-only-active': showErrorsOnly }"
             >
-              {{ showErrorsOnly ? '显示全部' : '仅查看错误' }}
+              {{ $t(showErrorsOnly ? 'eval.showAll' : 'eval.showErrorsOnly') }}
             </a-button>
           </div>
 
           <div class="result-metrics-bar">
             <div class="metric-items">
               <span class="result-count">
-                {{
-                  showErrorsOnly
-                    ? `仅显示错误结果，共 ${paginationTotal} 条`
-                    : `显示全部结果，共 ${paginationTotal} 条`
-                }}
+                {{ $t(showErrorsOnly ? 'eval.errorOnlyCount' : 'eval.allResultsCount', { count: paginationTotal }) }}
               </span>
               <template v-if="Object.keys(evaluationStats.retrievalMetrics || {}).length > 0">
                 <span
@@ -340,7 +332,7 @@
                 </span>
               </template>
               <span v-if="evaluationStats.totalQuestions" class="compact-metric">
-                答案准确率：<strong
+                {{ $t('eval.answerAccuracyColon') }}<strong
                   :style="{ color: getScoreColor(evaluationStats.answerAccuracy) }"
                 >
                   {{ (evaluationStats.answerAccuracy * 100).toFixed(1) }}%
@@ -349,8 +341,8 @@
             </div>
             <a-switch
               v-model:checked="resultAutoWrap"
-              checked-children="换行"
-              un-checked-children="不换行"
+              :checked-children="t('eval.wrapText')"
+              :un-checked-children="t('eval.noWrapText')"
             />
           </div>
 
@@ -364,7 +356,7 @@
               showSizeChanger: true,
               pageSizeOptions: ['10', '20', '50', '100'],
               showQuickJumper: true,
-              showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+              showTotal: (total, range) => t('eval.paginationRange', { from: range[0], to: range[1], total }),
               onChange: handlePageChange,
               onShowSizeChange: handlePageSizeChange
             }"
@@ -420,7 +412,7 @@
                   class="answer-judgement"
                 >
                   <a-tag :color="record.metrics.score > 0.5 ? 'green' : 'red'">
-                    {{ record.metrics.score === 1.0 ? '正确' : '错误' }}
+                    {{ $t(record.metrics.score === 1.0 ? 'eval.correctAnswer' : 'eval.wrongAnswer') }}
                   </a-tag>
                   <div
                     v-if="record.metrics.reasoning"
@@ -437,8 +429,8 @@
         </div>
 
         <div v-else-if="selectedResult" class="empty-results">
-          <a-empty description="暂无详细结果数据">
-            <a-button @click="viewDetails(selectedResult)">查看基本信息</a-button>
+          <a-empty :description="t('eval.noDetailResults')">
+            <a-button @click="viewDetails(selectedResult)">{{ $t('eval.viewBasicInfo') }}</a-button>
           </a-empty>
         </div>
       </div>
@@ -449,11 +441,14 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, watch, h } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { evaluationApi } from '@/apis/knowledge_api'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import { BarChart3, ChevronDown, ClipboardList, RefreshCw, X } from 'lucide-vue-next'
 import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
 import { useTaskerStore } from '@/stores/tasker'
+
+const { t } = useI18n()
 
 const props = defineProps({
   kbId: {
@@ -530,28 +525,28 @@ const configForm = reactive({
 })
 
 const evaluationStartHint = computed(() => {
-  if (!selectedDataset.value?.has_gold_answers) return '当前基准只会执行检索评估，无需选择模型。'
-  if (!configForm.answer_llm && !configForm.judge_llm) return '不选择模型时，将仅执行检索评估。'
-  if (configForm.answer_llm && configForm.judge_llm) return '将执行检索评估与答案评估。'
-  return '答案生成模型和答案评判模型需要同时选择。'
+  if (!selectedDataset.value?.has_gold_answers) return t('eval.hintRetrievalOnly')
+  if (!configForm.answer_llm && !configForm.judge_llm) return t('eval.hintRetrievalOnlyNoModel')
+  if (configForm.answer_llm && configForm.judge_llm) return t('eval.hintFullEvaluation')
+  return t('eval.hintModelMismatch')
 })
 
 // 表格列定义
 const resultColumns = computed(() => {
   const columns = [
     {
-      title: '问题',
+      title: t('eval.questionColumn'),
       dataIndex: 'query',
       key: 'query',
       width: resultColumnWidths.query
     },
     {
-      title: '生成答案',
+      title: t('eval.generatedAnswerColumn'),
       key: 'generated_answer',
       width: resultColumnWidths.generated_answer
     },
     {
-      title: '答案评判',
+      title: t('eval.answerJudgementColumn'),
       key: 'answer_score',
       width: resultColumnWidths.answer_score
     }
@@ -569,7 +564,7 @@ const resultColumns = computed(() => {
   // 如果有检索指标数据，添加检索指标列
   if (hasRetrievalMetrics) {
     columns.splice(2, 0, {
-      title: '检索指标',
+      title: t('eval.retrievalMetricsColumn'),
       key: 'retrieval_score',
       width: resultColumnWidths.retrieval_score
     })
@@ -625,9 +620,9 @@ const withResizableTitle = (column) => ({
   ])
 })
 
-const historyColumns = [
+const historyColumns = computed(() => [
   {
-    title: '评估名称',
+    title: t('eval.evalNameLabel'),
     dataIndex: 'name',
     key: 'name',
     width: 180,
@@ -635,20 +630,20 @@ const historyColumns = [
     customRender: ({ record }) => getRunName(record)
   },
   {
-    title: '评估基准',
+    title: t('eval.benchmarkLabel'),
     key: 'dataset_name',
     width: 180,
     ellipsis: true,
     customRender: ({ record }) => getDatasetName(record.dataset_id)
   },
   {
-    title: '数据量',
+    title: t('eval.dataVolumeMetric'),
     key: 'items',
     width: 92,
     customRender: ({ record }) => formatRunItems(record)
   },
   {
-    title: '耗时',
+    title: t('eval.durationMetric'),
     key: 'duration',
     width: 100,
     customRender: ({ record }) => formatRunDuration(record)
@@ -660,24 +655,24 @@ const historyColumns = [
     customRender: ({ record }) => renderMetricTag(getRecall10(record), record.status)
   },
   {
-    title: '综合评分',
+    title: t('eval.overallScoreColumn'),
     key: 'overall_score',
     width: 100,
     customRender: ({ record }) => renderMetricTag(record.overall_score, record.status, 0)
   },
   {
-    title: '状态',
+    title: t('common.status'),
     key: 'status',
     width: 86,
     customRender: ({ record }) =>
       h('a-tag', { color: getStatusColor(record.status) }, getStatusText(record.status))
   },
   {
-    title: '操作',
+    title: t('gaps.actionsColumn'),
     key: 'actions',
     width: 120
   }
-]
+])
 
 // 切换错误显示模式
 const toggleErrorOnly = async () => {
@@ -750,7 +745,7 @@ const loadResultsWithPagination = async () => {
     }
   } catch (error) {
     console.error('加载评估结果失败:', error)
-    message.error('加载评估结果失败')
+    message.error(t('eval.loadResultsFailed'))
   } finally {
     resultsLoading.value = false
   }
@@ -788,15 +783,15 @@ const loadDatasets = async (showSuccessMessage = false) => {
 
       // 如果是手动刷新，显示成功提示
       if (showSuccessMessage) {
-        message.success(`已刷新，找到 ${completedDatasets.length} 个可评估基准`)
+        message.success(t('eval.refreshedBenchmarksCount', { count: completedDatasets.length }))
       }
     } else {
       console.error('响应格式不符合预期:', response)
-      message.error('基准数据格式错误')
+      message.error(t('eval.benchmarkFormatError'))
     }
   } catch (error) {
     console.error('加载评估基准失败:', error)
-    message.error('加载评估基准失败')
+    message.error(t('eval.loadBenchmarksFailed'))
   } finally {
     datasetsLoading.value = false
   }
@@ -837,10 +832,10 @@ const refreshHistory = async () => {
   refreshingHistory.value = true
   try {
     await loadEvaluationHistory()
-    message.success('历史记录已刷新')
+    message.success(t('eval.historyRefreshed'))
   } catch (error) {
     console.error('刷新历史记录失败:', error)
-    message.error('刷新历史记录失败')
+    message.error(t('eval.refreshHistoryFailed'))
   } finally {
     refreshingHistory.value = false
   }
@@ -849,7 +844,7 @@ const refreshHistory = async () => {
 // 开始评估
 const startEvaluation = async () => {
   if (!selectedDataset.value) {
-    message.error('请先选择评估基准')
+    message.error(t('eval.selectBenchmarkFirst'))
     return
   }
 
@@ -860,11 +855,11 @@ const startEvaluation = async () => {
   const runName = configForm.name.trim()
 
   if (hasAnswerModel !== hasJudgeModel) {
-    message.warning('生成模型和评估模型必须同时选择或者同时不选择')
+    message.warning(t('eval.modelMismatchWarning'))
     return
   }
   if (!runName) {
-    message.warning('请输入评估名称')
+    message.warning(t('eval.evalNamePlaceholder'))
     return
   }
 
@@ -883,17 +878,17 @@ const startEvaluation = async () => {
     const response = await evaluationApi.runEvaluation(props.kbId, params)
 
     if (response.message === 'success') {
-      message.success('评估任务已开始')
+      message.success(t('eval.evalStartedSuccess'))
       evaluationDropdownOpen.value = false
       configForm.name = buildDefaultEvaluationName()
       loadEvaluationHistory()
       taskerStore.loadTasks()
     } else {
-      message.error(response.message || '启动评估失败')
+      message.error(response.message || t('eval.startEvalFailed'))
     }
   } catch (error) {
     console.error('启动评估失败:', error)
-    message.error('启动评估失败')
+    message.error(t('eval.startEvalFailed'))
   } finally {
     startingEvaluation.value = false
   }
@@ -908,7 +903,7 @@ const loadEvaluationHistory = async (silent = false) => {
     }
   } catch (error) {
     console.error('加载评估历史失败:', error)
-    if (!silent) message.error('加载评估历史失败')
+    if (!silent) message.error(t('eval.loadHistoryFailed'))
   } finally {
     syncEvaluationRefresh()
   }
@@ -1010,11 +1005,11 @@ const viewResults = async (runId) => {
       // 加载分页数据
       await loadResultsWithPagination()
     } else {
-      message.error('获取评估结果失败：数据格式错误')
+      message.error(t('eval.getResultsFormatError'))
     }
   } catch (error) {
     console.error('获取评估结果失败:', error)
-    message.error('获取评估结果失败')
+    message.error(t('eval.getResultsFailed'))
   } finally {
     resultsLoading.value = false
   }
@@ -1031,13 +1026,13 @@ const deleteEvaluationRecord = async (runId) => {
 
     const response = await evaluationApi.deleteRun(props.kbId, runId)
     if (response.message === 'success') {
-      message.success('删除成功')
+      message.success(t('common.deleteSuccess'))
       // 重新加载评估历史
       await loadEvaluationHistory()
     }
   } catch (error) {
     console.error('删除评估记录失败:', error)
-    message.error('删除评估记录失败')
+    message.error(t('eval.deleteRecordFailed'))
   } finally {
     // 清除loading状态
     const record = evaluationHistory.value.find((r) => r.run_id === runId)
@@ -1079,7 +1074,7 @@ const formatCompletionRate = (record) => {
 }
 
 const formatRunDuration = (record) => {
-  if (record?.status === 'running') return '进行中'
+  if (record?.status === 'running') return t('eval.runningStatus')
   if (!record?.started_at || !record?.completed_at) return '-'
   const duration = (new Date(record.completed_at) - new Date(record.started_at)) / 1000
   return Number.isFinite(duration) && duration >= 0 ? formatDuration(duration) : '-'
@@ -1098,8 +1093,8 @@ const getRunProgress = (record) => {
 const getRunProgressMessage = (record) => {
   if (record?.message) return record.message
   const total = Number(record?.total_items || 0)
-  if (total) return `评估 ${Number(record?.completed_items || 0)}/${total}`
-  return '评估进行中'
+  if (total) return t('eval.progressMessage', { completed: Number(record?.completed_items || 0), total })
+  return t('eval.evaluating')
 }
 
 const formatLatestRingValue = (record) =>
@@ -1120,8 +1115,8 @@ const renderMetricTag = (value, status, digits = 3) => {
       digits === 0 ? formatPercent(value, 0) : formatMetricValue(value)
     )
   }
-  if (status === 'running') return h('a-tag', { color: 'processing' }, '计算中')
-  if (status === 'completed') return h('a-tag', { color: 'default' }, '无数据')
+  if (status === 'running') return h('a-tag', { color: 'processing' }, t('eval.calculating'))
+  if (status === 'completed') return h('a-tag', { color: 'default' }, t('eval.noDataTag'))
   return h('span', '-')
 }
 
@@ -1156,32 +1151,32 @@ const getStatusColor = (status) => {
 
 const getStatusText = (status) => {
   const texts = {
-    running: '运行中',
-    completed: '已完成',
-    failed: '失败',
-    paused: '已暂停'
+    running: 'eval.statusRunning',
+    completed: 'eval.statusCompleted',
+    failed: 'common.failed',
+    paused: 'eval.statusPaused'
   }
-  return texts[status] || status
+  return texts[status] ? t(texts[status]) : status
 }
 
 const getMetricTitle = (key) => {
   const titles = {
-    precision: '精确率',
-    recall: '召回率',
-    map: '平均精度',
-    ndcg: 'NDCG',
-    bleu: 'BLEU分数',
-    rouge: 'ROUGE分数',
-    answer_correctness: '答案准确性',
-    score: '评分',
-    reasoning: '理由',
-    overall_score: '综合评分'
+    precision: 'eval.metricPrecision',
+    recall: 'eval.metricRecall',
+    map: 'eval.metricMap',
+    ndcg: 'eval.metricNdcg',
+    bleu: 'eval.metricBleu',
+    rouge: 'eval.metricRouge',
+    answer_correctness: 'eval.metricAnswerCorrectness',
+    score: 'eval.metricScore',
+    reasoning: 'eval.metricReasoning',
+    overall_score: 'eval.overallScoreColumn'
   }
   // 处理 recall@k
-  if (key.startsWith('recall@')) return `召回率 (${key.split('@')[1]})`
-  if (key.startsWith('precision@')) return `精确率 (${key.split('@')[1]})`
+  if (key.startsWith('recall@')) return t('eval.metricRecallAtK', { k: key.split('@')[1] })
+  if (key.startsWith('precision@')) return t('eval.metricPrecisionAtK', { k: key.split('@')[1] })
 
-  return titles[key] || key
+  return titles[key] ? t(titles[key]) : key
 }
 
 // 获取指标类型
@@ -1213,15 +1208,15 @@ const formatMetricValue = (val) => {
 // 格式化持续时间
 const formatDuration = (seconds) => {
   if (seconds < 60) {
-    return `${Math.round(seconds)}秒`
+    return t('eval.durationSeconds', { n: Math.round(seconds) })
   } else if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = Math.round(seconds % 60)
-    return `${minutes}分${remainingSeconds}秒`
+    return t('eval.durationMinutes', { m: minutes, s: remainingSeconds })
   } else {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}小时${minutes}分`
+    return t('eval.durationHours', { h: hours, m: minutes })
   }
 }
 

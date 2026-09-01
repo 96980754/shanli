@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 const DICEBEAR_GLYPHS_AVATAR_BASE_URL = 'https://api.dicebear.com/10.x/glyphs/svg'
 
 export const AVATAR_BACKGROUND_TOKENS = [
@@ -33,7 +35,10 @@ export const generatePixelAvatar = (id) => {
 }
 
 export const getAvatarInitials = (name, kind = 'user') => {
-  const fallback = kind === 'agent' ? '智能' : '用户'
+  const fallback =
+    kind === 'agent'
+      ? i18n.global.t('userInfo.agentInitial')
+      : i18n.global.t('userInfo.userInitial')
   const normalizedName = String(name || '').trim()
   if (!normalizedName) return fallback
   return Array.from(normalizedName).slice(0, 2).join('')

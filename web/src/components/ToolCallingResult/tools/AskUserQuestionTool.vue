@@ -8,10 +8,10 @@
   >
     <template #header>
       <div class="sep-header">
-        <span class="note">提问</span>
+        <span class="note">{{ $t('toolCall.askUser.question') }}</span>
         <span class="separator">|</span>
         <span class="description">{{ shortQuestionSummary }}</span>
-        <span v-if="displayAnswer" class="tag tag-answered"> 已回答: {{ displayAnswer }} </span>
+        <span v-if="displayAnswer" class="tag tag-answered"> {{ $t('toolCall.askUser.answered', { answer: displayAnswer }) }} </span>
       </div>
     </template>
 
@@ -29,17 +29,17 @@
             </div>
 
             <div v-if="questionItem.operation" class="operation-row">
-              <span class="row-label">操作</span>
+              <span class="row-label">{{ $t('toolCall.askUser.operation') }}</span>
               <span class="operation-text">{{ questionItem.operation }}</span>
             </div>
 
             <div v-if="getQuestionAnswerText(questionItem)" class="answer-row">
-              <span class="row-label">回答</span>
+              <span class="row-label">{{ $t('toolCall.askUser.answer') }}</span>
               <span class="answer-text">{{ getQuestionAnswerText(questionItem) }}</span>
             </div>
           </div>
         </div>
-        <div v-else class="no-question">暂无提问内容</div>
+        <div v-else class="no-question">{{ $t('toolCall.askUser.noQuestion') }}</div>
       </div>
     </template>
   </BaseToolCall>
@@ -47,8 +47,11 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
 import { normalizeQuestions } from '@/utils/questionUtils'
+
+const { t } = useI18n()
 
 const props = defineProps({
   toolCall: {
@@ -100,14 +103,17 @@ const questions = computed(() => {
 })
 
 const shortQuestionSummary = computed(() => {
-  if (!questions.value.length) return '无问题'
+  if (!questions.value.length) return t('toolCall.askUser.noQuestionSummary')
 
   const firstQuestion = questions.value[0].question
   const shortFirstQuestion =
     firstQuestion.length > 36 ? firstQuestion.slice(0, 36) + '...' : firstQuestion
 
   if (questions.value.length === 1) return shortFirstQuestion
-  return `${shortFirstQuestion} 等 ${questions.value.length} 题`
+  return t('toolCall.askUser.etcQuestions', {
+    question: shortFirstQuestion,
+    count: questions.value.length
+  })
 })
 
 const userAnswer = computed(() => {
@@ -140,7 +146,8 @@ const formatSingleAnswer = (answer, questionItem) => {
         ? answer.selected.map((item) => getOptionLabel(item, questionItem)).filter(Boolean)
         : []
       const text = String(answer.text || '').trim()
-      return [...selected, text ? `其他: ${text}` : '其他'].join('、')
+      const otherLabel = text ? t('toolCall.askUser.otherWithText', { text }) : t('toolCall.askUser.other')
+      return [...selected, otherLabel].join(t('toolCall.askUser.answerJoin'))
     }
     return JSON.stringify(answer)
   }

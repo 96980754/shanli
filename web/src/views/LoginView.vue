@@ -278,7 +278,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || 'AI知识库'
+  const brandNameRaw = infoStore.branding?.name?.trim() || t('login.brandFallback')
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
@@ -318,16 +318,16 @@ const lockCountdown = ref(null)
 
 // 登录表单
 const loginForm = reactive({
-  loginId: '', // 支持uid或phone_number登录
+  loginId: '', // 支持uid或phone_number登录 // i18n-ignore
   password: ''
 })
 
 // 管理员初始化表单
 const adminForm = reactive({
-  uid: '', // 改为直接输入uid
+  uid: '', // 改为直接输入uid // i18n-ignore
   password: '',
   confirmPassword: '',
-  phone_number: '' // 手机号字段（可选）
+  phone_number: '' // 手机号字段（可选） // i18n-ignore
 })
 
 const goHome = () => {
@@ -377,7 +377,7 @@ const phoneRules = computed(() => [
   {
     validator: async (rule, value) => {
       if (!value || value.trim() === '') {
-        return // 空值允许
+        return // 空值允许 // i18n-ignore
       }
       const phoneRegex = /^1[3-9]\d{9}$/
       if (!phoneRegex.test(value)) {
@@ -456,7 +456,7 @@ const handleLogin = async () => {
 
     // 获取重定向路径
     const redirectPath = sessionStorage.getItem('redirect') || '/'
-    sessionStorage.removeItem('redirect') // 清除重定向信息
+    sessionStorage.removeItem('redirect') // 清除重定向信息 // i18n-ignore
 
     // 根据用户角色决定重定向目标
     if (redirectPath === '/') {
@@ -465,7 +465,7 @@ const handleLogin = async () => {
         await agentStore.initialize()
         router.push('/agent')
       } catch (error) {
-        console.error('获取智能体信息失败:', error)
+        console.error('获取智能体信息失败:', error) // i18n-ignore
         router.push('/agent')
       }
     } else {
@@ -473,7 +473,7 @@ const handleLogin = async () => {
       router.push(redirectPath)
     }
   } catch (error) {
-    console.error('登录失败:', error)
+    console.error('登录失败:', error) // i18n-ignore
 
     // 检查是否是锁定错误（HTTP 423）
     if (error.status === 423) {
@@ -488,7 +488,7 @@ const handleLogin = async () => {
 
       // 如果没有从头中获取到，尝试从错误消息中解析
       if (remainingTime === 0) {
-        const lockTimeMatch = error.message.match(/(\d+)\s*秒/)
+        const lockTimeMatch = error.message.match(/(\d+)\s*秒/) // i18n-ignore
         if (lockTimeMatch) {
           remainingTime = parseInt(lockTimeMatch[1])
         }
@@ -532,7 +532,7 @@ const handleOIDCLogin = async () => {
       errorMessage.value = t('login.errors.oidcUrl')
     }
   } catch (error) {
-    console.error('OIDC 登录失败:', error)
+    console.error('OIDC 登录失败:', error) // i18n-ignore
     errorMessage.value = error.message || t('login.errors.oidcFailed')
   } finally {
     oidcLoading.value = false
@@ -550,7 +550,7 @@ const checkOIDCConfig = async () => {
     }
     return config
   } catch (error) {
-    console.error('检查 OIDC 配置失败:', error)
+    console.error('检查 OIDC 配置失败:', error) // i18n-ignore
     oidcEnabled.value = false
     return null
   } finally {
@@ -576,13 +576,13 @@ const handleInitialize = async () => {
     await userStore.initialize({
       uid: adminForm.uid,
       password: adminForm.password,
-      phone_number: adminForm.phone_number || null // 空字符串转为null
+      phone_number: adminForm.phone_number || null // 空字符串转为null // i18n-ignore
     })
 
     message.success(t('login.initSubmit'))
     router.push('/')
   } catch (error) {
-    console.error('初始化失败:', error)
+    console.error('初始化失败:', error) // i18n-ignore
     errorMessage.value = error.message || t('login.errors.initFailed')
   } finally {
     loading.value = false
@@ -596,7 +596,7 @@ const checkFirstRunStatus = async () => {
     const isFirst = await userStore.checkFirstRun()
     isFirstRun.value = isFirst
   } catch (error) {
-    console.error('检查首次运行状态失败:', error)
+    console.error('检查首次运行状态失败:', error) // i18n-ignore
     errorMessage.value = t('login.errors.systemError')
   } finally {
     loading.value = false
@@ -615,7 +615,7 @@ const checkServerHealth = async () => {
       serverError.value = response.message || t('login.errors.serverAbnormal')
     }
   } catch (error) {
-    console.error('检查服务器健康状态失败:', error)
+    console.error('检查服务器健康状态失败:', error) // i18n-ignore
     serverStatus.value = 'error'
     serverError.value = error.message || t('login.errors.cannotConnect')
   } finally {

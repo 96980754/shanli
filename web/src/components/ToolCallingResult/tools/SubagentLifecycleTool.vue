@@ -66,9 +66,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { getToolCallId, parseToolCallArgs, parseToolCallResult } from '../toolRegistry'
+
+const { t } = useI18n()
 
 const props = defineProps({
   toolCall: {
@@ -85,34 +88,34 @@ const props = defineProps({
   }
 })
 
-const TOOL_LABELS = {
-  subagent_start: '启动子智能体',
-  subagent_status: '查询子智能体',
-  subagent_events: '读取子智能体事件',
-  subagent_cancel: '取消子智能体',
-  subagent_await: '等待子智能体'
+const TOOL_LABEL_KEYS = {
+  subagent_start: 'toolCall.subagent.start',
+  subagent_status: 'toolCall.subagent.status',
+  subagent_events: 'toolCall.subagent.events',
+  subagent_cancel: 'toolCall.subagent.cancel',
+  subagent_await: 'toolCall.subagent.await'
 }
 
-const PROGRESS_KIND_LABELS = {
-  assistant_message: '消息',
-  assistant_reasoning: '思考',
-  tool_call: '工具',
-  tool_call_delta: '工具'
+const PROGRESS_KIND_KEYS = {
+  assistant_message: 'toolCall.subagent.progressMessage',
+  assistant_reasoning: 'toolCall.subagent.progressReasoning',
+  tool_call: 'toolCall.subagent.progressTool',
+  tool_call_delta: 'toolCall.subagent.progressTool'
 }
 
-const STATUS_LABELS = {
-  busy: '忙碌',
-  cancelled: '已取消',
-  cancel_requested: '取消中',
-  completed: '已完成',
-  existing: '已存在',
-  failed: '失败',
-  interrupted: '已中断',
-  ok: '成功',
-  pending: '等待中',
-  running: '运行中',
-  started: '已启动',
-  success: '成功'
+const STATUS_LABEL_KEYS = {
+  busy: 'toolCall.subagent.statusBusy',
+  cancelled: 'toolCall.subagent.statusCancelled',
+  cancel_requested: 'toolCall.subagent.statusCancelling',
+  completed: 'toolCall.subagent.statusCompleted',
+  existing: 'toolCall.subagent.statusExisting',
+  failed: 'common.failed',
+  interrupted: 'toolCall.subagent.statusInterrupted',
+  ok: 'common.success',
+  pending: 'toolCall.subagent.statusPending',
+  running: 'toolCall.subagent.statusRunning',
+  started: 'toolCall.subagent.statusStarted',
+  success: 'common.success'
 }
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'interrupted'])
@@ -132,7 +135,7 @@ const headerTitle = computed(() => {
     parsedResult.value?.subagent_slug ||
     subagentRun.value?.subagent_slug ||
     ''
-  const label = TOOL_LABELS[toolId.value] || '子智能体'
+  const label = TOOL_LABEL_KEYS[toolId.value] ? t(TOOL_LABEL_KEYS[toolId.value]) : t('toolCall.subagent.name')
   return name ? `${label}: ${name}` : label
 })
 
@@ -148,7 +151,8 @@ const effectiveStatus = computed(() => {
 
 const statusLabel = computed(() => {
   const status = String(effectiveStatus.value || '').trim()
-  return STATUS_LABELS[status] || status
+  const key = STATUS_LABEL_KEYS[status]
+  return key ? t(key) : status
 })
 
 const runStatusClass = computed(() => ({
@@ -197,7 +201,10 @@ const metaItems = computed(() => {
       result.subagent_slug || args.value.subagent_slug || subagentRun.value?.subagent_slug
     ],
     ['last_seq', result.last_seq || result.progress?.last_seq],
-    ['events', Array.isArray(result.events) ? `${result.events.length} 条` : '']
+    [
+      'events',
+      Array.isArray(result.events) ? t('toolCall.subagent.eventsCount', { count: result.events.length }) : ''
+    ]
   ]
   return items
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -221,7 +228,8 @@ const progressMessages = computed(() => {
     }))
 })
 
-const progressKindLabel = (kind) => PROGRESS_KIND_LABELS[kind] || '进度'
+const progressKindLabel = (kind) =>
+  PROGRESS_KIND_KEYS[kind] ? t(PROGRESS_KIND_KEYS[kind]) : t('toolCall.subagent.progress')
 
 const progressMessageKey = (message, index) =>
   [message?.seq, message?.message_id, message?.tool_call_id, index].filter(Boolean).join(':')

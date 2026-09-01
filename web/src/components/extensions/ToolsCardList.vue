@@ -1,21 +1,21 @@
 <template>
   <div class="tools-cards-page extension-page-root">
-    <PageShoulder search-placeholder="搜索工具..." v-model:search="searchQuery">
+    <PageShoulder :search-placeholder="$t('tools.searchTools')" v-model:search="searchQuery">
       <template #filters>
         <a-select
           v-model:value="selectedCategory"
           style="width: 120px"
-          placeholder="全部分类"
+          :placeholder="$t('tools.allCategories')"
           allow-clear
         >
-          <a-select-option value="">全部分类</a-select-option>
+          <a-select-option value="">{{ $t('tools.allCategories') }}</a-select-option>
           <a-select-option v-for="cat in categories" :key="cat" :value="cat">
-            {{ categoryLabels[cat] || cat }}
+            {{ categoryLabels[cat] ? $t(categoryLabels[cat]) : cat }}
           </a-select-option>
         </a-select>
       </template>
       <template #actions>
-        <a-tooltip title="刷新工具" placement="bottom">
+        <a-tooltip :title="$t('tools.refreshTip')" placement="bottom">
           <a-button class="lucide-icon-btn" :disabled="loading" @click="fetchTools">
             <RefreshCw :size="14" />
           </a-button>
@@ -24,7 +24,7 @@
     </PageShoulder>
 
     <div v-if="filteredTools.length === 0" class="extension-card-grid-empty-state">
-      <a-empty :image="false" :description="searchQuery ? '无匹配工具' : '暂无工具'" />
+      <a-empty :image="false" :description="searchQuery ? $t('tools.noMatchTools') : $t('tools.noTools')" />
     </div>
 
     <ExtensionCardGrid v-else>
@@ -33,7 +33,7 @@
         :key="getToolSlug(tool)"
         :title="formatExtensionCardTitle(tool.name)"
         :subtitle="getToolSlug(tool)"
-        :description="tool.description || '无描述'"
+        :description="tool.description || $t('tools.noDescription')"
         :default-icon="getToolIcon(getToolSlug(tool)) || WrenchIcon"
         :tags="toolTags(tool)"
         @click="selectTool(tool)"
@@ -43,7 +43,7 @@
 
     <a-modal
       v-model:open="detailVisible"
-      :title="currentTool?.name || '工具详情'"
+      :title="currentTool?.name || $t('tools.detailTitle')"
       :footer="null"
       width="640px"
     >
@@ -51,14 +51,14 @@
         <div class="tool-detail-content detail-section-container">
           <div class="detail-section">
             <div class="section-content description">
-              {{ currentTool.description || '无描述' }}
+              {{ currentTool.description || $t('tools.noDescription') }}
             </div>
           </div>
 
           <div class="detail-section" v-if="currentTool.config_guide">
             <div class="section-header">
               <FileText :size="14" />
-              <span>配置说明</span>
+              <span>{{ $t('tools.configGuide') }}</span>
             </div>
             <div class="section-content description config-guide">
               {{ currentTool.config_guide }}
@@ -68,11 +68,11 @@
           <div class="detail-section">
             <div class="section-header">
               <Tag :size="14" />
-              <span>分类</span>
+              <span>{{ $t('tools.categoryLabel') }}</span>
             </div>
             <div class="section-content">
               <a-tag :color="categoryColors[currentTool.category] || 'default'">
-                {{ categoryLabels[currentTool.category] || currentTool.category }}
+                {{ categoryLabels[currentTool.category] ? $t(categoryLabels[currentTool.category]) : currentTool.category }}
               </a-tag>
             </div>
           </div>
@@ -80,18 +80,18 @@
           <div class="detail-section">
             <div class="section-header">
               <Tags :size="14" />
-              <span>标签</span>
+              <span>{{ $t('tools.tags') }}</span>
             </div>
             <div class="section-content">
               <a-tag v-for="tag in currentTool.tags" :key="tag">{{ tag }}</a-tag>
-              <span v-if="!currentTool.tags?.length" class="text-muted">无</span>
+              <span v-if="!currentTool.tags?.length" class="text-muted">{{ $t('tools.none') }}</span>
             </div>
           </div>
 
           <div class="detail-section" v-if="currentTool.args?.length">
             <div class="section-header">
               <List :size="14" />
-              <span>参数</span>
+              <span>{{ $t('tools.parameters') }}</span>
             </div>
             <div class="section-content">
               <a-table
@@ -112,6 +112,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { Wrench, RefreshCw, FileText, Tag, Tags, List } from 'lucide-vue-next'
 import { toolApi } from '@/apis/tool_api'
@@ -123,6 +124,8 @@ import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const WrenchIcon = Wrench
 
+const { t } = useI18n()
+
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedCategory = ref('')
@@ -131,7 +134,12 @@ const currentTool = ref(null)
 const detailVisible = ref(false)
 
 const categories = ['buildin', 'knowledge', 'mysql', 'debug']
-const categoryLabels = { buildin: '内置工具', knowledge: '知识库', mysql: 'MySQL', debug: '调试' }
+const categoryLabels = {
+  buildin: 'tools.category.buildin',
+  knowledge: 'tools.category.knowledge',
+  mysql: 'tools.category.mysql',
+  debug: 'tools.category.debug'
+}
 const categoryColors = { buildin: 'blue', knowledge: 'purple', mysql: 'green', debug: 'orange' }
 
 const getToolSlug = (tool) => tool?.slug || tool?.id || ''
@@ -140,19 +148,19 @@ const toolTags = (tool) => {
   const tags = []
   if (tool.category) {
     tags.push({
-      name: categoryLabels[tool.category] || tool.category,
+      name: categoryLabels[tool.category] ? t(categoryLabels[tool.category]) : tool.category,
       color: categoryColors[tool.category] || 'blue'
     })
   }
-  ;(tool.tags || []).slice(0, 2).forEach((t) => tags.push(t))
+  ;(tool.tags || []).slice(0, 2).forEach((item) => tags.push(item))
   return tags
 }
 
-const argColumns = [
-  { title: '参数名', dataIndex: 'name', key: 'name' },
-  { title: '类型', dataIndex: 'type', key: 'type', width: 80 },
-  { title: '描述', dataIndex: 'description', key: 'description' }
-]
+const argColumns = computed(() => [
+  { title: t('tools.col.name'), dataIndex: 'name', key: 'name' },
+  { title: t('tools.col.type'), dataIndex: 'type', key: 'type', width: 80 },
+  { title: t('tools.col.description'), dataIndex: 'description', key: 'description' }
+])
 
 const filteredTools = computed(() => {
   let result = tools.value
@@ -183,7 +191,7 @@ const fetchTools = async () => {
     const result = await toolApi.getTools()
     tools.value = result?.data || []
   } catch {
-    message.error('加载工具失败')
+    message.error(t('tools.loadFail'))
   } finally {
     loading.value = false
   }

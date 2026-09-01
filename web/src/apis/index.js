@@ -4,19 +4,19 @@
  */
 
 // 导出API模块
-export * from './system_api' // 系统管理API
-export * from './knowledge_api' // 知识库管理API
-export * from './graph_api' // 图谱API
-export * from './agent_api' // 智能体API
-export * from './tasker' // 任务管理API
-export * from './department_api' // 部门管理API
-export * from './mcp_api' // MCP API
-export * from './skill_api' // Skills API
-export * from './tool_api' // 工具 API
-export * from './mention_api' // 提及搜索 API
-export * from './user_api' // 用户资源 API
-export * from './user_config_api' // 用户配置 API
-export * from './auth_api' // 认证与用户导入 API
+export * from './system_api' // 系统管理API // i18n-ignore
+export * from './knowledge_api' // 知识库管理API // i18n-ignore
+export * from './graph_api' // 图谱API // i18n-ignore
+export * from './agent_api' // 智能体API // i18n-ignore
+export * from './tasker' // 任务管理API // i18n-ignore
+export * from './department_api' // 部门管理API // i18n-ignore
+export * from './mcp_api' // MCP API // i18n-ignore
+export * from './skill_api' // Skills API // i18n-ignore
+export * from './tool_api' // 工具 API // i18n-ignore
+export * from './mention_api' // 提及搜索 API // i18n-ignore
+export * from './user_api' // 用户资源 API // i18n-ignore
+export * from './user_config_api' // 用户配置 API // i18n-ignore
+export * from './auth_api' // 认证与用户导入 API // i18n-ignore
 
 // 导出基础工具函数
 export {

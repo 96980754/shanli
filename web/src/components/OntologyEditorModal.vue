@@ -4,8 +4,8 @@
     :title="modalTitle"
     width="860px"
     :confirm-loading="submitting"
-    :ok-text="mode === 'edit' ? '保存修改' : '创建并启用'"
-    cancel-text="关闭"
+    :ok-text="mode === 'edit' ? $t('ontology.saveChanges') : $t('ontology.createAndEnable')"
+    :cancel-text="$t('common.close')"
     :footer="mode === 'view' ? null : undefined"
     @ok="submit"
     @cancel="close"
@@ -19,24 +19,24 @@
 
     <a-form layout="vertical">
       <div class="form-grid identity-grid">
-        <a-form-item label="展示名称" required>
-          <a-input v-model:value="form.name" :disabled="isReadOnly" placeholder="例如：产品知识本体" />
+        <a-form-item :label="$t('ontology.displayName')" required>
+          <a-input v-model:value="form.name" :disabled="isReadOnly" :placeholder="$t('ontology.namePlaceholder')" />
         </a-form-item>
         <a-form-item label="Registry ID" required>
-          <a-input v-model:value="form.registry_id" :disabled="mode !== 'create'" placeholder="例如：product-core" />
+          <a-input v-model:value="form.registry_id" :disabled="mode !== 'create'" :placeholder="$t('ontology.registryIdPlaceholder')" />
         </a-form-item>
-        <a-form-item label="版本" required>
-          <a-input v-model:value="form.version" :disabled="mode !== 'create'" placeholder="例如：1.0.0" />
+        <a-form-item :label="$t('ontology.versionLabel')" required>
+          <a-input v-model:value="form.version" :disabled="mode !== 'create'" :placeholder="$t('ontology.versionPlaceholder')" />
         </a-form-item>
       </div>
 
       <section class="editor-section">
         <div class="section-title-row">
           <div>
-            <h4>实体类型</h4>
-            <p>定义业务中需要识别的对象类型，以及具体对象的标准名称和别名。</p>
+            <h4>{{ $t('ontology.entityTypesTitle') }}</h4>
+            <p>{{ $t('ontology.entityTypesDesc') }}</p>
           </div>
-          <a-button v-if="!isReadOnly" @click="addEntity"><Plus :size="15" />添加实体</a-button>
+          <a-button v-if="!isReadOnly" @click="addEntity"><Plus :size="15" />{{ $t('ontology.addEntity') }}</a-button>
         </div>
 
         <div v-for="(entity, entityIndex) in form.entities" :key="entity.id" class="editor-card">
@@ -44,32 +44,32 @@
             v-if="!isReadOnly && form.entities.length > 1"
             type="button"
             class="remove-button"
-            aria-label="删除实体"
+            :aria-label="$t('ontology.deleteEntity')"
             @click="removeEntity(entityIndex)"
           >
             <Trash2 :size="15" />
           </button>
           <div class="form-grid two-columns">
-            <a-form-item label="类型名称" required>
-              <a-input v-model:value="entity.name" :disabled="isReadOnly" placeholder="例如：Product" />
+            <a-form-item :label="$t('ontology.typeNameLabel')" required>
+              <a-input v-model:value="entity.name" :disabled="isReadOnly" :placeholder="$t('ontology.typeNamePlaceholder')" />
             </a-form-item>
-            <a-form-item label="业务说明">
-              <a-input v-model:value="entity.description" :disabled="isReadOnly" placeholder="什么属于该类型" />
+            <a-form-item :label="$t('ontology.businessDesc')">
+              <a-input v-model:value="entity.description" :disabled="isReadOnly" :placeholder="$t('ontology.businessDescPlaceholder')" />
             </a-form-item>
           </div>
-          <a-form-item label="典型示例">
+          <a-form-item :label="$t('ontology.typicalExamples')">
             <a-select
               v-model:value="entity.examples"
               mode="tags"
-              placeholder="输入示例后按 Enter"
+              :placeholder="$t('ontology.enterExamplePlaceholder')"
               :disabled="isReadOnly"
               :token-separators="[',']"
             />
           </a-form-item>
           <div class="alias-header">
-            <span>标准名称与别名</span>
+            <span>{{ $t('ontology.canonicalAliasesTitle') }}</span>
             <a-button v-if="!isReadOnly" size="small" type="text" @click="addCanonicalAlias(entity)">
-              <Plus :size="14" />添加
+              <Plus :size="14" />{{ $t('ontology.add') }}
             </a-button>
           </div>
           <div
@@ -77,11 +77,11 @@
             :key="alias.id"
             class="nested-row"
           >
-            <a-input v-model:value="alias.canonical" :disabled="isReadOnly" placeholder="标准名称，例如：MCSTARS" />
+            <a-input v-model:value="alias.canonical" :disabled="isReadOnly" :placeholder="$t('ontology.canonicalPlaceholder')" />
             <a-select
               v-model:value="alias.aliases"
               mode="tags"
-              placeholder="输入别名后按 Enter"
+              :placeholder="$t('ontology.enterAliasPlaceholder')"
               :disabled="isReadOnly"
               :token-separators="[',']"
             />
@@ -95,29 +95,29 @@
       <section class="editor-section">
         <div class="section-title-row">
           <div>
-            <h4>关系</h4>
-            <p>关系方向为 source → relation → target，端点只能选择已定义实体或 Any。</p>
+            <h4>{{ $t('ontology.relationsTitle') }}</h4>
+            <p>{{ $t('ontology.relationsDesc') }}</p>
           </div>
-          <a-button v-if="!isReadOnly" @click="addRelation"><Plus :size="15" />添加关系</a-button>
+          <a-button v-if="!isReadOnly" @click="addRelation"><Plus :size="15" />{{ $t('ontology.addRelation') }}</a-button>
         </div>
 
-        <a-empty v-if="!form.relations.length" description="暂无关系" />
+        <a-empty v-if="!form.relations.length" :description="$t('ontology.noRelations')" />
         <div v-for="(relation, index) in form.relations" :key="relation.id" class="editor-card">
           <button
             v-if="!isReadOnly"
             type="button"
             class="remove-button"
-            aria-label="删除关系"
+            :aria-label="$t('ontology.deleteRelation')"
             @click="form.relations.splice(index, 1)"
           >
             <Trash2 :size="15" />
           </button>
           <div class="form-grid two-columns">
-            <a-form-item label="关系名称" required>
-              <a-input v-model:value="relation.name" :disabled="isReadOnly" placeholder="例如：SUPPORTS" />
+            <a-form-item :label="$t('ontology.relationNameLabel')" required>
+              <a-input v-model:value="relation.name" :disabled="isReadOnly" :placeholder="$t('ontology.relationNamePlaceholder')" />
             </a-form-item>
-            <a-form-item label="业务说明">
-              <a-input v-model:value="relation.description" :disabled="isReadOnly" placeholder="该关系表达什么事实" />
+            <a-form-item :label="$t('ontology.businessDesc')">
+              <a-input v-model:value="relation.description" :disabled="isReadOnly" :placeholder="$t('ontology.relationDescPlaceholder')" />
             </a-form-item>
           </div>
           <div class="form-grid two-columns">
@@ -127,7 +127,7 @@
                 mode="multiple"
                 :options="endpointOptions"
                 :disabled="isReadOnly"
-                placeholder="选择起点类型"
+                :placeholder="$t('ontology.selectSourceType')"
               />
             </a-form-item>
             <a-form-item label="Target" required>
@@ -136,15 +136,15 @@
                 mode="multiple"
                 :options="endpointOptions"
                 :disabled="isReadOnly"
-                placeholder="选择终点类型"
+                :placeholder="$t('ontology.selectTargetType')"
               />
             </a-form-item>
           </div>
-          <a-form-item label="关系别名">
+          <a-form-item :label="$t('ontology.relationAliases')">
             <a-select
               v-model:value="relation.aliases"
               mode="tags"
-              placeholder="例如：支持、具备、提供"
+              :placeholder="$t('ontology.relationAliasesPlaceholder')"
               :disabled="isReadOnly"
               :token-separators="[',']"
             />
@@ -155,67 +155,67 @@
       <section class="editor-section">
         <div class="section-title-row">
           <div>
-            <h4>属性</h4>
-            <p>只添加需要筛选、比较或结构化展示的参数；属性 key 在所有分类中必须唯一。</p>
+            <h4>{{ $t('ontology.propertiesTitle') }}</h4>
+            <p>{{ $t('ontology.propertiesDesc') }}</p>
           </div>
-          <a-button v-if="!isReadOnly" @click="addProperty"><Plus :size="15" />添加属性</a-button>
+          <a-button v-if="!isReadOnly" @click="addProperty"><Plus :size="15" />{{ $t('ontology.addProperty') }}</a-button>
         </div>
 
-        <a-empty v-if="!form.properties.length" description="暂无属性" />
+        <a-empty v-if="!form.properties.length" :description="$t('ontology.noProperties')" />
         <div v-for="(property, index) in form.properties" :key="property.id" class="editor-card">
           <button
             v-if="!isReadOnly"
             type="button"
             class="remove-button"
-            aria-label="删除属性"
+            :aria-label="$t('ontology.deleteProperty')"
             @click="form.properties.splice(index, 1)"
           >
             <Trash2 :size="15" />
           </button>
           <div class="form-grid property-grid">
-            <a-form-item label="分类" required>
-              <a-input v-model:value="property.category" :disabled="isReadOnly" placeholder="例如 Hardware" />
+            <a-form-item :label="$t('ontology.categoryLabel')" required>
+              <a-input v-model:value="property.category" :disabled="isReadOnly" :placeholder="$t('ontology.categoryPlaceholder')" />
             </a-form-item>
-            <a-form-item label="属性 key" required>
-              <a-input v-model:value="property.name" :disabled="isReadOnly" placeholder="例如 screen_size" />
+            <a-form-item :label="$t('ontology.propertyKeyLabel')" required>
+              <a-input v-model:value="property.name" :disabled="isReadOnly" :placeholder="$t('ontology.propertyKeyPlaceholder')" />
             </a-form-item>
-            <a-form-item label="类型" required>
+            <a-form-item :label="$t('ontology.propertyTypeLabel')" required>
               <a-select v-model:value="property.type" :disabled="isReadOnly" :options="propertyTypeOptions" />
             </a-form-item>
-            <a-form-item label="单位">
-              <a-input v-model:value="property.unit" :disabled="isReadOnly" placeholder="可选" />
+            <a-form-item :label="$t('ontology.unitLabel')">
+              <a-input v-model:value="property.unit" :disabled="isReadOnly" :placeholder="$t('ontology.optionalPlaceholder')" />
             </a-form-item>
           </div>
           <div class="form-grid two-columns">
-            <a-form-item label="所属实体">
+            <a-form-item :label="$t('ontology.ownerLabel')">
               <a-select
                 v-model:value="property.owners"
                 mode="multiple"
                 :options="propertyOwnerOptions"
                 :disabled="isReadOnly"
-                placeholder="留空表示兼容旧本体，不限制实体类型"
+                :placeholder="$t('ontology.ownerPlaceholder')"
               />
             </a-form-item>
-            <a-form-item label="枚举值">
+            <a-form-item :label="$t('ontology.enumLabel')">
               <a-select
                 v-model:value="property.enum"
                 mode="tags"
                 :disabled="isReadOnly || property.type !== 'string'"
                 :token-separators="[',']"
-                placeholder="仅文本属性可设置"
+                :placeholder="$t('ontology.enumPlaceholder')"
               />
             </a-form-item>
           </div>
-          <a-form-item label="属性说明">
-            <a-input v-model:value="property.description" :disabled="isReadOnly" placeholder="说明属性的业务含义" />
+          <a-form-item :label="$t('ontology.propertyDescLabel')">
+            <a-input v-model:value="property.description" :disabled="isReadOnly" :placeholder="$t('ontology.propertyDescPlaceholder')" />
           </a-form-item>
         </div>
       </section>
       <section class="editor-section">
         <div class="section-title-row">
           <div>
-            <h4>附加规则</h4>
-            <p>保留 schema.json 中参与抽取 Prompt 的扩展规则。</p>
+            <h4>{{ $t('ontology.extraRulesTitle') }}</h4>
+            <p>{{ $t('ontology.extraRulesDesc') }}</p>
           </div>
         </div>
         <a-textarea v-model:value="form.rules_text" :disabled="isReadOnly" :rows="6" />
@@ -226,6 +226,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import { ontologyRegistryApi } from '@/apis/ontology_api'
@@ -236,6 +237,8 @@ const props = defineProps({
   detail: { type: Object, default: null }
 })
 const emit = defineEmits(['update:open', 'created'])
+
+const { t } = useI18n()
 
 let rowId = 0
 const nextId = () => ++rowId
@@ -279,21 +282,21 @@ const submitting = ref(false)
 const identityPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const isReadOnly = computed(() => props.mode === 'view')
 const modalTitle = computed(() => {
-  if (props.mode === 'view') return '查看 Core Ontology'
-  if (props.mode === 'edit') return '编辑 Core Ontology'
-  return '新建 Core Ontology'
+  if (props.mode === 'view') return t('ontology.viewTitle')
+  if (props.mode === 'edit') return t('ontology.editTitle')
+  return t('ontology.createTitle')
 })
 const noticeMessage = computed(() => {
-  if (props.mode === 'view') return '当前版本为只读详情。'
-  if (props.mode === 'edit') return '保存后当前版本的 digest 将更新；被知识库引用时不能覆盖。'
-  return 'Ontology 创建后立即启用；同一 ID 和版本不能重复发布不同内容。'
+  if (props.mode === 'view') return t('ontology.viewNotice')
+  if (props.mode === 'edit') return t('ontology.editNotice')
+  return t('ontology.createNotice')
 })
-const propertyTypeOptions = [
-  { label: '文本', value: 'string' },
-  { label: '整数', value: 'int' },
-  { label: '数字', value: 'float' },
-  { label: '布尔值', value: 'bool' }
-]
+const propertyTypeOptions = computed(() => [
+  { label: t('ontology.propertyTypeText'), value: 'string' },
+  { label: t('ontology.propertyTypeInt'), value: 'int' },
+  { label: t('ontology.propertyTypeFloat'), value: 'float' },
+  { label: t('ontology.propertyTypeBool'), value: 'bool' }
+])
 const propertyOwnerOptions = computed(() =>
   form.entities
     .map((entity) => entity.name.trim())
@@ -305,7 +308,7 @@ const endpointOptions = computed(() => [
     .map((entity) => entity.name.trim())
     .filter(Boolean)
     .map((name) => ({ label: name, value: name })),
-  { label: 'Any（任意实体类型）', value: 'Any' }
+  { label: t('ontology.anyEntityType'), value: 'Any' }
 ])
 
 const reset = () => {
@@ -352,7 +355,7 @@ const ensureUnique = (values, label) => {
   const seen = new Set()
   for (const value of values) {
     const normalized = value.trim().toLowerCase()
-    if (seen.has(normalized)) throw new Error(`${label}不能重复：${value}`)
+    if (seen.has(normalized)) throw new Error(t('ontology.duplicateError', { label, value }))
     seen.add(normalized)
   }
 }
@@ -361,9 +364,9 @@ const buildPayload = () => {
   const name = form.name.trim()
   const registryId = form.registry_id.trim()
   const version = form.version.trim()
-  if (!name || !registryId || !version) throw new Error('请填写展示名称、Registry ID 和版本')
+  if (!name || !registryId || !version) throw new Error(t('ontology.fillIdentityRequired'))
   if (!identityPattern.test(registryId) || !identityPattern.test(version)) {
-    throw new Error('Registry ID 和版本只能包含字母、数字、点、下划线和中划线，长度 1-64')
+    throw new Error(t('ontology.identityPatternError'))
   }
 
   const entities = form.entities.map((entity) => ({
@@ -374,8 +377,8 @@ const buildPayload = () => {
       .filter((item) => item.canonical.trim() || cleanTags(item.aliases).length)
       .map((item) => ({ canonical: item.canonical.trim(), aliases: cleanTags(item.aliases) }))
   }))
-  if (entities.some((entity) => !entity.name)) throw new Error('实体类型名称不能为空')
-  ensureUnique(entities.map((entity) => entity.name), '实体类型')
+  if (entities.some((entity) => !entity.name)) throw new Error(t('ontology.entityNameRequired'))
+  ensureUnique(entities.map((entity) => entity.name), t('ontology.entityTypesTitle'))
 
   const entityNames = new Set(entities.map((entity) => entity.name))
   const relations = form.relations.map((relation) => ({
@@ -385,15 +388,15 @@ const buildPayload = () => {
     target: cleanTags(relation.target),
     aliases: cleanTags(relation.aliases)
   }))
-  ensureUnique(relations.map((relation) => relation.name), '关系名称')
+  ensureUnique(relations.map((relation) => relation.name), t('ontology.relationNameLabel'))
   for (const relation of relations) {
     if (!relation.name || !relation.source.length || !relation.target.length) {
-      throw new Error('关系名称、Source 和 Target 不能为空')
+      throw new Error(t('ontology.relationFieldsRequired'))
     }
     const invalid = [...relation.source, ...relation.target].find(
       (endpoint) => endpoint !== 'Any' && !entityNames.has(endpoint)
     )
-    if (invalid) throw new Error(`关系 ${relation.name} 引用了未声明实体：${invalid}`)
+    if (invalid) throw new Error(t('ontology.relationInvalidEndpoint', { name: relation.name, endpoint: invalid }))
   }
 
   const properties = form.properties.map((property) => ({
@@ -406,24 +409,24 @@ const buildPayload = () => {
     description: property.description.trim()
   }))
   if (properties.some((property) => !property.category || !property.name)) {
-    throw new Error('属性分类和属性 key 不能为空')
+    throw new Error(t('ontology.propertyFieldsRequired'))
   }
   for (const property of properties) {
     const invalidOwner = property.owners.find((owner) => !entityNames.has(owner))
-    if (invalidOwner) throw new Error(`属性 ${property.name} 引用了未声明实体：${invalidOwner}`)
+    if (invalidOwner) throw new Error(t('ontology.propertyInvalidOwner', { name: property.name, endpoint: invalidOwner }))
     if (property.enum.length && property.type !== 'string') {
-      throw new Error(`属性 ${property.name} 只有文本类型可以设置枚举值`)
+      throw new Error(t('ontology.propertyEnumTextOnly', { name: property.name }))
     }
   }
-  ensureUnique(properties.map((property) => property.name), '属性 key')
+  ensureUnique(properties.map((property) => property.name), t('ontology.propertyKeyLabel'))
   let rules
   try {
     rules = JSON.parse(form.rules_text || '{}')
   } catch {
-    throw new Error('附加规则必须是合法 JSON 对象')
+    throw new Error(t('ontology.rulesInvalidJson'))
   }
   if (!rules || Array.isArray(rules) || typeof rules !== 'object') {
-    throw new Error('附加规则必须是 JSON 对象')
+    throw new Error(t('ontology.rulesNotObject'))
   }
 
   return { registry_id: registryId, version, name, entities, relations, properties, rules }
@@ -441,15 +444,15 @@ const submit = async () => {
       : await ontologyRegistryApi.create(payload)
     message.success(
       props.mode === 'edit'
-        ? result.changed ? 'Core Ontology 已更新' : '内容没有变化'
-        : result.already_exists ? '该 Ontology 版本已存在' : 'Core Ontology 创建成功'
+        ? result.changed ? t('ontology.updatedSuccess') : t('ontology.noChange')
+        : result.already_exists ? t('ontology.versionExists') : t('ontology.createdSuccess')
     )
     emit('created', result.item)
     close()
     reset()
   } catch (error) {
-    const detail = error?.response?.data?.detail || error?.message || '创建 Core Ontology 失败'
-    message.error(typeof detail === 'object' ? detail.message || 'Core Ontology 操作失败' : detail)
+    const detail = error?.response?.data?.detail || error?.message || t('ontology.createFailed')
+    message.error(typeof detail === 'object' ? detail.message || t('ontology.operationFailed') : detail)
   } finally {
     submitting.value = false
   }

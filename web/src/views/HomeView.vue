@@ -310,7 +310,7 @@ const loadData = async () => {
     startSubtitleCarousel()
     startBadgeTyping()
   } catch (e) {
-    console.error('加载失败:', e)
+    console.error('加载失败:', e) // i18n-ignore
     stopBadgeTyping()
     stopSubtitleCarousel()
       typedBadge.value = ''

@@ -13,7 +13,7 @@
             </a>
           </h5>
           <span v-if="typeof result.score === 'number'" class="result-score">
-            相关度: {{ (result.score * 100).toFixed(1) }}%
+            {{ $t('sources.relevanceScore', { score: (result.score * 100).toFixed(1) }) }}
           </span>
         </div>
 
@@ -24,7 +24,7 @@
     </div>
 
     <div v-else class="no-results">
-      <p>{{ emptyText }}</p>
+      <p>{{ emptyText || $t('sources.webSearchNoResults') }}</p>
     </div>
   </div>
 </template>
@@ -37,7 +37,7 @@ defineProps({
   },
   emptyText: {
     type: String,
-    default: '未找到相关搜索结果'
+    default: ''
   }
 })
 

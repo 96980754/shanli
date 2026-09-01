@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { i18n } from '@/i18n'
 import { taskerApi } from '@/apis/tasker'
 import { useUserStore } from '@/stores/user'
 import { parseToShanghai } from '@/utils/time'
@@ -17,7 +18,7 @@ const createDefaultSummary = () => ({
 
 const toTask = (raw = {}) => ({
   id: raw.id,
-  name: raw.name || '后台任务',
+  name: raw.name || i18n.global.t('tasker.defaultTaskName'),
   type: raw.type || 'general',
   status: raw.status || 'pending',
   progress: raw.progress ?? 0,
@@ -105,7 +106,7 @@ export const useTaskerStore = defineStore('tasker', () => {
       }
       tasks.value = taskList.map(toTask)
     } catch (error) {
-      console.error('加载任务列表失败', error)
+      console.error('加载任务列表失败', error) // i18n-ignore
       lastError.value = error
       summary.value = createDefaultSummary()
     } finally {
@@ -122,7 +123,7 @@ export const useTaskerStore = defineStore('tasker', () => {
         upsertTask(response.task)
       }
     } catch (error) {
-      console.error(`刷新任务 ${taskId} 详情失败`, error)
+      console.error(`刷新任务 ${taskId} 详情失败`, error) // i18n-ignore
       lastError.value = error
     }
   }
@@ -131,11 +132,11 @@ export const useTaskerStore = defineStore('tasker', () => {
     if (!taskId) return
     try {
       await taskerApi.cancelTask(taskId)
-      message.success('取消任务成功')
+      message.success(i18n.global.t('tasker.cancelSuccess'))
       await refreshTask(taskId)
     } catch (error) {
-      console.error(`取消任务 ${taskId} 失败`, error)
-      message.error(error?.message || '取消任务失败')
+      console.error(`取消任务 ${taskId} 失败`, error) // i18n-ignore
+      message.error(error?.message || i18n.global.t('tasker.cancelFailed'))
     }
   }
 
@@ -143,15 +144,15 @@ export const useTaskerStore = defineStore('tasker', () => {
     if (!taskId) return
     try {
       await taskerApi.deleteTask(taskId)
-      message.success('删除任务成功')
+      message.success(i18n.global.t('tasker.deleteSuccess'))
       // 从本地列表中移除
       const index = tasks.value.findIndex((item) => item.id === taskId)
       if (index >= 0) {
         tasks.value.splice(index, 1)
       }
     } catch (error) {
-      console.error(`删除任务 ${taskId} 失败`, error)
-      message.error(error?.message || '删除任务失败')
+      console.error(`删除任务 ${taskId} 失败`, error) // i18n-ignore
+      message.error(error?.message || i18n.global.t('tasker.deleteFailed'))
     }
   }
 
@@ -160,11 +161,11 @@ export const useTaskerStore = defineStore('tasker', () => {
     const now = new Date().toISOString()
     upsertTask({
       id: task_id,
-      name: name || '后台任务',
+      name: name || i18n.global.t('tasker.defaultTaskName'),
       type: task_type || 'manual',
       status: 'queued',
       progress: 0,
-      message: msg || '任务已排队',
+      message: msg || i18n.global.t('tasker.queued'),
       created_at: now,
       updated_at: now,
       payload: payload || {}

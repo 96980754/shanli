@@ -60,7 +60,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
+
+const { t } = useI18n()
 
 // 导入子组件
 import StatusBar from '@/components/StatusBar.vue'
@@ -116,19 +119,19 @@ const loadAllStats = async () => {
     }
 
     console.log('Dashboard 数据加载完成:', response)
-    message.success('数据加载成功')
+    message.success(t('dash.loadSuccess'))
   } catch (error) {
     console.error('加载统计数据失败:', error)
-    message.error('加载统计数据失败')
+    message.error(t('dash.loadStatsFailed'))
 
     // 如果并行请求失败，尝试单独加载基础数据
     try {
       const basicResponse = await dashboardApi.getStats()
       basicStats.value = basicResponse
-      message.warning('详细数据加载失败，仅显示基础统计')
+      message.warning(t('dash.loadDetailedFailedFallback'))
     } catch (basicError) {
       console.error('加载基础统计数据也失败:', basicError)
-      message.error('无法加载任何统计数据')
+      message.error(t('dash.noStatsLoaded'))
     }
   } finally {
     loading.value = false

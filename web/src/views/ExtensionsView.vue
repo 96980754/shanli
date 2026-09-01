@@ -3,11 +3,11 @@
     <PageHeader
       v-if="!isDetailPage"
       v-model:active-key="activeTab"
-      :title="userStore.isAdmin ? '知识库与skills' : '知识库'"
+      :title="userStore.isAdmin ? $t('nav.extensions') : $t('nav.knowledgeBase')"
       :tabs="extensionTabs"
       :loading="activeChildLoading"
       :show-border="true"
-      aria-label="知识库与skills视图切换"
+      :aria-label="$t('tools.viewSwitchAria')"
     />
 
     <div v-if="!isDetailPage" class="extensions-content">
@@ -26,6 +26,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataBaseView from '@/views/DataBaseView.vue'
@@ -34,16 +35,19 @@ import { useUserStore } from '@/stores/user'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { t } = useI18n()
 const activeTab = ref(null)
 const knowledgeRef = ref(null)
 const skillsRef = ref(null)
 
-const adminExtensionTabs = [
-  { key: 'knowledge', label: '知识库' },
-  { key: 'skills', label: 'Skills' }
-]
-const userExtensionTabs = [{ key: 'knowledge', label: '知识库' }]
-const extensionTabs = computed(() => (userStore.isAdmin ? adminExtensionTabs : userExtensionTabs))
+const extensionTabs = computed(() =>
+  userStore.isAdmin
+    ? [
+        { key: 'knowledge', label: t('nav.knowledgeBase') },
+        { key: 'skills', label: t('tools.skillsTab') }
+      ]
+    : [{ key: 'knowledge', label: t('nav.knowledgeBase') }]
+)
 const allowedTabKeys = computed(() => extensionTabs.value.map((tab) => tab.key))
 const defaultTabKey = computed(() => extensionTabs.value[0]?.key || 'skills')
 

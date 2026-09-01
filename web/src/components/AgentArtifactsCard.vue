@@ -4,7 +4,7 @@
       <button
         type="button"
         class="item-main"
-        :title="`打开 ${file.name}`"
+        :title="t('artifacts.open', { name: file.name })"
         @click="openPreview(file)"
       >
         <FileTypeIcon :name="file.path" :size="20" class="item-icon" />
@@ -14,12 +14,12 @@
         </div>
       </button>
       <div class="item-actions">
-        <button class="item-action-btn" title="下载" @click.stop="downloadFile(file)">
+        <button class="item-action-btn" :title="t('common.download')" @click.stop="downloadFile(file)">
           <Download :size="15" />
         </button>
         <button
           class="item-action-btn"
-          :title="isSaving(file.path) ? '保存中' : '保存到工作区'"
+          :title="t(isSaving(file.path) ? 'artifacts.saving' : 'artifacts.saveToWorkspace')"
           :disabled="isSaving(file.path)"
           @click.stop="saveToWorkspace(file)"
         >
@@ -34,6 +34,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { Download, LoaderCircle, Save } from 'lucide-vue-next'
 import { threadApi } from '@/apis/agent_api'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
@@ -50,6 +51,7 @@ const props = defineProps({
   }
 })
 const emit = defineEmits(['saved', 'open-preview'])
+const { t } = useI18n()
 
 const normalizedArtifacts = computed(() =>
   (props.artifacts || [])
@@ -85,10 +87,12 @@ const getFileMetaLabel = (path) => {
     String(path || '')
       .split('/')
       .pop() || ''
-  if (!filename.includes('.')) return '交付文件'
+  if (!filename.includes('.')) return t('artifacts.deliverable')
 
   const extension = filename.split('.').pop()
-  return extension ? `交付文件 · ${extension.toUpperCase()}` : '交付文件'
+  return extension
+    ? t('artifacts.deliverableWithExt', { ext: extension.toUpperCase() })
+    : t('artifacts.deliverable')
 }
 
 const openPreview = (file) => {
@@ -113,7 +117,7 @@ const downloadFile = async (file) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    message.error(error?.message || '下载文件失败')
+    message.error(error?.message || t('artifacts.downloadFailed'))
   }
 }
 
@@ -132,10 +136,10 @@ const saveToWorkspace = async (file) => {
   setSaving(file.path, true)
   try {
     const result = await threadApi.saveThreadArtifactToWorkspace(props.threadId, file.path)
-    message.success(`已保存到工作区：${result.saved_path}`)
+    message.success(t('artifacts.savedToWorkspace', { path: result.saved_path }))
     emit('saved', result)
   } catch (error) {
-    message.error(error?.message || '保存到工作区失败')
+    message.error(error?.message || t('artifacts.saveToWorkspaceFailed'))
   } finally {
     setSaving(file.path, false)
   }

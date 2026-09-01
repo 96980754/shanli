@@ -60,14 +60,14 @@ export const useInfoStore = defineStore('info', () => {
 
       if (response.success && response.data) {
         setInfoConfig(response.data)
-        console.debug('信息配置加载成功:', response.data)
+        console.debug('信息配置加载成功:', response.data) // i18n-ignore
         return response.data
       } else {
-        console.warn('信息配置加载失败，使用默认配置')
+        console.warn('信息配置加载失败，使用默认配置') // i18n-ignore
         return null
       }
     } catch (error) {
-      console.error('加载信息配置时发生错误:', error)
+      console.error('加载信息配置时发生错误:', error) // i18n-ignore
       return null
     } finally {
       isLoading.value = false

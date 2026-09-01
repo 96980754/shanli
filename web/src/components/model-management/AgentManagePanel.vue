@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { Plus, RefreshCw, Trash2, SquarePen, Bot, MessageCirclePlus } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
@@ -13,6 +14,7 @@ import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import ExtensionCardGrid from '@/components/extensions/ExtensionCardGrid.vue'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 
+const { t } = useI18n()
 const agentStore = useAgentStore()
 const router = useRouter()
 const agentLoading = ref(false)
@@ -56,8 +58,8 @@ const groupedAgents = computed(() => {
   const agents = filteredAgents.value.filter((agent) => !agent.is_subagent)
   const subagents = filteredAgents.value.filter((agent) => agent.is_subagent)
   return [
-    { key: 'agents', title: '智能体', agents },
-    { key: 'subagents', title: '子智能体', agents: subagents }
+    { key: 'agents', title: t('agentCfg.agents'), agents },
+    { key: 'subagents', title: t('agentCfg.subagents'), agents: subagents }
   ].filter((group) => group.agents.length > 0)
 })
 
@@ -80,7 +82,7 @@ const loadAgentBackends = async () => {
       value: backend.backend_id
     }))
   } catch (error) {
-    message.error(error.message || '加载智能体后端失败')
+    message.error(error.message || t('agentCfg.loadBackendsFailed'))
   }
 }
 
@@ -90,7 +92,7 @@ const loadAgents = async () => {
     const response = await agentApi.getAgents({ includeSubagents: true })
     managedAgents.value = (response.agents || []).map(normalizeAgent)
   } catch (error) {
-    message.error(error.message || '加载智能体失败')
+    message.error(error.message || t('agentCfg.loadAgentsFailed'))
   } finally {
     agentLoading.value = false
   }
@@ -116,22 +118,22 @@ const refreshAgentLists = async () => {
 
 const deleteAgent = async (agent) => {
   if (isBuiltinAgent(agent)) {
-    message.warning('内置智能体不能删除')
+    message.warning(t('agentCfg.builtinNotDeletable'))
     return
   }
   Modal.confirm({
-    title: `删除 ${agent.name}`,
-    content: '删除后不可恢复，已绑定该智能体的历史对话仍保留原始绑定信息。',
-    okText: '删除',
+    title: t('agentCfg.deleteAgentTitle', { name: agent.name }),
+    content: t('agentCfg.deleteAgentContent'),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         await agentApi.deleteAgent(agent.id)
         await refreshAgentLists()
-        message.success('智能体已删除')
+        message.success(t('agentCfg.agentDeleted'))
       } catch (error) {
-        message.error(error.message || '删除智能体失败')
+        message.error(error.message || t('agentCfg.deleteAgentFailed'))
       }
     }
   })
@@ -150,11 +152,11 @@ defineExpose({
 
 <template>
   <div class="agent-manage-panel">
-    <PageShoulder v-model:search="searchQuery" search-placeholder="搜索智能体...">
+    <PageShoulder v-model:search="searchQuery" :search-placeholder="$t('agentCfg.searchAgentPlaceholder')">
       <template #actions>
         <a-button type="primary" class="lucide-icon-btn" @click="openCreateAgentModal">
           <Plus :size="14" />
-          新增智能体
+          {{ $t('agentCfg.addAgent') }}
         </a-button>
         <a-button class="lucide-icon-btn" @click="loadAgents" :loading="agentLoading">
           <RefreshCw :size="14" :class="{ spinning: agentLoading }" />
@@ -163,7 +165,10 @@ defineExpose({
     </PageShoulder>
 
     <div v-if="groupedAgents.length === 0" class="agent-empty-state">
-      <a-empty :image="false" :description="searchQuery ? '没有匹配的智能体' : '暂无智能体'" />
+      <a-empty
+        :image="false"
+        :description="searchQuery ? $t('agentCfg.noMatchingAgents') : $t('agentCfg.noAgents')"
+      />
     </div>
 
     <template v-else>
@@ -177,7 +182,7 @@ defineExpose({
             :key="agent.id"
             :title="agent.name"
             :subtitle="agent.slug || agent.id"
-            :description="agent.description || '暂无描述'"
+            :description="agent.description || $t('common.noDescription')"
             :default-icon="Bot"
             :tags="[]"
             class="config-card agent-card"
@@ -193,7 +198,7 @@ defineExpose({
                 kind="agent"
                 :size="40"
                 shape="rounded"
-                :alt="`${agent.name || '智能体'}图标`"
+                :alt="$t('agentCfg.agentIconAlt', { name: agent.name || $t('agentCfg.agent') })"
               />
             </template>
 
@@ -202,7 +207,7 @@ defineExpose({
                 <a-menu-item key="edit" @click.stop="openEditAgentModal(agent)">
                   <span class="lucide-menu-item">
                     <SquarePen :size="14" />
-                    <span>编辑智能体</span>
+                    <span>{{ $t('agentCfg.editAgent') }}</span>
                   </span>
                 </a-menu-item>
                 <a-menu-item
@@ -213,7 +218,7 @@ defineExpose({
                 >
                   <span class="lucide-menu-item">
                     <Trash2 :size="14" />
-                    <span>删除智能体</span>
+                    <span>{{ $t('agentCfg.deleteAgent') }}</span>
                   </span>
                 </a-menu-item>
               </a-menu>
@@ -228,7 +233,7 @@ defineExpose({
                   @click.stop="openAgentChat(agent)"
                 >
                   <MessageCirclePlus :size="14" />
-                  去对话
+                  {{ $t('agentCfg.goChat') }}
                 </a-button>
               </div>
             </template>

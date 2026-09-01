@@ -34,7 +34,7 @@
         </div>
         <div v-if="$slots['card-more-action-corner']" class="card-more-action-corner" @click.stop>
           <a-dropdown :trigger="['click']" placement="bottomRight">
-            <button type="button" class="card-more-action-trigger" aria-label="更多操作">
+            <button type="button" class="card-more-action-trigger" :aria-label="$t('common.moreActions')">
               <MoreHorizontal :size="18" />
             </button>
             <template #overlay>
@@ -81,7 +81,7 @@
         </div>
         <div v-if="$slots['card-more-action-corner']" class="card-more-action-corner" @click.stop>
           <a-dropdown :trigger="['click']" placement="bottomRight">
-            <button type="button" class="card-more-action-trigger" aria-label="更多操作">
+            <button type="button" class="card-more-action-trigger" :aria-label="$t('common.moreActions')">
               <MoreHorizontal :size="18" />
             </button>
             <template #overlay>

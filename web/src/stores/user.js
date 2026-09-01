@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { i18n } from '@/i18n'
 import { useAgentStore } from './agent'
 
 export const useUserStore = defineStore('user', () => {
@@ -25,7 +26,7 @@ export const useUserStore = defineStore('user', () => {
     try {
       const formData = new FormData()
       // 支持uid或phone_number登录
-      formData.append('username', credentials.loginId) // 使用loginId作为通用登录标识
+      formData.append('username', credentials.loginId) // 使用loginId作为通用登录标识 // i18n-ignore
       formData.append('password', credentials.password)
 
       const response = await fetch('/api/auth/token', {
@@ -38,13 +39,13 @@ export const useUserStore = defineStore('user', () => {
 
         // 如果是423锁定状态码，抛出包含状态码的错误
         if (response.status === 423) {
-          const lockError = new Error(error.detail || '账户被锁定')
+          const lockError = new Error(error.detail || i18n.global.t('errors.accountLocked'))
           lockError.status = 423
           lockError.headers = response.headers
           throw lockError
         }
 
-        throw new Error(error.detail || '登录失败')
+        throw new Error(error.detail || i18n.global.t('auth.loginFailed'))
       }
 
       const data = await response.json()
@@ -65,7 +66,7 @@ export const useUserStore = defineStore('user', () => {
 
       return true
     } catch (error) {
-      console.error('登录错误:', error)
+      console.error('登录错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -102,7 +103,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '初始化管理员失败')
+        throw new Error(error.detail || i18n.global.t('errors.initAdminFailed'))
       }
 
       const data = await response.json()
@@ -123,7 +124,7 @@ export const useUserStore = defineStore('user', () => {
 
       return true
     } catch (error) {
-      console.error('初始化管理员错误:', error)
+      console.error('初始化管理员错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -134,7 +135,7 @@ export const useUserStore = defineStore('user', () => {
       const data = await response.json()
       return data.first_run
     } catch (error) {
-      console.error('检查首次运行状态错误:', error)
+      console.error('检查首次运行状态错误:', error) // i18n-ignore
       return false
     }
   }
@@ -164,7 +165,7 @@ export const useUserStore = defineStore('user', () => {
         })
 
         if (!response.ok) {
-          throw new Error('获取用户列表失败')
+          throw new Error(i18n.global.t('errors.getUsersFailed'))
         }
 
         const batch = await response.json()
@@ -179,7 +180,7 @@ export const useUserStore = defineStore('user', () => {
 
       return users
     } catch (error) {
-      console.error('获取用户列表错误:', error)
+      console.error('获取用户列表错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -197,12 +198,12 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '创建用户失败')
+        throw new Error(error.detail || i18n.global.t('errors.createUserFailed'))
       }
 
       return await response.json()
     } catch (error) {
-      console.error('创建用户错误:', error)
+      console.error('创建用户错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -220,12 +221,12 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '更新用户失败')
+        throw new Error(error.detail || i18n.global.t('errors.updateUserFailed'))
       }
 
       return await response.json()
     } catch (error) {
-      console.error('更新用户错误:', error)
+      console.error('更新用户错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -241,12 +242,12 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '删除用户失败')
+        throw new Error(error.detail || i18n.global.t('errors.deleteUserFailed'))
       }
 
       return await response.json()
     } catch (error) {
-      console.error('删除用户错误:', error)
+      console.error('删除用户错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -265,12 +266,12 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '用户名验证失败')
+        throw new Error(error.detail || i18n.global.t('errors.validateUsernameFailed'))
       }
 
       return await response.json()
     } catch (error) {
-      console.error('用户名验证错误:', error)
+      console.error('用户名验证错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -291,7 +292,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '头像上传失败')
+        throw new Error(error.detail || i18n.global.t('errors.uploadAvatarFailed'))
       }
 
       const data = await response.json()
@@ -301,7 +302,7 @@ export const useUserStore = defineStore('user', () => {
 
       return data
     } catch (error) {
-      console.error('头像上传错误:', error)
+      console.error('头像上传错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -316,7 +317,7 @@ export const useUserStore = defineStore('user', () => {
       })
 
       if (!response.ok) {
-        throw new Error('获取用户信息失败')
+        throw new Error(i18n.global.t('errors.getUserInfoFailed'))
       }
 
       const userData = await response.json()
@@ -333,7 +334,7 @@ export const useUserStore = defineStore('user', () => {
 
       return userData
     } catch (error) {
-      console.error('获取用户信息错误:', error)
+      console.error('获取用户信息错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -352,7 +353,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || '更新个人资料失败')
+        throw new Error(error.detail || i18n.global.t('errors.updateProfileFailed'))
       }
 
       const userData = await response.json()
@@ -367,7 +368,7 @@ export const useUserStore = defineStore('user', () => {
 
       return userData
     } catch (error) {
-      console.error('更新个人资料错误:', error)
+      console.error('更新个人资料错误:', error) // i18n-ignore
       throw error
     }
   }
@@ -411,7 +412,7 @@ export const useUserStore = defineStore('user', () => {
 export const checkAdminPermission = () => {
   const userStore = useUserStore()
   if (!userStore.isAdmin) {
-    throw new Error('需要管理员权限')
+    throw new Error(i18n.global.t('errors.adminPermissionRequired'))
   }
   return true
 }
@@ -420,7 +421,7 @@ export const checkAdminPermission = () => {
 export const checkSuperAdminPermission = () => {
   const userStore = useUserStore()
   if (!userStore.isSuperAdmin) {
-    throw new Error('需要超级管理员权限')
+    throw new Error(i18n.global.t('errors.superAdminPermissionRequired'))
   }
   return true
 }

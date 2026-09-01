@@ -40,7 +40,7 @@
             <button
               class="attachment-remove-btn"
               type="button"
-              :aria-label="`移除附件 ${attachment.name}`"
+              :aria-label="t('msgInput.removeAttachment', { name: attachment.name })"
               @click.stop="handleAttachmentRemoved(attachment)"
             >
               <X :size="14" />
@@ -74,6 +74,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import MessageInputComponent from '@/components/MessageInputComponent.vue'
 import ImagePreviewComponent from '@/components/ImagePreviewComponent.vue'
 import AttachmentOptionsComponent from '@/components/AttachmentOptionsComponent.vue'
@@ -107,7 +108,8 @@ const emit = defineEmits([
 
 const inputRef = ref(null)
 const currentImage = ref(null)
-const placeholder = '问点什么？使用 @ 可以提及哦~'
+const { t } = useI18n()
+const placeholder = t('msgInput.askPlaceholder')
 
 const previewAttachments = computed(() => normalizeAttachmentPreviews(props.attachments))
 

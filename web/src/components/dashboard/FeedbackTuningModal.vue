@@ -1,10 +1,10 @@
 <template>
   <a-modal
     v-model:open="open"
-    title="调优答案"
+    :title="t('feedback.tuneAnswer')"
     width="760px"
-    ok-text="保存问答对"
-    cancel-text="取消"
+    :ok-text="t('feedback.saveQaPair')"
+    :cancel-text="t('common.cancel')"
     :confirm-loading="saving"
     :ok-button-props="{ disabled: loading || !context }"
     @ok="save"
@@ -15,30 +15,30 @@
       <a-alert
         type="info"
         show-icon
-        message="保存后，同一智能体再次收到相同问题时将优先直接返回这条人工确认答案。"
+        :message="t('feedback.saveTip')"
         class="tip"
       />
 
-      <a-form-item label="用户问题">
+      <a-form-item :label="t('feedback.userQuestionLabel')">
         <div class="readonly-block">{{ context.question }}</div>
       </a-form-item>
 
-      <a-form-item label="原回答">
+      <a-form-item :label="t('feedback.originalAnswerLabel')">
         <div class="readonly-block original-answer">{{ context.current_answer || '-' }}</div>
       </a-form-item>
 
-      <a-form-item label="人工确认答案" required>
+      <a-form-item :label="t('feedback.confirmAnswerLabel')" required>
         <a-textarea
           v-model:value="answer"
           :rows="8"
           :maxlength="20000"
           show-count
-          placeholder="编辑并确认正确答案"
+          :placeholder="t('feedback.answerPlaceholder')"
         />
       </a-form-item>
 
       <div v-if="context.qa_pair" class="existing-tip">
-        已存在人工问答对，本次保存会更新原答案；历史命中 {{ context.qa_pair.hit_count || 0 }} 次。
+        {{ $t('feedback.existingQaTip', { count: context.qa_pair.hit_count || 0 }) }}
       </div>
     </a-form>
   </a-modal>
@@ -47,7 +47,10 @@
 <script setup>
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
+
+const { t } = useI18n()
 
 const emit = defineEmits(['saved'])
 const open = ref(false)
@@ -68,7 +71,7 @@ async function show(id) {
     context.value = response.item
     answer.value = response.item?.qa_pair?.answer || response.item?.current_answer || ''
   } catch (error) {
-    message.error(error?.message || '加载调优信息失败')
+    message.error(error?.message || t('feedback.loadTuningFailed'))
     open.value = false
   } finally {
     loading.value = false
@@ -78,19 +81,19 @@ async function show(id) {
 async function save() {
   const normalized = answer.value.trim()
   if (!normalized) {
-    message.warning('请输入人工确认答案')
+    message.warning(t('feedback.enterAnswerWarning'))
     return
   }
 
   saving.value = true
   try {
     const response = await dashboardApi.saveFeedbackQaPair(feedbackId.value, { answer: normalized })
-    message.success('问答对已保存，后续相同问题将优先直接命中')
+    message.success(t('feedback.saveQaSuccess'))
     open.value = false
     emit('saved', response.item)
     reset()
   } catch (error) {
-    message.error(error?.message || '保存问答对失败')
+    message.error(error?.message || t('feedback.saveQaFailed'))
   } finally {
     saving.value = false
   }

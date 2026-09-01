@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 export const FILE_ACTIONS = {
   PARSE: 'parse',
   INDEX: 'index',
@@ -5,43 +7,43 @@ export const FILE_ACTIONS = {
 }
 
 const STATUS_VIEW = {
-  uploaded: { label: '待审核', tone: 'status-warning', icon: 'clock' },
-  parsing: { label: '解析中', tone: 'status-info', icon: 'progress' },
-  parsed: { label: '待入库', tone: 'status-primary', icon: 'file' },
-  error_parsing: { label: '重试解析', tone: 'status-error', icon: 'error' },
-  indexing: { label: '入库中', tone: 'status-info', icon: 'progress' },
-  indexed: { label: '已入库', tone: 'status-success', icon: 'success' },
-  error_indexing: { label: '重试入库', tone: 'status-error', icon: 'error' },
-  done: { label: '已入库', tone: 'status-success', icon: 'success' },
-  failed: { label: '入库失败', tone: 'status-error', icon: 'error' },
-  processing: { label: '处理中', tone: 'status-info', icon: 'progress' },
-  waiting: { label: '等待中', tone: 'status-warning', icon: 'clock' },
-  conflict_detecting: { label: '冲突检测中', tone: 'status-info', icon: 'progress' },
-  conflict_clear: { label: '冲突检测通过', tone: 'status-success', icon: 'success' },
-  conflict_review: { label: '待审核冲突', tone: 'status-warning', icon: 'clock' },
-  conflict_inconclusive: { label: '冲突证据不足', tone: 'status-warning', icon: 'clock' },
-  conflict_detection_failed: { label: '冲突检测失败', tone: 'status-error', icon: 'error' },
-  version_task_failed: { label: '版本更新失败', tone: 'status-error', icon: 'error' },
-  validation_processing: { label: '知识变更分析中', tone: 'status-info', icon: 'progress' },
-  validation_review: { label: '待审核知识变更', tone: 'status-warning', icon: 'clock' },
-  validation_accepted: { label: '知识变更已接受', tone: 'status-success', icon: 'success' },
-  validation_failed: { label: '知识变更分析失败', tone: 'status-error', icon: 'error' },
-  validation_rejected: { label: '新版已拒绝', tone: 'status-error', icon: 'error' },
-  error_replacement_cleanup: { label: '重试版本清理', tone: 'status-error', icon: 'error' }
+  uploaded: { key: 'kbFile.statusUploaded', tone: 'status-warning', icon: 'clock' },
+  parsing: { key: 'kbFile.statusParsing', tone: 'status-info', icon: 'progress' },
+  parsed: { key: 'kbFile.statusParsed', tone: 'status-primary', icon: 'file' },
+  error_parsing: { key: 'kbFile.statusErrorParsing', tone: 'status-error', icon: 'error' },
+  indexing: { key: 'kbFile.statusIndexing', tone: 'status-info', icon: 'progress' },
+  indexed: { key: 'kbFile.statusIndexed', tone: 'status-success', icon: 'success' },
+  error_indexing: { key: 'kbFile.statusErrorIndexing', tone: 'status-error', icon: 'error' },
+  done: { key: 'kbFile.statusDone', tone: 'status-success', icon: 'success' },
+  failed: { key: 'kbFile.statusFailed', tone: 'status-error', icon: 'error' },
+  processing: { key: 'kbFile.statusProcessing', tone: 'status-info', icon: 'progress' },
+  waiting: { key: 'kbFile.statusWaiting', tone: 'status-warning', icon: 'clock' },
+  conflict_detecting: { key: 'kbFile.statusConflictDetecting', tone: 'status-info', icon: 'progress' },
+  conflict_clear: { key: 'kbFile.statusConflictClear', tone: 'status-success', icon: 'success' },
+  conflict_review: { key: 'kbFile.statusConflictReview', tone: 'status-warning', icon: 'clock' },
+  conflict_inconclusive: { key: 'kbFile.statusConflictInconclusive', tone: 'status-warning', icon: 'clock' },
+  conflict_detection_failed: { key: 'kbFile.statusConflictDetectionFailed', tone: 'status-error', icon: 'error' },
+  version_task_failed: { key: 'kbFile.statusVersionTaskFailed', tone: 'status-error', icon: 'error' },
+  validation_processing: { key: 'kbFile.statusValidationProcessing', tone: 'status-info', icon: 'progress' },
+  validation_review: { key: 'kbFile.statusValidationReview', tone: 'status-warning', icon: 'clock' },
+  validation_accepted: { key: 'kbFile.statusValidationAccepted', tone: 'status-success', icon: 'success' },
+  validation_failed: { key: 'kbFile.statusValidationFailed', tone: 'status-error', icon: 'error' },
+  validation_rejected: { key: 'kbFile.statusValidationRejected', tone: 'status-error', icon: 'error' },
+  error_replacement_cleanup: { key: 'kbFile.statusErrorReplacementCleanup', tone: 'status-error', icon: 'error' }
 }
 
 const STATUS_ACTION = {
-  uploaded: { type: FILE_ACTIONS.PARSE, label: '解析文件' },
-  error_parsing: { type: FILE_ACTIONS.PARSE, label: '重试解析' },
-  parsed: { type: FILE_ACTIONS.INDEX, label: '入库' },
-  error_indexing: { type: FILE_ACTIONS.INDEX, label: '重试入库' },
-  error_replacement_cleanup: { type: FILE_ACTIONS.REPLACEMENT_CLEANUP, label: '重试版本清理' }
+  uploaded: { type: FILE_ACTIONS.PARSE, key: 'kbFile.actionParseFile' },
+  error_parsing: { type: FILE_ACTIONS.PARSE, key: 'kbFile.actionRetryParse' },
+  parsed: { type: FILE_ACTIONS.INDEX, key: 'kbFile.actionIndex' },
+  error_indexing: { type: FILE_ACTIONS.INDEX, key: 'kbFile.actionRetryIndex' },
+  error_replacement_cleanup: { type: FILE_ACTIONS.REPLACEMENT_CLEANUP, key: 'kbFile.actionRetryVersionCleanup' }
 }
 
 const PROCESSING_STAGE_LABELS = {
-  replacement_preparing: '准备新版本',
-  switching_version: '切换版本',
-  replacement_cleanup: '清理旧版本'
+  replacement_preparing: 'kbFile.stageReplacementPreparing',
+  switching_version: 'kbFile.stageSwitchingVersion',
+  replacement_cleanup: 'kbFile.stageReplacementCleanup'
 }
 
 const VERSION_MAINTENANCE_STAGES = new Set(['switching_version', 'replacement_cleanup'])
@@ -71,21 +73,26 @@ const STATUS_SORT_ORDER = {
 }
 
 export const FILE_STATUS_FILTER_OPTIONS = [
-  { label: '待审核', value: 'uploaded' },
-  { label: '解析中', value: 'parsing' },
-  { label: '待入库', value: 'parsed' },
-  { label: '重试解析', value: 'error_parsing' },
-  { label: '入库中', value: 'indexing' },
-  { label: '已入库', value: 'indexed' },
-  { label: '重试入库', value: 'error_indexing' }
+  { label: i18n.global.t('kbFile.statusUploaded'), value: 'uploaded' },
+  { label: i18n.global.t('kbFile.statusParsing'), value: 'parsing' },
+  { label: i18n.global.t('kbFile.statusParsed'), value: 'parsed' },
+  { label: i18n.global.t('kbFile.statusErrorParsing'), value: 'error_parsing' },
+  { label: i18n.global.t('kbFile.statusIndexing'), value: 'indexing' },
+  { label: i18n.global.t('kbFile.statusIndexed'), value: 'indexed' },
+  { label: i18n.global.t('kbFile.statusErrorIndexing'), value: 'error_indexing' }
 ]
 
-export const getFileStatusView = (status) =>
-  STATUS_VIEW[status] || { label: status || '', tone: '', icon: null }
+export const getFileStatusView = (status) => {
+  const meta = STATUS_VIEW[status]
+  if (!meta) return { label: status || '', tone: '', icon: null }
+  return { label: i18n.global.t(meta.key), tone: meta.tone, icon: meta.icon }
+}
 
 export const getFilePrimaryAction = (record) => {
   if (!record || record.is_folder) return null
-  return STATUS_ACTION[record.status] || null
+  const action = STATUS_ACTION[record.status]
+  if (!action) return null
+  return { type: action.type, label: i18n.global.t(action.key) }
 }
 
 export const canParseFile = (record) =>
@@ -123,7 +130,10 @@ export const canDeleteFile = (record, locked = false) =>
     !VERSION_MAINTENANCE_STAGES.has(record.processing_stage)
   )
 
-export const getProcessingStageLabel = (stage) => PROCESSING_STAGE_LABELS[stage] || stage || ''
+export const getProcessingStageLabel = (stage) => {
+  const key = PROCESSING_STAGE_LABELS[stage]
+  return key ? i18n.global.t(key) : stage || ''
+}
 
 export const isProcessingFile = (record) =>
   Boolean(record && PROCESSING_STATUSES.has(record.status))

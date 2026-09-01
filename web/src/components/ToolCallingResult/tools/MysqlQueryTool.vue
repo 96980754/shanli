@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall">
     <template #header-success>
       <span class="sep-header">
-        <span class="note">执行SQL查询：</span>
+        <span class="note">{{ $t('toolCall.mysql.executeQuery') }}</span>
         <span class="description">{{
           truncateSql(extractSql(toolCall.args || toolCall.function?.arguments))
         }}</span>

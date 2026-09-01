@@ -3,18 +3,18 @@
     <div class="section-header">
       <div>
         <h3>Core Ontology</h3>
-        <p>通过结构化表单定义实体、关系、别名和属性，创建成功后立即可用于知识图谱。</p>
+        <p>{{ $t('ontology.registryIntro') }}</p>
       </div>
       <a-button v-if="userStore.isSuperAdmin" type="primary" class="create-btn" @click="openCreate">
         <Plus :size="16" />
-        新建 Core Ontology
+        {{ $t('ontology.createNew') }}
       </a-button>
     </div>
 
     <a-collapse v-if="userStore.isSuperAdmin" class="upload-collapse" ghost>
-      <a-collapse-panel key="upload" header="高级：上传 Ontology Bundle">
+      <a-collapse-panel key="upload" :header="$t('ontology.uploadBundleHeader')">
         <div class="upload-row">
-          <span>ZIP 根目录必须且只能包含 schema.json、entity.yaml、relation.yaml、property.yaml。</span>
+          <span>{{ $t('ontology.bundleZipHint') }}</span>
           <a-upload
             accept=".zip,application/zip"
             :multiple="true"
@@ -24,7 +24,7 @@
           >
             <a-button :loading="uploading">
               <Upload :size="16" />
-              上传 Bundle
+              {{ $t('ontology.uploadBundle') }}
             </a-button>
           </a-upload>
         </div>
@@ -32,7 +32,7 @@
     </a-collapse>
 
     <a-spin :spinning="loading">
-      <a-empty v-if="!loading && !items.length" description="暂无可用 Ontology" />
+      <a-empty v-if="!loading && !items.length" :description="$t('ontology.noRegistry')" />
       <div v-else class="registry-list">
         <div v-for="item in items" :key="entryKey(item)" class="registry-card">
           <div class="registry-main">
@@ -40,18 +40,18 @@
             <div class="registry-meta">
               <span>{{ item.registry_id }} · {{ item.version }}</span>
               <a-tag :color="item.source === 'builtin' ? 'blue' : 'green'">
-                {{ item.source === 'builtin' ? '内置' : '自定义' }}
+                {{ item.source === 'builtin' ? $t('ontology.builtin') : $t('ontology.custom') }}
               </a-tag>
             </div>
           </div>
           <div class="registry-actions">
-            <a-button size="small" type="text" @click="openDetail(item, 'view')">查看</a-button>
+            <a-button size="small" type="text" @click="openDetail(item, 'view')">{{ $t('common.view') }}</a-button>
             <a-button
               v-if="userStore.isSuperAdmin && item.source === 'uploaded'"
               size="small"
               type="text"
               @click="openDetail(item, 'edit')"
-            >编辑</a-button>
+            >{{ $t('common.edit') }}</a-button>
             <a-tooltip :title="item.digest">
               <code>{{ item.digest.slice(0, 12) }}</code>
             </a-tooltip>
@@ -71,12 +71,14 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { Plus, Upload } from 'lucide-vue-next'
 import { ontologyRegistryApi } from '@/apis/ontology_api'
 import { useUserStore } from '@/stores/user'
 import OntologyEditorModal from '@/components/OntologyEditorModal.vue'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const items = ref([])
 const loading = ref(false)
@@ -98,7 +100,7 @@ const openDetail = async (item, mode) => {
     editorMode.value = mode
     editorOpen.value = true
   } catch (error) {
-    message.error(error?.response?.data?.detail || error?.message || '加载 Ontology 详情失败')
+    message.error(error?.response?.data?.detail || error?.message || t('ontology.loadDetailFailed'))
   } finally {
     loading.value = false
   }
@@ -112,7 +114,7 @@ const loadItems = async () => {
     const result = await ontologyRegistryApi.list()
     items.value = result.items || []
   } catch (error) {
-    message.error(error?.response?.data?.detail || error?.message || '加载 Ontology 失败')
+    message.error(error?.response?.data?.detail || error?.message || t('ontology.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -120,11 +122,11 @@ const loadItems = async () => {
 
 const beforeUpload = (file) => {
   if (!file.name?.toLowerCase().endsWith('.zip')) {
-    message.error(`${file.name} 不是 ZIP 文件`)
+    message.error(t('ontology.notZipFile', { name: file.name }))
     return false
   }
   if (file.size > 5 * 1024 * 1024) {
-    message.error(`${file.name} 超过 5 MiB`)
+    message.error(t('ontology.zipTooLarge', { name: file.name }))
     return false
   }
   return true
@@ -134,11 +136,13 @@ const uploadBundle = async ({ file, onSuccess, onError }) => {
   uploading.value = true
   try {
     const result = await ontologyRegistryApi.upload(file)
-    message.success(result.already_exists ? `${file.name} 已存在` : `${file.name} 上传成功`)
+    message.success(
+      result.already_exists ? t('ontology.uploadExists', { name: file.name }) : t('ontology.uploadSuccess', { name: file.name })
+    )
     onSuccess?.(result)
     await loadItems()
   } catch (error) {
-    const detail = error?.response?.data?.detail || error?.message || '上传失败'
+    const detail = error?.response?.data?.detail || error?.message || t('ontology.uploadFailed')
     message.error(`${file.name}: ${detail}`)
     onError?.(error)
   } finally {

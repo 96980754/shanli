@@ -2,12 +2,12 @@
   <div class="account-settings">
     <div class="header-section">
       <div class="header-content">
-        <div class="section-title">账户设置</div>
-        <p class="section-description">管理当前账户资料、身份信息。</p>
+        <div class="section-title">{{ $t('settings.accountTitle') }}</div>
+        <p class="section-description">{{ $t('settings.accountDescription') }}</p>
       </div>
       <a-button class="lucide-icon-btn" :loading="refreshing" @click="refreshProfile">
         <template #icon><RefreshCw :size="16" :class="{ spin: refreshing }" /></template>
-        刷新
+        {{ $t('common.refresh') }}
       </a-button>
     </div>
 
@@ -34,14 +34,14 @@
             <div class="avatar-mask">
               <Upload v-if="!avatarUploading" :size="16" />
               <RefreshCw v-else :size="16" class="spin" />
-              <span>{{ userStore.avatar ? '更换' : '上传' }}</span>
+              <span>{{ $t(userStore.avatar ? 'settings.changeAvatar' : 'common.upload') }}</span>
             </div>
           </div>
         </a-upload>
 
         <div class="profile-fields">
           <div class="profile-row editable-row">
-            <span class="profile-label">用户名</span>
+            <span class="profile-label">{{ $t('login.label.uid') }}</span>
             <a-input
               v-if="editingField === 'username'"
               ref="usernameInput"
@@ -55,11 +55,11 @@
               @blur="cancelField"
             />
             <button v-else type="button" class="editable-value" @click="startFieldEdit('username')">
-              {{ userStore.username || '未设置' }}
+              {{ userStore.username || $t('settings.notSet') }}
             </button>
           </div>
           <div class="profile-row editable-row">
-            <span class="profile-label">手机号</span>
+            <span class="profile-label">{{ $t('login.label.phone') }}</span>
             <a-input
               v-if="editingField === 'phone_number'"
               ref="phoneInput"
@@ -78,12 +78,12 @@
               class="editable-value"
               @click="startFieldEdit('phone_number')"
             >
-              {{ userStore.phoneNumber || '未设置' }}
+              {{ userStore.phoneNumber || $t('settings.notSet') }}
             </button>
           </div>
           <div class="profile-row">
             <span class="profile-label">UID</span>
-            <span class="profile-value mono">{{ userStore.uid || '未设置' }}</span>
+            <span class="profile-value mono">{{ userStore.uid || $t('settings.notSet') }}</span>
           </div>
         </div>
       </div>
@@ -91,15 +91,17 @@
       <div class="identity-panel">
         <div class="identity-item">
           <span class="identity-icon"><ShieldCheck :size="15" /></span>
-          <span class="profile-label">权限</span>
+          <span class="profile-label">{{ $t('settings.permission') }}</span>
           <span class="profile-value" :style="{ color: getRoleColor(userStore.userRole) }">
             {{ userRoleText }}
           </span>
         </div>
         <div class="identity-item">
           <span class="identity-icon"><Building2 :size="15" /></span>
-          <span class="profile-label">部门</span>
-          <span class="profile-value">{{ userStore.departmentName || '默认部门' }}</span>
+          <span class="profile-label">{{ $t('userMgmt.department') }}</span>
+          <span class="profile-value">
+            {{ userStore.departmentName || $t('settings.defaultDepartment') }}
+          </span>
         </div>
       </div>
     </div>
@@ -113,12 +115,14 @@
 import UserConfigSettingsCard from '@/components/UserConfigSettingsCard.vue'
 
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { Building2, RefreshCw, ShieldCheck, Upload } from 'lucide-vue-next'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import { useUserStore } from '@/stores/user'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const avatarUploading = ref(false)
 const refreshing = ref(false)
@@ -136,13 +140,13 @@ const avatarDefaultSrc = computed(() => (userStore.uid ? generatePixelAvatar(use
 const userRoleText = computed(() => {
   switch (userStore.userRole) {
     case 'superadmin':
-      return '超级管理员'
+      return t('user.role.superadmin')
     case 'admin':
-      return '管理员'
+      return t('user.role.admin')
     case 'user':
-      return '普通用户'
+      return t('user.role.user')
     default:
-      return '未知角色'
+      return t('user.role.unknown')
   }
 })
 
@@ -156,10 +160,10 @@ const refreshProfile = async () => {
   try {
     await userStore.getCurrentUser()
     syncProfileDraft()
-    message.success('账户信息已刷新')
+    message.success(t('settings.profileRefreshed'))
   } catch (error) {
-    console.error('刷新用户信息失败:', error)
-    message.error('刷新失败：' + (error.message || '请稍后重试'))
+    console.error(t('settings.refreshUserInfoFailed'), error)
+    message.error(t('settings.refreshFailed', { detail: error.message || t('settings.retryLater') }))
   } finally {
     refreshing.value = false
   }
@@ -184,7 +188,7 @@ const saveField = async (field) => {
   if (field === 'username') {
     const username = profileDraft.username.trim()
     if (username.length < 2 || username.length > 20) {
-      message.error('用户名长度必须在 2-20 个字符之间')
+      message.error(t('userMgmt.usernameLengthInvalid'))
       return
     }
     if (username === userStore.username) {
@@ -197,7 +201,7 @@ const saveField = async (field) => {
   if (field === 'phone_number') {
     const phoneNumber = profileDraft.phone_number.trim()
     if (phoneNumber && !validatePhoneNumber(phoneNumber)) {
-      message.error('请输入正确的手机号格式')
+      message.error(t('userMgmt.phoneFormatInvalid'))
       return
     }
     if (phoneNumber === (userStore.phoneNumber || '')) {
@@ -212,10 +216,10 @@ const saveField = async (field) => {
     await userStore.updateProfile(payload)
     syncProfileDraft()
     editingField.value = ''
-    message.success('个人资料更新成功')
+    message.success(t('settings.profileUpdated'))
   } catch (error) {
-    console.error('更新个人资料失败:', error)
-    message.error('更新失败：' + (error.message || '请稍后重试'))
+    console.error(t('settings.updateProfileFailed'), error)
+    message.error(t('settings.updateFailed', { detail: error.message || t('settings.retryLater') }))
   } finally {
     savingField.value = ''
   }
@@ -243,13 +247,13 @@ const validatePhoneNumber = (phone) => {
 const beforeUpload = (file) => {
   const isImage = file.type.startsWith('image/')
   if (!isImage) {
-    message.error('只能上传图片文件！')
+    message.error(t('settings.imageOnly'))
     return false
   }
 
   const isLt5M = file.size / 1024 / 1024 < 5
   if (!isLt5M) {
-    message.error('图片大小不能超过 5MB！')
+    message.error(t('settings.imageMaxSize', { size: 5 }))
     return false
   }
 
@@ -270,10 +274,12 @@ const handleAvatarChange = async (info) => {
   try {
     avatarUploading.value = true
     await userStore.uploadAvatar(info.file.originFileObj || info.file)
-    message.success('头像上传成功！')
+    message.success(t('settings.avatarUploaded'))
   } catch (error) {
-    console.error('头像上传失败:', error)
-    message.error('头像上传失败：' + (error.message || '请稍后重试'))
+    console.error(t('settings.uploadAvatarFailed'), error)
+    message.error(
+      t('settings.avatarUploadFailed', { detail: error.message || t('settings.retryLater') })
+    )
   } finally {
     avatarUploading.value = false
   }

@@ -18,12 +18,12 @@
     />
     <div v-else-if="loading" class="preview-state">
       <a-spin />
-      <span>正在加载预览...</span>
+      <span>{{ $t('workspace.loadingPreview') }}</span>
     </div>
     <div v-else class="preview-empty">
       <FileSearch :size="28" />
-      <h3>选择文件以预览</h3>
-      <p>支持 Markdown、TXT 编辑，其他格式保持只读预览。</p>
+      <h3>{{ $t('workspace.selectFileToPreview') }}</h3>
+      <p>{{ $t('workspace.previewHint') }}</p>
     </div>
   </aside>
 </template>

@@ -1,6 +1,6 @@
 <template>
   <div class="not-found">
-    <h1>404 - 页面还没做</h1>
+    <h1>{{ $t('empty.title') }}</h1>
     <p>Sorry, Yemian has not been zuoed.</p>
   </div>
 </template>

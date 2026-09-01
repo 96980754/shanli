@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { i18n } from '@/i18n'
 import { threadApi } from '@/apis'
 import { handleChatError } from '@/utils/errorHandler'
 
@@ -72,7 +73,7 @@ export const useChatThreadsStore = defineStore('chatThreads', () => {
     }
   }
 
-  const createThread = async (agentId, title = '新的对话') => {
+  const createThread = async (agentId, title = i18n.global.t('chat.newChat')) => {
     if (!agentId) return null
 
     try {

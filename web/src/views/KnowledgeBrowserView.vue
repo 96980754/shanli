@@ -1,11 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Folder } from 'lucide-vue-next'
 import { documentBrowseApi, databaseApi } from '@/apis/knowledge_api'
 import PageHeader from '@/components/shared/PageHeader.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const keyword = ref('')
 const publisher = ref('')
 const dates = ref([])
@@ -16,16 +18,12 @@ const databases = ref([])
 
 // 搜索方式：文件名 / 文件夹 / 内容，默认只按文件名匹配
 const searchType = ref('filename')
-const searchTypeOptions = [
-  { label: '文件名', value: 'filename' },
-  { label: '文件夹', value: 'folder' },
-  { label: '内容', value: 'content' }
-]
-const searchPlaceholder = computed(() => ({
-  filename: '搜索文件名',
-  folder: '搜索文件夹名',
-  content: '搜索正文关键词'
-})[searchType.value])
+const searchTypeOptions = computed(() => [
+  { label: t('kbBrowser.type.filename'), value: 'filename' },
+  { label: t('kbBrowser.type.folder'), value: 'folder' },
+  { label: t('kbBrowser.type.content'), value: 'content' }
+])
+const searchPlaceholder = computed(() => t(`kbBrowser.placeholder.${searchType.value}`))
 
 const categories = computed(() => databases.value.reduce((result, database) => {
   const category = database.kb_type || 'other'
@@ -102,16 +100,16 @@ onMounted(async () => {
 
 <template>
   <div class="knowledge-browser layout-container">
-    <PageHeader title="全库搜索" subtitle="按分类浏览目录，或搜索全部可访问文档" />
+    <PageHeader :title="$t('nav.knowledgeBrowser')" :subtitle="$t('kbBrowser.subtitle')" />
     <a-row :gutter="16">
       <a-col :xs="24" :lg="16">
-        <a-card title="全知识库文档搜索">
+        <a-card :title="$t('kbBrowser.docSearchTitle')">
           <a-space wrap class="filters">
             <a-segmented v-model:value="searchType" :options="searchTypeOptions" />
             <a-input v-model:value="keyword" :placeholder="searchPlaceholder" @press-enter="search" />
-            <a-input v-model:value="publisher" placeholder="发布人 UID" @press-enter="search" />
+            <a-input v-model:value="publisher" :placeholder="$t('kbBrowser.publisherPlaceholder')" @press-enter="search" />
             <a-range-picker v-model:value="dates" />
-            <a-button type="primary" :loading="loading" @click="search">搜索</a-button>
+            <a-button type="primary" :loading="loading" @click="search">{{ $t('common.search') }}</a-button>
           </a-space>
           <a-list :loading="loading" :data-source="documents" class="document-list">
             <template #renderItem="{ item }">
@@ -121,7 +119,7 @@ onMounted(async () => {
                     <span class="result-title">
                       <Folder v-if="item.is_folder" :size="14" class="folder-icon" />
                       <span class="doc-leaf">{{ displayPath(item).name }}</span>
-                      <a-tag v-if="item.is_folder" class="folder-tag">文件夹</a-tag>
+                      <a-tag v-if="item.is_folder" class="folder-tag">{{ $t('kbBrowser.type.folder') }}</a-tag>
                     </span>
                   </template>
                   <template #description>
@@ -129,21 +127,21 @@ onMounted(async () => {
                     <span class="doc-meta">
                       {{
                         item.is_folder
-                          ? `${item.kb_name} · 文件夹`
-                          : `${item.kb_name} · 发布人：${item.publisher_name || item.created_by || '未知'}`
+                          ? $t('kbBrowser.metaFolder', { kb: item.kb_name })
+                          : $t('kbBrowser.metaPublisher', { kb: item.kb_name, publisher: item.publisher_name || item.created_by || $t('common.unknown') })
                       }}
                     </span>
                   </template>
                 </a-list-item-meta>
-                <template #actions><a @click="browseDirectory(item)">打开目录</a></template>
+                <template #actions><a @click="browseDirectory(item)">{{ $t('kbBrowser.openDir') }}</a></template>
               </a-list-item>
             </template>
           </a-list>
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="8">
-        <a-card title="热门文档" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ splitPath(item.filename).name }}</a><span>{{ item.view_count }} 次浏览</span></a-list-item></template></a-list></a-card>
-        <a-card title="知识库分类 / 目录" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
+        <a-card :title="$t('kbBrowser.hotDocuments')" class="side-card"><a-list :data-source="hotDocuments" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ splitPath(item.filename).name }}</a><span>{{ $t('kbBrowser.viewCount', { count: item.view_count }) }}</span></a-list-item></template></a-list></a-card>
+        <a-card :title="$t('kbBrowser.categories')" class="side-card"><template v-for="(items, category) in categories" :key="category"><h4>{{ category }}</h4><a-list :data-source="items" size="small"><template #renderItem="{ item }"><a-list-item><a @click="browseDirectory(item)">{{ item.name }}</a></a-list-item></template></a-list></template></a-card>
       </a-col>
     </a-row>
   </div>

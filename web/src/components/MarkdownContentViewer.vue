@@ -1,17 +1,19 @@
 <template>
   <div class="markdown-content-viewer">
     <div class="viewer-header">
-      <h4>文件内容</h4>
+      <h4>{{ $t('markdown.fileContent') }}</h4>
       <div class="header-controls">
         <div class="header-info">
-          <span v-if="mappedChunks.length > 0">共 {{ mappedChunks.length }} 个片段</span>
-          <span>总长度 {{ formatTextLength(mergedContent.length) }}</span>
+          <span v-if="mappedChunks.length > 0">{{
+            $t('markdown.chunkCount', { count: mappedChunks.length })
+          }}</span>
+          <span>{{ $t('markdown.totalLength') }} {{ formatTextLength(mergedContent.length) }}</span>
         </div>
         <button
           class="toggle-btn"
           v-if="mappedChunks.length > 0"
           @click="toggleChunkPanel"
-          :title="chunkPanelVisible ? '隐藏片段列表' : '显示片段列表'"
+          :title="t(chunkPanelVisible ? 'markdown.hideChunkList' : 'markdown.showChunkList')"
         >
           <ChevronLeft v-if="chunkPanelVisible" :size="14" />
           <ChevronRight v-else :size="14" />
@@ -57,7 +59,7 @@
     <!-- 悬浮提示 -->
     <div v-if="showTooltip && currentChunk" class="chunk-tooltip" :style="tooltipStyle">
       <div class="tooltip-header">
-        <strong>片段信息</strong>
+        <strong>{{ $t('markdown.chunkInfo') }}</strong>
       </div>
       <div class="tooltip-content">
         <div class="tooltip-row">
@@ -65,15 +67,15 @@
           <span class="value">{{ currentChunk.id }}</span>
         </div>
         <div class="tooltip-row">
-          <span class="label">序号:</span>
+          <span class="label">{{ $t('markdown.seqLabel') }}</span>
           <span class="value">{{ currentChunk.chunk_order_index }}</span>
         </div>
         <div class="tooltip-row">
-          <span class="label">位置:</span>
+          <span class="label">{{ $t('markdown.positionLabel') }}</span>
           <span class="value">{{ currentChunk.startOffset }} - {{ currentChunk.endOffset }}</span>
         </div>
         <div class="tooltip-row">
-          <span class="label">长度:</span>
+          <span class="label">{{ $t('markdown.lengthLabel') }}</span>
           <span class="value">{{ formatTextLength(currentChunk.content.length) }}</span>
         </div>
       </div>
@@ -83,9 +85,12 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { mergeChunks, getChunkPreview } from '@/utils/chunkUtils'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const props = defineProps({
   chunks: {
@@ -113,12 +118,12 @@ const mappedChunks = computed(() => mergeResult.value.chunks)
 
 // 格式化文本长度
 function formatTextLength(length) {
-  if (!length && length !== 0) return '0 字符'
+  if (!length && length !== 0) return t('markdown.zeroChars')
 
   if (length < 1000) {
-    return `${length} 字符`
+    return t('markdown.chars', { count: length })
   } else {
-    return `${(length / 1000).toFixed(1)}k 字符`
+    return t('markdown.kChars', { count: (length / 1000).toFixed(1) })
   }
 }
 

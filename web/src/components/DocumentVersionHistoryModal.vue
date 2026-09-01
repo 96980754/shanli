@@ -1,28 +1,36 @@
 <template>
-  <a-modal v-model:open="visible" title="版本历史" width="840px" :footer="null">
+  <a-modal
+    v-model:open="visible"
+    :title="$t('docModal.versionHistoryTitle')"
+    width="840px"
+    :footer="null"
+  >
     <a-spin :spinning="versionLoading">
-      <a-empty v-if="!versionLoading && versionItems.length === 0" description="暂无版本记录" />
+      <a-empty
+        v-if="!versionLoading && versionItems.length === 0"
+        :description="$t('docModal.noVersionRecords')"
+      />
       <a-list v-else :data-source="versionItems" item-layout="horizontal">
         <template #renderItem="{ item }">
           <a-list-item>
             <template #actions>
-              <a-button type="link" @click="emit('download', item)">下载</a-button>
+              <a-button type="link" @click="emit('download', item)">{{ $t('common.download') }}</a-button>
               <a-button v-if="item.validation_report" type="link" @click="openReport(item)">
-                查看变更报告
+                {{ $t('docModal.viewChangeReport') }}
               </a-button>
             </template>
             <a-list-item-meta :title="`V${item.document_version} · ${item.filename}`">
               <template #description>
                 <a-space wrap>
                   <a-tag :color="item.is_current ? 'green' : 'default'">
-                    {{ item.is_current ? '当前版本' : '历史/候选版本' }}
+                    {{ $t(item.is_current ? 'docModal.currentVersion' : 'docModal.historyVersion') }}
                   </a-tag>
                   <span>{{ getFileStatusView(item.status).label }}</span>
                   <template v-if="item.validation_report">
-                    <a-tag color="blue">新增 {{ item.validation_report.new_count }}</a-tag>
-                    <a-tag color="orange">变更 {{ item.validation_report.changed_count }}</a-tag>
-                    <a-tag color="red">删除 {{ item.validation_report.removed_count }}</a-tag>
-                    <a-tag color="red">冲突 {{ item.validation_report.conflict_count }}</a-tag>
+                    <a-tag color="blue">{{ $t('docModal.reportNew', { count: item.validation_report.new_count }) }}</a-tag>
+                    <a-tag color="orange">{{ $t('docModal.reportChanged', { count: item.validation_report.changed_count }) }}</a-tag>
+                    <a-tag color="red">{{ $t('docModal.reportRemoved', { count: item.validation_report.removed_count }) }}</a-tag>
+                    <a-tag color="red">{{ $t('docModal.reportConflict', { count: item.validation_report.conflict_count }) }}</a-tag>
                   </template>
                   <span
                     v-if="item.error_message"
@@ -41,22 +49,30 @@
     </a-spin>
   </a-modal>
 
-  <a-modal v-model:open="reportVisible" title="知识变更报告" width="980px" :footer="null">
+  <a-modal
+    v-model:open="reportVisible"
+    :title="$t('docModal.knowledgeChangeReport')"
+    width="980px"
+    :footer="null"
+  >
     <a-spin :spinning="reportLoading">
       <template v-if="report">
         <a-alert
           v-if="report.inconclusive"
           type="warning"
           show-icon
-          :message="report.summary?.message || '知识变更证据不足，需要人工审核'"
+          :message="report.summary?.message || $t('docModal.inconclusiveReport')"
         />
         <div class="report-summary">
-          <a-tag color="blue">新增 {{ report.new_count }}</a-tag>
-          <a-tag color="orange">变更 {{ report.changed_count }}</a-tag>
-          <a-tag color="red">删除 {{ report.removed_count }}</a-tag>
-          <a-tag color="red">冲突 {{ report.conflict_count }}</a-tag>
+          <a-tag color="blue">{{ $t('docModal.reportNew', { count: report.new_count }) }}</a-tag>
+          <a-tag color="orange">{{ $t('docModal.reportChanged', { count: report.changed_count }) }}</a-tag>
+          <a-tag color="red">{{ $t('docModal.reportRemoved', { count: report.removed_count }) }}</a-tag>
+          <a-tag color="red">{{ $t('docModal.reportConflict', { count: report.conflict_count }) }}</a-tag>
         </div>
-        <a-empty v-if="reportItems.length === 0" description="没有结构化知识变化" />
+        <a-empty
+          v-if="reportItems.length === 0"
+          :description="$t('docModal.noStructuredChanges')"
+        />
         <div v-for="item in reportItems" :key="item.item_id" class="report-item">
           <div class="report-item-title">
             <a-tag :color="getChangeTypeView(item.change_type).color">
@@ -66,27 +82,29 @@
           </div>
           <p class="report-reason">{{ item.reason }}</p>
           <div class="report-value-compare">
-            <span class="value-label">旧值</span>
+            <span class="value-label">{{ $t('docModal.oldValue') }}</span>
             <code>{{ getSideValue(item, 'old') }}</code>
             <span class="value-arrow">→</span>
-            <span class="value-label">新值</span>
+            <span class="value-label">{{ $t('docModal.newValue') }}</span>
             <code>{{ getSideValue(item, 'new') }}</code>
           </div>
           <div class="report-evidence-columns">
             <section>
-              <span>旧版证据</span>
+              <span>{{ $t('docModal.oldEvidence') }}</span>
               <pre>{{ getEvidenceQuote(item.old_evidence, item.change_type, 'old') }}</pre>
             </section>
             <section>
-              <span>新版证据</span>
+              <span>{{ $t('docModal.newEvidence') }}</span>
               <pre>{{ getEvidenceQuote(item.new_evidence, item.change_type, 'new') }}</pre>
             </section>
           </div>
         </div>
         <div v-if="canReviewValidationReport(report, canManage)" class="report-actions">
-          <a-button danger :loading="decisionLoading" @click="rejectReport">拒绝新版</a-button>
+          <a-button danger :loading="decisionLoading" @click="rejectReport">{{
+            $t('docModal.rejectNewVersion')
+          }}</a-button>
           <a-button type="primary" :loading="decisionLoading" @click="acceptReport"
-            >接受并启用新版</a-button
+            >{{ $t('docModal.acceptAndEnable') }}</a-button
           >
         </div>
       </template>
@@ -96,6 +114,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 
 import { documentApi } from '@/apis/knowledge_api'
@@ -114,6 +133,8 @@ const props = defineProps({
   canManage: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:open', 'download', 'changed'])
+
+const { t } = useI18n()
 
 const visible = computed({
   get: () => props.open,
@@ -135,7 +156,7 @@ const loadVersions = async () => {
     const response = await documentApi.getDocumentVersions(props.kbId, props.fileId)
     versionItems.value = response?.versions || []
   } catch (error) {
-    message.error(error.message || '加载版本历史失败')
+    message.error(error.message || t('docModal.loadVersionHistoryFailed'))
     versionItems.value = []
   } finally {
     versionLoading.value = false
@@ -151,7 +172,7 @@ const openReport = async (version) => {
     report.value = response?.report || null
     reportItems.value = response?.items || []
   } catch (error) {
-    message.error(error.message || '加载知识变更报告失败')
+    message.error(error.message || t('docModal.loadChangeReportFailed'))
     reportVisible.value = false
   } finally {
     reportLoading.value = false
@@ -171,15 +192,19 @@ const acceptReport = async () => {
       }
     )
     if (response?.cleanup_warnings?.length) {
-      message.warning(`新版已生效，但旧版索引清理存在告警：${response.cleanup_warnings.join('；')}`)
+      message.warning(
+        t('docModal.newVersionActiveWarnings', {
+          warnings: response.cleanup_warnings.join('；')
+        })
+      )
     } else {
-      message.success('新版已生效')
+      message.success(t('docModal.newVersionActive'))
     }
     reportVisible.value = false
     await loadVersions()
     emit('changed')
   } catch (error) {
-    message.error(error.message || '启用新版失败')
+    message.error(error.message || t('docModal.activateVersionFailed'))
   } finally {
     decisionLoading.value = false
   }
@@ -187,20 +212,20 @@ const acceptReport = async () => {
 
 const rejectReport = () => {
   Modal.confirm({
-    title: '确认拒绝新版？',
-    content: '拒绝后旧版继续生效，知识变更报告仍会保留。',
-    okText: '拒绝新版',
+    title: t('docModal.confirmRejectNewTitle'),
+    content: t('docModal.confirmRejectNewContent'),
+    okText: t('docModal.rejectNewVersion'),
     okButtonProps: { danger: true },
     async onOk() {
       decisionLoading.value = true
       try {
         await documentApi.rejectDocumentValidationReport(props.kbId, report.value.report_id)
-        message.success('已拒绝新版，旧版继续生效')
+        message.success(t('docModal.rejectedNewVersion'))
         reportVisible.value = false
         await loadVersions()
         emit('changed')
       } catch (error) {
-        message.error(error.message || '拒绝新版失败')
+        message.error(error.message || t('docModal.rejectNewVersionFailed'))
       } finally {
         decisionLoading.value = false
       }

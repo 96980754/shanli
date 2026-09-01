@@ -36,6 +36,7 @@
 <script setup>
 import { RouterLink } from 'vue-router'
 import HeaderComponent from '@/components/HeaderComponent.vue'
+import { i18n } from '@/i18n'
 
 defineProps({
   title: {
@@ -56,7 +57,7 @@ defineProps({
   },
   ariaLabel: {
     type: String,
-    default: '视图切换'
+    default: () => i18n.global.t('settings.viewSwitchAriaLabel')
   }
 })
 

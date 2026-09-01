@@ -25,7 +25,7 @@
     <div ref="modalBodyRef" class="subagent-thread-modal-body">
       <div ref="modalContentRef" class="subagent-thread-modal-content">
         <div v-if="loading && !hasRenderableMessages" class="subagent-thread-modal-state">
-          正在加载子智能体消息...
+          {{ $t('subagent.loading') }}
         </div>
         <div v-else-if="error" class="subagent-thread-modal-state is-error">{{ error }}</div>
         <ThreadMessageList
@@ -41,6 +41,7 @@
 
 <script setup>
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { agentApi } from '@/apis'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import ThreadMessageList from '@/components/ThreadMessageList.vue'
@@ -112,7 +113,8 @@ const RUN_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'inte
 const normalizeRunStatus = (status) => String(status || '').trim()
 const isTerminalRunStatus = (status) => RUN_TERMINAL_STATUSES.has(normalizeRunStatus(status))
 
-const modalTitleName = computed(() => props.subagentName || '子智能体')
+const { t } = useI18n()
+const modalTitleName = computed(() => props.subagentName || t('subagent.titleFallback'))
 const effectiveRunStatus = computed(() =>
   normalizeRunStatus(historyRunStatus.value || props.runStatus)
 )
@@ -308,7 +310,7 @@ const loadHistory = async (threadId) => {
       scheduleScrollToBottom(true, true)
     }
   } catch (e) {
-    error.value = '加载子智能体消息失败'
+    error.value = t('subagent.loadFailed')
     console.error('Failed to load subagent thread messages:', e)
   } finally {
     loading.value = false

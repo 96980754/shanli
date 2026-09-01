@@ -9,11 +9,11 @@
     </template>
     <template #result="{}">
       <div class="list-kbs-result">
-        <div class="kb-count">共 {{ kbList.length }} 个知识库</div>
+        <div class="kb-count">{{ $t('toolCall.listKbs.count', { count: kbList.length }) }}</div>
         <div class="kb-list">
           <div v-for="kb in kbList" :key="kb.name" class="kb-item">
             <div class="kb-name">{{ kb.name }}</div>
-            <div class="kb-description">{{ kb.description || '无描述' }}</div>
+            <div class="kb-description">{{ kb.description || $t('toolCall.listKbs.noDescription') }}</div>
           </div>
         </div>
       </div>
@@ -23,7 +23,10 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   toolCall: {
@@ -32,9 +35,9 @@ const props = defineProps({
   }
 })
 
-const toolName = computed(() => props.toolCall.name || props.toolCall.function?.name || '知识库')
+const toolName = computed(() => props.toolCall.name || props.toolCall.function?.name || t('db.title'))
 
-const operationLabel = computed(() => `${toolName.value} 列表`)
+const operationLabel = computed(() => t('toolCall.listKbs.listOf', { name: toolName.value }))
 
 const parseData = (content) => {
   if (typeof content === 'string') {
@@ -55,13 +58,17 @@ const kbList = computed(() => {
 
 const headerSummary = computed(() => {
   const names = kbList.value.map((kb) => kb?.name).filter(Boolean)
-  if (!names.length) return '暂无知识库'
+  if (!names.length) return t('db.empty.title')
 
-  const previewNames = names.slice(0, 3).join('，')
+  const previewNames = names.slice(0, 3).join(t('toolCall.listKbs.nameJoin'))
   const remainingCount = names.length - 3
   return remainingCount > 0
-    ? `${names.length}个知识库：${previewNames} 等${remainingCount}个`
-    : `${names.length}个知识库：${previewNames}`
+    ? t('toolCall.listKbs.headerMany', {
+        count: names.length,
+        names: previewNames,
+        remaining: remainingCount
+      })
+    : t('toolCall.listKbs.headerFew', { count: names.length, names: previewNames })
 })
 </script>
 

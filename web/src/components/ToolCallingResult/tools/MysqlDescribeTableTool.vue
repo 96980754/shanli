@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall" :hide-params="true">
     <template #header-success>
       <span class="sep-header">
-        <span class="note">描述表结构：</span>
+        <span class="note">{{ $t('toolCall.mysql.describeTable') }}</span>
         <span class="description code">{{
           extractTableName(toolCall.args || toolCall.function?.arguments)
         }}</span>

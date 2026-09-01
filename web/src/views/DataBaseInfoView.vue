@@ -12,6 +12,7 @@
       v-model:visible="addFilesModalVisible"
       :folder-tree="folderTree"
       :current-folder-id="currentFolderId"
+      :current-path-prefix="currentPathPrefix"
       :is-folder-mode="isFolderUploadMode"
       :mode="addFilesMode"
       :can-upload="kbPermissions.can_upload"
@@ -21,21 +22,21 @@
     />
 
     <div v-if="detailLoading" class="database-detail-loading">
-      <a-spin tip="加载知识库信息..." />
+      <a-spin :tip="t('dbInfo.loadingKbInfo')" />
     </div>
 
     <template v-else>
       <div class="detail-top-bar">
         <button class="detail-back-btn" type="button" @click="backToDatabase">
           <ArrowLeft :size="16" />
-          <span>返回</span>
+          <span>{{ $t('common.back') }}</span>
         </button>
         <div class="detail-title-area">
           <div class="detail-icon">
             <component :is="kbTypeIcon" :size="18" />
           </div>
           <div class="detail-title-text">
-            <h2>{{ database.name || '知识库加载中' }}</h2>
+            <h2>{{ database.name || $t('dbInfo.kbLoading') }}</h2>
             <span class="detail-subtitle">{{ databaseSubtitle }}</span>
           </div>
         </div>
@@ -47,7 +48,7 @@
               @click="copyDatabaseId"
             >
               <Copy :size="14" />
-              <span>复制 ID</span>
+              <span>{{ $t('dbInfo.copyId') }}</span>
             </button>
             <button
               v-if="kbPermissions.can_grant"
@@ -56,7 +57,7 @@
               @click="activeTab = 'permissions'"
             >
               <Settings :size="14" />
-              <span>权限设置</span>
+              <span>{{ $t('dbInfo.permissionSettings') }}</span>
             </button>
             <button
               v-if="kbPermissions.can_manage"
@@ -65,15 +66,15 @@
               @click="showEditModal"
             >
               <Pencil :size="14" />
-              <span>编辑</span>
+              <span>{{ $t('common.edit') }}</span>
             </button>
           </a-space>
         </div>
       </div>
 
       <div class="database-detail-body">
-        <div class="database-tab-bar" aria-label="知识库功能导航">
-          <nav class="database-tab-list" aria-label="知识库功能标签" role="tablist">
+        <div class="database-tab-bar" :aria-label="t('dbInfo.kbFunctionNav')">
+          <nav class="database-tab-list" :aria-label="t('dbInfo.kbFunctionTabs')" role="tablist">
             <button
               v-for="tab in visibleTabs"
               :key="tab.key"
@@ -85,7 +86,7 @@
               @click="activeTab = tab.key"
             >
               <component :is="tab.icon" :size="17" />
-              <span>{{ tab.label }}</span>
+              <span>{{ getTabLabel(tab.label) }}</span>
             </button>
           </nav>
         </div>
@@ -102,7 +103,7 @@
                     @click="showAddFilesModal()"
                   >
                     <FileUp :size="14" />
-                    <span>上传</span>
+                    <span>{{ $t('common.upload') }}</span>
                   </button>
                   <button
                     v-if="userStore.isAdmin"
@@ -111,7 +112,7 @@
                     @click="showCreateFolderModal"
                   >
                     <FolderPlus :size="14" />
-                    <span>新建文件夹</span>
+                    <span>{{ $t('dbInfo.newFolder') }}</span>
                   </button>
                 </div>
               </div>
@@ -126,7 +127,7 @@
                   <FileText :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ pendingParseCount }}</strong>
-                    <span>待审核</span>
+                    <span>{{ $t('dbInfo.pendingReview') }}</span>
                   </div>
                 </button>
                 <button
@@ -139,21 +140,21 @@
                   <DatabaseIcon :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ pendingIndexCount }}</strong>
-                    <span>待入库</span>
+                    <span>{{ $t('dbInfo.pendingIndex') }}</span>
                   </div>
                 </button>
                 <div class="file-stat-card file-stat-summary">
                   <FileText :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ fileStats.count }}</strong>
-                    <span>文件</span>
+                    <span>{{ $t('dbInfo.files') }}</span>
                   </div>
                 </div>
                 <div v-if="fileStats.sizeText" class="file-stat-card file-stat-summary">
                   <DatabaseIcon :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ fileStats.sizeText }}</strong>
-                    <span>总大小</span>
+                    <span>{{ $t('dbInfo.totalSize') }}</span>
                   </div>
                 </div>
                 <button
@@ -162,8 +163,8 @@
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
                   :aria-busy="statsRepairing"
-                  aria-label="修复缺失的 Chunk/Token 统计"
-                  title="修复缺失的 Chunk/Token 统计"
+                  :aria-label="t('dbInfo.repairStatsLabel')"
+                  :title="t('dbInfo.repairStatsLabel')"
                   @click="repairDatabaseStats"
                 >
                   <LoaderCircle v-if="statsRepairing" :size="16" class="file-stat-spinner" />
@@ -179,8 +180,8 @@
                   class="file-stat-card file-stat-summary file-stat-repair"
                   :disabled="statsRepairing"
                   :aria-busy="statsRepairing"
-                  aria-label="修复缺失的 Chunk/Token 统计"
-                  title="修复缺失的 Chunk/Token 统计"
+                  :aria-label="t('dbInfo.repairStatsLabel')"
+                  :title="t('dbInfo.repairStatsLabel')"
                   @click="repairDatabaseStats"
                 >
                   <LoaderCircle v-if="statsRepairing" :size="16" class="file-stat-spinner" />
@@ -218,13 +219,13 @@
               <aside
                 v-if="kbPermissions.can_manage"
                 class="query-config-pane"
-                aria-label="检索配置"
+                :aria-label="t('dbInfo.queryConfigAria')"
               >
                 <div class="search-config-wrapper">
                   <div v-if="kbPermissions.can_manage" class="query-config-header">
                     <div>
-                      <h3>检索配置</h3>
-                      <p>调整当前知识库的检索参数。</p>
+                      <h3>{{ $t('dbInfo.queryConfig') }}</h3>
+                      <p>{{ $t('dbInfo.queryConfigDesc') }}</p>
                     </div>
                     <button
                       type="button"
@@ -233,7 +234,7 @@
                       @click="handleInlineSearchConfigSave"
                     >
                       <Save :size="14" />
-                      <span>保存</span>
+                      <span>{{ $t('common.save') }}</span>
                     </button>
                   </div>
                   <div class="search-config-body">
@@ -263,61 +264,61 @@
       </div>
     </template>
 
-    <a-modal v-model:open="editModalVisible" title="编辑知识库信息" width="700px">
+    <a-modal v-model:open="editModalVisible" :title="t('dbInfo.editKbTitle')" width="700px">
       <template #footer>
         <a-button danger @click="deleteDatabase" style="margin-right: auto; margin-left: 0">
           <template #icon>
             <Trash2 :size="16" style="vertical-align: -3px; margin-right: 4px" />
           </template>
-          删除知识库
+          {{ $t('dbInfo.deleteKb') }}
         </a-button>
-        <a-button key="back" @click="editModalVisible = false">取消</a-button>
-        <a-button key="submit" type="primary" @click="handleEditSubmit">确定</a-button>
+        <a-button key="back" @click="editModalVisible = false">{{ $t('common.cancel') }}</a-button>
+        <a-button key="submit" type="primary" @click="handleEditSubmit">{{ $t('common.ok') }}</a-button>
       </template>
       <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical">
-        <a-form-item label="知识库名称" name="name" required>
-          <a-input v-model:value="editForm.name" placeholder="请输入知识库名称" />
+        <a-form-item :label="t('dbInfo.kbNameLabel')" name="name" required>
+          <a-input v-model:value="editForm.name" :placeholder="t('dbInfo.kbNamePlaceholder')" />
         </a-form-item>
-        <a-form-item label="内容分类" name="category_id" required>
+        <a-form-item :label="t('dbInfo.categoryLabel')" name="category_id" required>
           <a-select
             v-model:value="editForm.category_id"
             :options="categoryOptions"
-            placeholder="请选择内容分类"
+            :placeholder="t('dbInfo.categoryPlaceholder')"
           />
         </a-form-item>
-        <a-form-item label="知识库描述" name="description">
+        <a-form-item :label="t('dbInfo.kbDescLabel')" name="description">
           <AiTextarea
             v-model="editForm.description"
             :name="editForm.name"
             :files="fileList"
-            placeholder="请输入知识库描述"
+            :placeholder="t('dbInfo.kbDescPlaceholder')"
             action-placement="header"
             :rows="4"
           />
         </a-form-item>
 
-        <a-form-item v-if="isMilvus && !isConnector" label="嵌入模型" name="embedding_model_spec">
+        <a-form-item v-if="isMilvus && !isConnector" :label="t('dbInfo.embeddingModelLabel')" name="embedding_model_spec">
           <EmbeddingModelSelector
             :value="editForm.embedding_model_spec"
             @update:value="handleEmbeddingModelChange"
           />
         </a-form-item>
 
-        <a-form-item v-if="!isConnector" label="自动生成问题" name="auto_generate_questions">
+        <a-form-item v-if="!isConnector" :label="t('dbInfo.autoGenQuestionsLabel')" name="auto_generate_questions">
           <a-switch
             v-model:checked="editForm.auto_generate_questions"
-            checked-children="开启"
-            un-checked-children="关闭"
+            :checked-children="t('dbInfo.on')"
+            :un-checked-children="t('dbInfo.off')"
           />
           <span style="margin-left: 8px; font-size: 12px; color: var(--gray-500)">
-            上传文件后自动生成测试问题
+            {{ $t('dbInfo.autoGenQuestionsHint') }}
           </span>
         </a-form-item>
 
         <a-form-item v-if="!isConnector" name="chunk_preset_id">
           <template #label>
             <span class="chunk-preset-label">
-              分块策略
+              {{ $t('dbInfo.chunkStrategy') }}
               <a-tooltip :title="editPresetDescription">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
@@ -331,52 +332,52 @@
         </a-form-item>
 
         <template v-if="isDifyKb">
-          <a-form-item label="Dify API URL" name="dify_api_url">
+          <a-form-item :label="t('dbInfo.difyApiUrlLabel')" name="dify_api_url">
             <a-input
               v-model:value="editForm.dify_api_url"
-              placeholder="例如: https://api.dify.ai/v1"
+              :placeholder="t('dbInfo.difyApiUrlPlaceholder')"
             />
           </a-form-item>
-          <a-form-item label="Dify Token" name="dify_token">
+          <a-form-item :label="t('dbInfo.difyTokenLabel')" name="dify_token">
             <a-input-password
               v-model:value="editForm.dify_token"
-              placeholder="请输入 Dify API Token"
+              :placeholder="t('dbInfo.difyTokenPlaceholder')"
             />
           </a-form-item>
-          <a-form-item label="Dataset ID" name="dify_dataset_id">
+          <a-form-item :label="t('dbInfo.datasetIdLabel')" name="dify_dataset_id">
             <a-input
               v-model:value="editForm.dify_dataset_id"
-              placeholder="请输入 Dify dataset_id"
+              :placeholder="t('dbInfo.datasetIdPlaceholder')"
             />
           </a-form-item>
         </template>
 
         <template v-if="isNotionKb">
-          <a-form-item label="Notion Token" name="notion_token">
+          <a-form-item :label="t('dbInfo.notionTokenLabel')" name="notion_token">
             <a-input-password
               v-model:value="editForm.notion_token"
-              placeholder="留空则保持现有 Token 或使用环境变量"
+              :placeholder="t('dbInfo.notionTokenPlaceholder')"
             />
           </a-form-item>
-          <a-form-item label="Data Source ID" name="notion_data_source_id">
+          <a-form-item :label="t('dbInfo.dataSourceIdLabel')" name="notion_data_source_id">
             <a-input
               v-model:value="editForm.notion_data_source_id"
-              placeholder="请输入 Notion data_source_id"
+              :placeholder="t('dbInfo.dataSourceIdPlaceholder')"
             />
           </a-form-item>
-          <a-form-item label="Notion API Version" name="notion_version">
+          <a-form-item :label="t('dbInfo.notionApiVersionLabel')" name="notion_version">
             <a-input v-model:value="editForm.notion_version" placeholder="2026-03-11" />
           </a-form-item>
         </template>
 
-        <a-form-item v-if="canEditShareConfig" label="共享设置" name="share_config">
+        <a-form-item v-if="canEditShareConfig" :label="t('dbInfo.shareSettingsLabel')" name="share_config">
           <a-form-item-rest>
             <ShareConfigForm ref="shareConfigFormRef" :model-value="database.share_config" />
           </a-form-item-rest>
         </a-form-item>
         <a-form-item
           v-else-if="database.share_config"
-          label="共享设置"
+          :label="t('dbInfo.shareSettingsLabel')"
           name="share_config_readonly"
         >
           <div class="share-config-readonly">
@@ -393,6 +394,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, h, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
@@ -424,7 +426,8 @@ const KnowledgeGraphSection = defineAsyncComponent({
   loader: () => import('@/components/KnowledgeGraphSection.vue'),
   loadingComponent: {
     setup() {
-      return () => h('div', { class: 'graph-section-loading' }, '图谱加载中…')
+      const { t } = useI18n()
+      return () => h('div', { class: 'graph-section-loading' }, t('dbInfo.graphLoading'))
     }
   }
 })
@@ -444,6 +447,7 @@ import { getKbTypeIcon, getKbTypeLabel, kbUtils } from '@/utils/kb_utils'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const store = useDatabaseStore()
 const taskerStore = useTaskerStore()
 const userStore = useUserStore()
@@ -486,28 +490,30 @@ const kbTypeIcon = computed(() => getKbTypeIcon(kbType.value || 'milvus'))
 
 const databaseSubtitle = computed(() => {
   const typeLabel = getKbTypeLabel(kbType.value || 'milvus')
-  if (!isCurrentDatabaseLoaded.value) return '正在加载知识库信息'
+  if (!isCurrentDatabaseLoaded.value) return t('dbInfo.loadingKbInfoProgress')
 
   const description = database.value.description?.trim()
   if (description) return description
 
-  if (isConnector.value) return `${typeLabel} 连接器`
-  return `${typeLabel} 知识库 · ${database.value.row_count || 0} 文件`
+  if (isConnector.value) return t('dbInfo.connectorSuffix', { type: typeLabel })
+  return t('dbInfo.kbSubtitle', { type: typeLabel, count: database.value.row_count || 0 })
 })
+
+const getTabLabel = (label) => (typeof label === 'string' && label.includes('.') ? t(label) : label)
 
 const tabs = computed(() => {
   const items = []
   if (isMilvus.value && kbPermissions.can_view) {
-    items.push({ key: 'filetable', label: '文件管理', icon: FileText })
+    items.push({ key: 'filetable', label: 'dbInfo.tabFileManagement', icon: FileText })
   }
   if (kbPermissions.can_search) {
-    items.push({ key: 'query', label: '检索测试', icon: Search })
+    items.push({ key: 'query', label: 'dbInfo.tabQueryTest', icon: Search })
   }
   if (isMilvus.value && userStore.isAdmin) {
-    items.push({ key: 'graph', label: '知识图谱', icon: Network })
+    items.push({ key: 'graph', label: 'dbInfo.tabKnowledgeGraph', icon: Network })
   }
   if (kbPermissions.can_grant) {
-    items.push({ key: 'permissions', label: '权限设置', icon: Settings })
+    items.push({ key: 'permissions', label: 'dbInfo.permissionSettings', icon: Settings })
   }
   return items
 })
@@ -575,14 +581,17 @@ const repairDatabaseStats = async () => {
     const updatedChunkFiles = Number(result?.updated_chunk_files || 0)
     if (updatedTokenFiles || updatedChunkFiles) {
       message.success(
-        `已修复 ${updatedTokenFiles} 个 Token 统计，${updatedChunkFiles} 个 Chunk 统计`
+        t('dbInfo.statsRepaired', {
+          tokenCount: updatedTokenFiles,
+          chunkCount: updatedChunkFiles
+        })
       )
     } else {
-      message.info('统计已是最新')
+      message.info(t('dbInfo.statsUpToDate'))
     }
   } catch (error) {
     console.error(error)
-    message.error(error.message || '统计修复失败')
+    message.error(error.message || t('dbInfo.statsRepairFailed'))
   } finally {
     statsRepairing.value = false
   }
@@ -595,15 +604,15 @@ const pendingIndexCount = computed(() => {
 const confirmBatchParse = () => {
   const count = pendingParseCount.value
   if (count <= 0) {
-    message.info('没有待审核文档')
+    message.info(t('dbInfo.noPendingReviewDocs'))
     return
   }
 
   Modal.confirm({
-    title: '解析待审核文件',
-    content: `将提交 ${formatStatNumber(count)} 个待审核文件，任务会在后台按批处理，可在任务中心查看进度。`,
-    okText: '提交解析',
-    cancelText: '取消',
+    title: t('dbInfo.parsePendingTitle'),
+    content: t('dbInfo.parsePendingContent', { count: formatStatNumber(count) }),
+    okText: t('dbInfo.submitParse'),
+    cancelText: t('common.cancel'),
     onOk: () => store.parsePendingFiles(count)
   })
 }
@@ -611,13 +620,13 @@ const confirmBatchParse = () => {
 const confirmBatchIndex = () => {
   const count = pendingIndexCount.value
   if (count <= 0) {
-    message.info('没有待入库文档')
+    message.info(t('fileTable.noPendingIndexDocs'))
     return
   }
 
   const opened = fileTableRef.value?.startPendingIndex?.(count)
   if (!opened) {
-    message.error('文件列表尚未加载完成，请稍后再试')
+    message.error(t('dbInfo.fileListNotReady'))
   }
 }
 
@@ -641,6 +650,7 @@ const handleInlineSearchConfigSave = async () => {
 
 const addFilesModalVisible = ref(false)
 const currentFolderId = ref(null)
+const currentPathPrefix = ref('')
 const isFolderUploadMode = ref(false)
 const addFilesMode = ref('file')
 const isInitialLoad = ref(true)
@@ -654,6 +664,8 @@ const showAddFilesModal = (options = {}) => {
   addFilesModalVisible.value = true
   currentFolderId.value =
     fileTableRef.value?.getCurrentFolderId?.() || store.fileBrowser.parentId || null
+  // 路径型虚拟目录：无 parent_id，上传时透传 path_prefix 避免落到根目录
+  currentPathPrefix.value = store.fileBrowser.pathPrefix || ''
 }
 
 const showCreateFolderModal = () => {
@@ -758,13 +770,13 @@ const backToDatabase = () => {
 
 const copyDatabaseId = async () => {
   if (!database.value.kb_id) {
-    message.warning('知识库ID为空')
+    message.warning(t('dbInfo.kbIdEmpty'))
     return
   }
 
   try {
     await navigator.clipboard.writeText(database.value.kb_id)
-    message.success('知识库ID已复制到剪贴板')
+    message.success(t('dbInfo.kbIdCopied'))
   } catch {
     const textArea = document.createElement('textarea')
     textArea.value = database.value.kb_id
@@ -772,7 +784,7 @@ const copyDatabaseId = async () => {
     textArea.select()
     document.execCommand('copy')
     document.body.removeChild(textArea)
-    message.success('知识库ID已复制到剪贴板')
+    message.success(t('dbInfo.kbIdCopied'))
   }
 }
 
@@ -800,10 +812,10 @@ const editForm = reactive({
   notion_version: '2026-03-11'
 })
 
-const rules = {
-  name: [{ required: true, message: '请输入知识库名称' }],
-  category_id: [{ required: true, message: '请选择内容分类' }]
-}
+const rules = computed(() => ({
+  name: [{ required: true, message: t('dbInfo.kbNamePlaceholder') }],
+  category_id: [{ required: true, message: t('dbInfo.categoryPlaceholder') }]
+}))
 
 const editPresetDescription = computed(() => getChunkPresetDescription(editForm.chunk_preset_id))
 const fileList = computed(() => {
@@ -816,34 +828,34 @@ const shareConfigDisplay = computed(() => {
   const shareConfig = database.value?.share_config || { access_level: 'global' }
   if (shareConfig.access_level === 'department') {
     const departmentIds = shareConfig.department_ids || []
-    const names = departmentIds.map((id) => getDepartmentName(id)).join('、') || '无'
+    const names = departmentIds.map((id) => getDepartmentName(id)).join('、') || t('dbInfo.none')
     return {
       color: 'blue',
-      label: '部门共享',
-      detail: `${departmentIds.length} 个部门可访问：${names}`
+      label: t('dbInfo.departmentShare'),
+      detail: t('dbInfo.departmentShareDetail', { count: departmentIds.length, names })
     }
   }
 
   if (shareConfig.access_level === 'user') {
     const userUids = shareConfig.user_uids || []
-    const names = userUids.map((uid) => getUserName(uid)).join('、') || '无'
+    const names = userUids.map((uid) => getUserName(uid)).join('、') || t('dbInfo.none')
     return {
       color: 'purple',
-      label: '指定人',
-      detail: `${userUids.length} 个用户可访问：${names}`
+      label: t('dbInfo.specificUsers'),
+      detail: t('dbInfo.userShareDetail', { count: userUids.length, names })
     }
   }
 
   return {
     color: 'green',
-    label: '全局共享',
-    detail: '所有用户可访问'
+    label: t('dbInfo.globalShare'),
+    detail: t('dbInfo.globalShareDetail')
   }
 })
 
 const getDepartmentName = (id) => {
   const dept = departments.value.find((item) => Number(item.id) === Number(id))
-  return dept?.name || `部门${id}`
+  return dept?.name || t('dbInfo.departmentName', { id })
 }
 
 const getUserName = (uid) => {
@@ -898,11 +910,10 @@ const showEditModal = () => {
 const handleEmbeddingModelChange = (spec) => {
   if (!spec || spec === editForm.embedding_model_spec) return
   Modal.confirm({
-    title: '切换嵌入模型',
-    content:
-      '切换仅推荐内外同为 BAAI/bge-m3（1024 维、余弦相似度）时执行；若维度与库内向量不一致，向量检索将不可用。',
-    okText: '确认切换',
-    cancelText: '取消',
+    title: t('dbInfo.switchEmbeddingModel'),
+    content: t('dbInfo.switchEmbeddingModelContent'),
+    okText: t('dbInfo.confirmSwitch'),
+    cancelText: t('common.cancel'),
     onOk: () => {
       editForm.embedding_model_spec = spec
     }
@@ -951,11 +962,11 @@ const handleEditSubmit = () => {
           !editForm.dify_token?.trim() ||
           !editForm.dify_dataset_id?.trim()
         ) {
-          message.error('请完整填写 Dify API URL、Token 和 Dataset ID')
+          message.error(t('dbInfo.difyFieldsRequired'))
           return
         }
         if (!editForm.dify_api_url.trim().endsWith('/v1')) {
-          message.error('Dify API URL 必须以 /v1 结尾')
+          message.error(t('dbInfo.difyUrlMustEndV1'))
           return
         }
         updateData.additional_params = {
@@ -965,7 +976,7 @@ const handleEditSubmit = () => {
         }
       } else if (isNotionKb.value) {
         if (!editForm.notion_data_source_id?.trim()) {
-          message.error('请填写 Notion Data Source ID')
+          message.error(t('dbInfo.notionDataSourceRequired'))
           return
         }
         updateData.additional_params = {

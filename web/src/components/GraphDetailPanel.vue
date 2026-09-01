@@ -9,7 +9,7 @@
         <template v-if="item">
           <template v-if="type === 'node'">
             <div :class="rowClass(item.data?.label)">
-              <span class="detail-label">名称</span>
+              <span class="detail-label">{{ $t('graph.nameLabel') }}</span>
               <span class="detail-value">
                 <DetailValue
                   :value="item.data?.label"
@@ -19,12 +19,12 @@
               </span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">ID</span>
+              <span class="detail-label">{{ $t('graph.idLabel') }}</span>
               <span class="detail-value detail-id">{{ item.id }}</span>
             </div>
             <template v-if="item.data?.original?.labels">
               <div class="detail-row">
-                <span class="detail-label">标签</span>
+                <span class="detail-label">{{ $t('graph.tagsLabel') }}</span>
                 <span class="detail-value">
                   <a-tag v-for="tag in item.data.original.labels" :key="tag" size="small">{{
                     tag
@@ -47,7 +47,7 @@
           </template>
           <template v-else-if="type === 'edge'">
             <div :class="rowClass(item.data?.label)">
-              <span class="detail-label">类型</span>
+              <span class="detail-label">{{ $t('graph.typeLabel') }}</span>
               <span class="detail-value">
                 <DetailValue
                   :value="item.data?.label"
@@ -77,10 +77,12 @@
 
 <script setup>
 import { computed, reactive, watch, defineComponent, h } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X } from 'lucide-vue-next'
 
 const STACK_THRESHOLD = 50
 const TRUNCATE_LIMIT = 100
+const { t } = useI18n()
 
 const DetailValue = defineComponent({
   props: {
@@ -105,7 +107,7 @@ const DetailValue = defineComponent({
                 props.expandedKeys.delete(props.fieldKey)
               }
             },
-            ' 收起'
+            t('graph.collapse')
           )
         ]
       }
@@ -120,7 +122,7 @@ const DetailValue = defineComponent({
               props.expandedKeys.add(props.fieldKey)
             }
           },
-          '展开'
+          t('graph.expand')
         )
       ]
     }
@@ -151,7 +153,7 @@ const rowClass = (value) => {
 }
 
 const title = computed(() => {
-  return props.type === 'node' ? '节点详情' : '关系详情'
+  return props.type === 'node' ? t('graph.nodeDetail') : t('graph.edgeDetail')
 })
 
 const filteredEdgeProperties = computed(() => {

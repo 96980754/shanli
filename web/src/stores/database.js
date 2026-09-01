@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { i18n } from '@/i18n'
 import { databaseApi, documentApi, queryApi } from '@/apis/knowledge_api'
 import { useTaskerStore } from '@/stores/tasker'
 import { useUserStore } from '@/stores/user'
@@ -20,7 +21,7 @@ export const useDatabaseStore = defineStore('database', () => {
   const kbId = ref(null)
   const fileDetailFileId = ref(null)
   const documentFiles = ref([])
-  const folderBreadcrumbs = ref([{ file_id: null, filename: '全部文件', path_prefix: '' }])
+  const folderBreadcrumbs = ref([{ file_id: null, filename: i18n.global.t('db.folderAllFiles'), path_prefix: '' }])
 
   const queryParams = ref([])
   const meta = reactive({})
@@ -65,7 +66,7 @@ export const useDatabaseStore = defineStore('database', () => {
   function resetFileBrowser() {
     fileBrowserContextId += 1
     documentFiles.value = []
-    folderBreadcrumbs.value = [{ file_id: null, filename: '全部文件', path_prefix: '' }]
+    folderBreadcrumbs.value = [{ file_id: null, filename: i18n.global.t('db.folderAllFiles'), path_prefix: '' }]
     selectedRowKeys.value = []
     Object.assign(fileBrowser, {
       loading: false,
@@ -96,12 +97,12 @@ export const useDatabaseStore = defineStore('database', () => {
         if (!timeA && !timeB) return 0
         if (!timeA) return 1
         if (!timeB) return -1
-        return timeB.valueOf() - timeA.valueOf() // 降序排列，最新的在前面
+        return timeB.valueOf() - timeA.valueOf() // 降序排列，最新的在前面 // i18n-ignore
       })
     } catch (error) {
-      console.error('加载数据库列表失败:', error)
-      if (error.message.includes('权限')) {
-        message.error('没有权限访问知识库')
+      console.error('加载数据库列表失败:', error) // i18n-ignore
+      if (error.message.includes('权限')) { // i18n-ignore
+        message.error(i18n.global.t('db.messages.noPermissionToAccess'))
       }
       throw error
     } finally {
@@ -112,29 +113,29 @@ export const useDatabaseStore = defineStore('database', () => {
   async function createDatabase(formData) {
     // 验证
     if (!formData.database_name?.trim()) {
-      message.error('知识库名称不能为空')
+      message.error(i18n.global.t('db.messages.nameRequired'))
       return false
     }
 
     if (!formData.kb_type) {
-      message.error('请选择知识库类型')
+      message.error(i18n.global.t('db.messages.selectType'))
       return false
     }
 
     if (!formData.category_id) {
-      message.error('请选择内容分类')
+      message.error(i18n.global.t('db.messages.selectCategory'))
       return false
     }
 
     state.creating = true
     try {
       const data = await databaseApi.createDatabase(formData)
-      message.success('创建成功')
-      await loadDatabases() // 刷新列表
+      message.success(i18n.global.t('db.messages.created'))
+      await loadDatabases() // 刷新列表 // i18n-ignore
       return data
     } catch (error) {
-      console.error('创建数据库失败:', error)
-      message.error(error.message || '创建失败')
+      console.error('创建数据库失败:', error) // i18n-ignore
+      message.error(error.message || i18n.global.t('db.messages.createFailed'))
       throw error
     } finally {
       state.creating = false
@@ -161,7 +162,7 @@ export const useDatabaseStore = defineStore('database', () => {
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '获取知识库信息失败')
+      message.error(error.message || i18n.global.t('db.messages.getInfoFailed'))
     } finally {
       if (!isBackground) {
         state.lock = false
@@ -174,11 +175,11 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       state.lock = true
       await databaseApi.updateDatabase(kbId.value, formData)
-      message.success('知识库信息更新成功')
+      message.success(i18n.global.t('db.messages.updateSuccess'))
       await getDatabaseInfo() // Load query params after updating database info
     } catch (error) {
       console.error(error)
-      message.error(error.message || '更新失败')
+      message.error(error.message || i18n.global.t('db.messages.updateFailed'))
     } finally {
       state.lock = false
     }
@@ -186,19 +187,19 @@ export const useDatabaseStore = defineStore('database', () => {
 
   function deleteDatabase() {
     Modal.confirm({
-      title: '删除知识库',
-      content: '确定要删除该知识库吗？',
-      okText: '确认',
-      cancelText: '取消',
+      title: i18n.global.t('db.deleteConfirm.title'),
+      content: i18n.global.t('db.deleteConfirm.contentThis'),
+      okText: i18n.global.t('common.confirm'),
+      cancelText: i18n.global.t('common.cancel'),
       onOk: async () => {
         state.lock = true
         try {
           const data = await databaseApi.deleteDatabase(kbId.value)
-          message.success(data.message || '删除成功')
+          message.success(data.message || i18n.global.t('common.deleteSuccess'))
           router.push({ path: '/extensions', query: { tab: 'knowledge' } })
         } catch (error) {
           console.error(error)
-          message.error(error.message || '删除失败')
+          message.error(error.message || i18n.global.t('common.deleteFailed'))
         } finally {
           state.lock = false
         }
@@ -214,7 +215,7 @@ export const useDatabaseStore = defineStore('database', () => {
       await loadDocumentFiles({ isBackground: true })
     } catch (error) {
       console.error(error)
-      message.error(error.message || '删除失败')
+      message.error(error.message || i18n.global.t('common.deleteFailed'))
       throw error
     } finally {
       state.lock = false
@@ -223,10 +224,10 @@ export const useDatabaseStore = defineStore('database', () => {
 
   function handleDeleteFile(fileId) {
     Modal.confirm({
-      title: '删除文件',
-      content: '确定要删除该文件吗？',
-      okText: '确认',
-      cancelText: '取消',
+      title: i18n.global.t('db.deleteFileTitle'),
+      content: i18n.global.t('db.deleteFileConfirm'),
+      okText: i18n.global.t('common.confirm'),
+      cancelText: i18n.global.t('common.cancel'),
       onOk: () => deleteFile(fileId)
     })
   }
@@ -238,7 +239,21 @@ export const useDatabaseStore = defineStore('database', () => {
       await loadDocumentFiles({ isBackground: true })
     } catch (error) {
       console.error(error)
-      message.error(error.message || '移动失败')
+      message.error(error.message || i18n.global.t('db.messages.moveFailed'))
+      throw error
+    } finally {
+      state.lock = false
+    }
+  }
+
+  async function renameFile(fileId, newName) {
+    state.lock = true
+    try {
+      await documentApi.renameDocument(kbId.value, fileId, newName)
+      await loadDocumentFiles({ isBackground: true })
+    } catch (error) {
+      console.error(error)
+      message.error(error.message || i18n.global.t('db.messages.renameFailed'))
       throw error
     } finally {
       state.lock = false
@@ -253,15 +268,15 @@ export const useDatabaseStore = defineStore('database', () => {
     })
 
     if (validFileIds.length === 0) {
-      message.info('没有可删除的文件')
+      message.info(i18n.global.t('db.messages.noDeletableFiles'))
       return
     }
 
     Modal.confirm({
-      title: '批量删除文件',
-      content: `确定要删除选中的 ${validFileIds.length} 个文件吗？`,
-      okText: '确认',
-      cancelText: '取消',
+      title: i18n.global.t('db.batchDeleteTitle'),
+      content: i18n.global.t('db.batchDeleteConfirm', { count: validFileIds.length }),
+      okText: i18n.global.t('common.confirm'),
+      cancelText: i18n.global.t('common.cancel'),
       onOk: async () => {
         state.batchDeleting = true
         let successCount = 0
@@ -269,7 +284,11 @@ export const useDatabaseStore = defineStore('database', () => {
         let processedCount = 0
         const totalCount = validFileIds.length
         const progressKey = `batch-delete-${Date.now()}`
-        message.loading({ content: `正在删除文件 0/${totalCount}`, key: progressKey, duration: 0 })
+        message.loading({
+          content: i18n.global.t('db.deletingFilesProgress', { current: 0, total: totalCount }),
+          key: progressKey,
+          duration: 0
+        })
 
         try {
           const CHUNK_SIZE = 50
@@ -283,12 +302,15 @@ export const useDatabaseStore = defineStore('database', () => {
                 failureCount += res.failed_items.length
               }
             } catch (err) {
-              console.error(`删除批次 ${i / CHUNK_SIZE + 1} 失败:`, err)
+              console.error(`删除批次 ${i / CHUNK_SIZE + 1} 失败:`, err) // i18n-ignore
               failureCount += chunk.length
             } finally {
               processedCount += chunk.length
               message.loading({
-                content: `正在删除文件 ${processedCount}/${totalCount}`,
+                content: i18n.global.t('db.deletingFilesProgress', {
+                  current: processedCount,
+                  total: totalCount
+                }),
                 key: progressKey,
                 duration: 0
               })
@@ -297,11 +319,16 @@ export const useDatabaseStore = defineStore('database', () => {
 
           message.destroy(progressKey)
           if (successCount > 0 && failureCount === 0) {
-            message.success(`成功删除 ${successCount} 个文件`)
+            message.success(i18n.global.t('db.messages.deleteCountSuccess', { count: successCount }))
           } else if (successCount > 0 && failureCount > 0) {
-            message.warning(`成功删除 ${successCount} 个文件，${failureCount} 个文件删除失败`)
+            message.warning(
+              i18n.global.t('db.messages.deletePartialFailed', {
+                success: successCount,
+                failed: failureCount
+              })
+            )
           } else if (failureCount > 0) {
-            message.error(`${failureCount} 个文件删除失败`)
+            message.error(i18n.global.t('db.messages.deleteFailedCount', { count: failureCount }))
           }
 
           selectedRowKeys.value = []
@@ -309,8 +336,8 @@ export const useDatabaseStore = defineStore('database', () => {
           await loadDocumentFiles({ isBackground: true })
         } catch (error) {
           message.destroy(progressKey)
-          console.error('批量删除出错:', error)
-          message.error(error.message || '批量删除过程中发生错误')
+          console.error('批量删除出错:', error) // i18n-ignore
+          message.error(error.message || i18n.global.t('db.messages.batchDeleteError'))
         } finally {
           state.batchDeleting = false
         }
@@ -430,7 +457,7 @@ export const useDatabaseStore = defineStore('database', () => {
     } catch (error) {
       console.error(error)
       if (!options.isBackground) {
-        message.error(error.message || '加载文件列表失败')
+        message.error(error.message || i18n.global.t('db.messages.loadFileListFailed'))
       }
     } finally {
       if (!options.isBackground && contextId === fileBrowserContextId) {
@@ -482,7 +509,7 @@ export const useDatabaseStore = defineStore('database', () => {
   async function navigateToFolder(folderPath = '') {
     let prefix = ''
     const crumbs = [
-      { file_id: null, filename: '全部文件', path_prefix: '' },
+      { file_id: null, filename: i18n.global.t('db.folderAllFiles'), path_prefix: '' },
       ...folderPath
         .split('/')
         .filter(Boolean)
@@ -515,7 +542,7 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const chain = (await documentApi.getFolderChain(kbId.value, folderId)).chain || []
       folderBreadcrumbs.value = [
-        { file_id: null, filename: '全部文件', path_prefix: '' },
+        { file_id: null, filename: i18n.global.t('db.folderAllFiles'), path_prefix: '' },
         ...chain.map((item) => ({
           file_id: item.file_id,
           filename: item.filename,
@@ -530,16 +557,16 @@ export const useDatabaseStore = defineStore('database', () => {
         recursive: false
       })
     } catch (error) {
-      console.error('进入文件夹失败:', error)
-      message.error(error.message || '进入文件夹失败')
-      folderBreadcrumbs.value = [{ file_id: null, filename: '全部文件', path_prefix: '' }]
+      console.error('进入文件夹失败:', error) // i18n-ignore
+      message.error(error.message || i18n.global.t('db.messages.enterFolderFailed'))
+      folderBreadcrumbs.value = [{ file_id: null, filename: i18n.global.t('db.folderAllFiles'), path_prefix: '' }]
       await loadDocumentFiles({ page: 1 })
     }
   }
 
   async function addUploadedFiles({ items, params, parentId }) {
     if (items.length === 0) {
-      message.error('请先上传文件')
+      message.error(i18n.global.t('db.messages.uploadFileFirst'))
       return false
     }
 
@@ -549,15 +576,15 @@ export const useDatabaseStore = defineStore('database', () => {
       if (parentId) requestParams.parent_id = parentId
       const data = await documentApi.addUploadedDocuments(kbId.value, items, requestParams)
       if (data.status === 'success' || data.status === 'partial_failed') {
-        message.success(data.message || '文件已上传，等待管理员处理')
+        message.success(data.message || i18n.global.t('db.messages.fileUploadedAwaitingAdmin'))
         await delayedRefresh()
         return true
       }
-      message.error(data.message || '文件添加失败')
+      message.error(data.message || i18n.global.t('db.messages.addFileFailed'))
       return false
     } catch (error) {
       console.error(error)
-      message.error(error.message || '文件添加失败')
+      message.error(error.message || i18n.global.t('db.messages.addFileFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -566,7 +593,11 @@ export const useDatabaseStore = defineStore('database', () => {
 
   async function addFiles({ items, contentType, params, parentId }) {
     if (items.length === 0) {
-      message.error(contentType === 'file' ? '请先上传文件' : '请输入有效的网页链接')
+      message.error(
+        contentType === 'file'
+          ? i18n.global.t('db.messages.uploadFileFirst')
+          : i18n.global.t('db.messages.enterValidUrl')
+      )
       return
     }
 
@@ -578,13 +609,15 @@ export const useDatabaseStore = defineStore('database', () => {
       }
       const data = await documentApi.addDocuments(kbId.value, items, requestParams)
       if (data.status === 'success' || data.status === 'queued') {
-        const itemType = contentType === 'file' ? '文件' : 'URL'
+        const itemType = contentType === 'file' ? i18n.global.t('db.fileLabel') : 'URL'
         enableAutoRefresh('auto')
-        message.success(data.message || `${itemType}已提交处理，请在任务中心查看进度`)
+        message.success(
+          data.message || i18n.global.t('db.messages.submittedForProcessing', { type: itemType })
+        )
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `知识库导入 (${kbId.value || ''})`,
+            name: i18n.global.t('db.tasks.kbImport', { id: kbId.value || '' }),
             task_type: 'knowledge_ingest',
             message: data.message,
             payload: {
@@ -594,15 +627,15 @@ export const useDatabaseStore = defineStore('database', () => {
             }
           })
         }
-        await delayedRefresh() // 延迟1秒后刷新
+        await delayedRefresh() // 延迟1秒后刷新 // i18n-ignore
         return true // Indicate success
       } else {
-        message.error(data.message || '处理失败')
+        message.error(data.message || i18n.global.t('db.messages.processFailed'))
         return false
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '处理请求失败')
+      message.error(error.message || i18n.global.t('db.messages.processRequestFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -616,25 +649,25 @@ export const useDatabaseStore = defineStore('database', () => {
       const data = await documentApi.parseDocuments(kbId.value, fileIds)
       if (data.status === 'success' || data.status === 'queued') {
         enableAutoRefresh('auto')
-        message.success(data.message || '解析任务已提交')
+        message.success(data.message || i18n.global.t('db.messages.parseSubmitted'))
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `文档解析 (${kbId.value})`,
+            name: i18n.global.t('db.tasks.documentParse', { id: kbId.value }),
             task_type: 'knowledge_parse',
             message: data.message,
             payload: { kb_id: kbId.value, count: fileIds.length }
           })
         }
-        await delayedRefresh() // 延迟1秒后刷新
+        await delayedRefresh() // 延迟1秒后刷新 // i18n-ignore
         return true
       } else {
-        message.error(data.message || '提交失败')
+        message.error(data.message || i18n.global.t('db.messages.submitFailed'))
         return false
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '请求失败')
+      message.error(error.message || i18n.global.t('db.messages.requestFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -647,11 +680,11 @@ export const useDatabaseStore = defineStore('database', () => {
       const data = await documentApi.parsePendingDocuments(kbId.value)
       if (data.status === 'success' || data.status === 'queued') {
         enableAutoRefresh('auto')
-        message.success(data.message || '解析任务已提交')
+        message.success(data.message || i18n.global.t('db.messages.parseSubmitted'))
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `文档解析 (${kbId.value})`,
+            name: i18n.global.t('db.tasks.documentParse', { id: kbId.value }),
             task_type: 'knowledge_parse',
             message: data.message,
             payload: { kb_id: kbId.value, count: data.queued_count || count, scope: 'pending' }
@@ -660,12 +693,12 @@ export const useDatabaseStore = defineStore('database', () => {
         await delayedRefresh()
         return true
       } else {
-        message.error(data.message || '提交失败')
+        message.error(data.message || i18n.global.t('db.messages.submitFailed'))
         return false
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '请求失败')
+      message.error(error.message || i18n.global.t('db.messages.requestFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -679,25 +712,25 @@ export const useDatabaseStore = defineStore('database', () => {
       const data = await documentApi.indexDocuments(kbId.value, fileIds, params)
       if (data.status === 'success' || data.status === 'queued') {
         enableAutoRefresh('auto')
-        message.success(data.message || '入库任务已提交')
+        message.success(data.message || i18n.global.t('db.messages.indexSubmitted'))
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `文档入库 (${kbId.value})`,
+            name: i18n.global.t('db.tasks.documentIndex', { id: kbId.value }),
             task_type: 'knowledge_index',
             message: data.message,
             payload: { kb_id: kbId.value, count: fileIds.length }
           })
         }
-        await delayedRefresh() // 延迟1秒后刷新
+        await delayedRefresh() // 延迟1秒后刷新 // i18n-ignore
         return true
       } else {
-        message.error(data.message || '提交失败')
+        message.error(data.message || i18n.global.t('db.messages.submitFailed'))
         return false
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '请求失败')
+      message.error(error.message || i18n.global.t('db.messages.requestFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -710,11 +743,11 @@ export const useDatabaseStore = defineStore('database', () => {
       const data = await documentApi.indexPendingDocuments(kbId.value, params)
       if (data.status === 'success' || data.status === 'queued') {
         enableAutoRefresh('auto')
-        message.success(data.message || '入库任务已提交')
+        message.success(data.message || i18n.global.t('db.messages.indexSubmitted'))
         if (data.task_id) {
           taskerStore.registerQueuedTask({
             task_id: data.task_id,
-            name: `文档入库 (${kbId.value})`,
+            name: i18n.global.t('db.tasks.documentIndex', { id: kbId.value }),
             task_type: 'knowledge_index',
             message: data.message,
             payload: { kb_id: kbId.value, count: data.queued_count || count, scope: 'pending' }
@@ -723,12 +756,12 @@ export const useDatabaseStore = defineStore('database', () => {
         await delayedRefresh()
         return true
       } else {
-        message.error(data.message || '提交失败')
+        message.error(data.message || i18n.global.t('db.messages.submitFailed'))
         return false
       }
     } catch (error) {
       console.error(error)
-      message.error(error.message || '请求失败')
+      message.error(error.message || i18n.global.t('db.messages.requestFailed'))
       return false
     } finally {
       state.chunkLoading = false
@@ -738,7 +771,7 @@ export const useDatabaseStore = defineStore('database', () => {
   function openFileDetail(fileId) {
     const nextFileId = typeof fileId === 'object' ? fileId?.file_id : fileId
     if (!nextFileId) {
-      message.error('文件信息不完整')
+      message.error(i18n.global.t('db.messages.fileInfoIncomplete'))
       return
     }
     fileDetailFileId.value = nextFileId
@@ -777,7 +810,7 @@ export const useDatabaseStore = defineStore('database', () => {
       })
     } catch (error) {
       console.error('Failed to load query params:', error)
-      message.error('加载查询参数失败')
+      message.error(i18n.global.t('db.messages.loadQueryParamsFailed'))
     } finally {
       state.queryParamsLoading = false
     }
@@ -828,9 +861,9 @@ export const useDatabaseStore = defineStore('database', () => {
     selectedRowKeys.value = newSelectedKeys
 
     if (failedFiles.length > 0) {
-      message.success(`已选择 ${failedFiles.length} 个失败的文件`)
+      message.success(i18n.global.t('db.messages.selectedFailedFiles', { count: failedFiles.length }))
     } else {
-      message.info('当前没有失败的文件')
+      message.info(i18n.global.t('db.messages.noFailedFiles'))
     }
   }
 
@@ -870,6 +903,7 @@ export const useDatabaseStore = defineStore('database', () => {
     deleteFile,
     handleDeleteFile,
     moveFile,
+    renameFile,
     handleBatchDelete,
     addFiles,
     addUploadedFiles,

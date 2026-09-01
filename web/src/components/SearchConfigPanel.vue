@@ -2,17 +2,17 @@
   <div class="search-config-panel">
     <div v-if="loading" class="config-loading">
       <a-spin />
-      <p>加载配置参数中...</p>
+      <p>{{ $t('searchCfg.loading') }}</p>
     </div>
 
-    <a-result v-else-if="error" status="error" title="配置加载失败" :sub-title="error">
+    <a-result v-else-if="error" status="error" :title="$t('searchCfg.loadFailedTitle')" :sub-title="error">
       <template #extra>
-        <a-button type="primary" @click="loadQueryParams">重新加载</a-button>
+        <a-button type="primary" @click="loadQueryParams">{{ $t('searchCfg.reload') }}</a-button>
       </template>
     </a-result>
 
     <template v-else>
-      <a-empty v-if="visibleQueryParams.length === 0" description="暂无可配置参数" />
+      <a-empty v-if="visibleQueryParams.length === 0" :description="$t('searchCfg.noParams')" />
       <a-form layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12" v-for="param in visibleQueryParams" :key="param.key">
@@ -39,8 +39,8 @@
                 @update:value="(value) => updateMeta(param.key, value)"
                 style="width: 100%"
               >
-                <a-select-option value="true">启用</a-select-option>
-                <a-select-option value="false">关闭</a-select-option>
+                <a-select-option value="true">{{ $t('searchCfg.enabled') }}</a-select-option>
+                <a-select-option value="false">{{ $t('searchCfg.disabled') }}</a-select-option>
               </a-select>
               <a-input-number
                 v-else-if="param.type === 'number'"
@@ -61,6 +61,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDatabaseStore } from '@/stores/database'
 import { message } from 'ant-design-vue'
 import { queryApi } from '@/apis/knowledge_api'
@@ -73,6 +74,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['save'])
+
+const { t } = useI18n()
 
 const store = useDatabaseStore()
 
@@ -142,7 +145,7 @@ const loadQueryParams = async () => {
     loadSavedConfig()
   } catch (err) {
     console.error('Failed to load query params:', err)
-    error.value = err.message || '加载查询参数失败'
+    error.value = err.message || t('searchCfg.loadFailed')
   } finally {
     loading.value = false
   }
@@ -172,7 +175,7 @@ const loadSavedConfig = () => {
 
 const save = async () => {
   if (!props.kbId) {
-    message.error('无法保存配置：缺少知识库ID')
+    message.error(t('searchCfg.missingKbId'))
     return false
   }
 
@@ -183,15 +186,15 @@ const save = async () => {
     if (response.message === 'success') {
       localStorage.setItem(`search-config-${props.kbId}`, JSON.stringify(meta))
       Object.assign(store.meta, meta)
-      message.success('配置已保存')
+      message.success(t('searchCfg.saved'))
       emit('save', { ...meta })
       return true
     } else {
-      throw new Error(response.message || '保存失败')
+      throw new Error(response.message || t('searchCfg.saveFailed'))
     }
   } catch (err) {
-    console.error('保存配置到知识库失败:', err)
-    message.error('保存配置失败：' + (err.message || '未知错误'))
+    console.error(t('searchCfg.saveFailedLog'), err)
+    message.error(t('searchCfg.saveFailedMessage', { message: err.message || t('searchCfg.unknownError') }))
     return false
   }
 }
@@ -203,7 +206,7 @@ const resetToDefaults = () => {
     }
   })
   meta.include_distances = true
-  message.success('已重置为默认配置')
+  message.success(t('searchCfg.resetToDefaults'))
 }
 
 watch(

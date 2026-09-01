@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from yuxi.knowledge.chunking.ragflow_like.presets import CHUNK_PRESET_IDS
@@ -909,3 +910,202 @@ async def test_move_folder_to_root_accepts_null_parent(
     assert move_back_response.status_code == 400
     assert "into itself" in move_back_response.json()["detail"]
 
+
+# =============================================================================
+# === 重命名（入库后文件/文件夹改名）Tests ===
+# =============================================================================
+
+
+def _local_db_engine():
+    """返回绑定当前事件循环的独立 async 引擎。
+
+    conftest 的 session 级 fixture 在 anyio.run 自己的循环里初始化了 pg_manager，
+    测试函数循环里直接复用该引擎会因跨 loop 报「Event loop is closed」。这里用
+    容器继承的 POSTGRES_URL 建独立引擎，用完即 dispose。
+    """
+    import os
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    url = os.environ.get("POSTGRES_URL") or "postgresql+asyncpg://postgres:postgres@postgres:5432/yuxi"
+    return create_async_engine(url)
+
+
+async def _seed_knowledge_file(
+    kb_id: str,
+    *,
+    file_id: str,
+    filename: str,
+    is_folder: bool = False,
+    parent_id: str | None = None,
+) -> None:
+    """直接落库一条 knowledge_files 记录，供改名测试构造数据（绕过完整上传/解析链路）。"""
+    from sqlalchemy import delete
+
+    from yuxi.repositories.knowledge_file_repository import normalize_document_filename
+    from yuxi.storage.postgres.models_knowledge import KnowledgeFile
+
+    engine = _local_db_engine()
+    try:
+        async with engine.begin() as conn:
+            # 清理同 file_id 残留（幂等）
+            await conn.execute(delete(KnowledgeFile).where(KnowledgeFile.file_id == file_id))
+            await conn.execute(
+                KnowledgeFile.__table__.insert().values(
+                    file_id=file_id,
+                    kb_id=kb_id,
+                    filename=filename,
+                    normalized_name=normalize_document_filename(filename),
+                    is_folder=is_folder,
+                    parent_id=parent_id,
+                    is_current=True,
+                    status="done",
+                    view_count=0,
+                    processing_progress=0,
+                    processing_task_attempt=0,
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _get_filename_by_id(kb_id: str, file_id: str) -> str | None:
+    from sqlalchemy import select
+
+    from yuxi.storage.postgres.models_knowledge import KnowledgeFile
+
+    engine = _local_db_engine()
+    try:
+        async with engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    select(KnowledgeFile.filename).where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == file_id)
+                )
+            ).scalar_one_or_none()
+            return row
+    finally:
+        await engine.dispose()
+
+
+async def test_rename_real_file_success(test_client, admin_headers, knowledge_database):
+    """根目录真实文件改名：仅改 filename，且不改动其它字段。"""
+    kb_id = knowledge_database["kb_id"]
+    file_id = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=file_id, filename="report.docx")
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{file_id}/rename",
+        json={"filename": "年度报告.docx"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["filename"] == "年度报告.docx"
+    assert await _get_filename_by_id(kb_id, file_id) == "年度报告.docx"
+
+
+async def test_rename_file_keeps_virtual_dir_prefix(test_client, admin_headers, knowledge_database):
+    """虚拟目录下的文件改名：保留目录前缀，只替换叶子。"""
+    kb_id = knowledge_database["kb_id"]
+    file_id = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=file_id, filename="poc资料/readme.md")
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{file_id}/rename",
+        json={"filename": "intro.md"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["filename"] == "poc资料/intro.md"
+
+
+async def test_rename_real_folder_success_no_cascade(test_client, admin_headers, knowledge_database):
+    """真实文件夹改名：只改文件夹行，子文件靠 parent_id 关联无需级联。"""
+    kb_id = knowledge_database["kb_id"]
+    folder_id = f"f_{uuid.uuid4().hex[:12]}"
+    child_id = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=folder_id, filename="docs", is_folder=True)
+    await _seed_knowledge_file(kb_id, file_id=child_id, filename="readme.md", parent_id=folder_id)
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{folder_id}/rename",
+        json={"filename": "documentation"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["filename"] == "documentation"
+    assert await _get_filename_by_id(kb_id, child_id) == "readme.md"
+
+
+async def test_rename_virtual_folder_rewrites_prefix(test_client, admin_headers, knowledge_database):
+    """虚拟文件夹改名：级联重写其下所有当前版本文件的前缀。"""
+    kb_id = knowledge_database["kb_id"]
+    ids = [f"f_{uuid.uuid4().hex[:12]}" for _ in range(2)]
+    await _seed_knowledge_file(kb_id, file_id=ids[0], filename="poc资料/readme.md")
+    await _seed_knowledge_file(kb_id, file_id=ids[1], filename="poc资料/细则/rule.docx")
+    virtual_folder_id = "__virtual_folder__:root:poc资料/"
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{quote(virtual_folder_id.rstrip('/'))}/rename",
+        json={"filename": "资料库"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert await _get_filename_by_id(kb_id, ids[0]) == "资料库/readme.md"
+    assert await _get_filename_by_id(kb_id, ids[1]) == "资料库/细则/rule.docx"
+
+
+async def test_rename_duplicate_file_rejected(test_client, admin_headers, knowledge_database):
+    """同目录重名报错：改名成既有文件名返回 400，且不落库。"""
+    kb_id = knowledge_database["kb_id"]
+    id_a = f"f_{uuid.uuid4().hex[:12]}"
+    id_b = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=id_a, filename="a.docx")
+    await _seed_knowledge_file(kb_id, file_id=id_b, filename="b.docx")
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{id_a}/rename",
+        json={"filename": "b.docx"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 400, response.text
+    assert "已存在同名文件" in response.json()["detail"]
+    assert await _get_filename_by_id(kb_id, id_a) == "a.docx"
+
+
+async def test_rename_virtual_folder_collision_rejected(test_client, admin_headers, knowledge_database):
+    """虚拟文件夹改名目标前缀已存在 → 400。"""
+    kb_id = knowledge_database["kb_id"]
+    id_a = f"f_{uuid.uuid4().hex[:12]}"
+    id_b = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=id_a, filename="dir/one.docx")
+    await _seed_knowledge_file(kb_id, file_id=id_b, filename="dir2/two.docx")
+
+    response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{quote('__virtual_folder__:root:dir/'.rstrip('/'))}/rename",
+        json={"filename": "dir2"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 400, response.text
+    assert "已存在同名目录或文件" in response.json()["detail"]
+
+
+async def test_rename_invalid_name_rejected(test_client, admin_headers, knowledge_database):
+    """非法名（含路径分隔符 / 纯空白）→ 400。"""
+    kb_id = knowledge_database["kb_id"]
+    file_id = f"f_{uuid.uuid4().hex[:12]}"
+    await _seed_knowledge_file(kb_id, file_id=file_id, filename="a.docx")
+
+    slash_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{file_id}/rename",
+        json={"filename": "a/b.docx"},
+        headers=admin_headers,
+    )
+    assert slash_response.status_code == 400, slash_response.text
+
+    empty_response = await test_client.put(
+        f"/api/knowledge/databases/{kb_id}/documents/{file_id}/rename",
+        json={"filename": "  "},
+        headers=admin_headers,
+    )
+    assert empty_response.status_code == 400, empty_response.text
+    assert await _get_filename_by_id(kb_id, file_id) == "a.docx"

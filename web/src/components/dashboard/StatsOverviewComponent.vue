@@ -7,7 +7,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.total_conversations || 0 }}</div>
-          <div class="stat-label">累计会话</div>
+          <div class="stat-label">{{ $t('dash.totalConversations') }}</div>
           <div class="stat-trend" v-if="basicStats?.conversation_trend">
             <TrendingUp v-if="basicStats.conversation_trend > 0" class="trend-icon up" />
             <TrendingDown v-else-if="basicStats.conversation_trend < 0" class="trend-icon down" />
@@ -22,7 +22,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.active_conversations || 0 }}</div>
-          <div class="stat-label">活跃对话</div>
+          <div class="stat-label">{{ $t('dash.activeConversations') }}</div>
         </div>
       </div>
 
@@ -32,7 +32,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.total_messages || 0 }}</div>
-          <div class="stat-label">总消息数</div>
+          <div class="stat-label">{{ $t('dash.totalMessages') }}</div>
         </div>
       </div>
 
@@ -42,7 +42,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.total_users || 0 }}</div>
-          <div class="stat-label">用户数</div>
+          <div class="stat-label">{{ $t('dash.totalUsers') }}</div>
         </div>
       </div>
 
@@ -52,7 +52,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.feedback_stats?.total_feedbacks || 0 }}</div>
-          <div class="stat-label">总反馈数</div>
+          <div class="stat-label">{{ $t('dash.totalFeedbacks') }}</div>
         </div>
       </div>
 
@@ -62,7 +62,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.feedback_stats?.satisfaction_rate || 0 }}%</div>
-          <div class="stat-label">满意度</div>
+          <div class="stat-label">{{ $t('dash.satisfactionRate') }}</div>
         </div>
       </div>
     </div>

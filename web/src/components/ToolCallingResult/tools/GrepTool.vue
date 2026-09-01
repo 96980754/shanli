@@ -37,7 +37,7 @@
           </div>
         </div>
 
-        <div class="empty-state" v-else-if="isEmptyResult">未找到匹配结果</div>
+        <div class="empty-state" v-else-if="isEmptyResult">{{ $t('toolCall.grep.noMatch') }}</div>
 
         <div class="raw-result" v-else>
           <pre>{{ rawResultText }}</pre>
@@ -49,7 +49,10 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   toolCall: {
@@ -113,10 +116,10 @@ const isEmptyResult = computed(() => {
 const matchCountLabel = computed(() => {
   if (isFileListResult.value) {
     const count = fileMatches.value.length
-    return count ? `共匹配 ${count} 个文件` : ''
+    return count ? t('toolCall.grep.matchedFiles', { count }) : ''
   }
   if (lineMatches.value.length) {
-    return `共匹配 ${lineMatches.value.length} 行`
+    return t('toolCall.grep.matchedLines', { count: lineMatches.value.length })
   }
   return ''
 })

@@ -2,10 +2,10 @@
   <section class="feedback-summary-section">
     <div class="section-header">
       <div>
-        <h3 class="section-title">答案反馈统计</h3>
-        <p class="section-subtitle">汇总用户点赞、点踩及不满意原因，便于持续优化答案质量</p>
+        <h3 class="section-title">{{ $t('feedback.summaryTitle') }}</h3>
+        <p class="section-subtitle">{{ $t('feedback.summarySubtitle') }}</p>
       </div>
-      <a-button size="small" :loading="loading" @click="loadSummary">刷新</a-button>
+      <a-button size="small" :loading="loading" @click="loadSummary">{{ $t('common.refresh') }}</a-button>
     </div>
 
     <div v-if="loading && !summary" class="summary-loading">
@@ -15,27 +15,27 @@
     <template v-else>
       <div class="metric-grid">
         <div class="metric-card">
-          <div class="metric-label">总反馈</div>
+          <div class="metric-label">{{ $t('feedback.totalFeedbackLabel') }}</div>
           <div class="metric-value">{{ summary?.total_feedbacks || 0 }}</div>
         </div>
         <div class="metric-card positive">
-          <div class="metric-label">点赞</div>
+          <div class="metric-label">{{ $t('feedback.likeLabel') }}</div>
           <div class="metric-value">{{ summary?.like_count || 0 }}</div>
         </div>
         <div class="metric-card negative">
-          <div class="metric-label">点踩</div>
+          <div class="metric-label">{{ $t('feedback.dislikeLabel') }}</div>
           <div class="metric-value">{{ summary?.dislike_count || 0 }}</div>
         </div>
         <div class="metric-card satisfaction">
-          <div class="metric-label">满意度</div>
+          <div class="metric-label">{{ $t('dash.satisfactionRate') }}</div>
           <div class="metric-value">{{ formatRate(summary?.satisfaction_rate) }}</div>
         </div>
       </div>
 
       <div class="reason-panel">
         <div class="reason-panel-header">
-          <span class="reason-title">点踩原因分布</span>
-          <span class="reason-total">共 {{ summary?.dislike_count || 0 }} 条点踩</span>
+          <span class="reason-title">{{ $t('feedback.reasonDistributionTitle') }}</span>
+          <span class="reason-total">{{ $t('feedback.dislikeTotal', { count: summary?.dislike_count || 0 }) }}</span>
         </div>
 
         <div v-if="reasonRows.length" class="reason-list">
@@ -50,7 +50,7 @@
           </div>
         </div>
 
-        <a-empty v-else :image="simpleImage" description="暂无点踩原因数据" class="reason-empty" />
+        <a-empty v-else :image="simpleImage" :description="t('feedback.noReasonData')" class="reason-empty" />
       </div>
     </template>
   </section>
@@ -59,7 +59,10 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { Empty, message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
+
+const { t } = useI18n()
 
 const props = defineProps({
   agentId: {
@@ -76,7 +79,7 @@ const reasonRows = computed(() => {
   const rows = Array.isArray(summary.value?.reason_stats) ? [...summary.value.reason_stats] : []
   const legacyCount = Number(summary.value?.legacy_unclassified_count || 0)
   if (legacyCount > 0) {
-    rows.push({ code: 'legacy_unclassified', label: '历史未分类', count: legacyCount })
+    rows.push({ code: 'legacy_unclassified', label: t('feedback.legacyUnclassifiedLabel'), count: legacyCount })
   }
   return rows.filter((item) => Number(item.count || 0) > 0)
 })
@@ -100,7 +103,7 @@ const loadSummary = async () => {
     })
   } catch (error) {
     console.error('加载反馈统计失败:', error)
-    message.error('加载反馈统计失败，请稍后重试')
+    message.error(t('feedback.loadSummaryFailed'))
   } finally {
     loading.value = false
   }

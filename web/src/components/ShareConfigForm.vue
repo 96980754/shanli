@@ -4,7 +4,7 @@
       class="share-mode-cards"
       :class="`active-${config.access_level}`"
       role="radiogroup"
-      aria-label="共享设置"
+      :aria-label="$t('share.configAriaLabel')"
     >
       <div
         v-for="option in shareModeOptions"
@@ -23,7 +23,7 @@
             <div class="card-icon-wrapper" aria-hidden="true">
               <component :is="option.icon" class="card-icon" :size="20" />
             </div>
-            <div class="card-title">{{ option.title }}</div>
+            <div class="card-title">{{ $t(option.title) }}</div>
             <div
               v-if="config.access_level === option.value && option.value !== 'global'"
               class="card-action"
@@ -37,7 +37,7 @@
                 <a-button
                   size="small"
                   class="select-action lucide-icon-btn"
-                  :aria-label="option.value === 'department' ? '选择部门' : '选择用户'"
+                  :aria-label="option.value === 'department' ? $t('share.selectDepartment') : $t('share.selectUser')"
                   :disabled="disabled"
                 >
                   <UserPlus class="select-action-icon" :size="14" />
@@ -47,7 +47,7 @@
                   <div class="selection-dropdown" @mousedown.stop @click.stop>
                     <div class="selection-dropdown-header">
                       <div class="selection-dropdown-title">
-                        {{ option.value === 'department' ? '可访问部门' : '可访问用户' }}
+                        {{ option.value === 'department' ? $t('share.accessDepartments') : $t('share.accessUsers') }}
                       </div>
                       <div class="selection-dropdown-subtitle">
                         {{ getAccessSummary(option.value) }}
@@ -58,7 +58,7 @@
                       size="small"
                       allow-clear
                       class="selection-search"
-                      :placeholder="option.value === 'department' ? '搜索部门' : '搜索用户'"
+                      :placeholder="option.value === 'department' ? $t('share.searchDepartment') : $t('share.searchUser')"
                       @mousedown.stop
                       @click.stop
                     />
@@ -111,16 +111,16 @@
                           />
                           <span class="selection-label">{{ item.label }}</span>
                         </span>
-                        <span v-if="item.disabled" class="selection-required">必选</span>
+                        <span v-if="item.disabled" class="selection-required">{{ $t('share.required') }}</span>
                       </div>
                     </div>
-                    <div v-else class="selection-empty">暂无可选项</div>
+                    <div v-else class="selection-empty">{{ $t('share.noOptions') }}</div>
                   </div>
                 </template>
               </a-dropdown>
             </div>
           </div>
-          <div class="card-description">{{ option.description }}</div>
+          <div class="card-description">{{ $t(option.description) }}</div>
         </div>
       </div>
     </div>
@@ -136,11 +136,13 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Globe, Building2, Users, UserPlus } from 'lucide-vue-next'
 import { useUserStore } from '@/stores/user'
 import { departmentApi } from '@/apis/department_api'
 import { authApi } from '@/apis/auth_api'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const departments = ref([])
 const users = ref([])
@@ -149,20 +151,20 @@ const syncingFromProps = ref(false)
 const baseShareModeOptions = [
   {
     value: 'global',
-    title: '全局共享',
-    description: '所有用户都可以访问',
+    title: 'share.modeGlobalTitle',
+    description: 'share.modeGlobalDescription',
     icon: Globe
   },
   {
     value: 'department',
-    title: '部门共享',
-    description: '选中的部门成员可以访问',
+    title: 'share.modeDepartmentTitle',
+    description: 'share.modeDepartmentDescription',
     icon: Building2
   },
   {
     value: 'user',
-    title: '指定人',
-    description: '选中的用户可以访问',
+    title: 'share.modeUserTitle',
+    description: 'share.modeUserDescription',
     icon: Users
   }
 ]
@@ -226,7 +228,9 @@ const departmentOptions = computed(() =>
 
 const userOptions = computed(() =>
   users.value.map((user) => ({
-    label: user.department_name ? `${user.username}（${user.department_name}）` : user.username,
+    label: user.department_name
+      ? t('share.userOptionLabel', { username: user.username, department: user.department_name })
+      : user.username,
     value: user.uid,
     disabled: user.uid === currentUserUid.value
   }))
@@ -298,10 +302,10 @@ const setAccessLevel = (accessLevel) => {
 }
 
 const getAccessSummary = (accessLevel) => {
-  if (accessLevel === 'global') return '所有用户可访问'
-  if (accessLevel === 'department') return `${config.department_ids.length} 个部门可访问`
-  if (accessLevel === 'user' && config.user_uids.length === 1) return '仅自己可访问'
-  return `${config.user_uids.length} 个用户可访问`
+  if (accessLevel === 'global') return t('share.allUsersAccessible')
+  if (accessLevel === 'department') return t('share.departmentsAccessible', { count: config.department_ids.length })
+  if (accessLevel === 'user' && config.user_uids.length === 1) return t('share.onlySelfAccessible')
+  return t('share.usersAccessible', { count: config.user_uids.length })
 }
 
 const getAccessCount = (accessLevel) => {
@@ -347,7 +351,7 @@ const loadDepartments = async () => {
     const res = await departmentApi.getDepartments()
     departments.value = res.departments || res || []
   } catch (e) {
-    console.error('加载部门列表失败:', e)
+    console.error(t('share.loadDepartmentsFailedLog'), e)
     departments.value = []
   }
 }
@@ -357,7 +361,7 @@ const loadUsers = async () => {
     users.value = await authApi.getUserAccessOptions()
     if (config.access_level === 'user') ensureCurrentUser()
   } catch (e) {
-    console.error('加载用户列表失败:', e)
+    console.error(t('share.loadUsersFailedLog'), e)
     users.value = []
   }
 }
@@ -392,16 +396,16 @@ const validate = () => {
   if (config.access_level === 'department') {
     // 编辑者的访问权由后端角色/创建者/显式授权保证，共享范围不再强制包含本人部门
     if (config.department_ids.length === 0) {
-      return { valid: false, message: '请至少选择一个部门' }
+      return { valid: false, message: t('share.departmentRequired') }
     }
     return { valid: true, message: '' }
   }
 
   if (!currentUserUid.value) {
-    return { valid: false, message: '无法获取当前用户，无法使用指定人可访问模式' }
+    return { valid: false, message: t('share.cannotGetCurrentUser') }
   }
   if (!config.user_uids.includes(currentUserUid.value)) {
-    return { valid: false, message: '当前用户必须在可访问用户范围内' }
+    return { valid: false, message: t('share.currentUserMustBeIncluded') }
   }
   return { valid: true, message: '' }
 }

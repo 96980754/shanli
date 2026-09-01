@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdx'])
 const IMAGE_EXTENSIONS = new Set([
   '.apng',
@@ -204,7 +206,7 @@ export const normalizePreviewResponse = async (response, baseFile = {}) => {
     content: null,
     previewType,
     supported: previewType !== 'unsupported',
-    message: previewType === 'unsupported' ? '当前文件暂不支持预览，请下载后查看' : '',
+    message: previewType === 'unsupported' ? i18n.global.t('fileUtil.previewUnsupported') : '',
     previewUrl: window.URL.createObjectURL(normalizePreviewBlob(blob, previewType, baseFile.filename || baseFile.name || baseFile.path))
   }
 }

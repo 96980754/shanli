@@ -12,7 +12,7 @@
         <div v-if="activeStatsPanel" class="floating-panel type-stats-card">
           <div class="panel-header">
             <span class="panel-title">
-              {{ activeStatsPanel === 'node' ? '实体类型' : '关系类型' }}
+              {{ activeStatsPanel === 'node' ? $t('graph.entityTypes') : $t('graph.relationshipTypes') }}
             </span>
           </div>
           <div class="panel-body">
@@ -37,7 +37,7 @@
             type="button"
             @click="toggleStatsPanel('node')"
           >
-            <span class="stat-label">实体</span>
+            <span class="stat-label">{{ $t('graph.entity') }}</span>
             <span class="stat-value">{{ visibleEntityCount }}</span>
           </button>
           <button
@@ -46,7 +46,7 @@
             type="button"
             @click="toggleStatsPanel('edge')"
           >
-            <span class="stat-label">关系</span>
+            <span class="stat-label">{{ $t('graph.relationship') }}</span>
             <span class="stat-value">{{ visibleRelationshipCount }}</span>
           </button>
         </div>
@@ -61,6 +61,7 @@
 <script setup>
 import { Graph } from '@antv/g6'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
 
 const props = defineProps({
@@ -89,6 +90,7 @@ const emit = defineEmits(['ready', 'data-rendered', 'node-click', 'edge-click', 
 const container = ref(null)
 const rootEl = ref(null)
 const themeStore = useThemeStore()
+const { t } = useI18n()
 const activeStatsPanel = ref('')
 let graphInstance = null
 let resizeObserver = null
@@ -243,7 +245,7 @@ function formatData() {
       visualLabel: getNodeVisualLabel(n),
       color: getNodeColor(n),
       degree: degrees.get(String(n.id)) || 0,
-      original: n // 保存原始数据
+      original: n // 保存原始数据 // i18n-ignore
     }
   }))
 
@@ -255,7 +257,7 @@ function formatData() {
       label: e.type ?? '',
       visualLabel: getEdgeVisualLabel(e),
       color: getEdgeColor(e),
-      original: e // 保存原始数据
+      original: e // 保存原始数据 // i18n-ignore
     }
   }))
 
@@ -341,9 +343,9 @@ function initGraph() {
       {
         type: 'click-select',
         degree: 1,
-        state: 'selected', // 选中的状态
-        neighborState: 'active', // 相邻节点附着状态
-        unselectedState: 'inactive', // 未选中节点状态
+        state: 'selected', // 选中的状态 // i18n-ignore
+        neighborState: 'active', // 相邻节点附着状态 // i18n-ignore
+        unselectedState: 'inactive', // 未选中节点状态 // i18n-ignore
         multiple: true,
         trigger: ['shift'],
         // 禁用默认的选中效果，避免与自定义事件冲突
@@ -383,7 +385,7 @@ function setGraphData() {
   if (!graphInstance || !isMounted) return
   const data = formatData()
 
-  console.log('开始设置图谱数据:', {
+  console.log(t('graph.setDataLog'), {
     nodes: data.nodes.length,
     edges: data.edges.length
   })
@@ -398,10 +400,10 @@ function setGraphData() {
     try {
       if (graphInstance && graphInstance.layout) {
         graphInstance.layout()
-        console.log('触发布局重新计算')
+        console.log(t('graph.triggerLayoutLog'))
       }
     } catch (error) {
-      console.warn('布局重新计算失败:', error)
+      console.warn(t('graph.layoutRetryWarn'), error)
     }
 
     // 等待力导向布局稳定后再应用高亮
@@ -410,9 +412,9 @@ function setGraphData() {
       if (!isMounted || !graphInstance) return
       applyHighlightKeywords()
       emit('data-rendered')
-      console.log('图谱渲染完成，布局已稳定')
+      console.log(t('graph.renderCompleteLog'))
     }, 1500)
-  }, 10) // 等待 10ms 确保布局完成
+  }, 10) // 等待 10ms 确保布局完成 // i18n-ignore
 }
 
 // 关键词高亮功能

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -10,14 +11,15 @@ import { useUserStore } from '@/stores/user'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { t } = useI18n()
 
 const activeTab = ref('agents')
 const agentPanelRef = ref(null)
 const providerPanelRef = ref(null)
 
 const modelManageTabs = computed(() => {
-  const tabs = [{ key: 'agents', label: '智能体' }]
-  if (userStore.isAdmin) tabs.push({ key: 'providers', label: '模型供应商' })
+  const tabs = [{ key: 'agents', label: t('modelMgmt.tabAgents') }]
+  if (userStore.isAdmin) tabs.push({ key: 'providers', label: t('modelMgmt.tabProviders') })
   return tabs
 })
 
@@ -57,26 +59,28 @@ watch(activeTab, (tab) => {
   <div class="model-manage-view">
     <PageHeader
       v-model:active-key="activeTab"
-      title="智能体管理"
+      :title="t('nav.agentManage')"
       :tabs="modelManageTabs"
       :loading="activeLoading"
       :show-border="true"
-      aria-label="智能体管理视图切换"
+      :aria-label="t('modelMgmt.viewSwitchAriaLabel')"
     >
       <template #info>
         <div v-if="activeTab === 'agents'" class="summary-strip">
-          <span>{{ activeStats.total || 0 }} 个智能体</span>
-          <span>{{ activeStats.global || 0 }} 个全局</span>
-          <span v-if="activeStats.builtin">{{ activeStats.builtin }} 个内置</span>
-          <span>{{ activeStats.manageable || 0 }} 个可管理</span>
+          <span>{{ t('modelMgmt.agentsCount', { count: activeStats.total || 0 }) }}</span>
+          <span>{{ t('modelMgmt.globalCount', { count: activeStats.global || 0 }) }}</span>
+          <span v-if="activeStats.builtin">
+            {{ t('modelMgmt.builtinCount', { count: activeStats.builtin }) }}
+          </span>
+          <span>{{ t('modelMgmt.manageableCount', { count: activeStats.manageable || 0 }) }}</span>
         </div>
         <div v-else class="summary-strip">
-          <span>{{ activeStats.total || 0 }} 个供应商</span>
-          <span>{{ activeStats.enabled || 0 }} 个启用</span>
+          <span>{{ t('modelMgmt.providersCount', { count: activeStats.total || 0 }) }}</span>
+          <span>{{ t('modelMgmt.enabledCountLabel', { count: activeStats.enabled || 0 }) }}</span>
           <span v-if="activeStats.warning > 0" class="warning-count">
-            {{ activeStats.warning }} 个凭证缺失
+            {{ t('modelMgmt.credentialMissingCount', { count: activeStats.warning }) }}
           </span>
-          <span>{{ activeStats.models || 0 }} 个模型</span>
+          <span>{{ t('modelMgmt.modelsCount', { count: activeStats.models || 0 }) }}</span>
         </div>
       </template>
     </PageHeader>

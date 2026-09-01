@@ -1,13 +1,13 @@
 <template>
   <div class="chunk-params-config">
     <div class="params-info">
-      <p>调整分块参数可以控制文本的切分方式，影响检索质量和文档加载效率。</p>
+      <p>{{ $t('chunk.intro') }}</p>
     </div>
     <a-form :model="localParams" name="chunkConfig" autocomplete="off" layout="vertical">
       <a-form-item v-if="showPreset" name="chunk_preset_id">
         <template #label>
           <span class="chunk-preset-label">
-            分块策略
+            {{ $t('chunk.presetLabel') }}
             <a-tooltip :title="presetDescription">
               <QuestionCircleOutlined class="chunk-preset-help-icon" />
             </a-tooltip>
@@ -20,8 +20,8 @@
           style="width: 100%"
         />
         <p class="param-description">
-          选择适合当前文档结构的分块策略。
-          <span v-if="allowPresetFollowDefault">留空时沿用知识库默认策略。</span>
+          {{ $t('chunk.presetDescription') }}
+          <span v-if="allowPresetFollowDefault">{{ $t('chunk.presetFollowDefault') }}</span>
         </p>
       </a-form-item>
 
@@ -34,7 +34,7 @@
         >
           <ChevronRight v-if="!showAdvanced" :size="14" />
           <ChevronDown v-else :size="14" />
-          <span>高级</span>
+          <span>{{ $t('chunk.advanced') }}</span>
         </a-button>
       </div>
 
@@ -42,8 +42,8 @@
         <a-form-item v-if="showChunkSizeOverlap" name="chunk_token_num">
           <template #label>
             <span class="chunk-preset-label">
-              最大 Token 数
-              <a-tooltip title="每个文本片段的最大 token 数，留空时使用默认值 512">
+              {{ $t('chunk.maxTokenLabel') }}
+              <a-tooltip :title="$t('chunk.maxTokenTip')">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
             </span>
@@ -52,15 +52,15 @@
             v-model:value="parserConfig.chunk_token_num"
             :min="100"
             :max="10000"
-            placeholder="默认 512"
+            :placeholder="$t('chunk.maxTokenPlaceholder')"
             style="width: 100%"
           />
         </a-form-item>
         <a-form-item v-if="showChunkSizeOverlap" name="overlapped_percent">
           <template #label>
             <span class="chunk-preset-label">
-              重叠比例 (%)
-              <a-tooltip title="相邻文本片段按 token 数计算的重叠比例，留空时使用默认值 0">
+              {{ $t('chunk.overlapPercentLabel') }}
+              <a-tooltip :title="$t('chunk.overlapPercentTip')">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
             </span>
@@ -69,22 +69,22 @@
             v-model:value="parserConfig.overlapped_percent"
             :min="0"
             :max="99"
-            placeholder="默认 0"
+            :placeholder="$t('chunk.overlapPercentPlaceholder')"
             style="width: 100%"
           />
         </a-form-item>
         <a-form-item v-if="showQaSplit" name="delimiter">
           <template #label>
             <span class="chunk-preset-label">
-              分隔符
-              <a-tooltip title="支持 \\n、\\t 等转义字符。留空时使用默认分隔符 \\n">
+              {{ $t('chunk.delimiterLabel') }}
+              <a-tooltip :title="$t('chunk.delimiterTip')">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
             </span>
           </template>
           <a-input
             v-model:value="parserConfig.delimiter"
-            placeholder="默认 \\n，可输入 \\n\\n\\n 或 ---"
+            :placeholder="$t('chunk.delimiterPlaceholder')"
             style="width: 100%"
           />
         </a-form-item>
@@ -95,10 +95,13 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
 import { DEFAULT_CHUNK_PRESET_ID, isPlainObject } from '@/utils/chunkUtils'
+
+const { t } = useI18n()
 
 const props = defineProps({
   tempChunkParams: {
@@ -155,7 +158,7 @@ const presetOptions = computed(() => {
   if (props.allowPresetFollowDefault) {
     options.push({
       value: '',
-      label: `沿用知识库默认（${defaultPresetLabel}）`
+      label: t('chunk.followDefaultOption', { label: defaultPresetLabel })
     })
   }
 

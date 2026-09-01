@@ -2,11 +2,11 @@
   <div v-if="message.type === 'human' && message.image_content" class="message-image">
     <img
       :src="`data:${messageImageMimeType};base64,${message.image_content}`"
-      alt="用户上传的图片"
+      :alt="t('chat.userUploadedImage')"
       @click="
         openImagePreview(
           `data:${messageImageMimeType};base64,${message.image_content}`,
-          '用户上传的图片'
+          t('chat.userUploadedImage')
         )
       "
     />
@@ -44,7 +44,7 @@
           </template>
           <a-collapse-panel
             key="show"
-            :header="isReasoning ? '正在思考...' : '推理过程'"
+            :header="t(isReasoning ? 'chat.reply.thinking' : 'chat.reasoningProcess')"
             class="reasoning-header"
           >
             <p class="reasoning-content">{{ parsedData.reasoning_content }}</p>
@@ -65,19 +65,21 @@
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
 
       <div v-if="handoffAvailable" class="handoff-action">
-        <a-button class="handoff-button" :loading="handoffSending" @click="createHandoff">转人工</a-button>
+        <a-button class="handoff-button" :loading="handoffSending" @click="createHandoff">{{
+          $t('chat.transferToHuman')
+        }}</a-button>
         <span v-if="handoffStatus" class="handoff-status">{{ handoffStatus }}</span>
       </div>
 
       <!-- 错误提示块 -->
       <div v-if="displayError" class="error-hint">
         <span v-if="getErrorMessage">{{ getErrorMessage }}</span>
-        <span v-else-if="message.error_type === 'interrupted'">回答生成已中断</span>
-        <span v-else-if="message.error_type === 'unexpect'">生成过程中出现异常</span>
-        <span v-else-if="message.error_type === 'content_guard_blocked'"
-          >检测到敏感内容，已中断输出</span
-        >
-        <span v-else>{{ message.error_type || '未知错误' }}</span>
+        <span v-else-if="message.error_type === 'interrupted'">{{ $t('chat.errorInterrupted') }}</span>
+        <span v-else-if="message.error_type === 'unexpect'">{{ $t('chat.errorUnexpected') }}</span>
+        <span v-else-if="message.error_type === 'content_guard_blocked'">{{
+          $t('chat.errorContentBlocked')
+        }}</span>
+        <span v-else>{{ message.error_type || $t('chat.errorUnknown') }}</span>
       </div>
 
       <ToolCallsGroupComponent
@@ -86,10 +88,10 @@
       />
 
       <div v-if="message.isStoppedByUser" class="retry-hint">
-        你停止生成了本次回答
-        <span class="retry-link" @click="emit('retryStoppedMessage', message.id)"
-          >重新编辑问题</span
-        >
+        {{ $t('chat.stoppedByUser') }}
+        <span class="retry-link" @click="emit('retryStoppedMessage', message.id)">{{
+          $t('chat.reeditQuestion')
+        }}</span>
       </div>
 
       <div
@@ -144,7 +146,7 @@
       class="message-image-preview-overlay"
       @click="closeImagePreview"
     >
-      <button class="message-image-preview-close" title="关闭" @click.stop="closeImagePreview">
+      <button class="message-image-preview-close" :title="t('common.close')" @click.stop="closeImagePreview">
         <X :size="20" />
       </button>
       <img :src="imagePreview.src" :alt="imagePreview.alt" class="message-image-preview-img" />
@@ -155,6 +157,7 @@
 <script setup>
 import { computed, ref, onUnmounted, watch } from 'vue'
 import { message as notification } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { CaretRightOutlined } from '@ant-design/icons-vue'
 import RefsComponent from '@/components/RefsComponent.vue'
 import { Copy, Check, X } from 'lucide-vue-next'
@@ -170,6 +173,8 @@ import { buildMentionDisplayLabels } from '@/utils/mention_utils'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import { enrichTaskToolCalls } from '@/components/ToolCallingResult/toolRegistry'
 import { queryApi } from '@/apis/knowledge_api'
+
+const { t } = useI18n()
 
 const props = defineProps({
   // 消息角色：'user'|'assistant'|'sent'|'received'
@@ -223,20 +228,20 @@ const handoffQuery = computed(
 
 const createHandoff = async () => {
   if (!handoffQuery.value.trim()) {
-    notification.error('未获取到原问题，无法转人工')
+    notification.error(t('chat.noOriginalQuestion'))
     return
   }
   handoffSending.value = true
   try {
     const result = await queryApi.createHandoff(handoffQuery.value)
     if (!result.customer_service_url) {
-      throw new Error('企业微信客服入口尚未配置')
+      throw new Error(t('chat.wecomNotConfigured'))
     }
-    handoffStatus.value = '正在打开企业微信客服'
+    handoffStatus.value = t('chat.openingWecom')
     notification.success(handoffStatus.value)
     window.location.assign(result.customer_service_url)
   } catch (error) {
-    notification.error(error.message || '转人工请求失败，请稍后重试')
+    notification.error(error.message || t('chat.transferFailed'))
   } finally {
     handoffSending.value = false
   }
@@ -325,13 +330,13 @@ const getErrorMessage = computed(() => {
   // 对于已知的错误类型，返回默认提示
   switch (props.message.error_type) {
     case 'interrupted':
-      return '回答生成已中断'
+      return t('chat.errorInterrupted')
     case 'content_guard_blocked':
-      return '检测到敏感内容，已中断输出'
+      return t('chat.errorContentBlocked')
     case 'unexpect':
-      return '生成过程中出现异常'
+      return t('chat.errorUnexpected')
     case 'agent_error':
-      return '智能体获取失败'
+      return t('chat.agentFetchFailed')
     default:
       return null
   }

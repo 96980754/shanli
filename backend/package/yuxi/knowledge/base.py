@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import string
+import unicodedata
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -1530,6 +1531,131 @@ class KnowledgeBase(ABC):
         meta["normalized_name"] = normalize_document_filename(meta["filename"])
         await self._persist_file_meta(file_id, meta)
         return meta
+
+    async def rename_file(self, kb_id: str, file_id: str, new_name: str) -> dict:
+        """
+        重命名入库后的文件或文件夹。
+
+        Args:
+            kb_id: 数据库 ID
+            file_id: 文件/文件夹 ID；若为虚拟目录 id（``__virtual_folder__:{parent_ref}:{path_prefix}/``），
+                则级联重写该前缀下所有当前版本文件的 ``filename``，等价于给虚拟目录改名。
+            new_name: 新的叶子名（不含路径分隔符）
+
+        Returns:
+            dict: 更新后的元数据
+        """
+        new_name = self._validate_rename_leaf(new_name)
+
+        if file_id.startswith(self._VIRTUAL_FOLDER_PREFIX):
+            return await self._rename_virtual_folder(kb_id, file_id, new_name)
+
+        meta = await self._load_file_meta(kb_id, file_id)
+        if meta.get("is_folder"):
+            return await self._rename_real_folder(kb_id, file_id, meta, new_name)
+        return await self._rename_file(kb_id, file_id, meta, new_name)
+
+    @staticmethod
+    def _validate_rename_leaf(new_name: str) -> str:
+        """校验改名叶子名：非空、不含路径分隔符/父目录引用/控制字符、长度受限。"""
+        normalized = unicodedata.normalize("NFKC", str(new_name or "")).strip()
+        if not normalized:
+            raise ValueError("文件名不能为空")
+        if normalized in {".", ".."} or "/" in normalized or "\\" in normalized:
+            raise ValueError("文件名不能包含路径分隔符（/ 或 \\）")
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("文件名包含非法字符")
+        if len(normalized) > 512:
+            raise ValueError("文件名过长（最多 512 字符）")
+        return normalized
+
+    async def _rename_file(self, kb_id: str, file_id: str, meta: dict, new_name: str) -> dict:
+        """重命名文件：真实文件夹/根目录下只改叶子；虚拟目录下保留目录前缀，仅替换叶子段。"""
+        from yuxi.repositories.knowledge_file_repository import (
+            KnowledgeFileRepository,
+            normalize_document_filename,
+        )
+
+        old = meta.get("filename") or ""
+        prefix = old.rsplit("/", 1)[0] + "/" if "/" in old else ""
+        new_full = prefix + new_name
+        if len(new_full) > 512:
+            raise ValueError("重命名后文件名过长（最多 512 字符）")
+        if new_full == old:
+            return meta
+
+        repo = KnowledgeFileRepository()
+        same = await repo.list_same_name_files(kb_id=kb_id, parent_id=meta.get("parent_id"), filename=new_full)
+        if any(item.file_id != file_id for item in same):
+            raise ValueError(f"同目录下已存在同名文件：{new_name}")
+
+        meta["filename"] = new_full
+        meta["normalized_name"] = normalize_document_filename(new_full)
+        await self._persist_file_meta(file_id, meta)
+        return meta
+
+    async def _rename_real_folder(self, kb_id: str, file_id: str, meta: dict, new_name: str) -> dict:
+        """重命名真实文件夹：子文件以 parent_id 关联，仅改文件夹行自身即可。"""
+        from yuxi.repositories.knowledge_file_repository import (
+            KnowledgeFileRepository,
+            normalize_document_filename,
+        )
+
+        old = meta.get("filename") or ""
+        if old == new_name:
+            return meta
+
+        repo = KnowledgeFileRepository()
+        same = await repo.list_same_name_folders(kb_id=kb_id, parent_id=meta.get("parent_id"), filename=new_name)
+        if any(item.file_id != file_id for item in same):
+            raise ValueError(f"同目录下已存在同名文件夹：{new_name}")
+
+        meta["filename"] = new_name
+        meta["normalized_name"] = normalize_document_filename(new_name)
+        await self._persist_file_meta(file_id, meta)
+        return meta
+
+    async def _rename_virtual_folder(self, kb_id: str, virtual_folder_id: str, new_name: str) -> dict:
+        """重命名虚拟文件夹：级联重写其下所有当前版本文件 filename 的路径前缀（虚拟目录由前缀聚合，无 DB 记录）。"""
+        from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+        parts = virtual_folder_id.split(":", 2)
+        if len(parts) < 3 or not parts[2]:
+            raise ValueError(f"Invalid virtual folder target: {virtual_folder_id}")
+        parent_ref, old_prefix = parts[1], parts[2]
+        # 路径参数中的 %2F 会被服务器提前解码为真实分隔符，尾部 "/" 无法随 doc_id 传递，这里补回
+        if not old_prefix.endswith("/"):
+            old_prefix += "/"
+
+        # 虚拟目录的 id 内嵌父上下文：root=根目录（parent_id 置空），否则为真实文件夹
+        parent_id = None if parent_ref == "root" else parent_ref
+        if parent_id:
+            parent_meta = await self._load_file_meta(kb_id, parent_id)
+            if not parent_meta.get("is_folder"):
+                raise ValueError(f"Parent is not a folder: {parent_ref}")
+
+        leaf = old_prefix.rstrip("/").rsplit("/", 1)[-1]
+        # 去掉 leaf 段及其后的 "/"，得到父目录前缀（old_prefix 恒以 "/" 结尾）
+        new_prefix = old_prefix[: -(len(leaf) + 1)] + new_name + "/"
+        if new_prefix == old_prefix:
+            return {}
+
+        repo = KnowledgeFileRepository()
+        old_rows = await repo.list_current_files_with_prefix(kb_id=kb_id, parent_id=parent_id, path_prefix=old_prefix)
+        if not old_rows:
+            raise ValueError("虚拟目录不存在")
+        if await repo.count_filenames_with_prefix(
+            kb_id=kb_id,
+            parent_id=parent_id,
+            path_prefix=new_prefix,
+            exclude_file_ids=tuple(row.file_id for row in old_rows),
+        ):
+            raise ValueError(f"已存在同名目录或文件：{new_name}")
+
+        await repo.rename_files_with_prefix(
+            kb_id=kb_id, parent_id=parent_id, old_prefix=old_prefix, new_prefix=new_prefix
+        )
+        return {"filename": new_prefix.rstrip("/")}
 
     @abstractmethod
     async def delete_file(self, kb_id: str, file_id: str) -> None:

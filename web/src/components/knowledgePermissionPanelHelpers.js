@@ -1,3 +1,8 @@
+/**
+ * i18n-ignore-file
+ * 本文件导出值被 __tests__/knowledgePermissionPanelHelpers.test.js 断言为中文原样，
+ * 不得改为 i18n key；UI 层在 KnowledgePermissionPanel.vue 渲染时通过本地 key map 翻译。
+ */
 export const permissionOptions = [
   { key: 'can_view', label: '查看' },
   { key: 'can_search', label: '问答' },

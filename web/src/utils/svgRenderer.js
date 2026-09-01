@@ -2,6 +2,7 @@
  * SVG 渲染工具函数
  * 将 Markdown 中的 ```svg 围栏代码块转换为内联 SVG HTML
  */
+import { i18n } from '@/i18n'
 
 /**
  * 将 Markdown 字符串中的 ```svg 围栏代码块转换为内联 SVG HTML
@@ -46,8 +47,8 @@ export function renderSvgBlocks(markdown) {
             .trim()
           const actionsHtml = [
             `<div class="svg-actions">`,
-            `<button class="svg-action-btn svg-copy-btn" type="button">复制 SVG</button>`,
-            `<button class="svg-action-btn svg-png-btn" type="button">复制为 PNG</button>`,
+            `<button class="svg-action-btn svg-copy-btn" type="button">${i18n.global.t('renderer.svgCopy')}</button>`,
+            `<button class="svg-action-btn svg-png-btn" type="button">${i18n.global.t('renderer.svgPngCopy')}</button>`,
             `</div>`
           ].join('')
           output.push(`<div class="svg-inline-render">${actionsHtml}${singleLine}</div>`)

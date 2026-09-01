@@ -6,7 +6,7 @@
     <div class="detail-top-bar">
       <button class="detail-back-btn" @click="goBack">
         <ArrowLeft :size="16" />
-        <span>返回</span>
+        <span>{{ $t('common.back') }}</span>
       </button>
       <div class="detail-title-area">
         <span class="detail-icon">{{ server?.icon || '🔌' }}</span>
@@ -24,7 +24,7 @@
             class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
           >
             <Zap :size="14" v-if="!testLoading" />
-            <span>测试</span>
+            <span>{{ $t('mcp.test') }}</span>
           </button>
           <button
             type="button"
@@ -33,7 +33,7 @@
             class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
           >
             <Pencil :size="14" />
-            <span>编辑</span>
+            <span>{{ $t('common.edit') }}</span>
           </button>
           <button
             type="button"
@@ -48,7 +48,7 @@
           >
             <Plus v-if="server?.enabled === false" :size="14" />
             <Trash2 v-else :size="14" />
-            <span>{{ actionLabel }}</span>
+            <span>{{ $t(actionLabel) }}</span>
           </button>
         </a-space>
       </div>
@@ -60,34 +60,34 @@
           <a-tabs v-model:activeKey="detailTab" class="detail-tabs">
             <a-tab-pane key="general">
               <template #tab>
-                <span class="tab-title"><Settings2 :size="14" />信息</span>
+                <span class="tab-title"><Settings2 :size="14" />{{ $t('mcp.tab.info') }}</span>
               </template>
               <div class="tab-content">
                 <div v-if="isEditing" class="edit-panel">
                   <div class="edit-panel-header">
                     <div>
-                      <h3>编辑 MCP</h3>
-                      <p>修改后保存会立即更新当前 MCP 配置。</p>
+                      <h3>{{ $t('mcp.editTitle') }}</h3>
+                      <p>{{ $t('mcp.editSubtitle') }}</p>
                     </div>
                   </div>
 
                   <a-form layout="vertical" class="extension-form inline-edit-form">
                     <section class="form-section">
                       <div class="form-section-title">
-                        <span>基础信息</span>
-                        <small>定义 MCP 的名称、描述与展示方式。</small>
+                        <span>{{ $t('mcp.basicInfo') }}</span>
+                        <small>{{ $t('mcp.basicInfoDesc') }}</small>
                       </div>
                       <div class="form-grid form-grid-three">
-                        <a-form-item label="MCP 标识" required class="form-item">
+                        <a-form-item :label="$t('mcp.form.slug')" required class="form-item">
                           <a-input v-model:value="editForm.slug" disabled />
                         </a-form-item>
-                        <a-form-item label="MCP 名称" required class="form-item">
+                        <a-form-item :label="$t('mcp.form.name')" required class="form-item">
                           <a-input
                             v-model:value="editForm.name"
-                            placeholder="请输入 MCP 展示名称"
+                            :placeholder="$t('mcp.placeholder.name')"
                           />
                         </a-form-item>
-                        <a-form-item label="传输类型" required class="form-item">
+                        <a-form-item :label="$t('mcp.form.transport')" required class="form-item">
                           <a-select v-model:value="editForm.transport">
                             <a-select-option value="streamable_http"
                               >streamable_http</a-select-option
@@ -96,18 +96,18 @@
                             <a-select-option value="stdio">stdio</a-select-option>
                           </a-select>
                         </a-form-item>
-                        <a-form-item label="图标" class="form-item">
+                        <a-form-item :label="$t('mcp.form.icon')" class="form-item">
                           <a-input
                             v-model:value="editForm.icon"
-                            placeholder="输入 emoji，如 🧠"
+                            :placeholder="$t('mcp.placeholder.icon')"
                             :maxlength="2"
                           />
                         </a-form-item>
                       </div>
-                      <a-form-item label="描述" class="form-item form-item-full">
+                      <a-form-item :label="$t('mcp.form.description')" class="form-item form-item-full">
                         <a-textarea
                           v-model:value="editForm.description"
-                          placeholder="请输入 MCP 描述"
+                          :placeholder="$t('mcp.placeholder.description')"
                           :rows="2"
                         />
                       </a-form-item>
@@ -115,22 +115,22 @@
 
                     <section class="form-section">
                       <div class="form-section-title">
-                        <span>连接配置</span>
-                        <small>配置当前传输方式需要的连接参数。</small>
+                        <span>{{ $t('mcp.connection') }}</span>
+                        <small>{{ $t('mcp.connectionDesc') }}</small>
                       </div>
                       <template
                         v-if="
                           editForm.transport === 'streamable_http' || editForm.transport === 'sse'
                         "
                       >
-                        <a-form-item label="MCP URL" required class="form-item form-item-full">
+                        <a-form-item :label="$t('mcp.form.url')" required class="form-item form-item-full">
                           <a-input
                             v-model:value="editForm.url"
                             placeholder="https://example.com/mcp"
                           />
                         </a-form-item>
                         <div class="form-grid">
-                          <a-form-item label="HTTP 超时（秒）" class="form-item">
+                          <a-form-item :label="$t('mcp.form.httpTimeout')" class="form-item">
                             <a-input-number
                               v-model:value="editForm.timeout"
                               :min="1"
@@ -138,7 +138,7 @@
                               style="width: 100%"
                             />
                           </a-form-item>
-                          <a-form-item label="SSE 读取超时（秒）" class="form-item">
+                          <a-form-item :label="$t('mcp.form.sseReadTimeout')" class="form-item">
                             <a-input-number
                               v-model:value="editForm.sse_read_timeout"
                               :min="1"
@@ -149,18 +149,18 @@
                         </div>
                       </template>
                       <template v-if="isStdioTransport">
-                        <a-form-item label="命令" required class="form-item form-item-full">
+                        <a-form-item :label="$t('mcp.form.command')" required class="form-item form-item-full">
                           <a-input
                             v-model:value="editForm.command"
-                            placeholder="例如：npx 或 /path/to/server"
+                            :placeholder="$t('mcp.placeholder.command')"
                           />
                         </a-form-item>
                       </template>
-                      <a-form-item label="标签" class="form-item form-item-full">
+                      <a-form-item :label="$t('mcp.form.tags')" class="form-item form-item-full">
                         <a-select
                           v-model:value="editForm.tags"
                           mode="tags"
-                          placeholder="输入标签后回车添加"
+                          :placeholder="$t('mcp.placeholder.tags')"
                           style="width: 100%"
                         />
                       </a-form-item>
@@ -168,36 +168,36 @@
 
                     <section class="form-section">
                       <div class="form-section-title">
-                        <span>高级配置</span>
-                        <small>请求头、启动参数和环境变量会直接影响 MCP 运行。</small>
+                        <span>{{ $t('mcp.advanced') }}</span>
+                        <small>{{ $t('mcp.advancedDesc') }}</small>
                       </div>
                       <template
                         v-if="
                           editForm.transport === 'streamable_http' || editForm.transport === 'sse'
                         "
                       >
-                        <a-form-item label="HTTP 请求头" class="form-item form-item-full">
+                        <a-form-item :label="$t('mcp.form.headers')" class="form-item form-item-full">
                           <a-textarea
                             v-model:value="editForm.headersText"
-                            placeholder='JSON 格式，如：{"Authorization": "Bearer xxx"}'
+                            :placeholder="$t('mcp.placeholder.headers')"
                             :rows="4"
                             class="config-textarea"
                           />
                           <div class="form-helper">
-                            请输入合法 JSON 对象，留空表示不发送额外请求头。
+                            {{ $t('mcp.headersHelper') }}
                           </div>
                         </a-form-item>
                       </template>
                       <template v-if="isStdioTransport">
-                        <a-form-item label="参数" class="form-item form-item-full">
+                        <a-form-item :label="$t('mcp.form.args')" class="form-item form-item-full">
                           <a-select
                             v-model:value="editForm.args"
                             mode="tags"
-                            placeholder="输入参数后回车添加，如：-m"
+                            :placeholder="$t('mcp.placeholder.args')"
                             style="width: 100%"
                           />
                         </a-form-item>
-                        <a-form-item label="环境变量" class="form-item form-item-full">
+                        <a-form-item :label="$t('mcp.form.env')" class="form-item form-item-full">
                           <div class="env-editor-shell">
                             <McpEnvEditor v-model="editForm.env" />
                           </div>
@@ -209,7 +209,7 @@
                   <div class="edit-panel-actions">
                     <a-button @click="cancelEdit" :disabled="editLoading" class="lucide-icon-btn">
                       <template #icon><X :size="14" /></template>
-                      取消
+                      {{ $t('common.cancel') }}
                     </a-button>
                     <a-button
                       type="primary"
@@ -218,18 +218,18 @@
                       class="lucide-icon-btn"
                     >
                       <template #icon><Save :size="14" /></template>
-                      保存
+                      {{ $t('common.save') }}
                     </a-button>
                   </div>
                 </div>
 
                 <div v-else class="info-grid">
                   <div class="info-item" v-if="server.description">
-                    <label>描述</label>
+                    <label>{{ $t('mcp.info.description') }}</label>
                     <span>{{ server.description }}</span>
                   </div>
                   <div class="info-item">
-                    <label>传输类型</label>
+                    <label>{{ $t('mcp.info.transport') }}</label>
                     <span>
                       <a-tag :color="getTransportColor(server.transport)">{{
                         server.transport
@@ -240,7 +240,7 @@
                     class="info-item"
                     v-if="Array.isArray(server.tags) && server.tags.length > 0"
                   >
-                    <label>标签</label>
+                    <label>{{ $t('mcp.info.tags') }}</label>
                     <span>
                       <a-tag v-for="tag in server.tags" :key="tag">{{ tag }}</a-tag>
                     </span>
@@ -249,32 +249,32 @@
                     v-if="server.transport === 'streamable_http' || server.transport === 'sse'"
                   >
                     <div class="info-item" v-if="server.url">
-                      <label>MCP URL</label>
+                      <label>{{ $t('mcp.info.url') }}</label>
                       <span class="code-inline text-break-all">{{ server.url }}</span>
                     </div>
                     <div
                       class="info-item"
                       v-if="server.headers && Object.keys(server.headers).length > 0"
                     >
-                      <label>请求头</label>
+                      <label>{{ $t('mcp.info.headers') }}</label>
                       <pre class="code-pre">{{ JSON.stringify(server.headers, null, 2) }}</pre>
                     </div>
                     <div class="info-item" v-if="server.timeout">
-                      <label>HTTP 超时</label>
-                      <span>{{ server.timeout }} 秒</span>
+                      <label>{{ $t('mcp.info.httpTimeout') }}</label>
+                      <span>{{ $t('mcp.timeoutValue', { value: server.timeout }) }}</span>
                     </div>
                     <div class="info-item" v-if="server.sse_read_timeout">
-                      <label>SSE 读取超时</label>
-                      <span>{{ server.sse_read_timeout }} 秒</span>
+                      <label>{{ $t('mcp.info.sseReadTimeout') }}</label>
+                      <span>{{ $t('mcp.timeoutValue', { value: server.sse_read_timeout }) }}</span>
                     </div>
                   </template>
                   <template v-if="server.transport === 'stdio'">
                     <div class="info-item" v-if="server.command">
-                      <label>命令</label>
+                      <label>{{ $t('mcp.info.command') }}</label>
                       <span class="code-inline">{{ server.command }}</span>
                     </div>
                     <div class="info-item" v-if="server.args && server.args.length > 0">
-                      <label>参数</label>
+                      <label>{{ $t('mcp.info.args') }}</label>
                       <span>
                         <a-tag v-for="(arg, index) in server.args" :key="index" size="small">{{
                           arg
@@ -282,20 +282,20 @@
                       </span>
                     </div>
                     <div class="info-item" v-if="server.env && Object.keys(server.env).length > 0">
-                      <label>环境变量</label>
+                      <label>{{ $t('mcp.info.env') }}</label>
                       <pre class="code-pre">{{ JSON.stringify(server.env, null, 2) }}</pre>
                     </div>
                   </template>
                   <div class="info-item">
-                    <label>创建时间</label>
+                    <label>{{ $t('mcp.info.createdAt') }}</label>
                     <span>{{ formatTime(server.created_at) }}</span>
                   </div>
                   <div class="info-item">
-                    <label>更新时间</label>
+                    <label>{{ $t('mcp.info.updatedAt') }}</label>
                     <span>{{ formatTime(server.updated_at) }}</span>
                   </div>
                   <div class="info-item">
-                    <label>创建人</label>
+                    <label>{{ $t('mcp.info.createdBy') }}</label>
                     <span>{{ server.created_by }}</span>
                   </div>
                 </div>
@@ -304,24 +304,24 @@
 
             <a-tab-pane key="tools">
               <template #tab>
-                <span class="tab-title"><Wrench :size="14" />工具 ({{ tools.length }})</span>
+                <span class="tab-title"><Wrench :size="14" />{{ $t('mcp.tab.tools', { count: tools.length }) }}</span>
               </template>
               <div class="tab-content tools-tab">
                 <div class="tools-toolbar">
                   <a-input-search
                     v-model:value="toolSearchText"
-                    placeholder="搜索工具..."
+                    :placeholder="$t('mcp.searchTools')"
                     style="width: 200px"
                     allowClear
                   />
                   <a-button @click="fetchTools" :loading="toolsLoading" class="lucide-icon-btn">
                     <RotateCw :size="14" />
-                    <span>刷新</span>
+                    <span>{{ $t('common.refresh') }}</span>
                   </a-button>
                 </div>
                 <a-spin :spinning="toolsLoading">
                   <div v-if="filteredTools.length === 0" class="empty-tools">
-                    <a-empty :description="toolsError || '暂无工具'" />
+                    <a-empty :description="toolsError || $t('mcp.noTools')" />
                   </div>
                   <div v-else class="tools-list">
                     <div
@@ -333,7 +333,7 @@
                       <div class="tool-header">
                         <div class="tool-info">
                           <span class="tool-name">{{ tool.name }}</span>
-                          <a-tooltip :title="`ID: ${tool.id}`">
+                          <a-tooltip :title="$t('mcp.toolId', { id: tool.id })">
                             <Info :size="14" class="info-icon" />
                           </a-tooltip>
                         </div>
@@ -344,7 +344,7 @@
                             :loading="toggleToolLoading === tool.name"
                             size="small"
                           />
-                          <a-tooltip title="复制工具名称">
+                          <a-tooltip :title="$t('mcp.copyToolName')">
                             <a-button
                               type="text"
                               size="small"
@@ -363,7 +363,7 @@
                         v-if="tool.parameters && Object.keys(tool.parameters).length > 0"
                         ghost
                       >
-                        <a-collapse-panel key="params" header="参数">
+                        <a-collapse-panel key="params" :header="$t('mcp.form.args')">
                           <div class="params-list">
                             <div
                               v-for="(param, paramName) in tool.parameters"
@@ -375,7 +375,7 @@
                                 <span
                                   class="param-required"
                                   v-if="tool.required?.includes(paramName)"
-                                  >必填</span
+                                  >{{ $t('mcp.required') }}</span
                                 >
                                 <span class="param-type">{{ param.type || 'any' }}</span>
                               </div>
@@ -394,7 +394,7 @@
           </a-tabs>
         </div>
         <div v-else-if="!loading" class="detail-empty">
-          <a-empty description="未找到 MCP 服务器" />
+          <a-empty :description="$t('mcp.notFound')" />
         </div>
       </a-spin>
     </div>
@@ -404,6 +404,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import {
   ArrowLeft,
@@ -425,6 +426,7 @@ import McpEnvEditor from '@/components/McpEnvEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const slug = computed(() => decodeURIComponent(route.params.slug ?? route.params.name))
 
 const loading = ref(false)
@@ -458,8 +460,8 @@ const editForm = reactive({
 })
 
 const actionLabel = computed(() => {
-  if (server.value?.enabled === false) return '添加'
-  return server.value?.created_by === 'system' ? '移除' : '删除'
+  if (server.value?.enabled === false) return 'mcp.action.add'
+  return server.value?.created_by === 'system' ? 'mcp.action.remove' : 'common.delete'
 })
 
 const filteredTools = computed(() => {
@@ -526,7 +528,7 @@ const buildEditPayload = () => {
     try {
       headers = JSON.parse(editForm.headersText)
     } catch {
-      message.error('请求头 JSON 格式错误')
+      message.error(t('mcp.headersJsonError'))
       return null
     }
   }
@@ -549,19 +551,19 @@ const buildEditPayload = () => {
 
 const validateEditPayload = (data) => {
   if (!data.name?.trim()) {
-    message.error('MCP 名称不能为空')
+    message.error(t('mcp.validateNameRequired'))
     return false
   }
   if (!data.transport) {
-    message.error('请选择传输类型')
+    message.error(t('mcp.validateTransportRequired'))
     return false
   }
   if (['sse', 'streamable_http'].includes(data.transport) && !data.url?.trim()) {
-    message.error('HTTP 类型必须填写 MCP URL')
+    message.error(t('mcp.validateUrlRequired'))
     return false
   }
   if (data.transport === 'stdio' && !data.command?.trim()) {
-    message.error('StdIO 类型必须填写命令')
+    message.error(t('mcp.validateCommandRequired'))
     return false
   }
   return true
@@ -576,14 +578,14 @@ const handleSaveEdit = async () => {
     editLoading.value = true
     const result = await mcpApi.updateMcpServer(server.value.slug, data)
     if (result.success) {
-      message.success('MCP 更新成功')
+      message.success(t('mcp.updateSuccess'))
       isEditing.value = false
       await fetchServer()
     } else {
-      message.error(result.message || '更新失败')
+      message.error(result.message || t('mcp.updateFail'))
     }
   } catch (err) {
-    message.error(err.message || '更新失败')
+    message.error(err.message || t('mcp.updateFail'))
   } finally {
     editLoading.value = false
   }
@@ -596,16 +598,16 @@ const fetchServer = async () => {
     if (result.success) {
       if (result.data?.enabled === false) {
         server.value = null
-        message.info('请先添加 MCP 后再查看详情')
+        message.info(t('mcp.addFirstHint'))
         router.replace({ path: '/extensions', query: { tab: 'mcp' } })
         return
       }
       server.value = result.data
     } else {
-      message.error(result.message || '获取 MCP 详情失败')
+      message.error(result.message || t('mcp.fetchDetailFail'))
     }
   } catch (err) {
-    message.error(err.message || '获取 MCP 详情失败')
+    message.error(err.message || t('mcp.fetchDetailFail'))
   } finally {
     loading.value = false
   }
@@ -620,11 +622,11 @@ const fetchTools = async () => {
     if (result.success) {
       tools.value = result.data || []
     } else {
-      toolsError.value = result.message || '获取工具列表失败'
+      toolsError.value = result.message || t('mcp.fetchToolsFail')
       tools.value = []
     }
   } catch (err) {
-    toolsError.value = err.message || '获取工具列表失败'
+    toolsError.value = err.message || t('mcp.fetchToolsFail')
     tools.value = []
   } finally {
     toolsLoading.value = false
@@ -641,10 +643,10 @@ const handleToggleTool = async (tool) => {
       const targetTool = tools.value.find((t) => t.name === tool.name)
       if (targetTool) targetTool.enabled = result.enabled
     } else {
-      message.error(result.message || '操作失败')
+      message.error(result.message || t('mcp.operationFail'))
     }
   } catch (err) {
-    message.error(err.message || '操作失败')
+    message.error(err.message || t('mcp.operationFail'))
   } finally {
     toggleToolLoading.value = null
   }
@@ -653,9 +655,9 @@ const handleToggleTool = async (tool) => {
 const copyToolName = async (toolName) => {
   try {
     await navigator.clipboard.writeText(toolName)
-    message.success('已复制到剪贴板')
+    message.success(t('mcp.copied'))
   } catch {
-    message.error('复制失败')
+    message.error(t('mcp.copyFail'))
   }
 }
 
@@ -667,10 +669,10 @@ const handleTestServer = async () => {
     if (result.success) {
       message.success(result.message)
     } else {
-      message.warning(result.message || '连接失败')
+      message.warning(result.message || t('mcp.connectFail'))
     }
   } catch (err) {
-    message.error(err.message || '测试失败')
+    message.error(err.message || t('mcp.testFail'))
   } finally {
     testLoading.value = null
   }
@@ -693,34 +695,37 @@ const handleSetServerEnabled = async (srv, enabled) => {
   try {
     const result = await mcpApi.updateMcpServerStatus(srv.slug, enabled)
     if (result.success) {
-      message.success(result.message || `MCP 已${enabled ? '添加' : '移除'}`)
+      message.success(
+        result.message ||
+          t('mcp.setEnabledSuccess', { action: enabled ? t('mcp.action.add') : t('mcp.action.remove') })
+      )
       await fetchServer()
     } else {
-      message.error(result.message || '操作失败')
+      message.error(result.message || t('mcp.operationFail'))
     }
   } catch (err) {
-    message.error(err.message || '操作失败')
+    message.error(err.message || t('mcp.operationFail'))
   }
 }
 
 const confirmDeleteServer = (srv) => {
   Modal.confirm({
-    title: '确认删除 MCP',
-    content: `确定要删除 MCP "${srv.name}" 吗？此操作不可撤销。`,
-    okText: '删除',
+    title: t('mcp.deleteConfirmTitle'),
+    content: t('mcp.deleteConfirmContent', { name: srv.name }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         const result = await mcpApi.deleteMcpServer(srv.slug)
         if (result.success) {
-          message.success('MCP 删除成功')
+          message.success(t('mcp.deleteSuccess'))
           router.push({ path: '/extensions', query: { tab: 'mcp' } })
         } else {
-          message.error(result.message || '删除失败')
+          message.error(result.message || t('common.deleteFailed'))
         }
       } catch (err) {
-        message.error(err.message || '删除失败')
+        message.error(err.message || t('common.deleteFailed'))
       }
     }
   })

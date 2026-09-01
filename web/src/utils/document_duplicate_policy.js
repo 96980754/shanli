@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 export const DUPLICATE_STRATEGIES = {
   PROMPT: 'prompt',
   SKIP: 'skip',
@@ -58,22 +60,22 @@ export const getDuplicateConflictMessage = (detail) => {
     const existing = detail.conflicts?.[0]
     const location = existing?.display_path || existing?.filename
     return location
-      ? `该文档已存在于「${location}」，为避免重复索引，不能再次入库。`
-      : '检测到重复文档，不能重复上传'
+      ? i18n.global.t('kbFile.duplicateExactContent', { location })
+      : i18n.global.t('kbFile.duplicateDetected')
   }
   if (detail?.conflict_type === 'same_name') {
-    return '同一目录下已存在同名但内容不同的文件'
+    return i18n.global.t('kbFile.duplicateSameName')
   }
-  return '文件上传失败，请稍后重试'
+  return i18n.global.t('kbFile.uploadFailedGeneric')
 }
 export const getSafeUploadErrorMessage = (response) => {
   const conflict = getDuplicateConflictDetail(response)
   if (conflict) return getDuplicateConflictMessage(conflict)
   if (getReplacementInProgressDetail(response)) {
-    return '文件正在被其他用户更新，请稍后重试'
+    return i18n.global.t('kbFile.uploadReplacementInProgress')
   }
   if (getInvalidReplacementTargetDetail(response)) {
-    return '替换目标不属于当前文件夹或文件名不匹配，请刷新文件列表后重试'
+    return i18n.global.t('kbFile.uploadInvalidReplacementTarget')
   }
   const detail = response?.detail
   const formatErrorCodes = new Set([
@@ -98,5 +100,5 @@ export const getSafeUploadErrorMessage = (response) => {
   ) {
     return detail.message
   }
-  return '文件上传失败，请稍后重试'
+  return i18n.global.t('kbFile.uploadFailedGeneric')
 }

@@ -6,7 +6,7 @@
     <div class="detail-top-bar">
       <button class="detail-back-btn" @click="goBack">
         <ArrowLeft :size="16" />
-        <span>返回</span>
+        <span>{{ $t('common.back') }}</span>
       </button>
       <div class="detail-title-area">
         <div class="detail-icon">
@@ -26,7 +26,7 @@
             class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
           >
             <Download :size="14" />
-            <span>导出</span>
+            <span>{{ $t('skill.export') }}</span>
           </button>
           <button
             v-if="isInstalledSkill && canManageCurrentSkill && !isBuiltinInstalledSkill"
@@ -35,7 +35,7 @@
             class="lucide-icon-btn extension-panel-action extension-panel-action-danger"
           >
             <Trash2 :size="14" />
-            <span>删除</span>
+            <span>{{ $t('common.delete') }}</span>
           </button>
         </a-space>
       </div>
@@ -44,25 +44,25 @@
     <div class="detail-content-wrapper">
       <div v-if="currentSkill" class="detail-content-inner">
         <div v-if="isReadOnlySkill" class="readonly-scope-hint readonly-detail-hint">
-          你可以查看并使用此 Skill，但没有管理权限。
+          {{ $t('skill.readonlyHint') }}
         </div>
         <a-tabs v-if="isInstalledSkill" v-model:activeKey="activeTab" class="minimal-tabs">
           <a-tab-pane key="editor">
             <template #tab>
-              <span class="tab-title"><FileText :size="14" />代码管理</span>
+              <span class="tab-title"><FileText :size="14" />{{ $t('skill.tab.editor') }}</span>
             </template>
             <div class="workspace">
               <div class="tree-container">
                 <div class="tree-header">
-                  <span class="label">项目结构</span>
+                  <span class="label">{{ $t('skill.projectStructure') }}</span>
                   <div class="tree-actions">
-                    <a-tooltip v-if="canEditSkillFiles" title="新建文件"
+                    <a-tooltip v-if="canEditSkillFiles" :title="$t('skill.newFile')"
                       ><button @click="openCreateModal(false)"><FilePlus :size="14" /></button
                     ></a-tooltip>
-                    <a-tooltip v-if="canEditSkillFiles" title="新建目录"
+                    <a-tooltip v-if="canEditSkillFiles" :title="$t('skill.newDir')"
                       ><button @click="openCreateModal(true)"><FolderPlus :size="14" /></button
                     ></a-tooltip>
-                    <a-tooltip title="刷新"
+                    <a-tooltip :title="$t('common.refresh')"
                       ><button @click="reloadTree"><RotateCw :size="14" /></button
                     ></a-tooltip>
                   </div>
@@ -80,7 +80,7 @@
                 <div class="editor-main">
                   <a-empty
                     v-if="!selectedPath || selectedIsDir"
-                    description="选择文件以开始编辑"
+                    :description="$t('skill.selectFileToEdit')"
                     class="mt-40"
                   />
                   <template v-else>
@@ -105,13 +105,13 @@
 
           <a-tab-pane key="settings">
             <template #tab>
-              <span class="tab-title"><Settings :size="14" />生效范围</span>
+              <span class="tab-title"><Settings :size="14" />{{ $t('skill.tab.settings') }}</span>
             </template>
             <div class="config-view">
               <div class="config-header">
                 <div class="text">
-                  <h3>共享与启用状态</h3>
-                  <p>控制此 Skill 是否可用，以及哪些用户可以选择和运行它。</p>
+                  <h3>{{ $t('skill.shareAndEnableTitle') }}</h3>
+                  <p>{{ $t('skill.shareAndEnableDesc') }}</p>
                 </div>
                 <a-button
                   v-if="canManageCurrentSkill"
@@ -121,20 +121,20 @@
                   class="lucide-icon-btn"
                 >
                   <Save :size="14" />
-                  <span>保存设置</span>
+                  <span>{{ $t('skill.saveSettings') }}</span>
                 </a-button>
               </div>
               <div class="settings-stack">
                 <section class="settings-card">
                   <div class="settings-card-main">
-                    <div class="settings-card-title">启用状态</div>
+                    <div class="settings-card-title">{{ $t('skill.enabledStatus') }}</div>
                     <div class="settings-card-desc">
-                      禁用后此 Skill 不会出现在可选资源中，也不会参与 Agent 运行时加载。
+                      {{ $t('skill.enabledStatusDesc') }}
                     </div>
                   </div>
                   <div class="settings-card-action">
                     <span class="status-pill" :class="enabledForm ? 'enabled' : 'disabled'">
-                      {{ enabledForm ? '已启用' : '已禁用' }}
+                      {{ enabledForm ? $t('skill.enabled') : $t('skill.disabled') }}
                     </span>
                     <a-switch v-model:checked="enabledForm" :disabled="!canManageCurrentSkill" />
                   </div>
@@ -142,16 +142,16 @@
 
                 <section class="settings-card scope-card">
                   <div class="settings-card-main">
-                    <div class="settings-card-title">生效范围</div>
+                    <div class="settings-card-title">{{ $t('skill.scope') }}</div>
                     <div class="settings-card-desc">
-                      控制哪些用户可以选择并在运行时使用此 Skill。
+                      {{ $t('skill.scopeDesc') }}
                     </div>
                   </div>
                   <div v-if="isBuiltinInstalledSkill" class="readonly-scope-hint">
-                    内置 Skill 固定为全局生效范围，可通过启用状态控制是否参与运行时。
+                    {{ $t('skill.builtinScopeHint') }}
                   </div>
                   <div v-else-if="isReadOnlySkill" class="readonly-scope-hint">
-                    当前 Skill 对你只读，不能修改生效范围。
+                    {{ $t('skill.readonlyScopeHint') }}
                   </div>
                   <ShareConfigForm
                     v-else
@@ -166,13 +166,13 @@
 
           <a-tab-pane key="dependencies">
             <template #tab>
-              <span class="tab-title"><Layers :size="14" />依赖管理</span>
+              <span class="tab-title"><Layers :size="14" />{{ $t('skill.tab.dependencies') }}</span>
             </template>
             <div class="config-view">
               <div class="config-header">
                 <div class="text">
-                  <h3>依赖声明</h3>
-                  <p>配置此 Skill 所需的工具、MCP 及其他 Skill 依赖。</p>
+                  <h3>{{ $t('skill.dependencyDeclarations') }}</h3>
+                  <p>{{ $t('skill.dependencyDeclarationsDesc') }}</p>
                 </div>
                 <a-button
                   v-if="canEditSkillDependencies"
@@ -182,7 +182,7 @@
                   class="lucide-icon-btn"
                 >
                   <Save :size="14" />
-                  <span>更新依赖</span>
+                  <span>{{ $t('skill.updateDependencies') }}</span>
                 </a-button>
               </div>
               <div class="dependency-groups">
@@ -197,7 +197,7 @@
                       <div class="dependency-title-row">
                         <h4>{{ group.title }}</h4>
                         <span class="dependency-count"
-                          >已选择 {{ getDependencyValues(group).length }} 项</span
+                          >{{ $t('skill.dependencySelectedCount', { count: getDependencyValues(group).length }) }}</span
                         >
                       </div>
                       <p>{{ group.description }}</p>
@@ -210,7 +210,7 @@
                     >
                       <a-button size="small" class="dependency-action-btn dependency-select-btn">
                         <Plus :size="13" />
-                        <span>选择依赖</span>
+                        <span>{{ $t('skill.selectDependencies') }}</span>
                         <ChevronDown :size="12" class="dependency-select-chevron" />
                       </a-button>
                       <template #overlay>
@@ -224,7 +224,7 @@
                             size="small"
                             allow-clear
                             class="selection-search"
-                            :placeholder="`搜索${group.shortTitle}`"
+                            :placeholder="$t('skill.searchDependency', { name: group.shortTitle })"
                             @mousedown.stop
                             @click.stop
                           />
@@ -276,13 +276,13 @@
                             </div>
                           </div>
                           <div v-else class="selection-empty">
-                            {{ group.options.length ? '没有匹配的依赖' : '暂无可选依赖' }}
+                            {{ group.options.length ? $t('skill.noMatchingDependency') : $t('skill.noAvailableDependency') }}
                           </div>
                         </div>
                       </template>
                     </a-dropdown>
                     <a-button v-else size="small" disabled class="dependency-action-btn">
-                      {{ isBuiltinInstalledSkill ? '系统维护' : '只读' }}
+                      {{ isBuiltinInstalledSkill ? $t('skill.systemMaintained') : $t('skill.readonly') }}
                     </a-button>
                   </div>
 
@@ -298,7 +298,7 @@
                         v-if="canEditSkillDependencies"
                         type="button"
                         class="dependency-chip-remove"
-                        :aria-label="`移除 ${getDependencyOptionLabel(group, value)}`"
+                        :aria-label="$t('skill.removeDependency', { name: getDependencyOptionLabel(group, value) })"
                         @click="removeDependency(group, value)"
                       >
                         <X :size="12" />
@@ -313,22 +313,22 @@
         </a-tabs>
       </div>
       <div v-else-if="!loading" class="detail-empty">
-        <a-empty description="未找到 Skill" />
+        <a-empty :description="$t('skill.notFound')" />
       </div>
     </div>
 
     <a-modal
       v-model:open="createModalVisible"
-      :title="createForm.isDir ? '新建目录' : '新建文件'"
+      :title="createForm.isDir ? $t('skill.newDir') : $t('skill.newFile')"
       @ok="handleCreateNode"
       :confirm-loading="creatingNode"
       width="400px"
     >
       <a-form layout="vertical" class="pt-12">
-        <a-form-item label="路径 (相对于根目录)" required>
+        <a-form-item :label="$t('skill.pathLabel')" required>
           <a-input v-model:value="createForm.path" placeholder="src/main.py" />
         </a-form-item>
-        <a-form-item v-if="!createForm.isDir" label="内容">
+        <a-form-item v-if="!createForm.isDir" :label="$t('skill.contentLabel')">
           <a-textarea v-model:value="createForm.content" :rows="5" />
         </a-form-item>
       </a-form>
@@ -339,6 +339,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import {
   ArrowLeft,
@@ -363,6 +364,7 @@ import ShareConfigForm from '@/components/ShareConfigForm.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const slug = computed(() => decodeURIComponent(route.params.slug))
 
 const loading = ref(false)
@@ -409,16 +411,16 @@ const canEditSkillDependencies = computed(
 )
 
 const sourceTypeLabel = (sourceType) => {
-  if (sourceType === 'builtin') return '内置'
-  if (sourceType === 'remote') return '远程添加'
-  return '上传'
+  if (sourceType === 'builtin') return 'skill.source.builtin'
+  if (sourceType === 'remote') return 'skill.source.remoteAdd'
+  return 'skill.source.upload'
 }
 
 const currentSkillStatusLabel = computed(() => {
   const skill = currentSkill.value
   if (!skill) return ''
-  if (skill.enabled === false) return `${sourceTypeLabel(skill.source_type)} · 已禁用`
-  return sourceTypeLabel(skill.source_type)
+  if (skill.enabled === false) return `${t(sourceTypeLabel(skill.source_type))} · ${t('skill.disabled')}`
+  return t(sourceTypeLabel(skill.source_type))
 })
 
 const selectedFilePreview = computed(() => ({
@@ -447,31 +449,31 @@ const dependencyGroups = computed(() => [
   {
     key: 'tools',
     formKey: 'tool_dependencies',
-    title: '工具依赖',
-    shortTitle: '工具',
-    description: '声明此 Skill 运行时需要调用的工具能力。',
-    dropdownHint: '选择后 Agent 运行时会同时加载这些工具。',
-    emptyText: '未声明工具依赖',
+    title: t('skill.dependency.tools.title'),
+    shortTitle: t('skill.dependency.tools.shortTitle'),
+    description: t('skill.dependency.tools.desc'),
+    dropdownHint: t('skill.dependency.tools.hint'),
+    emptyText: t('skill.dependency.tools.empty'),
     options: toolDependencyOptions.value
   },
   {
     key: 'mcps',
     formKey: 'mcp_dependencies',
-    title: 'MCP 依赖',
-    shortTitle: 'MCP',
-    description: '声明此 Skill 依赖的 MCP 服务。',
-    dropdownHint: '选择此 Skill 运行时需要的 MCP 服务。',
-    emptyText: '未声明 MCP 依赖',
+    title: t('skill.dependency.mcps.title'),
+    shortTitle: t('skill.dependency.mcps.shortTitle'),
+    description: t('skill.dependency.mcps.desc'),
+    dropdownHint: t('skill.dependency.mcps.hint'),
+    emptyText: t('skill.dependency.mcps.empty'),
     options: mcpDependencyOptions.value
   },
   {
     key: 'skills',
     formKey: 'skill_dependencies',
-    title: 'Skill 依赖',
-    shortTitle: 'Skill',
-    description: '声明需要一起加载的其他 Skill。',
-    dropdownHint: '依赖 Skill 会随当前 Skill 一起进入运行时可读范围。',
-    emptyText: '未声明 Skill 依赖',
+    title: t('skill.dependency.skills.title'),
+    shortTitle: t('skill.dependency.skills.shortTitle'),
+    description: t('skill.dependency.skills.desc'),
+    dropdownHint: t('skill.dependency.skills.hint'),
+    emptyText: t('skill.dependency.skills.empty'),
     options: skillDependencyOptions.value
   }
 ])
@@ -543,7 +545,7 @@ const fetchSkillDetail = async () => {
     }
     await fetchDependencyOptions(currentSkill.value?.slug)
   } catch {
-    message.error('加载失败')
+    message.error(t('skill.loadFail'))
   } finally {
     loading.value = false
   }
@@ -597,7 +599,7 @@ const reloadTree = async () => {
     treeData.value = normalized
     expandedKeys.value = expandAllKeys(normalized)
   } catch {
-    message.error('加载目录树失败')
+    message.error(t('skill.treeLoadFail'))
   } finally {
     loading.value = false
   }
@@ -636,7 +638,7 @@ const handleTreeSelect = async (keys, info) => {
     const content = result?.data?.content || ''
     fileContent.value = content
   } catch {
-    message.error('文件读取失败')
+    message.error(t('skill.fileReadFail'))
   }
 }
 
@@ -650,10 +652,10 @@ const saveCurrentFile = async (content = fileContent.value) => {
       content
     })
     fileContent.value = content
-    message.success('已保存')
+    message.success(t('skill.fileSaved'))
     if (selectedPath.value === 'SKILL.md') await fetchSkillDetail()
   } catch {
-    message.error('保存失败')
+    message.error(t('common.saveFailed'))
   } finally {
     savingFile.value = false
   }
@@ -662,20 +664,20 @@ const saveCurrentFile = async (content = fileContent.value) => {
 const confirmDeleteSkill = () => {
   const target = currentSkill.value
   if (!target || !canManageCurrentSkill.value || isBuiltinInstalledSkill.value) return
-  const actionText = '删除'
+  const actionText = t('common.delete')
   Modal.confirm({
-    title: `确认${actionText}技能「${target.slug}」？`,
-    content: '删除后无法恢复，所有文件和配置将永久消失。',
-    okText: `确认${actionText}`,
+    title: t('skill.confirmDeleteTitle', { action: actionText, slug: target.slug }),
+    content: t('skill.confirmDeleteContent'),
+    okText: t('skill.confirmDeleteOk'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       try {
         await skillApi.deleteSkill(target.slug)
-        message.success(`已${actionText}`)
+        message.success(t('skill.deleted'))
         router.push({ path: '/extensions', query: { tab: 'skills' } })
       } catch {
-        message.error(`${actionText}失败`)
+        message.error(t('common.deleteFailed'))
       }
     }
   })
@@ -693,7 +695,7 @@ const handleExport = async () => {
     link.click()
     URL.revokeObjectURL(url)
   } catch {
-    message.error('导出失败')
+    message.error(t('skill.exportFail'))
   }
 }
 
@@ -716,9 +718,9 @@ const handleCreateNode = async () => {
     })
     createModalVisible.value = false
     await reloadTree()
-    message.success('创建成功')
+    message.success(t('skill.created'))
   } catch {
-    message.error('创建失败')
+    message.error(t('skill.createFail'))
   } finally {
     creatingNode.value = false
   }
@@ -729,7 +731,7 @@ const saveShareConfig = async () => {
   if (!isBuiltinInstalledSkill.value) {
     const validation = shareConfigFormRef.value?.validate?.()
     if (validation && !validation.valid) {
-      message.warning(validation.message || '请完善 Skill 生效范围')
+      message.warning(validation.message || t('skill.improveScope'))
       return
     }
   }
@@ -744,9 +746,9 @@ const saveShareConfig = async () => {
       currentSkill.value = result.data
       syncShareConfigFromSkill(result.data)
     }
-    message.success('设置已保存')
+    message.success(t('skill.settingsSaved'))
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '保存设置失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.saveSettingsFail'))
   } finally {
     savingShareConfig.value = false
   }
@@ -767,9 +769,9 @@ const saveDependencies = async () => {
       syncDependencyFormFromSkill(updated)
     }
     await fetchSkillDetail()
-    message.success('依赖已更新')
+    message.success(t('skill.dependenciesUpdated'))
   } catch {
-    message.error('更新失败')
+    message.error(t('skill.updateFail'))
   } finally {
     savingDependencies.value = false
   }

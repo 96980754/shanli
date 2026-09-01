@@ -5,17 +5,22 @@
   >
     <slot />
     <div v-if="!$slots.default && items.length === 0" class="extension-card-grid-empty">
-      <a-empty :image="false" :description="emptyText" />
+      <a-empty :image="false" :description="resolvedEmptyText" />
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+const props = defineProps({
   items: { type: Array, default: () => [] },
-  emptyText: { type: String, default: '暂无数据' },
+  emptyText: { type: String, default: '' },
   minWidth: { type: Number, default: 280 }
 })
+const resolvedEmptyText = computed(() => props.emptyText || t('common.noData'))
 </script>
 
 <style lang="less" scoped>

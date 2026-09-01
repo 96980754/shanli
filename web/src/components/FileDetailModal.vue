@@ -13,7 +13,7 @@
         <!-- 左侧：文件名和图标 -->
         <div class="file-title">
           <FileTypeIcon :name="file?.filename" :size="18" />
-          <span class="file-name">{{ file?.filename || '文件详情' }}</span>
+          <span class="file-name">{{ file?.filename || $t('docModal.fileDetailTitle') }}</span>
         </div>
 
         <div class="header-controls">
@@ -27,7 +27,12 @@
 
           <!-- 下载按钮下拉菜单 -->
           <a-dropdown trigger="click" v-if="file && props.canDownload">
-            <a-button type="default" class="download-btn" title="下载" aria-label="下载">
+            <a-button
+              type="default"
+              class="download-btn"
+              :title="$t('common.download')"
+              :aria-label="$t('common.download')"
+            >
               <Download :size="16" />
               <ChevronDown :size="14" />
             </a-button>
@@ -35,11 +40,11 @@
               <a-menu @click="handleDownloadMenuClick">
                 <a-menu-item key="original" :disabled="!file.file_id">
                   <template #icon><Download :size="16" /></template>
-                  下载原文
+                  {{ $t('docModal.downloadOriginal') }}
                 </a-menu-item>
                 <a-menu-item key="markdown" :disabled="contentState.loading || !mergedContent">
                   <template #icon><FileText :size="16" /></template>
-                  下载 Markdown
+                  {{ $t('docModal.downloadMarkdown') }}
                 </a-menu-item>
               </a-menu>
             </template>
@@ -53,7 +58,7 @@
       </div>
     </template>
     <div v-if="basicLoading" class="loading-container">
-      <a-spin tip="正在加载文档内容..." />
+      <a-spin :tip="$t('docModal.loadingDocument')" />
     </div>
     <div v-else-if="detailError" class="empty-content">
       <p>{{ detailError }}</p>
@@ -61,7 +66,7 @@
     <div v-else-if="file && hasAvailableView" class="file-detail-content">
       <div v-if="viewMode === 'source'" class="content-panel source-panel">
         <div v-if="sourcePreview.loading" class="loading-container">
-          <a-spin tip="正在加载源文件预览..." />
+          <a-spin :tip="$t('docModal.loadingSourcePreview')" />
         </div>
         <AgentFilePreview
           v-else
@@ -80,7 +85,7 @@
       <!-- Markdown 模式 -->
       <div v-else-if="viewMode === 'markdown'" class="content-panel flat-md-preview">
         <div v-if="contentState.loading" class="loading-container">
-          <a-spin tip="正在加载解析内容..." />
+          <a-spin :tip="$t('docModal.loadingParsedContent')" />
         </div>
         <MarkdownPreview
           v-else-if="mergedContent"
@@ -88,14 +93,14 @@
           class="markdown-content"
         />
         <div v-else class="empty-content">
-          <p>{{ contentState.error || '暂无文件内容' }}</p>
+          <p>{{ contentState.error || $t('docModal.noFileContent') }}</p>
         </div>
       </div>
 
       <!-- Chunks 模式：使用 Grid 布局 -->
       <div v-else-if="viewMode === 'chunks'" class="chunks-panel">
         <div v-if="contentState.loading" class="loading-container">
-          <a-spin tip="正在加载分块内容..." />
+          <a-spin :tip="$t('docModal.loadingChunks')" />
         </div>
         <div v-else class="chunk-grid">
           <div v-for="chunk in mappedChunks" :key="chunk.id" class="chunk-card">
@@ -108,19 +113,20 @@
           </div>
         </div>
         <div v-if="!contentState.loading && mappedChunks.length === 0" class="empty-content">
-          <p>{{ contentState.error || '暂无分块信息' }}</p>
+          <p>{{ contentState.error || $t('docModal.noChunkInfo') }}</p>
         </div>
       </div>
     </div>
 
     <div v-else-if="file" class="empty-content">
-      <p>暂无文件内容</p>
+      <p>{{ $t('docModal.noFileContent') }}</p>
     </div>
   </a-modal>
 </template>
 
 <script setup>
 import { computed, h, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 import { getWorkspaceKnowledgeFileContent } from '@/apis/workspace_api'
@@ -157,6 +163,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:open', 'closed'])
+
+const { t } = useI18n()
 
 const visible = computed({
   get: () => props.open,
@@ -302,7 +310,7 @@ const makeViewModeOption = (label, value, icon) => ({
 
 const viewModeOptions = computed(() => {
   const optionMap = {
-    source: makeViewModeOption('源文件', 'source', FileSearch),
+    source: makeViewModeOption(t('docModal.viewSource'), 'source', FileSearch),
     markdown: makeViewModeOption('Markdown', 'markdown', FileText),
     chunks: makeViewModeOption('Chunks', 'chunks', Rows3)
   }
@@ -326,11 +334,11 @@ const loadBasicInfo = async () => {
   try {
     const data = await documentApi.getDocumentBasicInfo(kbId, fileId)
     if (requestId !== basicRequestSeq) return
-    ensureApiSuccess(data, '加载文件信息失败')
+    ensureApiSuccess(data, t('docModal.loadFileInfoFailed'))
 
     const nextFile = normalizeFileMeta(data?.meta || data)
     if (nextFile.is_folder) {
-      detailError.value = '文件夹不支持详情预览'
+      detailError.value = t('docModal.folderNoDetailPreview')
       return
     }
 
@@ -339,7 +347,7 @@ const loadBasicInfo = async () => {
   } catch (error) {
     if (requestId !== basicRequestSeq) return
     console.error('加载文件基本信息失败:', error)
-    detailError.value = error.message || '加载文件信息失败'
+    detailError.value = error.message || t('docModal.loadFileInfoFailed')
     message.error(detailError.value)
   } finally {
     if (requestId === basicRequestSeq) {
@@ -362,7 +370,7 @@ const loadParsedContent = async () => {
   try {
     const data = await documentApi.getDocumentContent(props.kbId, props.fileId)
     if (requestId !== contentRequestSeq) return
-    ensureApiSuccess(data, '加载解析内容失败')
+    ensureApiSuccess(data, t('docModal.loadParsedContentFailed'))
     contentState.value = {
       loading: false,
       loaded: true,
@@ -373,7 +381,7 @@ const loadParsedContent = async () => {
   } catch (error) {
     if (requestId !== contentRequestSeq) return
     console.error('加载解析内容失败:', error)
-    const errorMessage = error.message || '加载解析内容失败'
+    const errorMessage = error.message || t('docModal.loadParsedContentFailed')
     contentState.value = {
       loading: false,
       loaded: false,
@@ -447,21 +455,23 @@ const chunkCount = computed(
 const viewInfoText = computed(() => {
   if (viewMode.value === 'chunks') {
     if (contentState.value.loading) return ''
-    return `${chunkCount.value} 个片段`
+    return t('docModal.chunkCountText', { count: chunkCount.value })
   }
   if (viewMode.value === 'source') {
     if (sourcePreview.value.loading) return ''
-    if (sourceContentLength.value > 0) return `${formatTextLength(sourceContentLength.value)} 字符`
-    if (sourcePreview.value.url) return '源文件预览'
+    if (sourceContentLength.value > 0) {
+      return t('docModal.charCountText', { count: formatTextLength(sourceContentLength.value) })
+    }
+    if (sourcePreview.value.url) return t('docModal.sourcePreviewLabel')
     return ''
   }
   if (contentState.value.loading) return ''
-  return `${formatTextLength(charCount.value)} 字符`
+  return t('docModal.charCountText', { count: formatTextLength(charCount.value) })
 })
 
 // 格式化文本长度
 function formatTextLength(length) {
-  if (!length && length !== 0) return '0 字符'
+  if (!length && length !== 0) return t('docModal.zeroChars')
 
   if (length < 1000) {
     return `${length}`
@@ -501,7 +511,7 @@ const loadSourcePreview = async () => {
   } catch (error) {
     if (requestId !== sourceRequestSeq) return
     console.error('加载源文件预览失败:', error)
-    sourcePreview.value.message = error.message || '加载源文件预览失败'
+    sourcePreview.value.message = error.message || t('docModal.loadSourcePreviewFailed')
     sourcePreview.value.supported = false
     message.error(sourcePreview.value.message)
   } finally {
@@ -523,7 +533,7 @@ const handleDownloadMenuClick = ({ key }) => {
 // 下载原文
 const handleDownloadOriginal = async () => {
   if (!file.value || !props.kbId || !props.fileId) {
-    message.error('文件信息不完整')
+    message.error(t('docModal.fileInfoIncomplete'))
     return
   }
 
@@ -569,10 +579,10 @@ const handleDownloadOriginal = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    message.success('下载成功')
+    message.success(t('docModal.downloadSuccess'))
   } catch (error) {
     console.error('下载文件时出错:', error)
-    message.error(error.message || '下载文件失败')
+    message.error(error.message || t('docModal.downloadFileFailed'))
   } finally {
     downloadingOriginal.value = false
   }
@@ -583,7 +593,7 @@ const handleDownloadMarkdown = () => {
   const content = mergedContent.value
 
   if (!content) {
-    message.error('没有可下载的 Markdown 内容')
+    message.error(t('docModal.noMarkdownToDownload'))
     return
   }
 
@@ -612,10 +622,10 @@ const handleDownloadMarkdown = () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    message.success('下载成功')
+    message.success(t('docModal.downloadSuccess'))
   } catch (error) {
     console.error('下载 Markdown 时出错:', error)
-    message.error(error.message || '下载 Markdown 失败')
+    message.error(error.message || t('docModal.downloadMarkdownFailed'))
   } finally {
     downloadingMarkdown.value = false
   }

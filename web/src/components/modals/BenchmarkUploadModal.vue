@@ -1,26 +1,26 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="上传评估基准"
+    :title="t('benchmark.uploadModalTitle')"
     width="600px"
     :mask-closable="!uploading"
     :closable="!uploading"
     @cancel="handleCancel"
   >
     <a-form ref="formRef" :model="formState" :rules="rules" layout="vertical">
-      <a-form-item label="基准名称" name="name">
-        <a-input v-model:value="formState.name" placeholder="请输入评估基准名称" />
+      <a-form-item :label="t('benchmark.benchmarkNameLabel')" name="name">
+        <a-input v-model:value="formState.name" :placeholder="t('benchmark.namePlaceholder')" />
       </a-form-item>
 
-      <a-form-item label="描述" name="description">
+      <a-form-item :label="t('benchmark.descriptionLabel')" name="description">
         <a-textarea
           v-model:value="formState.description"
-          placeholder="请输入评估基准描述（可选）"
+          :placeholder="t('benchmark.descriptionPlaceholder')"
           :rows="3"
         />
       </a-form-item>
 
-      <a-form-item label="基准文件" name="file">
+      <a-form-item :label="t('benchmark.fileLabel')" name="file">
         <a-upload-dragger
           v-model:fileList="fileList"
           name="file"
@@ -30,17 +30,17 @@
           @remove="handleRemove"
         >
           <UploadCloud class="upload-icon" />
-          <p class="ant-upload-text">点击或拖拽 JSONL 文件到此区域上传</p>
-          <p class="ant-upload-hint">每行一个 JSON 对象，仅支持 .jsonl，最大 100MB</p>
+          <p class="ant-upload-text">{{ $t('benchmark.uploadDragText') }}</p>
+          <p class="ant-upload-hint">{{ $t('benchmark.uploadDragHint') }}</p>
         </a-upload-dragger>
       </a-form-item>
     </a-form>
     <template #footer>
       <div class="benchmark-modal-footer">
         <div class="footer-actions">
-          <a-button :disabled="uploading" @click="handleCancel">取消</a-button>
+          <a-button :disabled="uploading" @click="handleCancel">{{ $t('common.cancel') }}</a-button>
           <a-button type="primary" :loading="uploading" :disabled="uploading" @click="handleUpload">
-            上传
+            {{ $t('common.upload') }}
           </a-button>
         </div>
       </div>
@@ -53,6 +53,9 @@ import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadCloud } from 'lucide-vue-next'
 import { evaluationApi } from '@/apis/knowledge_api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: {
@@ -79,13 +82,13 @@ const formState = reactive({
 })
 
 // 表单验证规则
-const rules = {
+const rules = computed(() => ({
   name: [
-    { required: true, message: '请输入基准名称', trigger: 'blur' },
-    { min: 2, max: 100, message: '基准名称长度应在2-100个字符之间', trigger: 'blur' }
+    { required: true, message: t('benchmark.nameRequired'), trigger: 'blur' },
+    { min: 2, max: 100, message: t('benchmark.nameLengthRange'), trigger: 'blur' }
   ],
-  file: [{ required: true, message: '请选择基准文件', trigger: 'change' }]
-}
+  file: [{ required: true, message: t('benchmark.selectFileRequired'), trigger: 'change' }]
+}))
 
 // 双向绑定visible
 const visible = computed({
@@ -97,14 +100,14 @@ const visible = computed({
 const beforeUpload = async (file) => {
   // 检查文件类型
   if (!file.name.endsWith('.jsonl')) {
-    message.error('仅支持 JSONL 格式文件')
+    message.error(t('benchmark.jsonlOnlyError'))
     return false
   }
 
   // 检查文件大小（限制为100MB）
   const isLt100M = file.size / 1024 / 1024 < 100
   if (!isLt100M) {
-    message.error('文件大小不能超过 100MB')
+    message.error(t('benchmark.fileTooLargeError'))
     return false
   }
 
@@ -113,7 +116,7 @@ const beforeUpload = async (file) => {
     const content = await new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target.result)
-      reader.onerror = () => reject(new Error('文件读取失败'))
+      reader.onerror = () => reject(new Error(t('benchmark.fileReadFailed')))
       reader.readAsText(file)
     })
 
@@ -121,7 +124,7 @@ const beforeUpload = async (file) => {
 
     // 验证至少有一行
     if (lines.length === 0) {
-      message.error('文件不能为空')
+      message.error(t('benchmark.fileEmptyError'))
       return false
     }
 
@@ -138,9 +141,9 @@ const beforeUpload = async (file) => {
     return true
   } catch (error) {
     if (error instanceof SyntaxError) {
-      message.error('文件格式错误，请检查JSONL格式')
+      message.error(t('benchmark.fileFormatError'))
     } else {
-      message.error('文件验证失败: ' + error.message)
+      message.error(t('benchmark.fileValidateFailed', { reason: error.message }))
     }
     return false
   }
@@ -158,7 +161,7 @@ const handleUpload = async () => {
     await formRef.value.validate()
 
     if (!formState.file) {
-      message.error('请选择基准文件')
+      message.error(t('benchmark.selectFileRequired'))
       return
     }
 
@@ -170,15 +173,15 @@ const handleUpload = async () => {
     })
 
     if (response.message === 'success') {
-      message.success('上传成功')
+      message.success(t('benchmark.uploadFileSuccess'))
       handleCancel()
       emit('success')
     } else {
-      message.error(response.message || '上传失败')
+      message.error(response.message || t('benchmark.uploadFailed'))
     }
   } catch (error) {
     console.error('上传失败:', error)
-    message.error('上传失败')
+    message.error(t('benchmark.uploadFailed'))
   } finally {
     uploading.value = false
   }

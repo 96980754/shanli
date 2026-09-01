@@ -800,6 +800,112 @@ class KnowledgeFileRepository:
             )
             return list(result.scalars().all())
 
+    async def list_same_name_folders(
+        self,
+        *,
+        kb_id: str,
+        parent_id: str | None,
+        filename: str,
+    ) -> list[KnowledgeFile]:
+        """查找同目录下同名的真实文件夹（含大小写忽略的兜底匹配），用于文件夹改名重名校验。"""
+        normalized_filename = normalize_document_filename(filename)
+        if not normalized_filename:
+            return []
+
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile)
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.is_folder.is_(True),
+                    self._parent_condition(parent_id),
+                    KnowledgeFile.is_current.is_(True),
+                    or_(
+                        KnowledgeFile.normalized_name == normalized_filename,
+                        and_(
+                            KnowledgeFile.normalized_name.is_(None),
+                            func.lower(func.trim(KnowledgeFile.filename)) == normalized_filename,
+                        ),
+                        func.lower(KnowledgeFile.filename) == normalized_filename.lower(),
+                    ),
+                )
+                .order_by(KnowledgeFile.created_at.desc(), KnowledgeFile.file_id.asc())
+            )
+            return list(result.scalars().all())
+
+    async def list_current_files_with_prefix(
+        self,
+        *,
+        kb_id: str,
+        parent_id: str | None,
+        path_prefix: str,
+    ) -> list[KnowledgeFile]:
+        """列出虚拟目录前缀下所有当前版本文件，用于虚拟文件夹改名级联重写与碰撞排除。"""
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
+                    self._parent_condition(parent_id),
+                    KnowledgeFile.filename.like(self._like_prefix(path_prefix), escape="\\"),
+                )
+            )
+            return list(result.scalars().all())
+
+    async def count_filenames_with_prefix(
+        self,
+        *,
+        kb_id: str,
+        parent_id: str | None,
+        path_prefix: str,
+        exclude_file_ids: tuple[str, ...] = (),
+    ) -> int:
+        """统计虚拟目录前缀下当前版本文件数（可排除旧组），用于虚拟文件夹改名碰撞检测。"""
+        async with pg_manager.get_async_session_context() as session:
+            query = select(func.count(KnowledgeFile.file_id)).where(
+                KnowledgeFile.kb_id == kb_id,
+                KnowledgeFile.is_folder.is_(False),
+                KnowledgeFile.is_current.is_(True),
+                self._parent_condition(parent_id),
+                KnowledgeFile.filename.like(self._like_prefix(path_prefix), escape="\\"),
+            )
+            if exclude_file_ids:
+                query = query.where(KnowledgeFile.file_id.notin_(exclude_file_ids))
+            result = await session.execute(query)
+            return result.scalar_one()
+
+    async def rename_files_with_prefix(
+        self,
+        *,
+        kb_id: str,
+        parent_id: str | None,
+        old_prefix: str,
+        new_prefix: str,
+    ) -> list[KnowledgeFile]:
+        """批量重写虚拟目录前缀下文件的 filename/normalized_name，单 session 内原子提交。
+
+        只处理 is_current=True 的行；历史版本行保留旧名（有意行为）。任一行改名后超长则抛错回滚。
+        """
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.is_current.is_(True),
+                    self._parent_condition(parent_id),
+                    KnowledgeFile.filename.like(self._like_prefix(old_prefix), escape="\\"),
+                )
+            )
+            records = list(result.scalars().all())
+            for record in records:
+                new_filename = new_prefix + (record.filename or "")[len(old_prefix) :]
+                if len(new_filename) > 512:
+                    raise ValueError(f"重命名后文件名过长：{new_filename}")
+                record.filename = new_filename
+                record.normalized_name = normalize_document_filename(new_filename)
+            return records
+
     async def list_by_content_hash(self, *, kb_id: str, content_hash: str) -> list[KnowledgeFile]:
         normalized_hash = content_hash.strip()
         if not normalized_hash:

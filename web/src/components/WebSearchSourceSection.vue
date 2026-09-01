@@ -1,12 +1,15 @@
 <template>
   <div class="source-section">
-    <div class="section-title">网络搜索来源 ({{ sources.length }})</div>
-    <WebSearchResultList :results="sources" empty-text="未找到网络搜索来源" />
+    <div class="section-title">{{ $t('sources.webSearchTitle') }} ({{ sources.length }})</div>
+    <WebSearchResultList :results="sources" :empty-text="t('sources.webSearchEmpty')" />
   </div>
 </template>
 
 <script setup>
 import WebSearchResultList from '@/components/sources/WebSearchResultList.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps({
   sources: {

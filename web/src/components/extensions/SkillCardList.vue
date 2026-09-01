@@ -1,6 +1,6 @@
 <template>
   <div class="skill-cards-page extension-page-root">
-    <PageShoulder search-placeholder="搜索技能..." v-model:search="searchQuery">
+    <PageShoulder :search-placeholder="$t('skill.searchPlaceholder')" v-model:search="searchQuery">
       <template #actions>
         <template v-if="!isBatchDeleteMode">
           <a-button
@@ -8,7 +8,7 @@
             :disabled="loading || importing || filteredDeletableSkills.length === 0"
             class="lucide-icon-btn"
           >
-            <span>批量管理</span>
+            <span>{{ $t('skill.batchManage') }}</span>
           </a-button>
           <a-button
             @click="handleOpenRemoteInstall"
@@ -16,7 +16,7 @@
             class="lucide-icon-btn"
           >
             <Computer :size="14" />
-            <span>远程安装</span>
+            <span>{{ $t('skill.remoteInstall') }}</span>
           </a-button>
           <a-upload
             accept=".zip,.md"
@@ -27,19 +27,19 @@
           >
             <a-button type="primary" :loading="importing" class="lucide-icon-btn">
               <Upload :size="14" />
-              <span>上传 Skill</span>
+              <span>{{ $t('skill.uploadSkill') }}</span>
             </a-button>
           </a-upload>
-          <a-tooltip title="刷新 Skills" placement="bottom">
+          <a-tooltip :title="$t('skill.refreshSkills')" placement="bottom">
             <a-button class="lucide-icon-btn" :disabled="loading" @click="fetchSkills">
               <RefreshCw :size="14" />
             </a-button>
           </a-tooltip>
         </template>
         <template v-else>
-          <a-button size="small" type="link" @click="handleBatchSelectAll">全选</a-button>
-          <a-button size="small" type="link" @click="handleBatchSelectInvert">反选</a-button>
-          <a-button size="small" type="link" @click="handleBatchSelectNone">清空</a-button>
+          <a-button size="small" type="link" @click="handleBatchSelectAll">{{ $t('skill.selectAll') }}</a-button>
+          <a-button size="small" type="link" @click="handleBatchSelectInvert">{{ $t('skill.selectInvert') }}</a-button>
+          <a-button size="small" type="link" @click="handleBatchSelectNone">{{ $t('skill.selectNone') }}</a-button>
           <a-button
             type="primary"
             danger
@@ -47,9 +47,9 @@
             :loading="loading"
             @click="handleBatchDelete"
           >
-            批量删除 ({{ selectedCardSlugs.length }})
+            {{ $t('skill.batchDelete', { count: selectedCardSlugs.length }) }}
           </a-button>
-          <a-button :disabled="loading" @click="exitBatchDeleteMode">退出管理</a-button>
+          <a-button :disabled="loading" @click="exitBatchDeleteMode">{{ $t('skill.exitBatch') }}</a-button>
         </template>
       </template>
     </PageShoulder>
@@ -63,13 +63,13 @@
           <BookMarked :size="22" />
         </div>
         <div class="skill-empty-title">
-          {{ searchQuery ? '没有匹配的 Skill' : '还没有添加 Skill' }}
+          {{ searchQuery ? $t('skill.emptyNoMatch') : $t('skill.emptyNoAdd') }}
         </div>
         <div class="skill-empty-desc">
           {{
             searchQuery
-              ? '换个关键词试试，或清空搜索条件。'
-              : '可以从远程仓库安装，或上传本地 Skill 文件。'
+              ? $t('skill.emptyNoMatchDesc')
+              : $t('skill.emptyNoAddDesc')
           }}
         </div>
       </div>
@@ -102,7 +102,7 @@
             <InfoCard
               variant="mini"
               :title="formatExtensionCardTitle(skill.name)"
-              :description="skill.description || '暂无描述'"
+              :description="skill.description || $t('common.noDescription')"
               :default-icon="BookMarkedIcon"
               @click="handleCardClick(skill)"
               :class="{
@@ -117,7 +117,7 @@
                   class="skill-enabled-action"
                   :class="{ loading: isRecommendedSkillInstalling(skill.source) }"
                   :disabled="isRecommendedSkillInstallDisabled(skill.source)"
-                  aria-label="安装推荐 Skill"
+                  :aria-label="$t('skill.installRecommended')"
                   @click.stop="handleRecommendedSkillInstall(skill)"
                 >
                   <LoaderCircle
@@ -133,7 +133,7 @@
                   class="skill-enabled-action"
                   :class="{ enabled: skill.enabled !== false }"
                   :disabled="!canManageSkill(skill) || isSkillToggling(skill.slug)"
-                  :aria-label="skill.enabled === false ? '启用 Skill' : '禁用 Skill'"
+                  :aria-label="skill.enabled === false ? $t('skill.enableSkill') : $t('skill.disableSkill')"
                   @click.stop="handleToggleSkillEnabled(skill)"
                 >
                   <Plus v-if="skill.enabled === false" :size="15" class="action-icon" />
@@ -171,12 +171,12 @@
               <div class="skill-preview-meta">
                 <span
                   >{{
-                    sourceTypeLabel(previewSkill.sourceType || previewSkill.source_type)
+                    $t(sourceTypeLabel(previewSkill.sourceType || previewSkill.source_type))
                   }}
                   Skill</span
                 >
                 <span v-if="previewSkill.enabled === false" class="skill-preview-disabled-tag">
-                  已禁用
+                  {{ $t('skill.disabled') }}
                 </span>
               </div>
             </div>
@@ -201,7 +201,7 @@
             :content="skillPreviewMarkdown"
             :compact="true"
           />
-          <a-empty v-else :description="skillPreviewError || '未读取到 SKILL.md'" />
+          <a-empty v-else :description="skillPreviewError || $t('skill.noSkillMd')" />
         </div>
 
         <div class="skill-preview-footer">
@@ -212,13 +212,13 @@
               :loading="deletingPreviewSkill"
               @click="confirmDeletePreviewSkill"
             >
-              卸载
+              {{ $t('skill.uninstall') }}
             </a-button>
           </div>
           <div class="skill-preview-footer-right">
-            <a-button @click="closeSkillPreview">关闭</a-button>
+            <a-button @click="closeSkillPreview">{{ $t('common.close') }}</a-button>
             <a-button type="primary" class="lucide-icon-btn" @click="goToPreviewSkillManagement">
-              <span>去管理</span>
+              <span>{{ $t('skill.goManage') }}</span>
             </a-button>
           </div>
         </div>
@@ -227,7 +227,7 @@
 
     <a-modal
       v-model:open="remoteInstallModalVisible"
-      title="远程安装 Skill"
+      :title="$t('skill.remoteInstallTitle')"
       :footer="null"
       width="760px"
       :closable="!installingRemoteSkill"
@@ -242,14 +242,14 @@
             class="install-tabs"
           >
             <!-- Tab 1: 按仓库拉取 -->
-            <a-tab-pane key="repo" tab="按仓库拉取">
+            <a-tab-pane key="repo" :tab="$t('skill.tabRepo')">
               <div class="tab-content-wrapper">
                 <a-form layout="vertical" class="remote-install-form">
                   <div class="repo-input-row">
                     <div class="repo-input-field">
                       <a-input
                         v-model:value="remoteInstallForm.source"
-                        placeholder="来源仓库，如 anthropics/skills 或 GitHub URL"
+                        :placeholder="$t('skill.repoPlaceholder')"
                         :disabled="installingRemoteSkill"
                       >
                         <template #suffix>
@@ -259,7 +259,7 @@
                             overlay-class-name="history-dropdown-menu"
                           >
                             <div class="history-trigger-wrapper">
-                              <a-tooltip title="历史仓库">
+                              <a-tooltip :title="$t('skill.historyRepos')">
                                 <History
                                   :size="14"
                                   class="history-icon-trigger"
@@ -270,7 +270,7 @@
                             <template #overlay>
                               <a-menu @click="handleSelectHistory">
                                 <a-menu-item v-if="repoHistory.length === 0" disabled>
-                                  <span class="history-empty-text">暂无使用历史</span>
+                                  <span class="history-empty-text">{{ $t('skill.noHistory') }}</span>
                                 </a-menu-item>
                                 <template v-else>
                                   <a-menu-item v-for="item in repoHistory" :key="item">
@@ -293,7 +293,7 @@
                                   >
                                     <div class="clear-history-btn-content">
                                       <Trash2 :size="12" class="clear-icon" />
-                                      <span>清空历史记录</span>
+                                      <span>{{ $t('skill.clearHistory') }}</span>
                                     </div>
                                   </a-menu-item>
                                 </template>
@@ -309,21 +309,19 @@
                       :disabled="installingRemoteSkill"
                       @click="handleListRemoteSkills"
                     >
-                      拉取技能
+                      {{ $t('skill.fetchSkills') }}
                     </a-button>
                   </div>
                   <div class="repo-hint-text">
-                    支持 `owner/repo` 或 GitHub URL。可前往
+                    {{ $t('skill.repoHintLead') }}
                     <a href="https://skills.sh/" target="_blank" rel="noopener noreferrer"
                       >skills.sh</a
                     >
-                    查询开源 skills。 也支持 ModelScope 单个 Skill
-                    地址，每次仅限安装一个：`https://modelscope.cn/skills/&lt;skill-id&gt;`。 Skill
-                    ID 可在
+                    {{ $t('skill.repoHintBody') }}
                     <a href="https://modelscope.cn/skills" target="_blank" rel="noopener noreferrer"
-                      >ModelScope Skill 市场</a
+                      >{{ $t('skill.modelscopeMarket') }}</a
                     >
-                    进入详情后从地址栏获取。
+                    {{ $t('skill.repoHintTail') }}
                   </div>
 
                   <!-- 仓库技能分页多选列表 -->
@@ -332,7 +330,7 @@
                       <div class="single-remote-skill-card">
                         <div class="single-remote-skill-name">{{ singleRepoSkill.name }}</div>
                         <div class="single-remote-skill-meta">
-                          {{ singleRepoSkill.description || '暂无描述' }}
+                          {{ singleRepoSkill.description || $t('common.noDescription') }}
                         </div>
                       </div>
                     </template>
@@ -340,18 +338,18 @@
                       <div class="list-operations-bar">
                         <div class="op-buttons">
                           <a-button size="small" type="link" @click="handleRepoSelectAll"
-                            >全选</a-button
+                            >{{ $t('skill.selectAll') }}</a-button
                           >
                           <a-button size="small" type="link" @click="handleRepoSelectInvert"
-                            >反选</a-button
+                            >{{ $t('skill.selectInvert') }}</a-button
                           >
                           <a-button size="small" type="link" @click="handleRepoSelectNone"
-                            >清空</a-button
+                            >{{ $t('skill.selectNone') }}</a-button
                           >
                         </div>
                         <a-input
                           v-model:value="repoFilterKeyword"
-                          placeholder="本地过滤检索..."
+                          :placeholder="$t('skill.filterPlaceholder')"
                           size="small"
                           style="width: 180px"
                           allow-clear
@@ -380,11 +378,11 @@
                                 </div>
                                 <div class="skill-desc-col">
                                   <a-tooltip
-                                    :title="item.description || '暂无描述'"
+                                    :title="item.description || $t('common.noDescription')"
                                     placement="topLeft"
                                   >
                                     <span class="skill-item-desc">{{
-                                      item.description || '暂无描述'
+                                      item.description || $t('common.noDescription')
                                     }}</span>
                                   </a-tooltip>
                                 </div>
@@ -394,8 +392,7 @@
                         </a-list>
                       </div>
                       <div class="remote-skill-summary">
-                        已选 {{ selectedRepoSkills.length }} / 共发现
-                        {{ remoteSkillOptions.length }} 个 skills。
+                        {{ $t('skill.repoSummary', { selected: selectedRepoSkills.length, total: remoteSkillOptions.length }) }}
                       </div>
                     </template>
                   </div>
@@ -404,14 +401,14 @@
             </a-tab-pane>
 
             <!-- Tab 2: 全局搜索发现 -->
-            <a-tab-pane key="search" tab="全局搜索发现">
+            <a-tab-pane key="search" :tab="$t('skill.tabSearch')">
               <div class="tab-content-wrapper">
                 <a-form layout="vertical" class="remote-install-form">
                   <div class="repo-input-row">
                     <div class="repo-input-field">
                       <a-input
                         v-model:value="searchKeyword"
-                        placeholder="输入 web、python 等关键字进行全局查找"
+                        :placeholder="$t('skill.searchPlaceholderGlobal')"
                         :disabled="installingRemoteSkill"
                         @pressEnter="handleSearchRemoteSkills"
                       />
@@ -422,11 +419,11 @@
                       :disabled="installingRemoteSkill"
                       @click="handleSearchRemoteSkills"
                     >
-                      查找技能
+                      {{ $t('skill.searchSkills') }}
                     </a-button>
                   </div>
                   <div class="repo-hint-text">
-                    直接输入关键字检索 skills.sh 上的开源 Skills 并批量拉取安装。
+                    {{ $t('skill.searchHint') }}
                   </div>
 
                   <!-- 搜索结果列表 -->
@@ -454,13 +451,13 @@
                       <div class="list-operations-bar">
                         <div class="op-buttons">
                           <a-button size="small" type="link" @click="handleSearchSelectAll"
-                            >全选</a-button
+                            >{{ $t('skill.selectAll') }}</a-button
                           >
                           <a-button size="small" type="link" @click="handleSearchSelectInvert"
-                            >反选</a-button
+                            >{{ $t('skill.selectInvert') }}</a-button
                           >
                           <a-button size="small" type="link" @click="handleSearchSelectNone"
-                            >清空</a-button
+                            >{{ $t('skill.selectNone') }}</a-button
                           >
                         </div>
                       </div>
@@ -507,8 +504,7 @@
                         </a-list>
                       </div>
                       <div class="remote-skill-summary">
-                        已选择 {{ selectedSearchSkills.length }} / 共找到
-                        {{ searchedSkills.length }} 个 skills。
+                        {{ $t('skill.searchSummary', { selected: selectedSearchSkills.length, total: searchedSkills.length }) }}
                       </div>
                     </template>
                   </div>
@@ -520,7 +516,7 @@
           <!-- 底部操作区 -->
           <div class="modal-footer-actions">
             <a-button :disabled="installingRemoteSkill" @click="handleCancelInstall">
-              取消
+              {{ $t('common.cancel') }}
             </a-button>
             <a-button
               type="primary"
@@ -532,9 +528,7 @@
               "
               @click="startInstallRemoteSkills"
             >
-              解析并确认 (已选
-              {{ activeTab === 'repo' ? selectedRepoSkills.length : selectedSearchSkills.length }}
-              个)
+              {{ $t('skill.parseConfirm', { count: activeTab === 'repo' ? selectedRepoSkills.length : selectedSearchSkills.length }) }}
             </a-button>
           </div>
         </div>
@@ -543,21 +537,21 @@
 
     <a-modal
       v-model:open="draftConfirmVisible"
-      title="确认添加 Skill"
+      :title="$t('skill.confirmAddTitle')"
       width="720px"
       :confirm-loading="draftConfirmLoading"
       :closable="!draftConfirmLoading"
       :mask-closable="!draftConfirmLoading"
       :keyboard="!draftConfirmLoading"
-      ok-text="确认添加"
-      cancel-text="取消"
+      :ok-text="$t('skill.confirmAdd')"
+      :cancel-text="$t('common.cancel')"
       @ok="confirmSkillDraft"
       @cancel="cancelSkillDraft"
     >
       <div v-if="pendingDraft" class="skill-draft-confirm-panel">
         <div class="draft-source-row">
-          <span class="draft-source-label">来源</span>
-          <span>{{ pendingDraft.source || sourceTypeLabel(pendingDraft.source_type) }}</span>
+          <span class="draft-source-label">{{ $t('skill.sourceLabel') }}</span>
+          <span>{{ pendingDraft.source || $t(sourceTypeLabel(pendingDraft.source_type)) }}</span>
         </div>
         <div class="draft-items-list">
           <div
@@ -568,18 +562,18 @@
           >
             <div class="draft-item-main">
               <div class="draft-item-title">{{ item.name || item.slug }}</div>
-              <div class="draft-item-desc">{{ item.description || item.error || '暂无描述' }}</div>
+              <div class="draft-item-desc">{{ item.description || item.error || $t('common.noDescription') }}</div>
               <div v-if="item.warnings?.length" class="draft-item-warning">
                 {{ item.warnings.join('；') }}
               </div>
             </div>
-            <a-tag v-if="item.success === false" color="red">解析失败</a-tag>
+            <a-tag v-if="item.success === false" color="red">{{ $t('skill.parseFailed') }}</a-tag>
             <a-tag v-else color="blue">{{
-              sourceTypeLabel(item.source_type || pendingDraft.source_type)
+              $t(sourceTypeLabel(item.source_type || pendingDraft.source_type))
             }}</a-tag>
           </div>
         </div>
-        <div class="draft-share-title">生效范围</div>
+        <div class="draft-share-title">{{ $t('skill.scopeTitle') }}</div>
         <ShareConfigForm
           ref="shareConfigFormRef"
           v-model="draftShareConfig"
@@ -593,6 +587,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import {
   RefreshCw,
@@ -615,44 +610,42 @@ import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import { formatExtensionCardTitle } from '@/utils/extensionDisplayName'
 
 const BookMarkedIcon = BookMarked
+
+const { t } = useI18n()
+
 const RECOMMENDED_SKILLS = [
   {
     slug: 'skill-creator',
     name: 'skill-creator',
-    description:
-      '创建、维护和改进 Agent Skill，适合编写 SKILL.md、设计使用流程、整理依赖与优化技能说明。',
+    description: t('skill.recommended.skillCreator'),
     source: 'https://modelscope.cn/skills/@anthropics/skill-creator',
     aliases: ['skill-creator', 'Skill Creator']
   },
   {
     slug: 'frontend-design',
     name: 'frontend-design',
-    description:
-      '提供前端界面与交互设计建议，适合规划页面结构、组件状态、响应式布局和可访问性细节。',
+    description: t('skill.recommended.frontendDesign'),
     source: 'https://modelscope.cn/skills/@anthropics/frontend-design',
     aliases: ['frontend-design', 'Frontend Design']
   },
   {
     slug: 'docx',
     name: 'docx',
-    description:
-      '读取、编辑和生成 Word DOCX 文档，适合处理正文、表格、批注、样式和文档结构化内容。',
+    description: t('skill.recommended.docx'),
     source: 'https://modelscope.cn/skills/@anthropics/docx',
     aliases: ['docx', 'DOCX']
   },
   {
     slug: 'xlsx',
     name: 'xlsx',
-    description:
-      '读取、分析和生成 Excel XLSX 表格，适合处理多工作表数据、公式结果、统计汇总和结构化导出。',
+    description: t('skill.recommended.xlsx'),
     source: 'https://modelscope.cn/skills/@anthropics/xlsx',
     aliases: ['xlsx', 'XLSX']
   },
   {
     slug: 'pdf',
     name: 'pdf',
-    description:
-      '读取、提取和分析 PDF 文档内容，适合从报告、论文、合同等文件中整理要点、定位证据并生成摘要。',
+    description: t('skill.recommended.pdf'),
     source: 'https://modelscope.cn/skills/@anthropics/pdf',
     aliases: ['pdf', 'PDF']
   }
@@ -747,17 +740,17 @@ const filteredInstalledSkills = computed(() => installedSkillCards.value.filter(
 const skillGroups = computed(() => [
   {
     key: 'recommended',
-    title: '推荐',
+    title: t('skill.group.recommended'),
     skills: isBatchDeleteMode.value ? [] : recommendedSkillCards.value.filter(matchesSearch)
   },
   {
     key: 'builtin',
-    title: '内置',
+    title: t('skill.source.builtin'),
     skills: filteredInstalledSkills.value.filter((skill) => skill.sourceType === 'builtin')
   },
   {
     key: 'uploaded',
-    title: '上传的',
+    title: t('skill.group.uploaded'),
     skills: filteredInstalledSkills.value.filter((skill) => skill.sourceType !== 'builtin')
   }
 ])
@@ -848,9 +841,9 @@ const handleToggleSearchSkill = (item, checked) => {
 }
 
 const sourceTypeLabel = (sourceType) => {
-  if (sourceType === 'builtin') return '内置'
-  if (sourceType === 'remote') return '远程'
-  return '上传'
+  if (sourceType === 'builtin') return 'skill.source.builtin'
+  if (sourceType === 'remote') return 'skill.source.remote'
+  return 'skill.source.upload'
 }
 
 const canManageSkill = (skill) => skill?.can_manage !== false
@@ -883,7 +876,7 @@ const openSkillPreview = async (skill) => {
     skillPreviewMarkdown.value = result?.data?.content || ''
   } catch (error) {
     if (requestSeq !== previewRequestSeq || previewSkill.value?.slug !== skill.slug) return
-    skillPreviewError.value = error?.response?.data?.detail || error.message || '读取 SKILL.md 失败'
+    skillPreviewError.value = error?.response?.data?.detail || error.message || t('skill.readSkillMdFail')
   } finally {
     if (requestSeq === previewRequestSeq) skillPreviewLoading.value = false
   }
@@ -935,9 +928,9 @@ const handleToggleSkillEnabled = async (skill) => {
         ? { ...updatedSkill, sourceType: updatedSkill.source_type || 'upload' }
         : { ...previewSkill.value, enabled }
     }
-    message.success(`Skill 已${enabled ? '启用' : '禁用'}`)
+    message.success(enabled ? t('skill.toggledEnabled') : t('skill.toggledDisabled'))
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '更新 Skill 启用状态失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.updateEnabledFail'))
   } finally {
     togglingSkillSlugs.value = togglingSkillSlugs.value.filter((slug) => slug !== skill.slug)
   }
@@ -953,21 +946,21 @@ const confirmDeletePreviewSkill = () => {
   if (!target || !canDeletePreviewSkill.value || deletingPreviewSkill.value) return
 
   Modal.confirm({
-    title: `卸载 ${target.name || target.slug}`,
-    content: '卸载后会删除该 Skill 的数据库记录和本地文件，操作不可恢复。',
-    okText: '卸载',
+    title: t('skill.uninstallTitle', { name: target.name || target.slug }),
+    content: t('skill.uninstallContent'),
+    okText: t('skill.uninstall'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       deletingPreviewSkill.value = true
       try {
         await skillApi.deleteSkill(target.slug)
-        message.success('Skill 已卸载')
+        message.success(t('skill.uninstalled'))
         closeSkillPreview()
         previewSkill.value = null
         await fetchSkills()
       } catch (error) {
-        message.error(error?.response?.data?.detail || error.message || '卸载 Skill 失败')
+        message.error(error?.response?.data?.detail || error.message || t('skill.uninstallFail'))
       } finally {
         deletingPreviewSkill.value = false
       }
@@ -1009,11 +1002,11 @@ const handleBatchDelete = () => {
   if (deletableSlugs.length === 0) return
 
   Modal.confirm({
-    title: '确定要批量删除选中的技能吗？',
-    content: `您已选中了 ${deletableSlugs.length} 个技能。该操作将从数据库和物理磁盘中彻底删除这些技能包，且不可恢复！`,
-    okText: '确定删除',
+    title: t('skill.batchDeleteTitle'),
+    content: t('skill.batchDeleteContent', { count: deletableSlugs.length }),
+    okText: t('skill.confirmDelete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       loading.value = true
       try {
@@ -1023,15 +1016,15 @@ const handleBatchDelete = () => {
         const failList = results.filter((r) => !r.success)
 
         if (failList.length === 0) {
-          message.success(`批量删除成功，已删除 ${successList.length} 个技能`)
+          message.success(t('skill.batchDeleteSuccess', { count: successList.length }))
         } else {
-          message.warning(`批量删除完成：成功 ${successList.length} 个，失败 ${failList.length} 个`)
+          message.warning(t('skill.batchDeleteDone', { success: successList.length, fail: failList.length }))
         }
 
         exitBatchDeleteMode()
         await fetchSkills()
       } catch (error) {
-        message.error(error?.response?.data?.detail || error.message || '批量删除失败')
+        message.error(error?.response?.data?.detail || error.message || t('skill.batchDeleteFail'))
       } finally {
         loading.value = false
       }
@@ -1046,7 +1039,7 @@ const fetchSkills = async () => {
     skills.value = skillResult?.data || []
     allowedSkillAccessLevels.value = skillResult?.allowed_access_levels || ['user']
   } catch {
-    message.error('加载失败')
+    message.error(t('skill.loadFail'))
   } finally {
     loading.value = false
   }
@@ -1055,7 +1048,7 @@ const fetchSkills = async () => {
 const beforeSkillUpload = (file) => {
   const lower = file.name.toLowerCase()
   if (!lower.endsWith('.zip') && lower !== 'skill.md') {
-    message.error('仅支持上传 .zip 文件或 SKILL.md 文件')
+    message.error(t('skill.uploadTypeError'))
     return false
   }
   return true
@@ -1081,7 +1074,7 @@ const normalizePendingDraft = (draftPayload) => {
   return {
     ...first,
     draft_ids: validDrafts.map((item) => item.draft_id),
-    source: validDrafts.length === 1 ? first.source : `${validDrafts.length} 个来源`,
+    source: validDrafts.length === 1 ? first.source : t('skill.multipleSources', { count: validDrafts.length }),
     items: validDrafts.flatMap((draft) =>
       (draft.items || []).map((item) => ({
         ...item,
@@ -1100,7 +1093,7 @@ const openDraftConfirmation = async (draftPayload) => {
     await Promise.allSettled(
       draft.draft_ids.map((draftId) => skillApi.discardSkillInstallDraft(draftId))
     )
-    message.error('没有可添加的 Skill')
+    message.error(t('skill.noAddableSkill'))
     return false
   }
   pendingDraft.value = draft
@@ -1119,7 +1112,7 @@ const cancelSkillDraft = async () => {
 const confirmSkillDraft = async () => {
   const validation = shareConfigFormRef.value?.validate?.()
   if (validation && !validation.valid) {
-    message.warning(validation.message || '请完善 Skill 生效范围')
+    message.warning(validation.message || t('skill.improveScope'))
     return
   }
 
@@ -1136,15 +1129,15 @@ const confirmSkillDraft = async () => {
     const successCount = results.filter((item) => item.success).length
     const failedCount = results.length - successCount
     if (failedCount === 0) {
-      message.success(`已添加 ${successCount} 个 Skill`)
+      message.success(t('skill.addedSkill', { count: successCount }))
     } else {
-      message.warning(`添加完成：成功 ${successCount} 个，失败 ${failedCount} 个`)
+      message.warning(t('skill.addDone', { success: successCount, fail: failedCount }))
     }
     remoteInstallModalVisible.value = false
     resetDraftConfirmation()
     await fetchSkills()
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '确认添加 Skill 失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.confirmAddFail'))
   } finally {
     draftConfirmLoading.value = false
   }
@@ -1155,11 +1148,11 @@ const handleImportUpload = async ({ file, onSuccess, onError }) => {
   try {
     const result = await skillApi.prepareSkillUpload(file)
     if (await openDraftConfirmation(result?.data)) {
-      message.success('解析完成，请确认 Skill 生效范围')
+      message.success(t('skill.parseComplete'))
     }
     onSuccess?.(result)
   } catch (e) {
-    message.error(e?.response?.data?.detail || e.message || '解析 Skill 失败')
+    message.error(e?.response?.data?.detail || e.message || t('skill.parseSkillFail'))
     onError?.(e)
   } finally {
     importing.value = false
@@ -1196,7 +1189,7 @@ const rememberRemoteSource = (source) => {
 const handleListRemoteSkills = async () => {
   const source = remoteInstallForm.source.trim()
   if (!source) {
-    message.warning('请输入来源仓库')
+    message.warning(t('skill.enterRepo'))
     return
   }
   listingRemoteSkills.value = true
@@ -1206,18 +1199,18 @@ const handleListRemoteSkills = async () => {
     selectedRepoSkills.value =
       remoteSkillOptions.value.length === 1 ? [remoteSkillOptions.value[0].name] : []
     if (!remoteSkillOptions.value.length) {
-      message.warning('未发现可安装的 Skills')
+      message.warning(t('skill.noInstallableSkills'))
       return
     }
     if (remoteSkillOptions.value.length === 1) {
-      message.success('已发现 1 个 Skill，已自动选中')
+      message.success(t('skill.foundOneSkill'))
     } else {
-      message.success(`已发现 ${remoteSkillOptions.value.length} 个 Skills`)
+      message.success(t('skill.foundSkills', { count: remoteSkillOptions.value.length }))
     }
 
     rememberRemoteSource(source)
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '获取远程 Skills 失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.fetchRemoteFail'))
   } finally {
     listingRemoteSkills.value = false
   }
@@ -1249,7 +1242,7 @@ const handleRecommendedSkillInstall = async (skill) => {
 
     if (!matchedSkill?.name) {
       remoteInstallModalVisible.value = true
-      message.warning('已拉取推荐来源，请选择要安装的 Skill')
+      message.warning(t('skill.recommendedLoaded'))
       return
     }
 
@@ -1260,10 +1253,10 @@ const handleRecommendedSkillInstall = async (skill) => {
       skills: [matchedSkill.name]
     })
     if (await openDraftConfirmation(prepareResult?.data)) {
-      message.success('解析完成，请确认 Skill 生效范围')
+      message.success(t('skill.parseComplete'))
     }
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '解析推荐 Skill 失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.parseRecommendedFail'))
   } finally {
     installingRecommendedSources.value = installingRecommendedSources.value.filter(
       (source) => source !== skill.source
@@ -1290,7 +1283,7 @@ const deleteHistoryItem = (item) => {
 const clearAllHistory = () => {
   repoHistory.value = []
   localStorage.removeItem('ai_kb_remote_repo_history')
-  message.success('历史记录已清空')
+  message.success(t('skill.historyCleared'))
 }
 
 const handleSelectHistory = ({ key }) => {
@@ -1304,7 +1297,7 @@ const handleSelectHistory = ({ key }) => {
 const handleSearchRemoteSkills = async () => {
   const query = searchKeyword.value.trim()
   if (!query) {
-    message.warning('请输入搜索关键字')
+    message.warning(t('skill.enterSearchKeyword'))
     return
   }
   searchingRemoteSkills.value = true
@@ -1313,14 +1306,14 @@ const handleSearchRemoteSkills = async () => {
     searchedSkills.value = result?.data || []
     selectedSearchSkills.value = searchedSkills.value.length === 1 ? [...searchedSkills.value] : []
     if (!searchedSkills.value.length) {
-      message.warning('未搜索到相关的 Skills')
+      message.warning(t('skill.noSearchResults'))
     } else if (searchedSkills.value.length === 1) {
-      message.success('搜索到 1 个 Skill，已自动选中')
+      message.success(t('skill.searchedOneSkill'))
     } else {
-      message.success(`搜索到 ${searchedSkills.value.length} 个 Skills`)
+      message.success(t('skill.searchedSkills', { count: searchedSkills.value.length }))
     }
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '搜索远程 Skills 失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.searchRemoteFail'))
   } finally {
     searchingRemoteSkills.value = false
   }
@@ -1351,10 +1344,10 @@ const startInstallRemoteSkills = async () => {
 
     if (await openDraftConfirmation(drafts)) {
       remoteInstallModalVisible.value = false
-      message.success('解析完成，请确认 Skill 生效范围')
+      message.success(t('skill.parseComplete'))
     }
   } catch (error) {
-    message.error(error?.response?.data?.detail || error.message || '解析远程 Skill 失败')
+    message.error(error?.response?.data?.detail || error.message || t('skill.parseRemoteFail'))
   } finally {
     installingRemoteSkill.value = false
   }

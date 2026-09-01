@@ -1,13 +1,13 @@
 <template>
   <a-modal
     :open="props.modelValue"
-    title="检索配置"
+    :title="$t('searchCfg.modalTitle')"
     width="800px"
     :confirm-loading="saving"
     @ok="handleSave"
     @cancel="handleCancel"
-    ok-text="保存"
-    cancel-text="取消"
+    :ok-text="$t('common.save')"
+    :cancel-text="$t('common.cancel')"
   >
     <SearchConfigPanel
       v-if="props.modelValue"

@@ -31,7 +31,10 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { modelProviderApi } from '@/apis/system_api'
+
+const { t } = useI18n()
 
 const props = defineProps({
   value: {
@@ -40,7 +43,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '请选择重排序模型'
+    default: ''
   },
   size: {
     type: String,
@@ -60,7 +63,9 @@ const props = defineProps({
 const emit = defineEmits(['update:value', 'change'])
 
 const v2Models = ref({})
-const displayText = computed(() => props.value || props.placeholder)
+const displayText = computed(
+  () => props.value || props.placeholder || t('modelSel.rerankPlaceholder')
+)
 
 const handleOpenChange = async (open) => {
   if (!open) return
@@ -70,7 +75,7 @@ const handleOpenChange = async (open) => {
       v2Models.value = response.data || {}
     }
   } catch (error) {
-    console.error('获取 rerank 模型失败:', error)
+    console.error(t('modelSel.rerankLoadFailedLog'), error)
   }
 }
 

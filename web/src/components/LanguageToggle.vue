@@ -6,7 +6,7 @@
       </a-button>
       <template #overlay>
         <a-menu :selected-keys="[localeStore.locale]" @click="handleSelect">
-          <a-menu-item key="zh-CN">中文</a-menu-item>
+          <a-menu-item key="zh-CN"><!-- i18n-ignore -->中文</a-menu-item>
           <a-menu-item key="en-US">English</a-menu-item>
         </a-menu>
       </template>

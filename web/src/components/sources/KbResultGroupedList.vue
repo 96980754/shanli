@@ -1,7 +1,7 @@
 <template>
   <div class="kb-result-grouped-list">
     <div v-if="showSummary" class="result-summary">
-      找到 {{ normalizedChunks.length }} 个相关文档片段，来自 {{ fileGroupList.length }} 个文件
+      {{ $t('sources.summaryFound', { chunks: normalizedChunks.length, files: fileGroupList.length }) }}
     </div>
 
     <div class="kb-results" v-if="normalizedChunks.length > 0">
@@ -26,7 +26,7 @@
             <span v-if="fileGroup.product" class="product-name">{{ fileGroup.product }}</span>
             <span class="file-name">{{ fileGroup.displayName }}</span>
             <span v-if="getSourceVersion(fileGroup)?.document_version" class="current-version">
-              V{{ getSourceVersion(fileGroup).document_version }} 当前版本
+              {{ $t('sources.currentVersion', { version: getSourceVersion(fileGroup).document_version }) }}
             </span>
             <span class="chunk-count">{{ fileGroup.chunks.length }} chunks</span>
           </div>
@@ -34,16 +34,16 @@
             <button
               class="file-action-btn"
               @click.stop="openFileDetail(fileGroup)"
-              title="查看文件"
+              :title="t('sources.viewFile')"
             >
               <Eye :size="14" />
-              <span>查看</span>
+              <span>{{ $t('common.view') }}</span>
             </button>
             <button
               class="file-action-btn download-btn"
               :disabled="downloadingFileKey === getFileKey(fileGroup)"
               @click.stop="downloadOriginal(fileGroup)"
-              title="下载原文"
+              :title="t('sources.downloadOriginal')"
             >
               <LoaderCircle
                 v-if="downloadingFileKey === getFileKey(fileGroup)"
@@ -51,7 +51,7 @@
                 class="loading-icon"
               />
               <Download v-else :size="14" />
-              <span>下载原文</span>
+              <span>{{ $t('sources.downloadOriginal') }}</span>
             </button>
           </div>
         </div>
@@ -59,7 +59,7 @@
         <div v-if="getHistoryVersions(fileGroup).length" class="history-versions" @click.stop>
           <button class="history-toggle" type="button" @click="toggleHistory(fileGroup)">
             <History :size="13" />
-            <span>历史版本（{{ getHistoryVersions(fileGroup).length }}）</span>
+            <span>{{ $t('sources.historyVersions', { count: getHistoryVersions(fileGroup).length }) }}</span>
             <ChevronDown
               :size="13"
               class="history-expand-icon"
@@ -74,7 +74,7 @@
             >
               <div class="history-info">
                 <strong>V{{ version.document_version }}</strong>
-                <span class="history-label">历史版本</span>
+                <span class="history-label">{{ $t('sources.historyVersion') }}</span>
                 <span>{{ formatVersionTime(version.updated_at) }}</span>
               </div>
               <button
@@ -89,7 +89,7 @@
                   class="loading-icon"
                 />
                 <Download v-else :size="13" />
-                <span>下载</span>
+                <span>{{ $t('common.download') }}</span>
               </button>
             </div>
           </div>
@@ -107,10 +107,10 @@
               <span class="chunk-index">#{{ index + 1 }}</span>
               <div class="chunk-scores">
                 <span v-if="typeof chunk.score === 'number'" class="score-item"
-                  >相似度 {{ (chunk.score * 100).toFixed(0) }}%</span
+                  >{{ $t('sources.similarityScore', { score: (chunk.score * 100).toFixed(0) }) }}</span
                 >
                 <span v-if="typeof chunk.rerank_score === 'number'" class="score-item"
-                  >重排序 {{ (chunk.rerank_score * 100).toFixed(0) }}%</span
+                  >{{ $t('sources.rerankScore', { score: (chunk.rerank_score * 100).toFixed(0) }) }}</span
                 >
                 <span v-if="getLineRange(chunk)" class="score-item">{{ getLineRange(chunk) }}</span>
               </div>
@@ -120,25 +120,25 @@
           </div>
         </div>
       </div>
-      <div v-if="sourceVersionsLoading" class="source-versions-status">正在加载版本信息...</div>
+      <div v-if="sourceVersionsLoading" class="source-versions-status">{{ $t('sources.loadingVersions') }}</div>
       <button
         v-else-if="sourceVersionsError"
         type="button"
         class="source-versions-status source-versions-retry"
         @click="loadSourceVersions(fileGroupList)"
       >
-        {{ sourceVersionsError }}，点击重试
+        {{ $t('sources.versionsErrorRetry', { error: sourceVersionsError }) }}
       </button>
     </div>
 
     <div v-else class="no-results">
-      <p>{{ emptyText }}</p>
+      <p>{{ emptyText || $t('sources.kbNoResults') }}</p>
     </div>
 
     <KbChunkDetailModal
       v-model:open="modalVisible"
       :chunk="selectedChunk"
-      :title-prefix="`文档片段 #${selectedChunkIndex || '-'} `"
+      :title-prefix="t('sources.chunkDetailPrefix', { index: selectedChunkIndex || '-' })"
     />
 
     <FileDetailModal
@@ -152,6 +152,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import {
   FileText,
   ChevronRight,
@@ -182,9 +183,11 @@ const props = defineProps({
   },
   emptyText: {
     type: String,
-    default: '未找到相关知识库内容'
+    default: ''
   }
 })
+
+const { t } = useI18n()
 
 const expandedFiles = ref(new Set())
 const expandedHistories = ref(new Set())
@@ -224,7 +227,7 @@ const normalizedChunks = computed(() =>
         item.filename ||
         item.file_id ||
         item.kb_id ||
-        '未知来源'
+        t('sources.unknownSource')
 
       return {
         ...item,
@@ -276,7 +279,9 @@ const getLineRange = (chunk) => {
   const startLine = Number(chunk?.metadata?.start_line || 0)
   const endLine = Number(chunk?.metadata?.end_line || 0)
   if (!startLine || !endLine) return ''
-  return startLine === endLine ? `第 ${startLine} 行` : `第 ${startLine}-${endLine} 行`
+  return startLine === endLine
+    ? t('sources.lineRange', { line: startLine })
+    : t('sources.lineRangeRange', { start: startLine, end: endLine })
 }
 
 const openChunkDetail = (chunk, index) => {
@@ -319,7 +324,9 @@ const loadSourceVersions = async (groups) => {
   const responses = settled.filter((item) => item.status === 'fulfilled').map((item) => item.value)
   sourceVersions.value = normalizeSourceVersions(responses)
   if (settled.some((item) => item.status === 'rejected')) {
-    sourceVersionsError.value = responses.length ? '部分版本信息加载失败' : '版本信息加载失败'
+    sourceVersionsError.value = responses.length
+      ? t('sources.partialVersionsFailed')
+      : t('sources.versionsFailed')
   }
   sourceVersionsLoading.value = false
 }
@@ -372,10 +379,10 @@ const downloadOriginal = async (fileGroup) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    message.success('原文下载成功')
+    message.success(t('sources.originalDownloadSuccess'))
   } catch (error) {
     console.error('下载知识库原文失败:', error)
-    message.error(error?.message || '原文下载失败')
+    message.error(error?.message || t('sources.originalDownloadFailed'))
   } finally {
     downloadingFileKey.value = ''
   }
@@ -400,10 +407,10 @@ const downloadHistoryVersion = async (fileGroup, version) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    message.success(`历史版本 V${version.document_version} 下载成功`)
+    message.success(t('sources.historyDownloadSuccess', { version: version.document_version }))
   } catch (error) {
     console.error('下载知识库历史版本失败:', error)
-    message.error(error?.message || '历史版本下载失败')
+    message.error(error?.message || t('sources.historyDownloadFailed'))
   } finally {
     downloadingFileKey.value = ''
   }

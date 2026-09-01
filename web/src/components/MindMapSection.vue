@@ -4,13 +4,13 @@
       <!-- 加载状态 -->
       <div v-if="loading" class="loading-state">
         <a-spin size="small" />
-        <span>加载中...</span>
+        <span>{{ $t('common.loading') }}</span>
       </div>
 
       <!-- 生成中状态 -->
       <div v-else-if="generating" class="generating-state">
         <a-spin size="small" />
-        <span>AI 正在生成思维导图...</span>
+        <span>{{ $t('mindMap.generating') }}</span>
       </div>
 
       <!-- 空状态 -->
@@ -18,15 +18,15 @@
         <div class="empty-icon">
           <MapIcon :size="24" />
         </div>
-        <p class="empty-title">暂无思维导图</p>
-        <p class="empty-description">从当前知识库内容生成结构化导图。</p>
+        <p class="empty-title">{{ $t('mindMap.empty') }}</p>
+        <p class="empty-description">{{ $t('mindMap.emptyDescription') }}</p>
         <button
           type="button"
           class="lucide-icon-btn mindmap-primary-action"
           @click="generateMindmap"
         >
           <Sparkles :size="14" />
-          <span>生成思维导图</span>
+          <span>{{ $t('mindMap.generate') }}</span>
         </button>
       </div>
 
@@ -39,10 +39,10 @@
               class="lucide-icon-btn mindmap-toolbar-btn"
               :disabled="generating"
               @click="refreshMindmap"
-              title="重新生成"
+              :title="$t('mindMap.regenerate')"
             >
               <RefreshCw :size="14" :class="{ spin: generating }" />
-              <span class="toolbar-text">重新生成</span>
+              <span class="toolbar-text">{{ $t('mindMap.regenerate') }}</span>
             </button>
             <button
               v-if="isIncremental && mindmapData"
@@ -50,10 +50,10 @@
               class="lucide-icon-btn mindmap-toolbar-btn mindmap-toolbar-btn--accent"
               :disabled="generating"
               @click="incrementalUpdate"
-              title="增量更新"
+              :title="$t('mindMap.incremental')"
             >
               <Plus :size="14" />
-              <span class="toolbar-text">增量更新</span>
+              <span class="toolbar-text">{{ $t('mindMap.incremental') }}</span>
               <span v-if="mindmapDiff?.added_files?.length" class="mindmap-badge">
                 {{ mindmapDiff.added_files.length }}
               </span>
@@ -62,10 +62,10 @@
               type="button"
               class="lucide-icon-btn mindmap-toolbar-btn"
               @click="fitView"
-              title="适应视图"
+              :title="$t('mindMap.fitView')"
             >
               <Maximize2 :size="14" />
-              <span class="toolbar-text">适应视图</span>
+              <span class="toolbar-text">{{ $t('mindMap.fitView') }}</span>
             </button>
           </a-space>
         </div>
@@ -79,6 +79,7 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { RefreshCw, Map as MapIcon, Sparkles, Maximize2, Plus } from 'lucide-vue-next'
 import { mindmapApi } from '@/apis/knowledge_api'
@@ -91,6 +92,8 @@ const props = defineProps({
     required: true
   }
 })
+
+const { t } = useI18n()
 
 // ============================================================================
 // 状态管理
@@ -161,14 +164,14 @@ const loadMindmap = async () => {
     // 如果是404错误，说明还没有生成，静默处理
     if (
       error?.message?.includes('404') ||
-      error?.message?.includes('不存在') ||
-      error?.message?.includes('还没有生成')
+      error?.message?.includes('不存在') || // i18n-ignore
+      error?.message?.includes('还没有生成') // i18n-ignore
     ) {
       mindmapData.value = null
     } else {
-      console.error('加载思维导图失败:', error)
+      console.error(t('mindMap.loadFailedLog'), error)
       const errorMsg = error?.message || String(error)
-      message.error('加载思维导图失败: ' + errorMsg)
+      message.error(t('mindMap.loadFailedMessage', { message: errorMsg }))
     }
   } finally {
     loading.value = false
@@ -186,8 +189,8 @@ const generateMindmap = async () => {
 
     const response = await mindmapApi.generateMindmap(
       props.kbId,
-      [], // 使用所有文件
-      '' // 无自定义提示
+      [], // 使用所有文件 // i18n-ignore
+      '' // 无自定义提示 // i18n-ignore
     )
 
     mindmapData.value = response.mindmap
@@ -198,14 +201,14 @@ const generateMindmap = async () => {
     // 再延迟一点，确保SVG元素完全渲染
     setTimeout(() => {
       renderMindmap(response.mindmap)
-      message.success('思维导图生成成功！')
+      message.success(t('mindMap.generateSuccess'))
     }, 100)
 
     await checkMindmapDiff()
   } catch (error) {
-    console.error('生成思维导图失败:', error)
+    console.error(t('mindMap.generateFailedLog'), error)
     const errorMsg = error?.message || String(error)
-    message.error('生成失败: ' + errorMsg)
+    message.error(t('mindMap.generateFailed', { message: errorMsg }))
   } finally {
     generating.value = false
   }
@@ -255,17 +258,17 @@ const incrementalUpdate = async () => {
     setTimeout(() => {
       renderMindmap(response.mindmap)
       if (response.no_ai_needed) {
-        message.success('思维导图已更新（自动清理已删除文件）')
+        message.success(t('mindMap.updatedWithCleanup'))
       } else {
-        message.success('增量更新完成！')
+        message.success(t('mindMap.incrementalDone'))
       }
     }, 100)
 
     await checkMindmapDiff()
   } catch (error) {
-    console.error('增量更新失败:', error)
+    console.error(t('mindMap.incrementalFailedLog'), error)
     const errorMsg = error?.message || String(error)
-    message.error('增量更新失败: ' + errorMsg)
+    message.error(t('mindMap.incrementalFailed', { message: errorMsg }))
   } finally {
     generating.value = false
   }
@@ -463,8 +466,8 @@ const renderMindmap = async (data, retryCount = 0) => {
       }, 100)
       return
     } else {
-      console.error('无法获取SVG容器，渲染失败')
-      message.error('渲染失败：无法找到SVG容器')
+      console.error(t('mindMap.svgContainerFailedLog'))
+      message.error(t('mindMap.svgContainerFailed'))
       return
     }
   }
@@ -505,8 +508,8 @@ const renderMindmap = async (data, retryCount = 0) => {
       }
     }, 300)
   } catch (error) {
-    console.error('渲染思维导图失败:', error)
-    message.error('渲染失败: ' + error.message)
+    console.error(t('mindMap.renderFailedLog'), error)
+    message.error(t('mindMap.renderFailed', { message: error.message }))
   }
 }
 

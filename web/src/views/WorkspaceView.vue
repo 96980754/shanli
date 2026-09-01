@@ -1,6 +1,6 @@
 <template>
   <div class="workspace-view layout-container">
-    <PageHeader title="工作区" :loading="loadingTree || loadingPreview" :show-border="true">
+    <PageHeader :title="$t('workspace.title')" :loading="loadingTree || loadingPreview" :show-border="true">
       <template #actions>
         <a-button
           v-if="isAgentsWorkspacePath"
@@ -8,10 +8,10 @@
           @click="openAgentsGuideModal"
         >
           <template #icon><CircleHelp :size="16" /></template>
-          使用说明
+          {{ $t('workspace.guideButton') }}
         </a-button>
         <a-button :disabled="activeSourceKey !== 'personal'" @click="openCreateDirectoryModal">
-          新建文件夹
+          {{ $t('workspace.createFolder') }}
         </a-button>
         <a-button
           type="primary"
@@ -19,7 +19,7 @@
           :disabled="activeSourceKey !== 'personal'"
           @click="openUploadFilePicker"
         >
-          上传文件
+          {{ $t('workspace.uploadFile') }}
         </a-button>
       </template>
     </PageHeader>
@@ -37,7 +37,7 @@
         <button
           type="button"
           class="sidebar-collapse-action"
-          aria-label="收起工作区侧边栏"
+          :aria-label="$t('workspace.collapseSidebar')"
           @click="sidebarCollapsed = true"
         >
           <ChevronLeft :size="16" />
@@ -57,7 +57,7 @@
         v-else
         type="button"
         class="sidebar-expand-action"
-        aria-label="展开工作区侧边栏"
+        :aria-label="$t('workspace.expandSidebar')"
         @click="sidebarCollapsed = false"
       >
         <ChevronRight :size="16" />
@@ -79,7 +79,7 @@
             :selection-mode="selectionMode"
             :loading="loadingTree"
             :readonly="isKnowledgeSource"
-            :root-label="selectedDatabase?.name || '工作区'"
+            :root-label="selectedDatabase?.name || $t('workspace.title')"
             :breadcrumb-items="isKnowledgeSource ? knowledgeBreadcrumbItems : null"
             :pagination="isKnowledgeSource ? knowledgePagination : null"
             @select-entry="handleSelectEntry"
@@ -95,7 +95,7 @@
             v-if="showInlinePreview"
             class="workspace-preview-resizer"
             role="separator"
-            aria-label="调整预览宽度"
+            :aria-label="$t('workspace.adjustPreviewWidth')"
             tabindex="0"
             @pointerdown="startPreviewResize"
           ></div>
@@ -113,23 +113,23 @@
 
         <div v-else class="workspace-placeholder">
           <LibraryBig :size="32" />
-          <h2>知识库</h2>
-          <p>请选择一个可访问知识库以浏览文件。</p>
+          <h2>{{ $t('nav.knowledgeBase') }}</h2>
+          <p>{{ $t('workspace.selectKnowledgeBaseHint') }}</p>
         </div>
       </main>
     </div>
 
     <a-modal
       v-model:open="createDirectoryModalVisible"
-      title="新建文件夹"
-      okText="创建"
-      cancelText="取消"
+      :title="$t('workspace.createFolder')"
+      :okText="$t('common.create')"
+      :cancelText="$t('common.cancel')"
       :confirm-loading="creatingDirectory"
       @ok="createDirectory"
     >
       <a-input
         v-model:value="newDirectoryName"
-        placeholder="请输入文件夹名称"
+        :placeholder="$t('workspace.placeholderFolderName')"
         :disabled="creatingDirectory"
         @keyup.enter="createDirectory"
       />
@@ -137,31 +137,28 @@
 
     <a-modal
       v-model:open="agentsGuideModalVisible"
-      title="Agents 目录说明"
-      okText="我知道了"
+      :title="$t('workspace.agentsGuideTitle')"
+      :okText="$t('workspace.agentsGuideGotIt')"
       :cancelButtonProps="{ style: { display: 'none' } }"
       @ok="closeAgentsGuideModal"
     >
       <div class="agents-guide-content">
         <p>
-          这个文件夹中的说明文件会在合适的时机注入到 Agent
-          的执行流程中，用来补充你的长期偏好、业务背景和协作要求。
+          {{ $t('workspace.agentsGuideDesc1') }}
         </p>
         <p>
-          目前支持 <code>AGENTS.md</code>、<code>USER.md</code> 和
-          <code>MEMORY.md</code>：其中内容会在每次会话中注入到 Agent
-          Prompt，分别适合写入行为约束、用户信息和希望 Agent 记住的信息。
+          {{ $t('workspace.agentsGuideDesc2Prefix') }}<code>AGENTS.md</code>{{ $t('workspace.agentsGuideDesc2Punc1') }}<code>USER.md</code>{{ $t('workspace.agentsGuideDesc2Punc2') }}<code>MEMORY.md</code>{{ $t('workspace.agentsGuideDesc2Suffix') }}
         </p>
 
         <section class="agents-guide-section">
-          <h3>填写建议</h3>
+          <h3>{{ $t('workspace.agentsGuideTips') }}</h3>
           <ul>
-            <li>写清常用工作背景，例如部门职责、常见任务、知识库使用方式。</li>
-            <li>写清回答偏好，例如语言风格、详略程度、是否优先给结论。</li>
-            <li>写清业务术语和固定称呼，帮助 Agent 保持表达一致。</li>
-            <li>写清资料使用要求，例如优先引用哪些知识库、哪些内容需要谨慎确认。</li>
-            <li>写清协作边界，例如不确定时先提问，涉及重要决策时先给方案再执行。</li>
-            <li>优先使用明确、可执行的规则，避免“尽量做好”这类模糊描述。</li>
+            <li>{{ $t('workspace.agentsGuideTip1') }}</li>
+            <li>{{ $t('workspace.agentsGuideTip2') }}</li>
+            <li>{{ $t('workspace.agentsGuideTip3') }}</li>
+            <li>{{ $t('workspace.agentsGuideTip4') }}</li>
+            <li>{{ $t('workspace.agentsGuideTip5') }}</li>
+            <li>{{ $t('workspace.agentsGuideTip6') }}</li>
           </ul>
         </section>
       </div>
@@ -202,6 +199,7 @@ defineOptions({ name: 'WorkspaceView' })
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, CircleHelp, LibraryBig } from 'lucide-vue-next'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import AgentFilePreview from '@/components/AgentFilePreview.vue'
@@ -225,6 +223,7 @@ import {
 import { normalizePreviewResponse } from '@/utils/file_preview'
 
 const userStore = useUserStore()
+const { t } = useI18n()
 
 const activeSourceKey = ref('personal')
 const currentPath = ref('/')
@@ -320,8 +319,8 @@ const normalizePreviewFile = async (entry, response) => {
 }
 
 const KNOWLEDGE_PREVIEW_LOAD_MESSAGES = {
-  log: '加载知识库文件预览失败:',
-  resolveUserMessage: () => '加载知识库文件预览失败'
+  log: `${t('workspace.knowledgePreviewLoadFail')}:`,
+  resolveUserMessage: () => t('workspace.knowledgePreviewLoadFail')
 }
 
 const buildPreviewLoadingFile = (entry, baseFile = entry) => ({
@@ -339,7 +338,7 @@ const buildPreviewErrorFile = (entry, error) => ({
   content: `Error loading file: ${error?.message || 'unknown error'}`,
   supported: false,
   previewType: 'unsupported',
-  message: error?.message || '文件预览失败',
+  message: error?.message || t('workspace.filePreviewFail'),
   previewUrl: ''
 })
 
@@ -398,7 +397,13 @@ const loadWorkspacePreview = async (entry) => {
     const file = await normalizePreviewFile(entry, response)
     applyPreviewFile(requestId, entry, file)
   } catch (error) {
-    showPreviewError(requestId, entry, error, '加载文件预览失败:', '加载文件预览失败')
+    showPreviewError(
+      requestId,
+      entry,
+      error,
+      `${t('workspace.filePreviewLoadFail')}:`,
+      t('workspace.filePreviewLoadFail')
+    )
   } finally {
     finishPreviewRequest(requestId)
   }
@@ -450,8 +455,8 @@ const loadWorkspaceEntries = async (path = '/') => {
       selectionMode.value = false
     }
   } catch (error) {
-    console.warn('加载工作区目录失败:', error)
-    message.error('加载工作区目录失败')
+    console.warn(`${t('workspace.loadTreeFail')}:`, error)
+    message.error(t('workspace.loadTreeFail'))
   } finally {
     loadingTree.value = false
   }
@@ -480,7 +485,7 @@ const loadKnowledgeEntries = async (
     entries.value = response.entries || []
     knowledgeBreadcrumbItems.value = breadcrumbs || [
       {
-        name: database.name || '知识库',
+        name: database.name || t('nav.knowledgeBase'),
         path: '/',
         parentId: null,
         pathPrefix: '',
@@ -501,9 +506,9 @@ const loadKnowledgeEntries = async (
       selectionMode.value = false
     }
   } catch (error) {
-    console.warn('加载知识库目录失败:', error)
+    console.warn(`${t('workspace.loadKnowledgeTreeFail')}:`, error)
     entries.value = []
-    message.error(error?.message || '加载知识库目录失败')
+    message.error(error?.message || t('workspace.loadKnowledgeTreeFail'))
   } finally {
     loadingTree.value = false
   }
@@ -517,7 +522,7 @@ const loadDatabases = async () => {
       return database?.supports_documents !== false
     })
   } catch (error) {
-    console.warn('加载可访问知识库失败:', error)
+    console.warn(`${t('workspace.loadDatabasesFail')}:`, error)
     databases.value = []
   } finally {
     loadingDatabases.value = false
@@ -646,7 +651,7 @@ const closePreview = () => {
 
 const handleSavePreviewFile = async (content) => {
   if (selectedEntry.value?.source === 'knowledge') {
-    message.warning('知识库文件为只读，无法保存')
+    message.warning(t('workspace.knowledgeReadonly'))
     return
   }
   if (!selectedEntry.value?.path || savingPreviewFile.value) return
@@ -662,10 +667,10 @@ const handleSavePreviewFile = async (content) => {
       content
     }
     await loadWorkspaceEntries(currentPath.value)
-    message.success('文件保存成功')
+    message.success(t('workspace.saveFileSuccess'))
   } catch (error) {
-    console.warn('保存工作区文件失败:', error)
-    message.error(error?.message || '文件保存失败')
+    console.warn(`${t('workspace.saveFileFail')}:`, error)
+    message.error(error?.message || t('workspace.saveFileFailed'))
   } finally {
     savingPreviewFile.value = false
   }
@@ -689,7 +694,7 @@ const createDirectory = async () => {
   if (creatingDirectory.value) return
   const directoryName = newDirectoryName.value.trim()
   if (!directoryName) {
-    message.warning('请输入文件夹名')
+    message.warning(t('workspace.enterFolderName'))
     return
   }
 
@@ -699,10 +704,10 @@ const createDirectory = async () => {
     await loadWorkspaceEntries(currentPath.value)
     createDirectoryModalVisible.value = false
     newDirectoryName.value = ''
-    message.success('文件夹创建成功')
+    message.success(t('workspace.folderCreated'))
   } catch (error) {
-    console.warn('创建文件夹失败:', error)
-    message.error(error?.message || '创建文件夹失败')
+    console.warn(`${t('workspace.createFolderFail')}:`, error)
+    message.error(error?.message || t('workspace.createFolderFail'))
   } finally {
     creatingDirectory.value = false
   }
@@ -720,7 +725,7 @@ const handleUploadInputChange = async (event) => {
   const files = Array.from(event.target?.files || [])
   if (!files.length || uploadingFile.value) return
   if (files.length > MAX_WORKSPACE_UPLOAD_FILES) {
-    message.warning(`一次最多上传 ${MAX_WORKSPACE_UPLOAD_FILES} 个文件`)
+    message.warning(t('workspace.uploadLimit', { count: MAX_WORKSPACE_UPLOAD_FILES }))
     event.target.value = ''
     return
   }
@@ -729,10 +734,10 @@ const handleUploadInputChange = async (event) => {
   try {
     await uploadWorkspaceFiles(currentPath.value, files)
     await loadWorkspaceEntries(currentPath.value)
-    message.success(`${files.length} 个文件上传成功`)
+    message.success(t('workspace.uploadSuccess', { count: files.length }))
   } catch (error) {
-    console.warn('上传文件失败:', error)
-    message.error(error?.message || '上传文件失败')
+    console.warn(`${t('workspace.uploadFail')}:`, error)
+    message.error(error?.message || t('workspace.uploadFail'))
   } finally {
     uploadingFile.value = false
     event.target.value = ''
@@ -747,17 +752,17 @@ const confirmDeleteEntries = (targetEntries) => {
   const firstEntry = validEntries[0]
   Modal.confirm({
     title: isBatch
-      ? `确认删除选中的 ${validEntries.length} 项？`
+      ? t('workspace.deleteSelectedTitle', { count: validEntries.length })
       : firstEntry.is_dir
-        ? `确认删除文件夹「${firstEntry.name}」？`
-        : `确认删除文件「${firstEntry.name}」？`,
+        ? t('workspace.deleteFolderTitle', { name: firstEntry.name })
+        : t('workspace.deleteFileTitle', { name: firstEntry.name }),
     content:
       isBatch || firstEntry.is_dir
-        ? '将删除文件夹及其所有内容，删除后不可恢复。'
-        : '删除后不可恢复。',
-    okText: '删除',
+        ? t('workspace.deleteFolderContent')
+        : t('workspace.deleteFileContent'),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: () => deleteEntries(validEntries)
   })
 }
@@ -775,10 +780,10 @@ const deleteEntries = async (targetEntries) => {
     }
     clearWorkspaceSelection()
     await loadWorkspaceEntries(currentPath.value)
-    message.success(paths.length > 1 ? '选中项删除成功' : '删除成功')
+    message.success(paths.length > 1 ? t('workspace.deleteSelectedSuccess') : t('common.deleteSuccess'))
   } catch (error) {
-    console.warn('删除工作区文件失败:', error)
-    message.error(error?.message || '删除失败')
+    console.warn(`${t('workspace.deleteFileFail')}:`, error)
+    message.error(error?.message || t('common.deleteFailed'))
     await loadWorkspaceEntries(currentPath.value)
   } finally {
     deletingPaths.value = []
@@ -793,7 +798,7 @@ const parseDownloadFilename = (contentDisposition) => {
     try {
       return decodeURIComponent(utf8Match[1])
     } catch (error) {
-      console.warn('解析 UTF-8 文件名失败:', error)
+      console.warn(`${t('workspace.parseUtf8FilenameFail')}:`, error)
     }
   }
 
@@ -826,8 +831,8 @@ const downloadEntry = async (entry) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    console.warn('下载文件失败:', error)
-    message.error(error?.message || '下载文件失败')
+    console.warn(`${t('workspace.downloadFail')}:`, error)
+    message.error(error?.message || t('workspace.downloadFail'))
   }
 }
 

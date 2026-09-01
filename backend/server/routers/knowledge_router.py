@@ -2867,6 +2867,28 @@ async def move_document(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@knowledge.put("/databases/{kb_id}/documents/{doc_id}/rename")
+async def rename_document(
+    kb_id: str,
+    doc_id: str,
+    filename: str = Body(..., embed=True),
+    current_user: User = Depends(get_required_user),
+):
+    """重命名文件/文件夹；doc_id 为虚拟目录 id 时等价于给虚拟目录改名（级联重写前缀）"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "文件重命名")
+    logger.debug(f"Rename document {doc_id} to {filename} in {kb_id}")
+    try:
+        return await knowledge_base.rename_file(kb_id, doc_id, filename)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"重命名失败 {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @knowledge.get("/databases/{kb_id}/folders/{folder_id}/chain")
 async def get_folder_chain(
     kb_id: str,

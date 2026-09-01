@@ -1,6 +1,6 @@
 <template>
   <!-- 反馈列表模态框 -->
-  <a-modal v-model:open="modalVisible" title="用户反馈详情" width="1200px" :footer="null">
+  <a-modal v-model:open="modalVisible" :title="t('feedback.modalTitle')" width="1200px" :footer="null">
     <a-space style="margin-bottom: 16px">
       <a-segmented
         v-model:value="feedbackFilter"
@@ -31,7 +31,7 @@
               class="user-avatar"
             />
             <div class="user-details">
-              <div class="username">{{ feedback.username || '未知用户' }}</div>
+              <div class="username">{{ feedback.username || $t('feedback.unknownUser') }}</div>
             </div>
           </div>
           <div class="card-actions">
@@ -41,7 +41,7 @@
               size="small"
               @click="openTuning(feedback.id)"
             >
-              调优答案
+              {{ $t('feedback.tuneAnswer') }}
             </a-button>
             <a-tag
               :color="feedback.rating === 'like' ? 'green' : 'red'"
@@ -52,7 +52,7 @@
                 <LikeOutlined v-if="feedback.rating === 'like'" />
                 <DislikeOutlined v-else />
               </template>
-              {{ feedback.rating === 'like' ? '点赞' : '点踩' }}
+              {{ $t(feedback.rating === 'like' ? 'feedback.likeLabel' : 'feedback.dislikeLabel') }}
             </a-tag>
           </div>
         </div>
@@ -67,7 +67,7 @@
                   class="conversation-title"
                   :class="{ collapsed: !expandedStates.get(`${feedback.id}-conversation`) }"
                 >
-                  标题：{{ feedback.conversation_title }}
+                  {{ $t('feedback.conversationTitle', { title: feedback.conversation_title }) }}
                 </span>
                 <a-button
                   v-if="shouldShowConversationExpandButton(feedback.conversation_title)"
@@ -76,11 +76,11 @@
                   @click="toggleConversationExpand(feedback.id)"
                   class="expand-button-inline"
                 >
-                  {{ expandedStates.get(`${feedback.id}-conversation`) ? '收起' : '展开' }}
+                  {{ $t(expandedStates.get(`${feedback.id}-conversation`) ? 'feedback.collapse' : 'feedback.expand') }}
                 </a-button>
               </div>
               <div class="info-item" v-if="!props.agentId">
-                <span class="label">智能体:</span>
+                <span class="label">{{ $t('feedback.agentLabel') }}</span>
                 <span class="value">{{ feedback.agent_id }}</span>
               </div>
             </div>
@@ -101,7 +101,7 @@
               @click="toggleExpand(feedback.id)"
               class="expand-button"
             >
-              {{ expandedStates.get(`${feedback.id}-message`) ? '收起' : '展开全部' }}
+              {{ $t(expandedStates.get(`${feedback.id}-message`) ? 'feedback.collapse' : 'feedback.expandAll') }}
             </a-button>
           </div>
 
@@ -122,7 +122,7 @@
 
       <!-- 空状态 -->
       <div v-if="feedbacks.length === 0" class="empty-state">
-        <a-empty description="暂无反馈数据" />
+        <a-empty :description="t('feedback.noFeedbackData')" />
       </div>
     </div>
   </a-modal>
@@ -133,12 +133,15 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { LikeOutlined, DislikeOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
 import FeedbackTuningModal from '@/components/dashboard/FeedbackTuningModal.vue'
+
+const { t } = useI18n()
 
 // 常量配置
 const CONFIG = {
@@ -165,9 +168,9 @@ const feedbacks = ref([])
 const loadingFeedbacks = ref(false)
 const feedbackFilter = ref('all')
 const feedbackOptions = [
-  { label: '全部', value: 'all' },
-  { label: '点赞', value: 'like' },
-  { label: '点踩', value: 'dislike' }
+  { label: t('common.all'), value: 'all' },
+  { label: t('feedback.likeLabel'), value: 'like' },
+  { label: t('feedback.dislikeLabel'), value: 'dislike' }
 ]
 
 // 展开状态映射（使用 Map 避免直接修改对象）
@@ -232,7 +235,7 @@ const loadFeedbacks = async () => {
     expandedStates.value.clear()
   } catch (error) {
     console.error('加载反馈列表失败:', error)
-    message.error('加载反馈列表失败，请稍后重试')
+    message.error(t('feedback.loadFeedbackFailed'))
     feedbacks.value = []
   } finally {
     loadingFeedbacks.value = false

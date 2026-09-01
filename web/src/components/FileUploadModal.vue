@@ -5,14 +5,14 @@
     :selected-file-id="activeVersionCandidate?.currentFileId"
     @select="applyDocumentSelection"
   />
-  <a-modal v-model:open="visible" title="添加文件" width="800px" @cancel="handleCancel">
+  <a-modal v-model:open="visible" :title="t('upload.addFileTitle')" width="800px" @cancel="handleCancel">
     <template #footer>
       <div class="footer-container">
         <a-button type="link" class="help-link-btn" @click="openDocLink">
-          <CircleHelp :size="14" /> 文档处理说明
+          <CircleHelp :size="14" /> {{ $t('upload.documentProcessingHelp') }}
         </a-button>
         <div class="footer-buttons">
-          <a-button key="back" @click="handleCancel">取消</a-button>
+          <a-button key="back" @click="handleCancel">{{ $t('common.cancel') }}</a-button>
           <a-button
             key="submit"
             type="primary"
@@ -20,7 +20,7 @@
             :loading="chunkLoading"
             :disabled="!canSubmit"
           >
-            添加到知识库
+            {{ $t('upload.addToKnowledgeBase') }}
           </a-button>
         </div>
       </div>
@@ -37,8 +37,8 @@
           />
         </div>
         <div v-if="!props.deferProcessing" class="auto-index-toggle">
-          <a-checkbox v-model:checked="autoIndex">上传后自动入库</a-checkbox>
-          <a-checkbox v-if="!HIDE_CLEAN" v-model:checked="enableClean" class="clean-toggle">AI 清洗排版</a-checkbox>
+          <a-checkbox v-model:checked="autoIndex">{{ $t('upload.autoIndexAfterUpload') }}</a-checkbox>
+          <a-checkbox v-if="!HIDE_CLEAN" v-model:checked="enableClean" class="clean-toggle">{{ $t('upload.aiCleanLayout') }}</a-checkbox>
         </div>
       </div>
 
@@ -54,14 +54,14 @@
           :class="{ 'two-cols': uploadMode !== 'url' && folderTreeData.length > 0 }"
         >
           <div class="col-item" v-if="folderTreeData.length > 0">
-            <div class="setting-label">存储位置</div>
+            <div class="setting-label">{{ $t('upload.storageLocation') }}</div>
             <div class="setting-content flex-row">
               <a-tree-select
                 v-model:value="selectedFolderId"
                 show-search
                 class="folder-select"
                 :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
-                placeholder="选择目标文件夹（默认为根目录）"
+                :placeholder="t('upload.folderPlaceholder')"
                 allow-clear
                 tree-default-expand-all
                 :tree-data="folderTreeData"
@@ -69,12 +69,12 @@
               >
               </a-tree-select>
             </div>
-            <p class="param-description">选择文件保存的目标文件夹</p>
+            <p class="param-description">{{ $t('upload.folderSelectDesc') }}</p>
           </div>
           <div class="col-item" v-if="uploadMode !== 'url'">
             <div class="setting-label">
-              OCR 引擎（仅应用于 PDF/图片文件）
-              <a-tooltip title="检查服务状态">
+              {{ $t('upload.ocrEngineLabel') }}
+              <a-tooltip :title="t('upload.checkServiceStatus')">
                 <ReloadOutlined
                   class="action-icon refresh-icon"
                   :class="{ spinning: ocrHealthChecking }"
@@ -102,7 +102,7 @@
                       @click="selectOcrEngine(option.value)"
                     >
                       <span class="ocr-engine-option-header">
-                        <span class="ocr-engine-name">{{ option.label }}</span>
+                        <span class="ocr-engine-name">{{ getOcrLabel(option.label) }}</span>
                         <span
                           class="ocr-engine-status"
                           :class="`status-${getOcrStatus(option.value)}`"
@@ -119,7 +119,7 @@
                         class="unavailable-toggle"
                         @click="toggleUnavailableOcrOptions"
                       >
-                        <span>不可用选项（{{ unavailableOcrOptions.length }}）</span>
+                        <span>{{ t('upload.unavailableOptions', { count: unavailableOcrOptions.length }) }}</span>
                         <ChevronUp v-if="unavailableOcrExpanded" :size="14" />
                         <ChevronDown v-else :size="14" />
                       </button>
@@ -133,7 +133,7 @@
                           disabled
                         >
                           <span class="ocr-engine-option-header">
-                            <span class="ocr-engine-name">{{ option.label }}</span>
+                            <span class="ocr-engine-name">{{ getOcrLabel(option.label) }}</span>
                             <span
                               class="ocr-engine-status"
                               :class="`status-${getOcrStatus(option.value)}`"
@@ -163,7 +163,7 @@
         <!-- 第二行：自动入库配置 (仅在开启时显示) -->
         <div class="setting-row" v-if="autoIndex">
           <div class="col-item">
-            <div class="setting-label">入库参数配置</div>
+            <div class="setting-label">{{ $t('upload.indexParamsConfig') }}</div>
             <div class="setting-content">
               <ChunkParamsConfig
                 :temp-chunk-params="indexParams"
@@ -183,7 +183,7 @@
       <!-- PDF/图片OCR提醒 (Alert样式优化) -->
       <div v-if="hasPdfOrImageFiles && !isOcrEnabled" class="inline-alert warning">
         <Info :size="16" />
-        <span>检测到PDF或图片文件，建议启用 OCR 以提取文本内容</span>
+        <span>{{ $t('upload.ocrAdvice') }}</span>
       </div>
 
       <!-- 文件上传区域 -->
@@ -205,9 +205,9 @@
           @drop="handleDrop"
           @preview="handlePreviewUploaded"
         >
-          <p class="ant-upload-text">点击或将文件拖拽到此处</p>
-          <p class="ant-upload-hint">支持类型: {{ uploadHint }}</p>
-          <div class="zip-tip" v-if="hasZipFiles">📦 ZIP包将自动解压提取 Markdown 与图片</div>
+          <p class="ant-upload-text">{{ $t('upload.clickOrDrag') }}</p>
+          <p class="ant-upload-hint">{{ t('upload.supportedTypesHint', { types: uploadHint }) }}</p>
+          <div class="zip-tip" v-if="hasZipFiles">{{ $t('upload.zipTip') }}</div>
           <!-- 上传完成后在文件名旁提供显式的「查看」按钮，用户无需猜测文件名可点击预览。
                originNode 是 VNode，必须经 UploadItemWrap 用 h() 渲染，不能 {{ }} 文本插值（会被序列化成 JSON 文本） -->
           <template #itemRender="{ originNode, file, actions }">
@@ -220,7 +220,7 @@
                 @click="actions.preview()"
               >
                 <Eye :size="13" />
-                查看
+                {{ $t('common.view') }}
               </a-button>
             </UploadItemWrap>
           </template>
@@ -229,17 +229,17 @@
         <div v-if="showAggregateProgress" class="upload-progress-card">
           <div class="progress-header">
             <div class="progress-header-left">
-              <div class="progress-title">上传进度</div>
+              <div class="progress-title">{{ $t('upload.uploadProgress') }}</div>
               <div class="progress-stats inline-in-header">
-                <div class="stat-pill">总计 {{ totalUploadCount }}</div>
+                <div class="stat-pill">{{ t('upload.totalCount', { count: totalUploadCount }) }}</div>
                 <div class="stat-pill uploading" v-if="uploadingUploadCount > 0">
-                  上传中 {{ uploadingUploadCount }}
+                  {{ t('upload.uploadingCount', { count: uploadingUploadCount }) }}
                 </div>
                 <div class="stat-pill queued" v-if="queuedUploadCount > 0">
-                  排队 {{ queuedUploadCount }}
+                  {{ t('upload.queuedCount', { count: queuedUploadCount }) }}
                 </div>
                 <div class="stat-pill error" v-if="failedUploadCount > 0">
-                  失败 {{ failedUploadCount }}
+                  {{ t('upload.failedCount', { count: failedUploadCount }) }}
                 </div>
               </div>
             </div>
@@ -251,7 +251,7 @@
                 class="toggle-progress-btn"
                 @click="progressExpanded = !progressExpanded"
               >
-                <span>{{ progressExpanded ? '收起' : '展开' }}</span>
+                <span>{{ progressExpanded ? $t('upload.collapse') : $t('upload.expand') }}</span>
                 <ChevronUp v-if="progressExpanded" :size="14" />
                 <ChevronDown v-else :size="14" />
               </a-button>
@@ -266,12 +266,12 @@
               </div>
             </div>
 
-            <div class="progress-tip" v-else>当前无失败文件。</div>
+            <div class="progress-tip" v-else>{{ $t('upload.noFailedFiles') }}</div>
 
             <div class="progress-tip" v-if="hasPendingUploads">
-              文件夹上传采用队列模式，最多同时上传 {{ MAX_UPLOAD_CONCURRENCY }} 个文件。
+              {{ t('upload.folderQueueMode', { count: MAX_UPLOAD_CONCURRENCY }) }}
             </div>
-            <div class="progress-tip" v-else>上传队列已完成，可点击“添加到知识库”继续下一步。</div>
+            <div class="progress-tip" v-else>{{ $t('upload.queueDoneTip') }}</div>
           </div>
         </div>
       </div>
@@ -280,18 +280,18 @@
       <div v-if="!HIDE_CLEAN && enableClean && uploadMode === 'file' && uploadedCleanFiles.length > 0 && !hasPendingUploads" class="clean-preview-panel">
         <div class="clean-preview-header">
           <Sparkles :size="15" />
-          <span class="clean-preview-title">AI 清洗排版</span>
-          <span class="clean-preview-sub">对上传的文档自动重排版为结构清晰的规范文本</span>
+          <span class="clean-preview-title">{{ $t('upload.aiCleanLayout') }}</span>
+          <span class="clean-preview-sub">{{ $t('upload.cleanLayoutDesc') }}</span>
           <a-button size="small" class="clean-regenerate-btn" :loading="cleanAllLoading" @click="runCleanAll">
             <RefreshCw :size="13" />
-            全部清洗
+            {{ $t('upload.cleanAll') }}
           </a-button>
         </div>
 
         <div v-for="file in uploadedCleanFiles" :key="file.uid" class="clean-file-card">
           <div class="clean-file-head">
             <span class="clean-file-name" :title="file.name || file.response?.filename">
-              {{ file.name || file.response?.filename || '文档' }}
+              {{ file.name || file.response?.filename || $t('upload.documentFallback') }}
             </span>
             <span class="clean-file-status" :class="getFileCleanState(file)?.status">
               {{ cleanStatusLabel(getFileCleanState(file)?.status) }}
@@ -303,7 +303,7 @@
               @click="runCleanForFile(file)"
             >
               <Sparkles :size="13" />
-              清洗
+              {{ $t('upload.clean') }}
             </a-button>
             <a-button
               v-else
@@ -313,13 +313,13 @@
               @click="runCleanForFile(file)"
             >
               <RefreshCw :size="13" />
-              重新生成
+              {{ $t('upload.regenerate') }}
             </a-button>
           </div>
 
           <div v-if="getFileCleanState(file)?.status === 'loading'" class="clean-loading">
             <a-spin size="small" />
-            <span>AI 正在清洗排版...</span>
+            <span>{{ $t('upload.cleaningInProgress') }}</span>
           </div>
 
           <div v-else-if="getFileCleanState(file)?.status === 'error'" class="clean-error">
@@ -329,8 +329,8 @@
           <div v-else-if="getFileCleanState(file)?.cleanedMarkdown" class="clean-preview-body">
             <div class="clean-preview-tabs">
               <a-radio-group v-model:value="getFileCleanState(file).viewMode" size="small">
-                <a-radio-button value="edit">编辑</a-radio-button>
-                <a-radio-button value="preview">预览</a-radio-button>
+                <a-radio-button value="edit">{{ $t('common.edit') }}</a-radio-button>
+                <a-radio-button value="preview">{{ $t('upload.preview') }}</a-radio-button>
               </a-radio-group>
             </div>
             <a-textarea
@@ -355,18 +355,18 @@
       >
         <div class="clean-preview-header">
           <FileText :size="15" />
-          <span class="clean-preview-title">Word / Excel 编辑</span>
-          <span class="clean-preview-sub">上传后可直接编辑文字/单元格，确认后以原格式入库</span>
+          <span class="clean-preview-title">{{ $t('upload.officeEditTitle') }}</span>
+          <span class="clean-preview-sub">{{ $t('upload.officeEditDesc') }}</span>
         </div>
         <div v-for="file in uploadedOfficeFiles" :key="file.uid" class="clean-file-card">
           <div class="clean-file-head">
             <span class="clean-file-name" :title="file.name">{{ file.name }}</span>
             <span class="clean-file-status" :class="getOfficeEditState(file)?.edited ? 'done' : 'idle'">
-              {{ getOfficeEditState(file)?.edited ? '已编辑' : '待编辑' }}
+              {{ getOfficeEditState(file)?.edited ? $t('upload.edited') : $t('upload.pendingEdit') }}
             </span>
             <a-button size="small" class="clean-file-action" @click="openOfficeEdit(file)">
               <Edit3 :size="13" />
-              编辑
+              {{ $t('common.edit') }}
             </a-button>
           </div>
         </div>
@@ -380,11 +380,7 @@
             <span class="workspace-current-path" :title="workspaceCurrentPath">
               {{ workspaceCurrentPath }}
             </span>
-            <span
-              >已选择
-              {{ selectedWorkspacePaths.length }}
-              个文件，注意上传会扁平化上传，不保留文件层级结构</span
-            >
+            <span>{{ t('upload.workspaceSelectedFiles', { count: selectedWorkspacePaths.length }) }}</span>
           </div>
           <div class="workspace-actions">
             <a-button
@@ -439,7 +435,7 @@
 
         <div class="url-empty-tip" v-else>
           <Info :size="16" />
-          <span>{{ workspaceLoading ? '正在加载工作区文件' : '当前目录暂无文件' }}</span>
+          <span>{{ workspaceLoading ? $t('upload.workspaceLoading') : $t('upload.workspaceEmpty') }}</span>
         </div>
       </div>
 
@@ -448,15 +444,15 @@
         <div class="url-input-wrapper">
           <a-textarea
             v-model:value="newUrl"
-            placeholder="输入 URL，一行一个&#10;https://site1.com&#10;https://site2.com"
+            :placeholder="t('upload.urlPlaceholder')"
             :auto-size="{ minRows: 4, maxRows: 8 }"
             class="url-input"
             @keydown.enter.ctrl="handleFetchUrls"
           />
           <div class="url-actions">
             <span class="url-hint">
-              支持批量粘贴，自动过滤空行。
-              <span class="warning-text">需配置白名单，详见文档说明</span>
+              {{ $t('upload.urlBatchPaste') }}
+              <span class="warning-text">{{ $t('upload.urlWhitelistHint') }}</span>
             </span>
             <a-button
               type="primary"
@@ -465,7 +461,7 @@
               :loading="fetchingUrls"
               :disabled="!newUrl.trim()"
             >
-              加载 URLs
+              {{ $t('upload.loadUrls') }}
             </a-button>
           </div>
         </div>
@@ -492,7 +488,7 @@
         </div>
         <div class="url-empty-tip" v-else>
           <Info :size="16" />
-          <span>输入 URL 后点击加载，系统将自动抓取网页内容</span>
+          <span>{{ $t('upload.urlLoadTip') }}</span>
         </div>
       </div>
 
@@ -500,18 +496,18 @@
       <div v-if="versionCandidates.length > 0 && props.canManage" class="conflict-files-panel">
         <div class="panel-header">
           <Info :size="14" class="icon-warning" />
-          <span>请选择上传文件的处理方式</span>
+          <span>{{ $t('upload.chooseHandling') }}</span>
         </div>
         <div class="file-list-scroll">
           <div v-for="item in versionCandidates" :key="item.uid" class="conflict-item version-candidate">
             <div class="version-candidate-main">
               <div class="file-meta">
                 <span class="fname" :title="item.filename">{{ item.filename }}</span>
-                <span class="ftime">作为新版本时，旧版将保留在版本历史中</span>
+                <span class="ftime">{{ $t('upload.versionRetainHint') }}</span>
               </div>
               <a-radio-group v-model:value="item.action" size="small">
-                <a-radio value="add">作为独立文档</a-radio>
-                <a-radio value="version">作为新版本</a-radio>
+                <a-radio value="add">{{ $t('upload.asIndependentDoc') }}</a-radio>
+                <a-radio value="version">{{ $t('upload.asNewVersion') }}</a-radio>
               </a-radio-group>
             </div>
             <div v-if="item.action === 'version'" class="version-target-row">
@@ -519,7 +515,7 @@
                 v-model:value="item.currentFileId"
                 size="small"
                 class="version-target-select"
-                placeholder="选择同名文档，或搜索其他当前文档"
+                :placeholder="t('upload.selectSameNameDoc')"
                 @change="syncSameNameSelection(item)"
               >
                 <a-select-option v-for="file in item.sameNameFiles" :key="file.file_id" :value="file.file_id">
@@ -533,7 +529,7 @@
                   {{ item.selectedFile.filename }} · {{ formatFileTime(item.selectedFile.updated_at || item.selectedFile.created_at) }}
                 </a-select-option>
               </a-select>
-              <a-button size="small" @click="openDocumentSearch(item)">搜索文档</a-button>
+              <a-button size="small" @click="openDocumentSearch(item)">{{ $t('upload.searchDocument') }}</a-button>
             </div>
           </div>
         </div>
@@ -542,7 +538,7 @@
       <div v-else-if="sameNameFiles.length > 0" class="conflict-files-panel">
         <div class="panel-header">
           <Info :size="14" class="icon-warning" />
-          <span>已存在同名文件 ({{ sameNameFiles.length }})</span>
+          <span>{{ t('upload.sameNameFiles', { count: sameNameFiles.length }) }}</span>
         </div>
         <div class="file-list-scroll">
           <div v-for="file in sameNameFiles" :key="file.file_id" class="conflict-item">
@@ -605,7 +601,7 @@
     <!-- 重复冲突弹窗（PR12 吸收） -->
     <a-modal
       :open="duplicateConflictOpen"
-      :title="duplicateConflictIsExact ? '重复文件' : '同名文件冲突'"
+      :title="duplicateConflictIsExact ? t('upload.duplicateFileTitle') : t('upload.sameNameConflictTitle')"
       :closable="false"
       :mask-closable="false"
       :footer="null"
@@ -616,12 +612,12 @@
           {{ getDuplicateConflictMessage(duplicateConflictCurrent) }}
         </p>
         <div v-if="duplicateConflictIsExact" class="duplicate-conflict-actions">
-          <a-button key="skip" @click="skipDuplicate">知道了，跳过</a-button>
+          <a-button key="skip" @click="skipDuplicate">{{ $t('upload.gotItSkip') }}</a-button>
         </div>
         <div v-else class="duplicate-conflict-actions">
-          <a-button key="keep-both" @click="keepBothDuplicate">保留两份</a-button>
-          <a-button key="replace" type="primary" @click="confirmReplacement">替换现有文件</a-button>
-          <a-button key="cancel" @click="cancelDuplicateConflict">取消</a-button>
+          <a-button key="keep-both" @click="keepBothDuplicate">{{ $t('upload.keepBoth') }}</a-button>
+          <a-button key="replace" type="primary" @click="confirmReplacement">{{ $t('upload.replaceExisting') }}</a-button>
+          <a-button key="cancel" @click="cancelDuplicateConflict">{{ $t('common.cancel') }}</a-button>
         </div>
       </div>
     </a-modal>
@@ -630,6 +626,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, h } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Upload, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
 import { useConfigStore } from '@/stores/config'
@@ -713,11 +710,17 @@ const props = defineProps({
   deferProcessing: {
     type: Boolean,
     default: false
+  },
+  // 当前路径型（虚拟）目录前缀，如 "文档/技术/"，用于把上传文件的 source_path 拼上前缀落到该目录
+  currentPathPrefix: {
+    type: String,
+    default: ''
   }
 })
 
 const emit = defineEmits(['update:visible', 'success'])
 
+const { t } = useI18n()
 const store = useDatabaseStore()
 const configStore = useConfigStore()
 const DEFAULT_OCR_ENGINE = 'rapid_ocr'
@@ -794,7 +797,7 @@ const acceptedFileTypes = computed(() => {
 
 const uploadHint = computed(() => {
   if (!supportedFileTypes.value.length) {
-    return '加载中...'
+    return t('common.loading')
   }
   const exts = new Set(supportedFileTypes.value)
   exts.add('.zip')
@@ -822,7 +825,7 @@ const loadSupportedFileTypes = async () => {
     applySupportedFileTypes(data?.file_types)
   } catch (error) {
     console.error('获取支持的文件类型失败:', error)
-    message.warning('获取支持的文件类型失败，已使用默认配置')
+    message.warning(t('upload.loadTypesFailedWarning'))
     applySupportedFileTypes(DEFAULT_SUPPORTED_TYPES)
   }
 }
@@ -890,9 +893,9 @@ const failedDetailItems = computed(() => {
       const detail = file?.response?.detail || file?.error?.message || ''
       return {
         uid,
-        name: file.name || '未命名文件',
+        name: file.name || t('upload.unnamedFile'),
         status: rawStatus,
-        errorText: detail || '上传失败'
+        errorText: detail || t('upload.uploadFailed')
       }
     })
     .filter((item) => item.status === 'error')
@@ -917,28 +920,28 @@ const uploadModeOptions = computed(() => [
     value: 'file',
     label: h('div', { class: 'segmented-option' }, [
       h(FileUp, { size: 16, class: 'option-icon' }),
-      h('span', { class: 'option-text' }, '上传文件')
+      h('span', { class: 'option-text' }, t('upload.uploadFile'))
     ])
   },
   {
     value: 'folder',
     label: h('div', { class: 'segmented-option' }, [
       h(FolderUp, { size: 16, class: 'option-icon' }),
-      h('span', { class: 'option-text' }, '上传文件夹')
+      h('span', { class: 'option-text' }, t('upload.uploadFolder'))
     ])
   },
   {
     value: 'url',
     label: h('div', { class: 'segmented-option' }, [
       h(Link, { size: 16, class: 'option-icon' }),
-      h('span', { class: 'option-text' }, '解析 URL')
+      h('span', { class: 'option-text' }, t('upload.parseUrl'))
     ])
   },
   {
     value: 'workspace',
     label: h('div', { class: 'segmented-option' }, [
       h(FolderOpen, { size: 16, class: 'option-icon' }),
-      h('span', { class: 'option-text' }, '工作区')
+      h('span', { class: 'option-text' }, t('upload.workspace'))
     ])
   }
 ])
@@ -1001,7 +1004,7 @@ watch(fileList, (newFileList) => {
 const urlList = ref([])
 const newUrl = ref('')
 const fetchingUrls = ref(false)
-const CONTENT_EXISTS_ERROR_TEXT = '内容已存在于知识库中'
+const CONTENT_EXISTS_ERROR_TEXT = () => t('upload.contentAlreadyExists')
 
 // 文件版本处理
 const sameNameFiles = ref([])
@@ -1143,10 +1146,10 @@ const fetchSingleUrlItem = async (item) => {
     const detailMessage =
       (typeof detailData === 'string' ? detailData : detailData?.message) || error.message || ''
     if (detailMessage.includes('same content') || detailMessage.includes('相同内容')) {
-      item.error = CONTENT_EXISTS_ERROR_TEXT
+      item.error = CONTENT_EXISTS_ERROR_TEXT()
       mergeSameNameFiles(detailData?.same_name_files)
     } else {
-      item.error = detailMessage || '加载失败'
+      item.error = detailMessage || t('upload.loadFailed')
     }
   }
 }
@@ -1176,7 +1179,7 @@ const handleFetchUrls = async () => {
 
   if (newItems.length === 0) {
     if (lines.length > 0) {
-      message.warning('没有检测到有效的新 URL')
+      message.warning(t('upload.noValidUrl'))
     }
     return
   }
@@ -1227,7 +1230,7 @@ const loadWorkspaceFiles = async (path = workspaceCurrentPath.value) => {
     workspaceItems.value = entries
   } catch (error) {
     console.error('加载工作区文件失败:', error)
-    message.error('加载工作区文件失败: ' + (error.message || '未知错误'))
+    message.error(t('upload.workspaceLoadFailed', { msg: error.message || t('common.unknownError') }))
   } finally {
     workspaceLoading.value = false
   }
@@ -1369,7 +1372,7 @@ const handlePreviewUploaded = async (file) => {
   const kbIdValue = file?.response?.kb_id
   if (!filePath || !kbIdValue) return
   try {
-    previewTarget.value = { name: file.name || file.response?.filename || '文档' }
+    previewTarget.value = { name: file.name || file.response?.filename || t('upload.documentFallback') }
     const response = await getUploadedFilePreview(kbIdValue, filePath, file.name)
     previewData.value = await normalizePreviewResponse(response, {
       filename: file.name || file.response?.filename
@@ -1377,7 +1380,7 @@ const handlePreviewUploaded = async (file) => {
     previewVisible.value = true
   } catch (error) {
     console.error('上传文件预览失败:', error)
-    message.error(`预览失败：${error?.message || '请稍后重试'}`)
+    message.error(t('upload.previewFailed', { msg: error?.message || t('upload.retryLater') }))
   }
 }
 
@@ -1386,7 +1389,7 @@ const runCleanForFile = async (file) => {
   const state = getFileCleanState(file)
   const filePath = file.response?.file_path
   if (!state || !filePath) {
-    message.error('上传文件信息不完整，请重新上传')
+    message.error(t('upload.fileInfoIncomplete'))
     return
   }
   const fileName = file.name || file.response?.filename || 'document'
@@ -1396,11 +1399,11 @@ const runCleanForFile = async (file) => {
     const response = await databaseApi.cleanDocument(kbId.value, null, fileName, filePath)
     state.cleanedMarkdown = response?.cleaned_markdown || ''
     state.status = state.cleanedMarkdown ? 'done' : 'error'
-    if (!state.cleanedMarkdown) state.error = '清洗结果为空'
+    if (!state.cleanedMarkdown) state.error = t('upload.cleanResultEmpty')
   } catch (error) {
     console.error('文档清洗失败:', error)
     state.status = 'error'
-    state.error = error?.message || '文档清洗失败，请稍后重试'
+    state.error = error?.message || t('upload.cleanFailed')
   }
 }
 
@@ -1408,7 +1411,7 @@ const runCleanForFile = async (file) => {
 const runCleanAll = async () => {
   const files = uploadedCleanFiles.value
   if (files.length === 0) {
-    message.error('请先上传文件')
+    message.error(t('upload.uploadFileFirst'))
     return
   }
   const items = files.map((file) => ({
@@ -1429,7 +1432,7 @@ const runCleanAll = async () => {
       if (!state) return
       state.cleanedMarkdown = result?.cleaned_markdown || ''
       state.status = result?.error ? 'error' : state.cleanedMarkdown ? 'done' : 'error'
-      state.error = result?.error || (state.cleanedMarkdown ? '' : '清洗结果为空')
+      state.error = result?.error || (state.cleanedMarkdown ? '' : t('upload.cleanResultEmpty'))
     })
   } catch (error) {
     console.error('批量文档清洗失败:', error)
@@ -1437,7 +1440,7 @@ const runCleanAll = async () => {
       const state = getFileCleanState(file)
       if (state) {
         state.status = 'error'
-        state.error = error?.message || '文档清洗失败，请稍后重试'
+        state.error = error?.message || t('upload.cleanFailed')
       }
     }
   }
@@ -1477,8 +1480,14 @@ const cleanAllLoading = computed(() =>
 )
 
 const cleanStatusLabel = (status) => {
-  const labels = { idle: '待清洗', loading: '清洗中', done: '已清洗', error: '失败' }
-  return labels[status] || status || '待清洗'
+  const labels = {
+    idle: 'docModal.cleanStatusParsed',
+    loading: 'docModal.cleanStatusCleaning',
+    done: 'upload.cleanStatusDone',
+    error: 'common.failed'
+  }
+  const key = labels[status]
+  return key ? t(key) : status || t('docModal.cleanStatusParsed')
 }
 
 const isFolderUpload = ref(false)
@@ -1539,8 +1548,8 @@ const hasZipFiles = computed(() => {
 const ocrEngineOptions = [
   {
     value: 'disable',
-    label: '不启用',
-    description: '不启用 OCR，仅处理文本文件'
+    label: 'upload.ocrDisabledLabel',
+    description: 'upload.ocrDisabledDesc'
   },
   {
     value: 'rapid_ocr',
@@ -1602,16 +1611,18 @@ watch(
 )
 
 const ocrStatusLabels = {
-  local: '不启用',
-  healthy: '可用',
-  configured: '已配置',
-  unavailable: '不可用',
-  unhealthy: '异常',
-  timeout: '超时',
-  error: '异常',
-  checking: '检查中',
-  unknown: '状态未知'
+  local: 'upload.ocrDisabledLabel',
+  healthy: 'upload.ocrStatusHealthy',
+  configured: 'upload.ocrStatusConfigured',
+  unavailable: 'upload.ocrStatusUnavailable',
+  unhealthy: 'upload.ocrStatusAbnormal',
+  timeout: 'upload.ocrStatusTimeout',
+  error: 'upload.ocrStatusAbnormal',
+  checking: 'upload.ocrStatusChecking',
+  unknown: 'upload.ocrStatusUnknown'
 }
+
+const getOcrLabel = (value) => (typeof value === 'string' && value.includes('.') ? t(value) : value)
 
 const getOcrStatus = (engine) => {
   if (engine === 'disable') return 'local'
@@ -1620,27 +1631,30 @@ const getOcrStatus = (engine) => {
   return current?.status || 'unknown'
 }
 
-const getOcrStatusLabel = (engine) => ocrStatusLabels[getOcrStatus(engine)] || '状态未知'
+const getOcrStatusLabel = (engine) => {
+  const key = ocrStatusLabels[getOcrStatus(engine)]
+  return key ? t(key) : t('upload.ocrStatusUnknown')
+}
 
 const getOcrDescription = (engine) => {
   const option = ocrEngineOptions.find((item) => item.value === engine)
-  if (engine === 'disable') return option?.description || '不启用 OCR，仅处理文本文件'
+  if (engine === 'disable') return getOcrLabel(option?.description) || t('upload.ocrDisabledDesc')
 
   const messageText = ocrHealthStatus.value?.[engine]?.message
   if (messageText) return messageText
 
   const status = getOcrStatus(engine)
   const fallbackMap = {
-    healthy: '服务正常',
-    configured: 'Token 已配置，将在解析时验证',
-    unavailable: '服务不可用',
-    unhealthy: '服务异常',
-    timeout: '服务检查超时',
-    error: '服务异常',
-    checking: '正在检查服务状态',
-    unknown: option?.description || '服务状态未知'
+    healthy: 'upload.ocrDescHealthy',
+    configured: 'upload.ocrDescConfigured',
+    unavailable: 'upload.ocrDescUnavailable',
+    unhealthy: 'upload.ocrDescUnhealthy',
+    timeout: 'upload.ocrDescTimeout',
+    error: 'upload.ocrDescUnhealthy',
+    checking: 'upload.ocrDescChecking',
+    unknown: option?.description || 'upload.ocrDescUnknown'
   }
-  return fallbackMap[status] || option?.description || '服务状态未知'
+  return getOcrLabel(fallbackMap[status]) || option?.description || t('upload.ocrDescUnknown')
 }
 
 const isUnavailableOcrEngine = (engine) => ['unavailable', 'error'].includes(getOcrStatus(engine))
@@ -1654,10 +1668,10 @@ const unavailableOcrOptions = computed(() =>
 )
 
 const selectedOcrEngineLabel = computed(() => {
-  return (
-    ocrEngineOptions.find((option) => option.value === processingParams.value.ocr_engine)?.label ||
-    '选择 OCR 引擎'
-  )
+  const label = ocrEngineOptions.find(
+    (option) => option.value === processingParams.value.ocr_engine
+  )?.label
+  return label ? getOcrLabel(label) : t('upload.selectOcrEngine')
 })
 
 const selectOcrEngine = (engine) => {
@@ -1679,7 +1693,7 @@ const validateOcrService = () => {
 
   const engine = processingParams.value.ocr_engine
   if (isUnavailableOcrEngine(engine)) {
-    message.error(`OCR服务不可用: ${getOcrDescription(engine)}`)
+    message.error(t('upload.ocrUnavailableError', { msg: getOcrDescription(engine) }))
     return false
   }
 
@@ -1699,7 +1713,7 @@ const handleCancel = () => {
 
 const beforeUpload = (file) => {
   if (!isSupportedExtension(file?.name)) {
-    message.error(`不支持的文件类型：${file?.name || '未知文件'}`)
+    message.error(t('upload.unsupportedFileType', { name: file?.name || t('upload.unknownFile') }))
     return Upload.LIST_IGNORE
   }
   return true
@@ -1720,11 +1734,11 @@ const downloadSameNameFile = async (file) => {
     // 获取当前数据库ID
     const currentDbId = kbId.value
     if (!currentDbId) {
-      message.error('知识库ID不存在')
+      message.error(t('upload.kbIdMissing'))
       return
     }
 
-    message.loading('正在下载文件...', 0)
+    message.loading(t('upload.downloadingFile'), 0)
     const response = await documentApi.downloadDocument(currentDbId, file.file_id)
     message.destroy()
 
@@ -1739,42 +1753,42 @@ const downloadSameNameFile = async (file) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
 
-    message.success(`文件 ${file.filename} 下载成功`)
+    message.success(t('upload.fileDownloadSuccess', { name: file.filename }))
   } catch (error) {
     message.destroy()
     console.error('下载文件失败:', error)
-    message.error(`下载文件失败: ${error.message || '未知错误'}`)
+    message.error(t('upload.downloadFileFailed', { msg: error.message || t('common.unknownError') }))
   }
 }
 
 const deleteSameNameFile = (file) => {
   Modal.confirm({
-    title: '确认删除文件',
-    content: `确定要删除文件 "${file.filename}" 吗？此操作不可恢复。`,
-    okText: '删除',
+    title: t('upload.confirmDeleteFileTitle'),
+    content: t('upload.confirmDeleteFileContent', { name: file.filename }),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       try {
         // 获取当前数据库ID
         const currentDbId = kbId.value
         if (!currentDbId) {
-          message.error('知识库ID不存在')
+          message.error(t('upload.kbIdMissing'))
           return
         }
 
-        message.loading('正在删除文件...', 0)
+        message.loading(t('upload.deletingFile'), 0)
         await documentApi.deleteDocument(currentDbId, file.file_id)
         message.destroy()
 
         // 从同名文件列表中移除
         sameNameFiles.value = sameNameFiles.value.filter((f) => f.file_id !== file.file_id)
 
-        message.success(`文件 ${file.filename} 删除成功`)
+        message.success(t('upload.fileDeleteSuccess', { name: file.filename }))
       } catch (error) {
         message.destroy()
         console.error('删除文件失败:', error)
-        message.error(`删除文件失败: ${error.message || '未知错误'}`)
+        message.error(t('upload.deleteFileFailed', { msg: error.message || t('common.unknownError') }))
       }
     }
   })
@@ -1955,9 +1969,9 @@ const handleFileUpload = (info) => {
     // 尝试多种方式获取错误信息
     const detail = file?.response?.detail || file?.error?.message || ''
     if (detail.includes('same content') || detail.includes('相同内容')) {
-      message.error(`${file.name} 已是相同内容文件，无需重复上传`)
+      message.error(t('upload.sameContentNoNeedUpload', { name: file.name }))
     } else {
-      message.error(detail || `文件上传失败：${file.name}`)
+      message.error(detail || t('upload.fileUploadFailed', { name: file.name }))
     }
   }
 
@@ -1982,7 +1996,7 @@ const checkOcrHealth = async () => {
     ocrHealthStatus.value = healthData.services
   } catch (error) {
     console.error('OCR健康检查失败:', error)
-    message.error('OCR服务健康检查失败')
+    message.error(t('upload.ocrHealthCheckFailed'))
   } finally {
     ocrHealthChecking.value = false
   }
@@ -2001,12 +2015,12 @@ const getAuthHeaders = () => {
 }
 
 const openDocLink = () => {
-  message.info('文档解析说明请联系系统管理员获取')
+  message.info(t('upload.docParsingHelpContactAdmin'))
 }
 
 const chunkData = async () => {
   if (!props.canUpload) {
-    message.error('没有上传权限')
+    message.error(t('upload.noUploadPermission'))
     return
   }
   if (props.deferProcessing) {
@@ -2014,7 +2028,7 @@ const chunkData = async () => {
   }
 
   if (!kbId.value) {
-    message.error('请先选择知识库')
+    message.error(t('upload.selectKbFirst'))
     return
   }
 
@@ -2025,7 +2039,7 @@ const chunkData = async () => {
 
   if (uploadMode.value === 'workspace') {
     if (selectedWorkspacePaths.value.length === 0) {
-      message.error('请先选择工作区文件')
+      message.error(t('upload.selectWorkspaceFileFirst'))
       return
     }
 
@@ -2034,7 +2048,7 @@ const chunkData = async () => {
       const res = await fileApi.importWorkspaceFiles(kbId.value, selectedWorkspacePaths.value)
       const importedItems = Array.isArray(res?.items) ? res.items : []
       if (importedItems.length === 0) {
-        message.error('工作区文件导入失败')
+        message.error(t('upload.workspaceImportFailed'))
         return
       }
 
@@ -2042,10 +2056,18 @@ const chunkData = async () => {
       const items = []
       const content_hashes = {}
       const file_sizes = {}
+      const source_paths = {}
       for (const item of importedItems) {
         const filePath = item.file_path
         if (!filePath) continue
         items.push(filePath)
+        if (props.currentPathPrefix) {
+          // 虚拟目录下导入工作区文件同样拼上 path_prefix；还原原始大小写名与默认展示一致
+          const ext = item.filename?.includes('.')
+            ? item.filename.slice(item.filename.lastIndexOf('.'))
+            : ''
+          source_paths[filePath] = props.currentPathPrefix + (item.original_filename || '') + ext
+        }
         if (item.content_hash) content_hashes[filePath] = item.content_hash
         if (Number.isFinite(item.size)) file_sizes[filePath] = item.size
         mergeSameNameFiles(item.same_name_files)
@@ -2053,7 +2075,7 @@ const chunkData = async () => {
         const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
         if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
           message.error({
-            content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
+            content: t('upload.ocrRequiredForImage'),
             duration: 5
           })
           return
@@ -2065,6 +2087,7 @@ const chunkData = async () => {
         params.auto_index = true
         Object.assign(params, buildAutoIndexParams())
       }
+      if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
       const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
       await addFiles({
@@ -2079,7 +2102,7 @@ const chunkData = async () => {
       selectedWorkspacePaths.value = []
     } catch (error) {
       console.error('工作区文件导入失败:', error)
-      message.error('工作区文件导入失败: ' + (error.message || '未知错误'))
+      message.error(t('upload.workspaceImportFailedMsg', { msg: error.message || t('common.unknownError') }))
     } finally {
       store.state.chunkLoading = false
     }
@@ -2091,7 +2114,7 @@ const chunkData = async () => {
     // 过滤出成功的项
     const successfulItems = urlList.value.filter((item) => item.status === 'success' && item.data)
     if (successfulItems.length === 0) {
-      message.error('请添加并等待至少一个 URL 解析成功')
+      message.error(t('upload.urlParseWait'))
       return
     }
 
@@ -2110,12 +2133,12 @@ const chunkData = async () => {
     }
 
     if (deduplicatedItems.length === 0) {
-      message.error('URL 内容均为重复项，请更换后重试')
+      message.error(t('upload.urlAllDuplicates'))
       return
     }
 
     if (skippedDuplicates > 0) {
-      message.warning(`检测到 ${skippedDuplicates} 个重复 URL 内容，已保留首个并跳过其余项`)
+      message.warning(t('upload.urlDuplicatesSkipped', { count: skippedDuplicates }))
     }
 
     try {
@@ -2129,12 +2152,16 @@ const chunkData = async () => {
       // 构造 _preprocessed_map 和 items (minio urls)
       const items = []
       const preprocessedMap = {}
+      const source_paths = {}
       for (const item of deduplicatedItems) {
         // item.data = { file_path: "http://minio...", content_hash: "...", filename: "...", ... }
         // 注意：fetch-url 返回的 file_path 其实是 MinIO URL
         // 我们需要传递 MinIO URL 给 addDocuments
         const minioUrl = item.data.file_path
         items.push(minioUrl)
+        if (props.currentPathPrefix) {
+          source_paths[minioUrl] = props.currentPathPrefix + (item.data.filename || 'document')
+        }
         preprocessedMap[minioUrl] = {
           path: minioUrl,
           content_hash: item.data.content_hash,
@@ -2143,6 +2170,7 @@ const chunkData = async () => {
         }
       }
       params._preprocessed_map = preprocessedMap
+      if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
       const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
       await addFiles({
@@ -2158,7 +2186,7 @@ const chunkData = async () => {
       newUrl.value = ''
     } catch (error) {
       console.error('URL 提交失败:', error)
-      message.error('URL 提交失败: ' + (error.message || '未知错误'))
+      message.error(t('upload.urlSubmitFailed', { msg: error.message || t('common.unknownError') }))
     } finally {
       store.state.chunkLoading = false
     }
@@ -2172,9 +2200,10 @@ const chunkData = async () => {
   const items = []
   const content_hashes = {}
   const file_sizes = {}
+  const source_paths = {}
   const versionUploads = []
   if (findDuplicateVersionTarget(versionCandidates.value)) {
-    message.error('同一批次不能为同一文档提交多个新版本')
+    message.error(t('upload.noMultipleVersionsPerBatch'))
     return
   }
   for (const file of fileList.value) {
@@ -2197,6 +2226,11 @@ const chunkData = async () => {
       // xlsx 不参与清洗，始终走 Office 编辑路径入库
       if (!enableClean.value || xlsxCleanExempt) {
         items.push(effectivePath)
+        if (props.currentPathPrefix) {
+          // 虚拟目录上传：source_path 拼上 path_prefix，避免文件落到知识库根目录；
+          // 用 file.name（原始大小写）与无 source_path 时的默认展示名保持一致
+          source_paths[effectivePath] = props.currentPathPrefix + file.name
+        }
         if (effectiveHash) content_hashes[effectivePath] = effectiveHash
         if (officeState?.edited && Number.isFinite(officeState.size)) {
           file_sizes[effectivePath] = officeState.size
@@ -2210,7 +2244,7 @@ const chunkData = async () => {
     const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
     if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
       message.error({
-        content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
+        content: t('upload.ocrRequiredForImage'),
         duration: 5
       })
       return
@@ -2219,7 +2253,7 @@ const chunkData = async () => {
 
   // 勾选清洗时原始文件不入库，需以已上传文件判断是否为空，否则会提前拦截
   if (items.length === 0 && versionUploads.length === 0 && uploadedCleanFiles.value.length === 0) {
-    message.error('请先上传文件')
+    message.error(t('upload.uploadFileFirst'))
     return
   }
 
@@ -2238,7 +2272,7 @@ const chunkData = async () => {
         (file) => getFileCleanState(file)?.status !== 'done' || !getFileCleanState(file)?.cleanedMarkdown
       )
       if (unCleanedFiles.length > 0) {
-        message.error('勾选了 AI 清洗排版，请先对全部文件执行清洗（全部清洗或逐个清洗）')
+        message.error(t('upload.cleanAllFirst'))
         return
       }
       for (const file of uploadedCleanFiles.value) {
@@ -2259,9 +2293,12 @@ const chunkData = async () => {
         const cleanPath = cleanRes?.file_path
         const cleanHash = cleanRes?.content_hash
         if (!cleanPath) {
-          throw new Error('清洗后内容上传失败，请重试')
+          throw new Error(t('upload.cleanUploadFailedRetry'))
         }
         items.push(cleanPath)
+        if (props.currentPathPrefix) {
+          source_paths[cleanPath] = props.currentPathPrefix + (cleanRes?.filename || filename)
+        }
         if (cleanHash) content_hashes[cleanPath] = cleanHash
         if (Number.isFinite(cleanRes?.size)) file_sizes[cleanPath] = cleanRes.size
       }
@@ -2288,6 +2325,7 @@ const chunkData = async () => {
       }
       if (Object.keys(duplicate_strategies).length > 0) params.duplicate_strategies = duplicate_strategies
       if (Object.keys(replace_file_ids).length > 0) params.replace_file_ids = replace_file_ids
+      if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
       const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
       const added = await addFiles({
@@ -2309,12 +2347,12 @@ const chunkData = async () => {
         processing_params: params
       })
       if (result?.status !== 'queued') {
-        throw new Error(`版本更新任务提交失败：${file.name}`)
+        throw new Error(t('upload.versionTaskSubmitFailed', { name: file.name }))
       }
     }
 
     if (versionUploads.length > 0) {
-      message.success(`${versionUploads.length} 个文档版本更新任务已提交，请在任务中心查看处理进度`)
+      message.success(t('upload.versionTasksSubmitted', { count: versionUploads.length }))
     }
     emit('success')
     handleCancel()
@@ -2324,8 +2362,8 @@ const chunkData = async () => {
     console.error('文件处理失败:', error)
     const detail = error.response?.data?.detail
     const errorText =
-      (typeof detail === 'string' ? detail : detail?.message) || error.message || '未知错误'
-    message.error(`文件或版本任务提交失败: ${errorText}`)
+      (typeof detail === 'string' ? detail : detail?.message) || error.message || t('common.unknownError')
+    message.error(t('upload.fileOrVersionSubmitFailed', { msg: errorText }))
   } finally {
     store.state.chunkLoading = false
   }

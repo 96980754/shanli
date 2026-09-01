@@ -2,6 +2,7 @@
  * 认证相关 API
  */
 
+import { i18n } from '@/i18n'
 import { apiAdminGet, apiAdminPost, apiGet, apiPost } from './base'
 
 async function parseErrorDetail(response, fallbackMessage) {
@@ -23,7 +24,7 @@ async function parseErrorDetail(response, fallbackMessage) {
 async function getOIDCConfig() {
   const response = await fetch('/api/auth/oidc/config')
   if (!response.ok) {
-    throw new Error('获取 OIDC 配置失败')
+    throw new Error(i18n.global.t('auth.fetchOidcConfigFailed'))
   }
   return response.json()
 }
@@ -37,7 +38,7 @@ async function getOIDCLoginUrl(redirectPath = '/') {
   const params = new URLSearchParams({ redirect_path: redirectPath })
   const response = await fetch(`/api/auth/oidc/login-url?${params}`)
   if (!response.ok) {
-    const detail = await parseErrorDetail(response, '获取 OIDC 登录地址失败')
+    const detail = await parseErrorDetail(response, i18n.global.t('auth.fetchOidcUrlFailed'))
     throw new Error(detail)
   }
   return response.json()
@@ -73,7 +74,7 @@ async function exchangeOIDCCode(code) {
   })
 
   if (!response.ok) {
-    const detail = await parseErrorDetail(response, 'OIDC 登录失败')
+    const detail = await parseErrorDetail(response, i18n.global.t('auth.oidcExchangeFailed'))
     throw new Error(detail)
   }
 
@@ -94,7 +95,7 @@ async function downloadUserImportTemplate() {
   const response = await apiAdminGet('/api/auth/users/import-template', {}, 'blob')
   const disposition = response.headers.get('Content-Disposition') || ''
   const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
-  const filename = encodedName ? decodeURIComponent(encodedName) : '用户导入模板.xlsx'
+  const filename = encodedName ? decodeURIComponent(encodedName) : i18n.global.t('auth.userImportTemplateFilename')
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

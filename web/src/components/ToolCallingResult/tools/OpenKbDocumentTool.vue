@@ -4,9 +4,9 @@
       <div class="sep-header">
         <span class="note">Open</span>
         <span class="separator" v-if="resourceName">|</span>
-        <span class="description" v-if="resourceName">知识库: {{ resourceName }}</span>
+        <span class="description" v-if="resourceName">{{ $t('toolCall.kbLabel', { name: resourceName }) }}</span>
         <span class="separator" v-if="fileId">|</span>
-        <span class="description" v-if="fileId">文件: {{ fileId }}</span>
+        <span class="description" v-if="fileId">{{ $t('toolCall.fileLabel', { name: fileId }) }}</span>
         <span class="tag" v-if="lineLabel">{{ lineLabel }}</span>
       </div>
     </template>

@@ -3,7 +3,7 @@
     <div class="extension-toolbar-left">
       <a-input
         v-model:value="searchModel"
-        :placeholder="searchPlaceholder"
+        :placeholder="resolvedPlaceholder"
         allow-clear
         class="extension-search-input"
       >
@@ -18,13 +18,17 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { Search } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const searchModel = defineModel('search', { type: String, default: '' })
 
-defineProps({
-  searchPlaceholder: { type: String, default: '搜索...' }
+const props = defineProps({
+  searchPlaceholder: { type: String, default: '' }
 })
+const resolvedPlaceholder = computed(() => props.searchPlaceholder || t('tools.searchPlaceholder'))
 </script>
 
 <style lang="less" scoped>

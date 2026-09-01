@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import {
   Globe,
@@ -21,6 +22,7 @@ import PageShoulder from '@/components/shared/PageShoulder.vue'
 import InfoCard from '@/components/shared/InfoCard.vue'
 import ExtensionCardGrid from '@/components/extensions/ExtensionCardGrid.vue'
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 const loading = ref(false)
 const remoteLoading = ref(false)
@@ -190,7 +192,7 @@ const isDefaultModel = (providerId, modelId) =>
   defaultModelSpec.value === buildModelSpec(providerId, modelId)
 
 const warnDefaultModelProtected = () => {
-  message.warning('当前默认模型正在使用该供应商或模型，请先切换默认模型')
+  message.warning(t('modelMgmt.defaultModelProtected'))
 }
 
 const isModelTesting = (providerId, modelId) =>
@@ -199,16 +201,16 @@ const isModelTesting = (providerId, modelId) =>
 const getModelTestTitle = (providerId, model) => {
   const spec = buildModelSpec(providerId, model.id)
   const result = modelTestResultBySpec.value[spec]
-  if (!result) return '测试连接'
+  if (!result) return t('modelMgmt.testConnection')
 
   const statusText =
     {
-      available: '可用',
-      unavailable: '不可用',
-      unsupported: '暂不支持',
-      error: '错误'
-    }[result.status] || '未知'
-  return `${statusText}: ${result.message || '无详细信息'}`
+      available: t('modelMgmt.statusAvailable'),
+      unavailable: t('modelMgmt.statusUnavailable'),
+      unsupported: t('modelMgmt.statusUnsupported'),
+      error: t('modelMgmt.statusError')
+    }[result.status] || t('modelMgmt.statusUnknown')
+  return `${statusText}: ${result.message || t('modelMgmt.noDetail')}`
 }
 
 const getInputModalities = (model) => {
@@ -249,7 +251,7 @@ const filteredRemoteModels = computed(() => {
 })
 
 const remoteModelTypeOptions = computed(() => {
-  if (!currentProviderForModels.value) return [{ label: '全部', value: 'all' }]
+  if (!currentProviderForModels.value) return [{ label: t('modelMgmt.all'), value: 'all' }]
   const providerId = currentProviderForModels.value.provider_id
   const models = remoteModelsMap.value[providerId] || []
   const counts = models.reduce((acc, model) => {
@@ -258,7 +260,7 @@ const remoteModelTypeOptions = computed(() => {
     return acc
   }, {})
   return [
-    { label: `全部 ${models.length}`, value: 'all' },
+    { label: t('modelMgmt.allWithCount', { count: models.length }), value: 'all' },
     { label: `Chat ${counts.chat || 0}`, value: 'chat' },
     { label: `Embedding ${counts.embedding || 0}`, value: 'embedding' },
     { label: `Rerank ${counts.rerank || 0}`, value: 'rerank' }
@@ -277,11 +279,11 @@ const parseJsonObject = (text, label) => {
   try {
     const parsed = JSON.parse(text || '{}')
     if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      throw new Error(`${label} 必须是 JSON 对象`)
+      throw new Error(t('modelMgmt.jsonObjectRequired', { label }))
     }
     return parsed
   } catch {
-    throw new Error(`${label} 格式不正确`)
+    throw new Error(t('modelMgmt.jsonFormatInvalid', { label }))
   }
 }
 
@@ -295,7 +297,7 @@ const loadProviders = async () => {
     const result = await modelProviderApi.getProviders()
     providers.value = result.data || []
   } catch (error) {
-    message.error(error.message || '加载模型供应商失败')
+    message.error(error.message || t('modelMgmt.loadProvidersFailed'))
   } finally {
     loading.value = false
   }
@@ -305,13 +307,13 @@ function getProviderInfo(provider) {
   return [
     { label: 'Provider Type', value: getProviderTypeLabel(provider.provider_type) },
     { label: 'Base URL', value: provider.base_url || '-' },
-    { label: '能力', value: provider.capabilities?.join(', ') || 'chat' }
+    { label: t('modelMgmt.capabilities'), value: provider.capabilities?.join(', ') || 'chat' }
   ]
 }
 
 function getProviderStatus(provider) {
-  if (!provider.is_enabled) return { label: '未启用', level: 'info' }
-  if (provider.credential_status === 'warning') return { label: '凭证缺失', level: 'warning' }
+  if (!provider.is_enabled) return { label: t('modelMgmt.providerDisabled'), level: 'info' }
+  if (provider.credential_status === 'warning') return { label: t('modelMgmt.credentialMissing'), level: 'warning' }
   if (provider.is_enabled) return { label: '', level: 'success' }
   return null
 }
@@ -377,19 +379,19 @@ const buildProviderPayload = () => ({
   api_key: providerForm.api_key || null,
   capabilities: providerForm.capabilities,
   is_enabled: providerForm.is_enabled,
-  headers_json: parseJsonObject(providerForm.headers_text, '请求头'),
-  extra_json: parseJsonObject(providerForm.extra_text, '扩展配置')
+  headers_json: parseJsonObject(providerForm.headers_text, t('modelMgmt.headersJsonLabel')),
+  extra_json: parseJsonObject(providerForm.extra_text, t('modelMgmt.extraJsonLabel'))
 })
 
 const createProvider = async () => {
   saving.value = true
   try {
     await modelProviderApi.createProvider(buildProviderPayload())
-    message.success('供应商已创建')
+    message.success(t('modelMgmt.providerCreated'))
     showProviderModal.value = false
     await loadProviders()
   } catch (error) {
-    message.error(error.message || '创建失败')
+    message.error(error.message || t('modelMgmt.createFailed'))
   } finally {
     saving.value = false
   }
@@ -408,11 +410,11 @@ const saveProvider = async () => {
   saving.value = true
   try {
     await modelProviderApi.updateProvider(providerForm.provider_id, buildProviderPayload())
-    message.success('供应商已保存')
+    message.success(t('modelMgmt.providerSaved'))
     showProviderModal.value = false
     await loadProviders()
   } catch (error) {
-    message.error(error.message || '保存失败')
+    message.error(error.message || t('modelMgmt.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -425,15 +427,15 @@ const deleteProvider = async (provider) => {
   }
 
   Modal.confirm({
-    title: `删除 ${provider.display_name}`,
-    content: '删除后不会影响当前系统正在使用的旧模型配置。',
-    okText: '删除',
+    title: t('modelMgmt.deleteProviderTitle', { name: provider.display_name }),
+    content: t('modelMgmt.deleteProviderContent'),
+    okText: t('common.delete'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         await modelProviderApi.deleteProvider(provider.provider_id)
-        message.success('已删除')
+        message.success(t('modelMgmt.deleted'))
         if (currentProviderForModels.value?.provider_id === provider.provider_id) {
           showModelsModal.value = false
           currentProviderForModels.value = null
@@ -444,7 +446,7 @@ const deleteProvider = async (provider) => {
         }
         await loadProviders()
       } catch (error) {
-        message.error(error.message || '删除失败')
+        message.error(error.message || t('modelMgmt.deleteFailed'))
       }
     }
   })
@@ -466,10 +468,10 @@ const toggleProviderEnabled = async (provider, checked) => {
   togglingProviderId.value = provider.provider_id
   try {
     await modelProviderApi.updateProvider(provider.provider_id, { is_enabled: checked })
-    message.success(checked ? '已启用' : '已停用')
+    message.success(t(checked ? 'modelMgmt.enabledMsg' : 'modelMgmt.disabledMsg'))
     await loadProviders()
   } catch (error) {
-    message.error(error.message || '操作失败')
+    message.error(error.message || t('common.operationFailed'))
     await loadProviders()
   } finally {
     togglingProviderId.value = null
@@ -498,9 +500,9 @@ const fetchRemoteModels = async (providerId) => {
       [providerId]: result.data || []
     }
     remoteModelsLoaded.value[providerId] = true
-    message.success(`已获取 ${result.data?.length || 0} 个远端模型`)
+    message.success(t('modelMgmt.remoteModelsFetched', { count: result.data?.length || 0 }))
   } catch (error) {
-    message.error(error.message || '获取远端模型失败')
+    message.error(error.message || t('modelMgmt.fetchRemoteModelsFailed'))
   } finally {
     remoteLoading.value = false
   }
@@ -528,24 +530,24 @@ const testModelConnection = async (providerId, model) => {
   modelTestLoadingBySpec.value = { ...modelTestLoadingBySpec.value, [spec]: true }
   try {
     const result = await modelProviderApi.getModelStatusBySpec(spec)
-    const status = result.data || { spec, status: 'error', message: '检查失败' }
+    const status = result.data || { spec, status: 'error', message: t('modelMgmt.checkFailed') }
     modelTestResultBySpec.value = { ...modelTestResultBySpec.value, [spec]: status }
 
     if (status.status === 'available') {
-      message.success(`${getModelDisplayName(model)} 连接正常`)
+      message.success(t('modelMgmt.modelConnected', { name: getModelDisplayName(model) }))
     } else if (status.status === 'unsupported') {
-      message.warning(status.message || '暂不支持测试该类型模型')
+      message.warning(status.message || t('modelMgmt.modelTypeUnsupported'))
     } else if (status.status === 'unavailable') {
-      message.warning(status.message || '模型连接不可用')
+      message.warning(status.message || t('modelMgmt.modelUnavailable'))
     } else {
-      message.error(status.message || '模型连接测试失败')
+      message.error(status.message || t('modelMgmt.modelTestFailed'))
     }
   } catch (error) {
     modelTestResultBySpec.value = {
       ...modelTestResultBySpec.value,
-      [spec]: { spec, status: 'error', message: error.message || '检查失败' }
+      [spec]: { spec, status: 'error', message: error.message || t('modelMgmt.checkFailed') }
     }
-    message.error(error.message || '模型连接测试失败')
+    message.error(error.message || t('modelMgmt.modelTestFailed'))
   } finally {
     modelTestLoadingBySpec.value = { ...modelTestLoadingBySpec.value, [spec]: false }
   }
@@ -557,7 +559,7 @@ const addModelFromRemote = async (providerId, remoteModel) => {
 
   const enabledModels = provider.enabled_models || []
   if (enabledModels.some((m) => m.id === remoteModel.id)) {
-    message.info('模型已存在')
+    message.info(t('modelMgmt.modelExists'))
     return
   }
 
@@ -568,14 +570,14 @@ const addModelFromRemote = async (providerId, remoteModel) => {
 
   try {
     await modelProviderApi.updateProvider(providerId, { enabled_models: newEnabledModels })
-    message.success(`已添加模型 ${remoteModel.id}`)
+    message.success(t('modelMgmt.remoteModelAdded', { id: remoteModel.id }))
     await loadProviders()
     // Refresh current provider reference if modal is open
     if (currentProviderForModels.value?.provider_id === providerId) {
       currentProviderForModels.value = providers.value.find((p) => p.provider_id === providerId)
     }
   } catch (error) {
-    message.error(error.message || '添加模型失败')
+    message.error(error.message || t('modelMgmt.addModelFailed'))
   }
 }
 
@@ -620,11 +622,11 @@ const saveModelConfig = async () => {
     if (isCreating.value) {
       const newId = (editingModel.value.id || '').trim()
       if (!newId) {
-        message.error('请填写模型 ID')
+        message.error(t('modelMgmt.modelIdRequired'))
         return
       }
       if ((provider.enabled_models || []).some((m) => m.id === newId)) {
-        message.error('模型 ID 已存在')
+        message.error(t('modelMgmt.modelIdExists'))
         return
       }
       const newModel = { ...editingModel.value, id: newId, source: 'manual', enabled: true }
@@ -638,7 +640,7 @@ const saveModelConfig = async () => {
     await modelProviderApi.updateProvider(currentProviderForModels.value.provider_id, {
       enabled_models: enabledModels
     })
-    message.success(isCreating.value ? '模型已添加' : '模型配置已保存')
+    message.success(t(isCreating.value ? 'modelMgmt.modelAdded' : 'modelMgmt.modelConfigSaved'))
     showModelModal.value = false
     isCreating.value = false
     await loadProviders()
@@ -647,7 +649,7 @@ const saveModelConfig = async () => {
       (p) => p.provider_id === currentProviderForModels.value.provider_id
     )
   } catch (error) {
-    message.error(error.message || '保存失败')
+    message.error(error.message || t('modelMgmt.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -662,23 +664,23 @@ const removeModel = async (providerId, modelId) => {
   }
 
   Modal.confirm({
-    title: '移除模型',
-    content: `确定要移除模型 ${modelId} 吗？`,
-    okText: '移除',
+    title: t('modelMgmt.removeModelTitle'),
+    content: t('modelMgmt.removeModelContent', { id: modelId }),
+    okText: t('modelMgmt.remove'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     async onOk() {
       try {
         const enabledModels = (provider.enabled_models || []).filter((m) => m.id !== modelId)
         await modelProviderApi.updateProvider(providerId, { enabled_models: enabledModels })
-        message.success('模型已移除')
+        message.success(t('modelMgmt.modelRemoved'))
         await loadProviders()
         // Refresh current provider reference if modal is open
         if (currentProviderForModels.value?.provider_id === providerId) {
           currentProviderForModels.value = providers.value.find((p) => p.provider_id === providerId)
         }
       } catch (error) {
-        message.error(error.message || '移除失败')
+        message.error(error.message || t('modelMgmt.removeFailed'))
       }
     }
   })
@@ -695,11 +697,11 @@ defineExpose({
 
 <template>
   <div class="model-provider-manage-panel">
-    <PageShoulder v-model:search="searchQuery" search-placeholder="搜索供应商...">
+    <PageShoulder v-model:search="searchQuery" :search-placeholder="$t('modelMgmt.searchProviderPlaceholder')">
       <template #actions>
         <a-button type="primary" class="lucide-icon-btn" @click="openCreateProviderModal">
           <Plus :size="14" />
-          新增供应商
+          {{ $t('modelMgmt.addProvider') }}
         </a-button>
         <a-button class="lucide-icon-btn" @click="loadProviders" :loading="loading">
           <RefreshCw :size="14" :class="{ spinning: loading }" />
@@ -728,9 +730,9 @@ defineExpose({
         <template #footer>
           <button class="view-models-btn" type="button" @click.stop="openModelsModal(provider)">
             <Settings2 :size="14" />
-            管理模型
+            {{ $t('modelMgmt.manageModels') }}
             <span v-if="provider.enabled_models?.length" class="enabled-count"
-              >（已启用 {{ provider.enabled_models.length }} 个）</span
+              >{{ $t('modelMgmt.enabledCount', { count: provider.enabled_models.length }) }}</span
             >
           </button>
           <span class="provider-enable-switch" @click.stop>
@@ -748,7 +750,7 @@ defineExpose({
     <!-- Provider Edit Modal -->
     <a-modal
       v-model:open="showProviderModal"
-      :title="editingProviderId ? '编辑供应商' : '新增供应商'"
+      :title="editingProviderId ? $t('modelMgmt.editProvider') : $t('modelMgmt.addProvider')"
       :width="560"
       :confirm-loading="saving"
     >
@@ -761,17 +763,17 @@ defineExpose({
             @click="deleteProviderFromEdit"
           >
             <Trash2 :size="14" />
-            删除供应商
+            {{ $t('modelMgmt.deleteProvider') }}
           </a-button>
           <span v-else></span>
           <div class="provider-modal-footer-actions">
-            <a-button @click="showProviderModal = false">取消</a-button>
+            <a-button @click="showProviderModal = false">{{ $t('common.cancel') }}</a-button>
             <a-button
               type="primary"
               :loading="saving"
               @click="editingProviderId ? saveProvider() : createProvider()"
             >
-              确认
+              {{ $t('common.ok') }}
             </a-button>
           </div>
         </div>
@@ -787,7 +789,7 @@ defineExpose({
             />
           </label>
           <label class="form-label">
-            <span>展示名称</span>
+            <span>{{ $t('modelMgmt.displayName') }}</span>
             <a-input v-model:value="providerForm.display_name" placeholder="My Provider" />
           </label>
         </div>
@@ -817,7 +819,7 @@ defineExpose({
         <div class="form-row">
           <label class="form-label">
             <span>API Key Env</span>
-            <a-input v-model:value="providerForm.api_key_env" placeholder="环境变量名" />
+            <a-input v-model:value="providerForm.api_key_env" :placeholder="$t('modelMgmt.envVarPlaceholder')" />
           </label>
           <label class="form-label">
             <span>API Key</span>
@@ -864,14 +866,14 @@ defineExpose({
               <span>Rerank Endpoint</span>
               <a-input
                 v-model:value="providerForm.rerank_models_endpoint"
-                placeholder="按供应商文档填写，留空则不自动加载"
+                :placeholder="$t('modelMgmt.rerankEndpointPlaceholder')"
               />
             </label>
           </div>
         </template>
 
         <label class="form-label full-width">
-          <span>能力</span>
+          <span>{{ $t('modelMgmt.capabilities') }}</span>
           <a-select v-model:value="providerForm.capabilities" mode="multiple">
             <a-select-option value="chat">chat</a-select-option>
             <a-select-option value="embedding">embedding</a-select-option>
@@ -881,23 +883,23 @@ defineExpose({
         </label>
 
         <div class="form-switch">
-          <span>状态</span>
+          <span>{{ $t('modelMgmt.status') }}</span>
           <a-switch
             v-model:checked="providerForm.is_enabled"
-            checked-children="启用"
-            un-checked-children="停用"
+            :checked-children="$t('modelMgmt.enabled')"
+            :un-checked-children="$t('modelMgmt.disabled')"
           />
         </div>
 
         <a-collapse expand-icon-position="end" :ghost="true" class="advanced-collapse">
-          <a-collapse-panel key="advanced" header="高级配置">
+          <a-collapse-panel key="advanced" :header="$t('modelMgmt.advancedConfig')">
             <label class="form-label full-width">
-              <span>请求头 JSON</span>
+              <span>{{ $t('modelMgmt.headersJson') }}</span>
               <a-textarea v-model:value="providerForm.headers_text" :rows="4" placeholder="{}" />
             </label>
 
             <label class="form-label full-width">
-              <span>扩展配置 JSON</span>
+              <span>{{ $t('modelMgmt.extraJson') }}</span>
               <a-textarea v-model:value="providerForm.extra_text" :rows="4" placeholder="{}" />
             </label>
           </a-collapse-panel>
@@ -909,8 +911,8 @@ defineExpose({
       v-model:open="showModelsModal"
       :title="
         currentProviderForModels
-          ? `${currentProviderForModels.display_name} - 模型配置`
-          : '模型配置'
+          ? $t('modelMgmt.providerModelsTitle', { name: currentProviderForModels.display_name })
+          : $t('modelMgmt.modelsConfig')
       "
       :width="800"
       :footer="null"
@@ -920,7 +922,7 @@ defineExpose({
         <div class="models-section">
           <div class="enabled-header">
             <h4 class="models-section-title">
-              已启用模型 ({{ currentProviderForModels.enabled_models?.length || 0 }})
+              {{ $t('modelMgmt.enabledModels', { count: currentProviderForModels.enabled_models?.length || 0 }) }}
             </h4>
             <div class="actions">
               <a-button
@@ -930,7 +932,7 @@ defineExpose({
                 :loading="remoteLoading"
                 @click="fetchRemoteModels(currentProviderForModels.provider_id)"
               >
-                获取远程模型
+                {{ $t('modelMgmt.fetchRemoteModels') }}
               </a-button>
               <a-button
                 size="small"
@@ -938,17 +940,17 @@ defineExpose({
                 @click="openCreateModal(currentProviderForModels)"
               >
                 <Plus :size="14" />
-                <span>手动添加</span>
+                <span>{{ $t('modelMgmt.manualAdd') }}</span>
               </a-button>
             </div>
           </div>
           <div class="models-table" v-if="currentProviderForModels.enabled_models?.length">
             <div class="table-head">
-              <span class="col-name">模型</span>
-              <span class="col-type">类型</span>
-              <span class="col-context">上下文</span>
-              <span class="col-dim">维度</span>
-              <span class="col-ops">操作</span>
+              <span class="col-name">{{ $t('modelMgmt.model') }}</span>
+              <span class="col-type">{{ $t('modelMgmt.type') }}</span>
+              <span class="col-context">{{ $t('modelMgmt.context') }}</span>
+              <span class="col-dim">{{ $t('modelMgmt.dimension') }}</span>
+              <span class="col-ops">{{ $t('modelMgmt.operations') }}</span>
             </div>
             <div
               v-for="model in currentProviderForModels.enabled_models"
@@ -965,8 +967,8 @@ defineExpose({
                 <span
                   v-if="model.source === 'manual'"
                   class="type-tag manual"
-                  title="管理员手动添加"
-                  aria-label="管理员手动添加"
+                  :title="$t('modelMgmt.manualAddTooltip')"
+                  :aria-label="$t('modelMgmt.manualAddTooltip')"
                 >
                   <LayersPlus :size="12" />
                 </span>
@@ -976,7 +978,7 @@ defineExpose({
                 <span
                   v-if="model.type === 'embedding' && !model.dimension"
                   class="dim-warning"
-                  title="缺少维度配置"
+                  :title="$t('modelMgmt.dimensionMissing')"
                   >⚠</span
                 >
                 <span v-else>{{ model.dimension || '-' }}</span>
@@ -988,7 +990,7 @@ defineExpose({
                   :class="{
                     'is-testing': isModelTesting(currentProviderForModels.provider_id, model.id)
                   }"
-                  aria-label="测试模型连接"
+                  :aria-label="$t('modelMgmt.testConnectionAria')"
                   :aria-busy="isModelTesting(currentProviderForModels.provider_id, model.id)"
                   :title="getModelTestTitle(currentProviderForModels.provider_id, model)"
                   @click="testModelConnection(currentProviderForModels.provider_id, model)"
@@ -1014,18 +1016,20 @@ defineExpose({
               </span>
             </div>
           </div>
-          <a-empty v-else description="暂无已启用模型" />
+          <a-empty v-else :description="$t('modelMgmt.noEnabledModels')" />
         </div>
 
         <!-- Remote Models Section -->
         <div class="models-section">
           <div class="remote-header">
-            <h4 class="models-section-title">远端候选模型 ({{ filteredRemoteModels.length }})</h4>
+            <h4 class="models-section-title">
+              {{ $t('modelMgmt.remoteModels', { count: filteredRemoteModels.length }) }}
+            </h4>
             <a-input
               v-if="remoteModelsMap[currentProviderForModels.provider_id]?.length"
               v-model:value="remoteModelSearch[currentProviderForModels.provider_id]"
               class="remote-search-input"
-              placeholder="搜索模型..."
+              :placeholder="$t('modelMgmt.searchModelPlaceholder')"
               allow-clear
             >
               <template #prefix><Search :size="12" /></template>
@@ -1092,7 +1096,7 @@ defineExpose({
     <!-- Model Config Modal -->
     <a-modal
       v-model:open="showModelModal"
-      :title="isCreating ? '手动添加模型' : '模型配置'"
+      :title="isCreating ? $t('modelMgmt.manualAddModel') : $t('modelMgmt.modelsConfig')"
       :width="520"
       :confirm-loading="saving"
       @ok="saveModelConfig"
@@ -1100,22 +1104,22 @@ defineExpose({
       <div class="modal-form">
         <div v-if="isCreating" class="form-row">
           <label class="form-label">
-            <span>模型 ID <span class="required-mark">*</span></span>
-            <a-input v-model:value="editingModel.id" placeholder="例如 BAAI/bge-m3" allow-clear />
+            <span>{{ $t('modelMgmt.modelId') }} <span class="required-mark">*</span></span>
+            <a-input v-model:value="editingModel.id" :placeholder="$t('modelMgmt.modelIdPlaceholder')" allow-clear />
           </label>
         </div>
         <div v-else class="model-id-display">
-          <span class="info-label">模型 ID</span>
+          <span class="info-label">{{ $t('modelMgmt.modelId') }}</span>
           <code>{{ editingModel.id }}</code>
         </div>
 
         <div class="form-row">
           <label class="form-label">
-            <span>展示名称</span>
+            <span>{{ $t('modelMgmt.displayName') }}</span>
             <a-input v-model:value="editingModel.display_name" />
           </label>
           <label class="form-label">
-            <span>模型类型</span>
+            <span>{{ $t('modelMgmt.modelType') }}</span>
             <a-select
               v-model:value="editingModel.type"
               :options="editingModelTypeOptions"
@@ -1126,18 +1130,18 @@ defineExpose({
 
         <div class="form-row">
           <label class="form-label">
-            <span>协议覆盖</span>
-            <a-input v-model:value="editingModel.protocol_override" placeholder="可选" />
+            <span>{{ $t('modelMgmt.protocolOverride') }}</span>
+            <a-input v-model:value="editingModel.protocol_override" :placeholder="$t('modelMgmt.optional')" />
           </label>
           <label class="form-label">
-            <span>Base URL 覆盖</span>
-            <a-input v-model:value="editingModel.base_url_override" placeholder="可选" />
+            <span>{{ $t('modelMgmt.baseUrlOverride') }}</span>
+            <a-input v-model:value="editingModel.base_url_override" :placeholder="$t('modelMgmt.optional')" />
           </label>
         </div>
 
         <div class="form-row">
           <label class="form-label" v-if="editingModel.type === 'embedding'">
-            <span>维度</span>
+            <span>{{ $t('modelMgmt.dimension') }}</span>
             <a-input-number v-model:value="editingModel.dimension" :min="1" />
           </label>
           <label

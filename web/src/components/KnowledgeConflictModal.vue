@@ -1,18 +1,18 @@
 <template>
-  <a-modal v-model:open="visible" title="知识冲突审核" width="1080px" :footer="null">
+  <a-modal v-model:open="visible" :title="$t('conflict.auditTitle')" width="1080px" :footer="null">
     <div class="conflict-toolbar">
       <a-select v-model:value="statusFilter" style="width: 160px" @change="load">
-        <a-select-option value="">全部状态</a-select-option>
-        <a-select-option value="pending">待处理</a-select-option>
-        <a-select-option value="resolved">已处理</a-select-option>
-        <a-select-option value="deferred">已暂缓</a-select-option>
+        <a-select-option value="">{{ $t('conflict.statusAll') }}</a-select-option>
+        <a-select-option value="pending">{{ $t('conflict.statusPending') }}</a-select-option>
+        <a-select-option value="resolved">{{ $t('conflict.statusResolved') }}</a-select-option>
+        <a-select-option value="deferred">{{ $t('conflict.statusDeferred') }}</a-select-option>
       </a-select>
-      <a-button :loading="loading" @click="load">刷新</a-button>
-      <span v-if="payload?.readonly" class="readonly-hint">当前权限为只读</span>
+      <a-button :loading="loading" @click="load">{{ $t('common.refresh') }}</a-button>
+      <span v-if="payload?.readonly" class="readonly-hint">{{ $t('conflict.readonlyHint') }}</span>
     </div>
     <a-alert v-if="errorMessage" type="error" show-icon :message="errorMessage" />
     <a-spin :spinning="loading">
-      <a-empty v-if="!loading && conflicts.length === 0" description="暂无知识冲突记录" />
+      <a-empty v-if="!loading && conflicts.length === 0" :description="$t('conflict.empty')" />
       <section v-for="item in conflicts" :key="item.conflict_id" class="conflict-card">
         <header>
           <div>
@@ -28,20 +28,20 @@
         </header>
         <div class="comparison-grid">
           <article>
-            <h4>当前知识</h4>
+            <h4>{{ $t('conflict.existingKnowledge') }}</h4>
             <div v-if="item.existing_assertions?.length">
               <div v-for="existing in item.existing_assertions" :key="existing.assertion_id">
                 <p class="value">
                   {{ formatKnowledgeValue(existing.raw_value, existing.unit) }}
                 </p>
-                <small>文档版本：{{ existing.cleaning_version }} · {{ existing.file_id }}</small>
+                <small>{{ $t('conflict.docVersion', { version: existing.cleaning_version, fileId: existing.file_id }) }}</small>
                 <blockquote>{{ existing.evidence }}</blockquote>
               </div>
             </div>
-            <p v-else class="empty-value">当前没有正式值</p>
+            <p v-else class="empty-value">{{ $t('conflict.noExistingValue') }}</p>
           </article>
           <article>
-            <h4>新候选知识</h4>
+            <h4>{{ $t('conflict.incomingKnowledge') }}</h4>
             <p class="value">
               {{
                 formatKnowledgeValue(
@@ -51,28 +51,26 @@
               }}
             </p>
             <small>
-              文档版本：{{ item.incoming_assertion?.cleaning_version }} ·
-              {{ item.incoming_assertion?.file_id }} ·
-              {{ item.incoming_assertion?.extraction_method }}
+              {{ $t('conflict.docVersionMethod', { version: item.incoming_assertion?.cleaning_version, fileId: item.incoming_assertion?.file_id, method: item.incoming_assertion?.extraction_method }) }}
             </small>
             <blockquote>{{ item.incoming_assertion?.evidence }}</blockquote>
           </article>
           <article>
-            <h4>系统判断</h4>
-            <p>标准化旧值：{{ formatKnowledgeValue(item.normalized_existing_value) }}</p>
-            <p>标准化新值：{{ formatKnowledgeValue(item.normalized_incoming_value) }}</p>
+            <h4>{{ $t('conflict.systemJudgment') }}</h4>
+            <p>{{ $t('conflict.normalizedOldValue', { value: formatKnowledgeValue(item.normalized_existing_value) }) }}</p>
+            <p>{{ $t('conflict.normalizedNewValue', { value: formatKnowledgeValue(item.normalized_incoming_value) }) }}</p>
             <ul>
               <li v-for="reason in item.detection_rules?.reasons || []" :key="reason">
                 {{ reason }}
               </li>
             </ul>
-            <small>实体链接：{{ item.detection_rules?.entity_link_status || '-' }}</small>
+            <small>{{ $t('conflict.entityLink', { status: item.detection_rules?.entity_link_status || '-' }) }}</small>
           </article>
         </div>
         <div v-if="item.status === 'pending' && !payload?.readonly" class="review-actions">
           <a-select
             v-model:value="drafts[item.conflict_id].resolution"
-            placeholder="请选择处理结果"
+            :placeholder="$t('conflict.resolutionPlaceholder')"
             style="width: 220px"
           >
             <a-select-option
@@ -86,12 +84,12 @@
           <a-input
             v-if="drafts[item.conflict_id].resolution === 'link_existing_entity'"
             v-model:value="drafts[item.conflict_id].target_entity_id"
-            placeholder="已有实体 ID"
+            :placeholder="$t('conflict.targetEntityPlaceholder')"
             style="width: 220px"
           />
           <a-input
             v-model:value="drafts[item.conflict_id].reason"
-            placeholder="处理理由（可选）"
+            :placeholder="$t('conflict.reasonPlaceholder')"
             style="min-width: 280px; flex: 1"
           />
           <a-button
@@ -100,14 +98,14 @@
             :loading="resolvingId === item.conflict_id"
             @click="resolve(item)"
           >
-            确认处理
+            {{ $t('conflict.confirmResolution') }}
           </a-button>
         </div>
         <a-alert
           v-if="item.publish_status !== 'not_requested'"
           :type="publishAlertType(item.publish_status)"
           show-icon
-          :message="`图谱发布：${publishStatusLabel(item.publish_status)}`"
+          :message="$t('conflict.publishStatus', { status: publishStatusLabel(item.publish_status) })"
           :description="item.publish_error || undefined"
         >
           <template v-if="canRetry(item, payload?.readonly)" #action>
@@ -117,7 +115,7 @@
               :disabled="retryingId === item.conflict_id"
               @click="retryPublish(item)"
             >
-              重试发布
+              {{ $t('conflict.retryPublish') }}
             </a-button>
           </template>
         </a-alert>
@@ -127,6 +125,7 @@
 </template>
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { knowledgeConflictApi } from '@/apis/knowledge_api'
 import {
@@ -143,6 +142,7 @@ const props = defineProps({
   kbId: { type: [String, Number], default: '' }
 })
 const emit = defineEmits(['update:open', 'changed'])
+const { t } = useI18n()
 const visible = computed({
   get: () => props.open,
   set: (value) => emit('update:open', value)
@@ -166,7 +166,7 @@ const load = async () => {
       drafts[item.conflict_id] ||= { resolution: undefined, reason: '', target_entity_id: '' }
     }
   } catch (error) {
-    errorMessage.value = error.message || '加载知识冲突失败'
+    errorMessage.value = error.message || t('conflict.loadFailed')
   } finally {
     loading.value = false
   }
@@ -186,11 +186,11 @@ const resolve = async (item) => {
       reason: draft.reason || null,
       target_entity_id: draft.target_entity_id || null
     })
-    message.success('处理结果已保存')
+    message.success(t('conflict.resolutionSaved'))
     emit('changed')
     await load()
   } catch (error) {
-    message.error(error.message || '处理失败，请刷新后重试')
+    message.error(error.message || t('conflict.resolveFailed'))
   } finally {
     resolvingId.value = ''
   }
@@ -199,10 +199,10 @@ const retryPublish = async (item) => {
   retryingId.value = item.conflict_id
   try {
     await knowledgeConflictApi.retryPublish(props.kbId, item.conflict_id)
-    message.success('发布任务已重新提交')
+    message.success(t('conflict.retrySubmitted'))
     await load()
   } catch (error) {
-    message.error(error.message || '重新发布失败')
+    message.error(error.message || t('conflict.retryFailed'))
   } finally {
     retryingId.value = ''
   }

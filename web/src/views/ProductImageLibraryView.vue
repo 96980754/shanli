@@ -1,24 +1,24 @@
 <template>
   <div class="product-image-library layout-container">
-    <PageHeader title="产品图库" />
+    <PageHeader :title="$t('nav.productImages')" />
     <a-card class="library-card">
       <div class="toolbar">
         <a-select
           v-model:value="selectedKbId"
           class="kb-select"
-          placeholder="筛选知识库（全部）"
+          :placeholder="$t('productImages.filterKbPlaceholder')"
           :options="kbOptions"
           allow-clear
         />
         <a-space :size="8">
-          <a-button :loading="loading" @click="loadAll">刷新</a-button>
+          <a-button :loading="loading" @click="loadAll">{{ $t('common.refresh') }}</a-button>
           <a-button
             type="primary"
             :loading="rebuilding"
             :disabled="!selectedKbId"
             @click="handleRebuild"
           >
-            重建索引
+            {{ $t('productImages.rebuildIndex') }}
           </a-button>
         </a-space>
       </div>
@@ -34,9 +34,9 @@
         <p class="ant-upload-drag-icon">
           <UploadCloud :size="36" :stroke-width="1.5" />
         </p>
-        <p class="ant-upload-text">点击或拖拽上传参照图到「{{ selectedKbName }}」</p>
+        <p class="ant-upload-text">{{ $t('productImages.uploadText', { name: selectedKbName }) }}</p>
         <p class="ant-upload-hint">
-          每款产品一张清晰图，文件名即产品名（需与库内产品名一致）；上传后点击「重建索引」生效
+          {{ $t('productImages.uploadHint') }}
         </p>
       </a-upload-dragger>
       <a-alert
@@ -44,7 +44,7 @@
         class="upload-hint"
         type="info"
         show-icon
-        message="选择上方知识库后可上传参照图或重建索引"
+        :message="$t('productImages.selectKbHint')"
       />
 
       <a-table
@@ -61,22 +61,22 @@
           </template>
           <template v-else-if="column.key === 'indexed'">
             <a-tag :color="record.indexed ? 'green' : 'default'">
-              {{ record.indexed ? '已索引' : '未索引' }}
+              {{ record.indexed ? $t('productImages.indexed') : $t('productImages.notIndexed') }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-popconfirm
-              title="删除该参照图？将同时清理其索引向量。"
-              ok-text="删除"
-              cancel-text="取消"
+              :title="$t('productImages.deleteConfirmTitle')"
+              :ok-text="$t('common.delete')"
+              :cancel-text="$t('common.cancel')"
               @confirm="handleRemove(record)"
             >
-              <a-button type="link" danger>删除</a-button>
+              <a-button type="link" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
           </template>
         </template>
         <template #emptyText>
-          <a-empty description="还没有产品参照图" />
+          <a-empty :description="$t('productImages.empty')" />
         </template>
       </a-table>
     </a-card>
@@ -86,10 +86,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { UploadCloud } from 'lucide-vue-next'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import { databaseApi, referenceImageApi } from '@/apis/knowledge_api'
 import { rewriteMinioImageUrls } from '@/utils/minioUrl'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -111,13 +114,13 @@ const filteredImages = computed(() => {
   return allImages.value.filter((item) => item.kb_id === selectedKbId.value)
 })
 
-const columns = [
-  { title: '缩略图', key: 'thumbnail', width: 90 },
-  { title: '产品名', dataIndex: 'product', key: 'product' },
-  { title: '知识库', dataIndex: 'kb_name', key: 'kb_name' },
-  { title: '索引状态', key: 'indexed', width: 110 },
-  { title: '操作', key: 'actions', width: 90 }
-]
+const columns = computed(() => [
+  { title: t('productImages.col.thumbnail'), key: 'thumbnail', width: 90 },
+  { title: t('productImages.col.product'), dataIndex: 'product', key: 'product' },
+  { title: t('db.title'), dataIndex: 'kb_name', key: 'kb_name' },
+  { title: t('productImages.col.indexStatus'), key: 'indexed', width: 110 },
+  { title: t('productImages.col.actions'), key: 'actions', width: 90 }
+])
 
 async function loadAll() {
   loading.value = true
@@ -129,7 +132,7 @@ async function loadAll() {
     databases.value = dbResp.databases || []
     allImages.value = imgResp.images || []
   } catch (err) {
-    message.error(err?.message || '加载产品图库失败')
+    message.error(err?.message || t('productImages.loadFail'))
   } finally {
     loading.value = false
   }
@@ -152,10 +155,10 @@ async function flushUploads() {
   try {
     const resp = await referenceImageApi.upload(selectedKbId.value, batch)
     const count = resp.images?.length ?? batch.length
-    message.success(`已上传 ${count} 张参照图`)
+    message.success(t('productImages.uploadSuccess', { count }))
     await loadAll()
   } catch (err) {
-    message.error(err?.message || '上传参照图失败')
+    message.error(err?.message || t('productImages.uploadFail'))
   } finally {
     uploading.value = false
   }
@@ -165,12 +168,12 @@ async function handleRebuild() {
   rebuilding.value = true
   try {
     const resp = await referenceImageApi.rebuild(selectedKbId.value)
-    const parts = [`已索引 ${resp.indexed ?? 0} 张`]
-    if (resp.errors) parts.push(`失败 ${resp.errors} 张`)
-    message.success(`索引重建完成：${parts.join('，')}`)
+    const parts = [t('productImages.indexedCount', { count: resp.indexed ?? 0 })]
+    if (resp.errors) parts.push(t('productImages.failedCount', { count: resp.errors }))
+    message.success(t('productImages.rebuildComplete', { parts: parts.join('，') }))
     await loadAll()
   } catch (err) {
-    message.error(err?.message || '重建索引失败')
+    message.error(err?.message || t('productImages.rebuildFail'))
   } finally {
     rebuilding.value = false
   }
@@ -179,10 +182,10 @@ async function handleRebuild() {
 async function handleRemove(record) {
   try {
     await referenceImageApi.remove(record.kb_id, record.product)
-    message.success(`已删除：${record.product}`)
+    message.success(t('productImages.deleted', { name: record.product }))
     await loadAll()
   } catch (err) {
-    message.error(err?.message || '删除失败')
+    message.error(err?.message || t('common.deleteFailed'))
   }
 }
 

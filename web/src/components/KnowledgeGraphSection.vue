@@ -3,9 +3,9 @@
     <div class="graph-container-compact">
       <div v-if="!isGraphSupported" class="graph-disabled">
         <div class="disabled-content">
-          <h4>知识图谱不可用</h4>
-          <p>当前知识库类型 "{{ kbTypeLabel }}" 不支持知识图谱功能。</p>
-          <p>只有 Milvus 类型的知识库支持知识图谱。</p>
+          <h4>{{ $t('graph.unavailableTitle') }}</h4>
+          <p>{{ $t('graph.unsupportedByType', { type: kbTypeLabel }) }}</p>
+          <p>{{ $t('graph.milvusOnly') }}</p>
         </div>
       </div>
       <div v-else class="graph-wrapper">
@@ -21,7 +21,7 @@
               <div class="actions-left">
                 <a-input
                   v-model:value="searchInput"
-                  placeholder="搜索实体"
+                  :placeholder="$t('graph.searchEntity')"
                   style="width: 240px"
                   @keydown.enter="onSearch"
                   allow-clear
@@ -35,7 +35,7 @@
                     />
                   </template>
                 </a-input>
-                <a-button class="action-btn" @click="loadGraph" title="刷新">
+                <a-button class="action-btn" @click="loadGraph" :title="$t('common.refresh')">
                   <RefreshCw :size="16" :class="{ spin: graph.fetching }" />
                 </a-button>
               </div>
@@ -50,7 +50,7 @@
                 >
                   <Database :size="16" />
                   <span v-if="hasPendingGraphChunks" class="index-status-label"
-                    >{{ pendingGraphChunks }} 待索引</span
+                    >{{ $t('graph.pendingIndex', { count: pendingGraphChunks }) }}</span
                   >
                   <span
                     v-if="graphIndexDotStatus"
@@ -58,7 +58,7 @@
                     :class="`status-dot--${graphIndexDotStatus}`"
                   ></span>
                 </a-button>
-                <a-button class="action-btn" @click="toggleSettingsPanel" title="设置">
+                <a-button class="action-btn" @click="toggleSettingsPanel" :title="$t('graph.settings')">
                   <Settings :size="16" />
                 </a-button>
               </div>
@@ -68,15 +68,15 @@
         <ResourceEmptyState
           v-if="showGraphConfigEmpty"
           class="graph-empty-state"
-          title="暂无知识图谱"
-          description="配置抽取器后，才能从当前知识库构建实体与关系。"
+          :title="$t('graph.emptyTitle')"
+          :description="$t('graph.emptyDescription')"
           :icon="Network"
           full-height
         >
           <template #actions>
             <a-button type="primary" class="lucide-icon-btn" @click="openGraphConfig">
               <Settings :size="16" />
-              配置抽取器
+              {{ $t('graph.configureExtractor') }}
             </a-button>
           </template>
         </ResourceEmptyState>
@@ -91,7 +91,7 @@
           <template #actions>
             <a-button v-if="searchInput.trim()" class="lucide-icon-btn" @click="clearGraphSearch">
               <Search :size="16" />
-              清空搜索
+              {{ $t('graph.clearSearch') }}
             </a-button>
             <a-button
               v-else-if="hasPendingGraphChunks && !isBuildActive"
@@ -100,11 +100,11 @@
               @click="startGraphBuild"
             >
               <Database :size="16" />
-              开始索引
+              {{ $t('graph.startIndex') }}
             </a-button>
             <a-button v-else class="lucide-icon-btn" @click="loadGraph">
               <RefreshCw :size="16" :class="{ spin: graph.fetching }" />
-              刷新图谱
+              {{ $t('graph.refreshGraph') }}
             </a-button>
           </template>
         </ResourceEmptyState>
@@ -121,11 +121,11 @@
         <transition name="slide-fade">
           <div v-if="showSettings" class="floating-panel settings-panel">
             <div class="panel-header">
-              <span class="panel-title">图谱设置</span>
+              <span class="panel-title">{{ $t('graph.settingsPanelTitle') }}</span>
             </div>
             <div class="panel-body">
               <a-form layout="vertical">
-                <a-form-item label="最大节点数 (limit)">
+                <a-form-item :label="$t('graph.maxNodesLabel')">
                   <a-input-number
                     v-model:value="subgraphParams.maxNodes"
                     :min="10"
@@ -134,7 +134,7 @@
                     style="width: 100%"
                   />
                 </a-form-item>
-                <a-form-item label="搜索深度 (depth)">
+                <a-form-item :label="$t('graph.maxDepthLabel')">
                   <a-input-number
                     v-model:value="subgraphParams.maxDepth"
                     :min="1"
@@ -143,12 +143,12 @@
                     style="width: 100%"
                   />
                 </a-form-item>
-                <a-form-item label="排除 Chunk 节点">
+                <a-form-item :label="$t('graph.excludeChunk')">
                   <a-switch v-model:checked="subgraphParams.excludeChunk" />
                 </a-form-item>
                 <a-form-item>
                   <a-button type="primary" @click="applySettings" style="width: 100%">
-                    应用
+                    {{ $t('graph.apply') }}
                   </a-button>
                 </a-form-item>
               </a-form>
@@ -160,7 +160,7 @@
         <transition name="slide-fade">
           <div v-if="isMilvus && showBuildPanel" class="floating-panel build-panel">
             <div class="panel-header">
-              <span class="panel-title">索引管理</span>
+              <span class="panel-title">{{ $t('graph.indexManagement') }}</span>
               <a-button
                 size="small"
                 type="text"
@@ -173,16 +173,16 @@
             </div>
             <div class="panel-body">
               <div class="status-row">
-                <span class="status-label">状态</span>
-                <a-tag v-if="isBuildActive" color="blue" size="small">构建中</a-tag>
-                <a-tag v-else-if="isBuildFailed" color="red" size="small">构建失败</a-tag>
-                <a-tag v-else-if="isBuildCancelled" size="small">已取消</a-tag>
-                <a-tag v-else-if="graphBuildStatus?.published" color="green" size="small">已创建</a-tag>
+                <span class="status-label">{{ $t('common.status') }}</span>
+                <a-tag v-if="isBuildActive" color="blue" size="small">{{ $t('graph.buildActive') }}</a-tag>
+                <a-tag v-else-if="isBuildFailed" color="red" size="small">{{ $t('graph.buildFailed') }}</a-tag>
+                <a-tag v-else-if="isBuildCancelled" size="small">{{ $t('graph.buildCancelled') }}</a-tag>
+                <a-tag v-else-if="graphBuildStatus?.published" color="green" size="small">{{ $t('graph.published') }}</a-tag>
                 <a-tag v-else-if="graphBuildStatus?.configured && graphBuildStatus?.locked" color="orange" size="small">
-                  已配置，未创建
+                  {{ $t('graph.configuredNotCreated') }}
                 </a-tag>
-                <a-tag v-else-if="graphBuildStatus?.configured" color="orange" size="small">已配置，待确认</a-tag>
-                <a-tag v-else color="orange" size="small">未配置</a-tag>
+                <a-tag v-else-if="graphBuildStatus?.configured" color="orange" size="small">{{ $t('graph.configuredPending') }}</a-tag>
+                <a-tag v-else color="orange" size="small">{{ $t('graph.notConfigured') }}</a-tag>
               </div>
               <a-progress
                 v-if="isBuildActive"
@@ -199,30 +199,30 @@
                 :message="buildTaskFailureMessage"
               />
               <div v-if="buildTaskResult" class="build-result-summary">
-                <span>成功 {{ buildTaskResult.success ?? 0 }}</span>
-                <span>失败 {{ buildTaskResult.failed ?? 0 }}</span>
-                <span>剩余 {{ buildTaskResult.remaining ?? 0 }}</span>
+                <span>{{ $t('graph.buildResultSuccess', { count: buildTaskResult.success ?? 0 }) }}</span>
+                <span>{{ $t('graph.buildResultFailed', { count: buildTaskResult.failed ?? 0 }) }}</span>
+                <span>{{ $t('graph.buildResultRemaining', { count: buildTaskResult.remaining ?? 0 }) }}</span>
               </div>
               <div class="stats-grid">
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.total_chunks ?? '-' }}</span>
-                  <span class="stat-label">总 Chunk</span>
+                  <span class="stat-label">{{ $t('graph.totalChunks') }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.pending_chunks ?? '-' }}</span>
-                  <span class="stat-label">待构建</span>
+                  <span class="stat-label">{{ $t('graph.pendingBuild') }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.indexed_chunks ?? '-' }}</span>
-                  <span class="stat-label">已构建</span>
+                  <span class="stat-label">{{ $t('graph.indexed') }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.entity_count ?? '-' }}</span>
-                  <span class="stat-label">实体</span>
+                  <span class="stat-label">{{ $t('graph.entity') }}</span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-value">{{ graphBuildStatus?.relationship_count ?? '-' }}</span>
-                  <span class="stat-label">关系</span>
+                  <span class="stat-label">{{ $t('graph.relationship') }}</span>
                 </div>
               </div>
               <div class="build-actions">
@@ -232,10 +232,10 @@
                   block
                   @click="openGraphConfig"
                 >
-                  配置抽取器
+                  {{ $t('graph.configureExtractor') }}
                 </a-button>
                 <a-button v-else-if="isBuildActive" type="primary" block disabled>
-                  构建中 {{ graphBuildStatus?.build_task_progress ?? 0 }}%
+                  {{ $t('graph.buildProgress', { percent: graphBuildStatus?.build_task_progress ?? 0 }) }}
                 </a-button>
                 <a-button
                   v-else-if="canRetryBuild"
@@ -244,7 +244,7 @@
                   :disabled="!graphBuildStatus?.pending_chunks"
                   @click="startGraphBuild"
                 >
-                  重试索引
+                  {{ $t('graph.retryIndex') }}
                 </a-button>
                 <a-button
                   v-else
@@ -253,7 +253,7 @@
                   :disabled="!graphBuildStatus?.pending_chunks"
                   @click="startGraphBuild"
                 >
-                  开始索引
+                  {{ $t('graph.startIndex') }}
                 </a-button>
                 <div class="actions-secondary">
                   <a-button
@@ -262,7 +262,7 @@
                     type="text"
                     @click="openGraphConfig"
                   >
-                    修改配置
+                    {{ $t('graph.modifyConfig') }}
                   </a-button>
                   <a-button
                     size="small"
@@ -270,7 +270,7 @@
                     danger
                     v-if="graphBuildStatus?.configured && !isBuildActive"
                     @click="confirmResetGraph"
-                    >重置</a-button
+                    >{{ $t('graph.reset') }}</a-button
                   >
                 </div>
               </div>
@@ -292,10 +292,10 @@
           class="config-warning"
           type="warning"
           show-icon
-          message="修改配置仅影响后续构建；已构建的图谱不会自动重算，如需一致请重置后重新抽取。抽取器类型创建后不可修改。"
+          :message="$t('graph.configChangeWarning')"
         />
-        <a-form-item label="抽取器类型">
-          <div class="extractor-type-cards" role="radiogroup" aria-label="抽取器类型">
+        <a-form-item :label="$t('graph.extractorType')">
+          <div class="extractor-type-cards" role="radiogroup" :aria-label="$t('graph.extractorType')">
             <div
               v-for="option in extractorTypeOptions"
               :key="option.value"
@@ -314,19 +314,19 @@
             >
               <div class="card-header">
                 <component :is="option.icon" class="type-icon" />
-                <span class="type-title">{{ option.label }}</span>
+                <span class="type-title">{{ t(option.label) }}</span>
               </div>
-              <div class="card-description">{{ option.description }}</div>
+              <div class="card-description">{{ t(option.description) }}</div>
               <div v-if="option.helper" class="card-helper" :class="{ warning: option.disabled }">
-                {{ option.helper }}
+                {{ t(option.helper) }}
               </div>
             </div>
           </div>
         </a-form-item>
-        <a-form-item label="模型">
+        <a-form-item :label="$t('graph.modelLabel')">
           <ModelSelectorComponent
             :model_spec="graphConfigForm.model_spec"
-            placeholder="选择抽取模型"
+            :placeholder="t('graph.selectExtractorModel')"
             @select-model="(spec) => (graphConfigForm.model_spec = spec)"
           />
         </a-form-item>
@@ -335,31 +335,31 @@
             v-model:value="graphConfigForm.ontology_key"
             :loading="ontologyRegistryLoading"
             :options="ontologyRegistryOptions"
-            placeholder="选择 Core Ontology"
+            :placeholder="$t('graph.selectCoreOntology')"
             show-search
             option-filter-prop="label"
             @change="selectOntologyRegistry"
           />
           <div class="ontology-help">
-            Core Ontology 固化企业知识结构；领域扩展只能新增实体、关系、词典和属性，不能覆盖 Core。
+            {{ $t('graph.ontologyHelp') }}
           </div>
         </a-form-item>
-        <a-form-item :label="isLegacyGraphConfig ? '旧版自由文本 Schema' : '领域 Ontology 扩展（YAML）'">
+        <a-form-item :label="isLegacyGraphConfig ? t('graph.legacyFreeTextSchema') : t('graph.domainOntologyExt')">
           <a-textarea
             v-if="isLegacyGraphConfig"
             v-model:value="graphConfigForm.schema"
             :rows="6"
-            placeholder="历史配置继续按原方式追加到固定抽取 Prompt。"
+            :placeholder="$t('graph.legacySchemaPlaceholder')"
           />
           <a-textarea
             v-else
             v-model:value="graphConfigForm.domain_schema"
             :rows="10"
-            placeholder="entities:\n  DomainEntity:\n    description: 领域实体\nrelations:\n  DOMAIN_RELATION:\n    source: DomainEntity\n    target: DomainEntity"
+            :placeholder="$t('graph.domainSchemaPlaceholder')"
           />
         </a-form-item>
         <div class="form-grid two-columns">
-          <a-form-item label="并发队列数">
+          <a-form-item :label="$t('graph.concurrencyLabel')">
             <a-input-number
               v-model:value="graphConfigForm.concurrency_count"
               :min="1"
@@ -368,10 +368,10 @@
               style="width: 100%"
             />
           </a-form-item>
-          <a-form-item label="模型参数 JSON">
+          <a-form-item :label="$t('graph.modelParamsJson')">
             <a-input
               v-model:value="graphConfigForm.model_params_text"
-              placeholder='例如 {"temperature":0.1}'
+              :placeholder="$t('graph.modelParamsExample')"
             />
           </a-form-item>
         </div>
@@ -382,6 +382,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onUnmounted, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
 import { useConfigStore } from '@/stores/config'
@@ -417,6 +418,8 @@ const props = defineProps({
   }
 })
 
+const { t } = useI18n()
+
 const store = useDatabaseStore()
 const taskerStore = useTaskerStore()
 const configStore = useConfigStore()
@@ -446,16 +449,16 @@ const extractorTypeOptions = [
   {
     value: 'llm',
     label: 'LLM',
-    description: '使用大模型按 Schema 抽取实体和关系',
-    helper: '当前唯一支持的图谱抽取方式',
+    description: 'graph.llmDescription',
+    helper: 'graph.llmHelper',
     icon: BrainCircuit,
     disabled: false
   },
   {
     value: 'more',
-    label: '更多',
-    description: '更多抽取方式正在拓展中',
-    helper: '拓展中',
+    label: 'graph.moreLabel',
+    description: 'graph.moreDescription',
+    helper: 'graph.moreHelper',
     icon: ScanText,
     disabled: true
   }
@@ -481,7 +484,7 @@ const buildTaskFailureMessage = computed(() => {
   return (
     graphBuildStatus.value?.build_task_error ||
     graphBuildStatus.value?.build_task_message ||
-    (isBuildCancelled.value ? '图谱构建任务已取消' : '图谱构建任务失败')
+    (isBuildCancelled.value ? t('graph.buildTaskCancelled') : t('graph.buildTaskFailed'))
   )
 })
 
@@ -512,12 +515,12 @@ const graphIndexDotStatus = computed(() => {
 })
 
 const graphIndexButtonTitle = computed(() => {
-  if (isBuildActive.value) return '索引管理，索引中'
-  if (hasPendingGraphChunks.value) return `索引管理，${pendingGraphChunks.value} 待索引`
-  if (isGraphIndexComplete.value) return '索引管理，已全部索引'
-  if (isGraphConfigured.value && !graphBuildStatus.value?.locked) return '索引管理，配置尚未确认'
-  if (graphBuildStatus.value?.locked && !graphBuildStatus.value?.published) return '索引管理，已配置但尚未创建图谱'
-  return '索引管理'
+  if (isBuildActive.value) return t('graph.indexButtonActive')
+  if (hasPendingGraphChunks.value) return t('graph.indexButtonPending', { count: pendingGraphChunks.value })
+  if (isGraphIndexComplete.value) return t('graph.indexButtonComplete')
+  if (isGraphConfigured.value && !graphBuildStatus.value?.locked) return t('graph.indexButtonConfigUnconfirmed')
+  if (graphBuildStatus.value?.locked && !graphBuildStatus.value?.published) return t('graph.indexButtonConfiguredNotCreated')
+  return t('graph.indexButton')
 })
 
 const toggleBuildPanel = () => {
@@ -538,7 +541,7 @@ const isLegacyGraphConfig = computed(() => {
 })
 
 const graphConfigTitle = computed(() =>
-  isEditingGraphConfig.value ? '修改图谱抽取配置' : '配置图谱抽取器'
+  isEditingGraphConfig.value ? t('graph.editGraphConfigTitle') : t('graph.configGraphExtractorTitle')
 )
 
 const stopBuildStatusPoll = () => {
@@ -600,15 +603,15 @@ const showGraphDataEmpty = computed(
     !hasGraphNodes.value
 )
 const graphDataEmptyTitle = computed(() =>
-  searchInput.value.trim() ? '未找到匹配实体' : '暂无知识图谱'
+  searchInput.value.trim() ? t('graph.noMatchingEntity') : t('graph.emptyTitle')
 )
 const graphDataEmptyDescription = computed(() => {
-  if (searchInput.value.trim()) return '换个关键词或调整图谱设置后再搜索。'
-  if (isBuildActive.value) return '图谱索引正在运行，完成后会展示实体与关系。'
-  if (hasPendingGraphChunks.value) return '当前还有待索引 Chunk，完成索引后会展示实体与关系。'
-  if (!graphBuildStatus.value?.total_chunks) return '当前没有可用于创建知识图谱的文档 Chunk。'
-  if (!graphBuildStatus.value?.published) return '抽取器已配置，但当前版本尚未形成可展示的图谱。'
-  return '当前筛选条件下没有可展示的实体与关系。'
+  if (searchInput.value.trim()) return t('graph.emptySearchHint')
+  if (isBuildActive.value) return t('graph.emptyBuildingHint')
+  if (hasPendingGraphChunks.value) return t('graph.emptyPendingHint')
+  if (!graphBuildStatus.value?.total_chunks) return t('graph.emptyNoChunk')
+  if (!graphBuildStatus.value?.published) return t('graph.emptyNotPublished')
+  return t('graph.emptyNoResult')
 })
 
 let pendingLoadTimer = null
@@ -631,7 +634,7 @@ const loadGraphBuildStatus = async () => {
     }
   } catch (e) {
     console.error('Failed to load graph build status:', e)
-    message.error('加载图谱构建状态失败')
+    message.error(t('graph.loadBuildStatusFailed'))
   } finally {
     if (requestSeq === graphStatusRequestSeq) {
       graphBuildLoading.value = false
@@ -646,10 +649,10 @@ const parseModelParams = () => {
   try {
     params = JSON.parse(text)
   } catch {
-    throw new Error('模型参数必须是合法 JSON 对象')
+    throw new Error(t('graph.modelParamsInvalidJson'))
   }
   if (!params || Array.isArray(params) || typeof params !== 'object') {
-    throw new Error('模型参数必须是 JSON 对象')
+    throw new Error(t('graph.modelParamsNotObject'))
   }
   return params
 }
@@ -689,7 +692,7 @@ const loadOntologyRegistries = async () => {
     ontologyRegistries.value = result.items || []
   } catch (e) {
     console.error('Failed to load ontology registries:', e)
-    message.error(getErrorDetail(e, '加载 Core Ontology 失败'))
+    message.error(getErrorDetail(e, t('graph.loadOntologyFailed')))
   } finally {
     ontologyRegistryLoading.value = false
   }
@@ -777,7 +780,7 @@ const configureGraphBuild = async () => {
       isOntologyChanged() &&
       hasExistingGraphData()
     ) {
-      message.warning('当前知识库已有图谱或抽取数据，请先重置后再切换 Core Ontology')
+      message.warning(t('graph.switchOntologyRequiresReset'))
       return
     }
     document.activeElement?.blur()
@@ -786,23 +789,23 @@ const configureGraphBuild = async () => {
       extractor_type: 'llm',
       extractor_options: buildExtractorOptions()
     })
-    message.success(isEditingGraphConfig.value ? '图谱抽取配置已更新' : '图谱抽取配置已保存')
+    message.success(isEditingGraphConfig.value ? t('graph.configUpdated') : t('graph.configSaved'))
     showGraphConfig.value = false
     await loadGraphBuildStatus()
   } catch (e) {
     console.error('Failed to configure graph build:', e)
-    message.error(getErrorDetail(e, '配置图谱抽取失败'))
+    message.error(getErrorDetail(e, t('graph.configFailed')))
   }
 }
 
 const startGraphBuild = async () => {
   try {
     const data = await graphBuildApi.startIndex(kbId.value, 20)
-    message.success(data.message || '图谱构建任务已提交')
+    message.success(data.message || t('graph.buildSubmitted'))
     if (data.task_id) {
       taskerStore.registerQueuedTask({
         task_id: data.task_id,
-        name: `图谱构建 (${kbId.value})`,
+        name: t('graph.buildTaskName', { kbId: kbId.value }),
         task_type: GRAPH_BUILD_TASK_TYPE,
         message: data.message,
         payload: { kb_id: kbId.value }
@@ -811,16 +814,16 @@ const startGraphBuild = async () => {
     await loadGraphBuildStatus()
   } catch (e) {
     console.error('Failed to start graph build:', e)
-    message.error(getErrorDetail(e, '提交图谱构建任务失败'))
+    message.error(getErrorDetail(e, t('graph.submitBuildFailed')))
   }
 }
 
 const confirmResetGraph = () => {
   Modal.confirm({
-    title: '清空并重建图谱',
-    content: '将删除该知识库在 Neo4j 中的图谱，重置 Chunk 图谱状态，并清空抽取结果与配置。',
-    okText: '确认重置',
-    cancelText: '取消',
+    title: t('graph.resetConfirmTitle'),
+    content: t('graph.resetConfirmContent'),
+    okText: t('graph.resetConfirmOk'),
+    cancelText: t('common.cancel'),
     onOk: resetGraphBuild
   })
 }
@@ -831,13 +834,13 @@ const resetGraphBuild = async () => {
       clear_extraction_result: true,
       clear_config: true
     })
-    message.success('图谱构建状态已重置')
+    message.success(t('graph.resetSuccess'))
     graphLoaded.value = false
     graph.clearGraph()
     await loadGraphBuildStatus()
   } catch (e) {
     console.error('Failed to reset graph build:', e)
-    message.error(getErrorDetail(e, '重置图谱构建状态失败'))
+    message.error(getErrorDetail(e, t('graph.resetFailed')))
   }
 }
 
@@ -869,7 +872,7 @@ const loadGraph = async () => {
     }
   } catch (e) {
     console.error('Failed to load graph:', e)
-    message.error('加载图谱失败')
+    message.error(t('graph.loadGraphFailed'))
   } finally {
     if (requestSeq === graphLoadRequestSeq) {
       graph.fetching = false

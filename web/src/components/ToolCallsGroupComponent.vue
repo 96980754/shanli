@@ -40,6 +40,7 @@
 
 <script setup>
 import { computed, ref, watch, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronDown, ChevronRight, Atom } from 'lucide-vue-next'
 import { ToolCallRenderer } from '@/components/ToolCallingResult'
 import {
@@ -72,6 +73,7 @@ const props = defineProps({
   }
 })
 
+const { t } = useI18n()
 const normalizedToolCalls = computed(() => normalizeToolCalls(props.toolCalls))
 
 const shouldCollapseToolCalls = computed(() => normalizedToolCalls.value.length > 0)
@@ -111,9 +113,9 @@ const getToolCallLabel = (toolCall) => {
 
 const toolCallsSummaryTitle = computed(() => {
   if (normalizedToolCalls.value.length === 1) {
-    return `调用: ${getToolCallLabel(normalizedToolCalls.value[0])}`
+    return t('toolCalls.calling', { name: getToolCallLabel(normalizedToolCalls.value[0]) })
   }
-  return `已调用 ${normalizedToolCalls.value.length} 个工具`
+  return t('toolCalls.calledCount', { count: normalizedToolCalls.value.length })
 })
 
 const toolCallsNamesMeta = computed(() => {
@@ -134,10 +136,10 @@ const statusSummary = computed(() => {
 
   const parts = []
   if (successCount > 0 && successCount === normalizedToolCalls.value.length) {
-    return '已完成'
+    return t('toolCalls.completed')
   }
-  if (errorCount > 0) parts.push(`${errorCount} 失败`)
-  if (runningCount > 0) parts.push(`${runningCount} 进行中`)
+  if (errorCount > 0) parts.push(t('toolCalls.failedCount', { count: errorCount }))
+  if (runningCount > 0) parts.push(t('toolCalls.runningCount', { count: runningCount }))
 
   return parts.join(' · ')
 })

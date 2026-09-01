@@ -14,7 +14,7 @@
         <div class="window-title">
           <span>{{ windowTitle(window, windowIndex) }}</span>
           <span v-if="window.matched_lines?.length" class="matched-count">
-            命中 {{ window.matched_lines.length }} 行
+            {{ $t('toolCall.docPreview.matchedLines', { count: window.matched_lines.length }) }}
           </span>
         </div>
         <pre class="content-preview"><span
@@ -26,12 +26,15 @@
       </div>
     </div>
 
-    <div v-else class="empty-text">暂无可预览内容</div>
+    <div v-else class="empty-text">{{ $t('toolCall.docPreview.noPreview') }}</div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   result: {
@@ -52,15 +55,21 @@ const documentWindows = computed(() => {
 
 const summaryText = computed(() => {
   if (props.mode === 'find') {
-    const modeText = props.result.match_mode === 'regex' ? '正则' : '关键词'
-    return `${modeText}查找: ${props.result.total_matches || 0} 处匹配，${documentWindows.value.length} 个上下文窗口`
+    const modeText = props.result.match_mode === 'regex' ? t('toolCall.docPreview.regex') : t('toolCall.docPreview.keyword')
+    return t('toolCall.docPreview.findSummary', {
+      mode: modeText,
+      matches: props.result.total_matches || 0,
+      windows: documentWindows.value.length
+    })
   }
 
   const startLine = props.result.start_line || 0
   const endLine = props.result.end_line || 0
   const totalLines = props.result.total_lines || 0
-  const moreText = props.result.has_more_after ? `，下一段 offset ${props.result.next_offset}` : ''
-  return `打开文档: 第 ${startLine}-${endLine} 行 / 共 ${totalLines} 行${moreText}`
+  const moreText = props.result.has_more_after
+    ? t('toolCall.docPreview.nextOffset', { offset: props.result.next_offset })
+    : ''
+  return t('toolCall.docPreview.openSummary', { startLine, endLine, totalLines, more: moreText })
 })
 
 const splitContent = (content = '') => String(content).split('\n')
@@ -80,8 +89,10 @@ const windowKey = (window, index) => `${window.start_line || 0}-${window.end_lin
 const windowTitle = (window, index) => {
   const startLine = window.start_line || 0
   const endLine = window.end_line || 0
-  if (startLine || endLine) return `窗口 ${index + 1}: 第 ${startLine}-${endLine} 行`
-  return `窗口 ${index + 1}`
+  if (startLine || endLine) {
+    return t('toolCall.docPreview.windowTitle', { index: index + 1, startLine, endLine })
+  }
+  return t('toolCall.docPreview.windowTitleSimple', { index: index + 1 })
 }
 </script>
 

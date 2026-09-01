@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall" :hide-params="true">
     <template #header-success>
       <span class="sep-header">
-        <span class="note">列出数据库表</span>
+        <span class="note">{{ $t('toolCall.mysql.listTables') }}</span>
       </span>
     </template>
 

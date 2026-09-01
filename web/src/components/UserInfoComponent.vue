@@ -124,8 +124,9 @@ const userRoleText = computed(() => {
 const logout = () => {
   userStore.logout()
   message.success(t('user.loggedOut'))
-  // 跳转到首页
-  router.push('/login')
+  // 整页跳转确保退出后刷新到登录页（与 apis/base.js 401 处理一致）；
+  // 侧栏弹层内使用 router.push 软跳转在移动端可能不生效
+  window.location.href = '/login'
 }
 
 // 前往登录页
@@ -241,11 +242,11 @@ const openProfile = () => {
   }
 
   &.admin {
-    background-color: var(--color-info-500); /* 蓝色，管理员 */
+    background-color: var(--color-info-500); /* 蓝色，管理员 */ // i18n-ignore
   }
 
   &.user {
-    background-color: var(--color-success-500); /* 绿色，普通用户 */
+    background-color: var(--color-success-500); /* 绿色，普通用户 */ // i18n-ignore
   }
 }
 

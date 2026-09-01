@@ -1,6 +1,6 @@
 <template>
   <div class="source-section">
-    <div class="section-title">知识库来源 ({{ docCount }})</div>
+    <div class="section-title">{{ $t('sources.kbTitle') }} ({{ docCount }})</div>
     <KbResultGroupedList :chunks="chunks" :show-summary="false" />
   </div>
 </template>

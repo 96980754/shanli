@@ -1,20 +1,21 @@
 import { getPreviewFileExtension } from '@/utils/file_preview'
 import { formatRelative, parseToShanghai } from '@/utils/time'
+import { i18n } from '@/i18n'
 
 export const formatRelativeTime = (value) => formatRelative(value)
 
 export const formatStandardTime = (value) => {
   const parsed = parseToShanghai(value)
   if (!parsed) return '-'
-  return parsed.format('YYYY年MM月DD日 HH:mm:ss')
+  return parsed.format(i18n.global.t('fileUtil.dateTimeFormat'))
 }
 
 export const getStatusText = (status) => {
   const statusMap = {
-    done: '处理完成',
-    failed: '处理失败',
-    processing: '处理中',
-    waiting: '等待处理'
+    done: i18n.global.t('fileUtil.status.done'),
+    failed: i18n.global.t('fileUtil.status.failed'),
+    processing: i18n.global.t('fileUtil.status.processing'),
+    waiting: i18n.global.t('fileUtil.status.waiting')
   }
   return statusMap[status] || status
 }
@@ -28,7 +29,7 @@ export const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-export const getDisplayFileName = (pathOrName, fallback = '文件') => {
+export const getDisplayFileName = (pathOrName, fallback = i18n.global.t('fileUtil.fileFallback')) => {
   const value = String(pathOrName || '').trim()
   if (!value) return fallback
   return value.split('/').pop() || value || fallback
@@ -60,12 +61,15 @@ export const inferImageMimeTypeFromBase64 = (base64Content) => {
 export const normalizeAttachmentPreview = (attachment) => {
   const name = getDisplayFileName(
     attachment?.file_name || attachment?.name || attachment?.path,
-    '附件'
+    i18n.global.t('fileUtil.attachmentFallback')
   )
   const fileId = attachment?.file_id || attachment?.path || name
   const fileType = String(attachment?.file_type || '')
   const sizeLabel = formatFileSize(attachment?.file_size)
-  const typeLabel = getFileExtensionLabel(name) || getMimeSubtypeLabel(fileType) || '文件'
+  const typeLabel =
+    getFileExtensionLabel(name) ||
+    getMimeSubtypeLabel(fileType) ||
+    i18n.global.t('fileUtil.fileFallback')
 
   return {
     raw: attachment,

@@ -140,7 +140,7 @@ export const dashboardApi = {
         agents: agentStats
       }
     } catch (error) {
-      console.error('批量获取统计数据失败:', error)
+      console.error('批量获取统计数据失败:', error) // i18n-ignore
       throw error
     }
   },

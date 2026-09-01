@@ -1,17 +1,19 @@
 <template>
   <div class="basic-settings-section">
     <template v-if="userStore.isAdmin">
-      <div class="section-title">默认项配置</div>
+      <div class="section-title">{{ $t('settings.defaultsTitle') }}</div>
       <div class="settings-panel">
         <template v-if="userStore.isSuperAdmin">
           <div class="setting-row two-cols">
             <div class="col-item">
-              <div class="setting-label">{{ items?.default_model?.des || '默认对话模型' }}</div>
+              <div class="setting-label">
+                {{ items?.default_model?.des || $t('settings.defaultChatModel') }}
+              </div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   @select-model="handleChatModelSelect"
                   :model_spec="configStore.config?.default_model"
-                  placeholder="请选择默认模型"
+                  :placeholder="$t('settings.selectDefaultModel')"
                 />
               </div>
             </div>
@@ -21,7 +23,7 @@
                 <ModelSelectorComponent
                   @select-model="handleFastModelSelect"
                   :model_spec="configStore.config?.fast_model"
-                  placeholder="请选择模型"
+                  :placeholder="$t('settings.selectModel')"
                 />
               </div>
             </div>
@@ -51,7 +53,7 @@
           <div class="setting-row two-cols">
             <div class="col-item">
               <div class="setting-label">
-                {{ items?.default_ocr_engine?.des || '默认 OCR 解析引擎' }}
+                {{ items?.default_ocr_engine?.des || $t('settings.defaultOcrEngine') }}
               </div>
               <div class="setting-content">
                 <a-select
@@ -64,14 +66,14 @@
                     :key="option.value"
                     :value="option.value"
                   >
-                    {{ option.label }}
+                    {{ $t(option.label) }}
                   </a-select-option>
                 </a-select>
               </div>
             </div>
             <div class="col-item">
               <div class="setting-label">
-                {{ items?.transcription_model?.des || '默认语音转写模型' }}
+                {{ items?.transcription_model?.des || $t('settings.defaultTranscriptionModel') }}
               </div>
               <div class="setting-content">
                 <ModelSelectorComponent
@@ -79,7 +81,7 @@
                   model-type="transcription"
                   :show-status="false"
                   clearable
-                  placeholder="请选择语音转写模型"
+                  :placeholder="$t('settings.selectTranscriptionModel')"
                   @select-model="handleTranscriptionModelSelect"
                 />
               </div>
@@ -89,7 +91,7 @@
       </div>
 
       <template v-if="userStore.isSuperAdmin">
-        <div class="section-title">内容审查配置</div>
+        <div class="section-title">{{ $t('settings.contentGuardTitle') }}</div>
         <div class="section">
           <div class="card">
             <span class="label">{{ items?.enable_content_guard?.des }}</span>
@@ -116,7 +118,7 @@
             <ModelSelectorComponent
               @select-model="handleContentGuardModelSelect"
               :model_spec="configStore.config?.content_guard_llm_model"
-              placeholder="请选择模型"
+              :placeholder="$t('settings.selectModel')"
             />
           </div>
         </div>
@@ -124,16 +126,14 @@
     </template>
 
     <!-- 服务链接部分 -->
-    <div v-if="userStore.isAdmin" class="section-title">服务链接</div>
+    <div v-if="userStore.isAdmin" class="section-title">{{ $t('settings.serviceLinks') }}</div>
     <div v-if="userStore.isAdmin">
-      <p class="section-description">
-        快速访问系统相关的外部服务，需要将 localhost 替换为实际的 IP 地址。
-      </p>
+      <p class="section-description">{{ $t('settings.serviceLinksDesc') }}</p>
       <div class="services-grid">
         <div class="service-link-card">
           <div class="service-info">
-            <h4>Neo4j 浏览器</h4>
-            <p>图数据库管理界面</p>
+            <h4>{{ $t('settings.neo4jBrowser') }}</h4>
+            <p>{{ $t('settings.neo4jBrowserDesc') }}</p>
           </div>
           <a-button
             type="default"
@@ -141,14 +141,14 @@
             @click="openLink('http://localhost:7474/')"
             :icon="h(Globe, { size: 18 })"
           >
-            访问
+            {{ $t('settings.visit') }}
           </a-button>
         </div>
 
         <div class="service-link-card">
           <div class="service-info">
-            <h4>API 接口文档</h4>
-            <p>系统接口文档和调试工具</p>
+            <h4>{{ $t('settings.apiDocs') }}</h4>
+            <p>{{ $t('settings.apiDocsDesc') }}</p>
           </div>
           <a-button
             type="default"
@@ -156,14 +156,14 @@
             @click="openLink('http://localhost:5050/docs')"
             :icon="h(Globe, { size: 18 })"
           >
-            访问
+            {{ $t('settings.visit') }}
           </a-button>
         </div>
 
         <div class="service-link-card">
           <div class="service-info">
-            <h4>MinIO 对象存储</h4>
-            <p>文件存储管理控制台</p>
+            <h4>{{ $t('settings.minioStorage') }}</h4>
+            <p>{{ $t('settings.minioStorageDesc') }}</p>
           </div>
           <a-button
             type="default"
@@ -171,14 +171,14 @@
             @click="openLink('http://localhost:9001')"
             :icon="h(Globe, { size: 18 })"
           >
-            访问
+            {{ $t('settings.visit') }}
           </a-button>
         </div>
 
         <div class="service-link-card">
           <div class="service-info">
             <h4>Milvus WebUI</h4>
-            <p>向量数据库管理界面</p>
+            <p>{{ $t('settings.milvusWebUIDesc') }}</p>
           </div>
           <a-button
             type="default"
@@ -186,7 +186,7 @@
             @click="openLink('http://localhost:9091/webui/')"
             :icon="h(Globe, { size: 18 })"
           >
-            访问
+            {{ $t('settings.visit') }}
           </a-button>
         </div>
       </div>
@@ -207,7 +207,7 @@ const configStore = useConfigStore()
 const userStore = useUserStore()
 const items = computed(() => configStore.config?._config_items || {})
 const ocrEngineOptions = [
-  { value: 'disable', label: '不启用' },
+  { value: 'disable', label: 'settings.ocrDisabled' },
   { value: 'rapid_ocr', label: 'RapidOCR (ONNX)' },
   { value: 'mineru_ocr', label: 'MinerU OCR' },
   { value: 'mineru_official', label: 'MinerU Official API' },

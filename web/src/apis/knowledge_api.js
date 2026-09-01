@@ -251,6 +251,20 @@ export const documentApi = {
   },
 
   /**
+   * 重命名文件/文件夹（只传新的叶子名，不含路径分隔符；虚拟目录改名为级联重写前缀）
+   * @param {string} kbId - 知识库ID
+   * @param {string} fileId - 文件/文件夹ID
+   * @param {string} filename - 新的文件名/文件夹名
+   * @returns {Promise} - 重命名结果
+   */
+  renameDocument: async (kbId, fileId, filename) => {
+    // fileId 可能是虚拟目录 id（形如 __virtual_folder__:root:poc资料/，含 / 和中文）。
+    // 尾部的 / 在 URL 路径里无法作为 %2F 传递（服务器会提前解码成真实分隔符），
+    // 因此去掉后再整体编码；后端会按规范补回尾部斜杠
+    return apiPut(`/api/knowledge/databases/${kbId}/documents/${encodeURIComponent(fileId.replace(/\/$/, ''))}/rename`, { filename })
+  },
+
+  /**
    * 获取真实文件夹（is_folder）的祖先链（top-down，含目标自身），用于全库搜索深链进入文件夹目录
    * @param {string} kbId - 知识库ID
    * @param {string} folderId - 目标文件夹ID
@@ -883,7 +897,7 @@ export const fileApi = {
       },
       true,
       'json'
-    ) // 需要认证，期望JSON响应
+    ) // 需要认证，期望JSON响应 // i18n-ignore
   },
 
   /**

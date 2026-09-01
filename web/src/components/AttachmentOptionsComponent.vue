@@ -1,19 +1,19 @@
 <template>
   <div class="attachment-options">
     <div class="option-item" :class="{ disabled: disabled }" @click="handleAttachmentClick">
-      <a-tooltip title="支持任意文件格式 ≤ 5 MB" placement="right">
+      <a-tooltip :title="$t('attachOption.anyFileTip')" placement="right">
         <div class="option-content">
           <FileText :size="14" class="option-icon" />
-          <span class="option-text">添加附件</span>
+          <span class="option-text">{{ $t('attachOption.addAttachment') }}</span>
         </div>
       </a-tooltip>
     </div>
 
     <div class="option-item" @click="handleImageUpload">
-      <a-tooltip title="支持 jpg/jpeg/png/gif， ≤ 5 MB" placement="right">
+      <a-tooltip :title="$t('attachOption.imageTip')" placement="right">
         <div class="option-content">
           <Image :size="14" class="option-icon" />
-          <span class="option-text">上传图片</span>
+          <span class="option-text">{{ $t('attachOption.uploadImage') }}</span>
         </div>
       </a-tooltip>
     </div>
@@ -21,9 +21,12 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { FileText, Image } from 'lucide-vue-next'
 import { message } from 'ant-design-vue'
 import { uploadMultimodalImage } from '@/utils/multimodal_image_upload'
+
+const { t } = useI18n()
 
 const props = defineProps({
   disabled: {
@@ -76,9 +79,9 @@ const processImageUpload = async (file) => {
     // 发出上传成功通知事件，用于关闭选项面板
     emit('upload-image-success')
   } catch (error) {
-    console.error('图片上传失败:', error)
+    console.error(t('attachOption.uploadFailedLog'), error)
     message.error({
-      content: `图片上传失败: ${error.message || '未知错误'}`,
+      content: t('attachOption.uploadFailedMessage', { message: error.message || t('attachOption.unknownError') }),
       key: 'image-upload'
     })
   }

@@ -7,7 +7,7 @@
       :rows="rows"
       :auto-size="autoSize"
     />
-    <a-tooltip v-if="name" title="使用 AI 生成或优化描述">
+    <a-tooltip v-if="name" :title="t('msgInput.aiTooltip')">
       <a-button
         class="ai-btn"
         type="text"
@@ -18,7 +18,9 @@
         <template #icon>
           <WandSparkles size="14" />
         </template>
-        <span v-if="!loading" class="ai-text">{{ modelValue?.trim() ? '润色' : '生成' }}</span>
+        <span v-if="!loading" class="ai-text">{{
+          modelValue?.trim() ? $t('msgInput.polish') : $t('msgInput.generate')
+        }}</span>
       </a-button>
     </a-tooltip>
   </div>
@@ -27,6 +29,7 @@
 <script setup>
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { databaseApi } from '@/apis/knowledge_api'
 import { WandSparkles } from 'lucide-vue-next'
 
@@ -62,12 +65,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { t } = useI18n()
 
 const loading = ref(false)
 
 const generateDescription = async () => {
   if (!props.name?.trim()) {
-    message.warning('请先输入知识库名称')
+    message.warning(t('msgInput.nameRequired'))
     return
   }
 
@@ -76,13 +80,13 @@ const generateDescription = async () => {
     const result = await databaseApi.generateDescription(props.name, props.modelValue, props.files)
     if (result.status === 'success' && result.description) {
       emit('update:modelValue', result.description)
-      message.success('描述生成成功')
+      message.success(t('msgInput.descSuccess'))
     } else {
-      message.error(result.message || '生成失败')
+      message.error(result.message || t('msgInput.genFailed'))
     }
   } catch (error) {
     console.error('生成描述失败:', error)
-    message.error(error.message || '生成描述失败')
+    message.error(error.message || t('msgInput.genDescFailed'))
   } finally {
     loading.value = false
   }

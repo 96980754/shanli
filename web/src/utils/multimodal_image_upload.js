@@ -1,5 +1,6 @@
 import { message } from 'ant-design-vue'
 import { multimodalApi } from '@/apis/agent_api'
+import { i18n } from '@/i18n'
 
 const MAX_IMAGE_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
@@ -7,29 +8,29 @@ export const uploadMultimodalImage = async (file) => {
   if (!file) return null
 
   if (file.size > MAX_IMAGE_UPLOAD_SIZE_BYTES) {
-    message.error('图片文件过大，请选择小于10MB的图片')
+    message.error(i18n.global.t('fileUtil.imageTooLarge'))
     return null
   }
 
   if (!file.type?.startsWith('image/')) {
-    message.error('请选择有效的图片文件')
+    message.error(i18n.global.t('fileUtil.selectValidImage'))
     return null
   }
 
   try {
-    message.loading({ content: '正在处理图片...', key: 'image-upload' })
+    message.loading({ content: i18n.global.t('fileUtil.processingImage'), key: 'image-upload' })
 
     const result = await multimodalApi.uploadImage(file)
     if (!result.success) {
       message.error({
-        content: `图片处理失败: ${result.error}`,
+        content: i18n.global.t('fileUtil.imageProcessFailed', { error: result.error }),
         key: 'image-upload'
       })
       return null
     }
 
     message.success({
-      content: '图片处理成功',
+      content: i18n.global.t('fileUtil.imageProcessSuccess'),
       key: 'image-upload',
       duration: 2
     })
@@ -46,9 +47,11 @@ export const uploadMultimodalImage = async (file) => {
       originalName: file.name || result.original_filename || 'pasted-image'
     }
   } catch (error) {
-    console.error('图片上传失败:', error)
+    console.error('图片上传失败:', error) // i18n-ignore
     message.error({
-      content: `图片上传失败: ${error.message || '未知错误'}`,
+      content: i18n.global.t('fileUtil.imageUploadFailed', {
+        message: error.message || i18n.global.t('fileUtil.unknownError')
+      }),
       key: 'image-upload'
     })
     return null

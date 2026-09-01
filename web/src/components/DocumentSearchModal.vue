@@ -1,26 +1,26 @@
 <template>
   <a-modal
     :open="open"
-    title="选择要更新的当前文档"
+    :title="$t('docVersion.selectTitle')"
     width="720px"
     :confirm-loading="loading"
     :ok-button-props="{ disabled: !selectedDocument }"
-    ok-text="选择文档"
-    cancel-text="取消"
+    :ok-text="$t('docVersion.selectButton')"
+    :cancel-text="$t('common.cancel')"
     @ok="confirmSelection"
     @cancel="close"
   >
     <a-input-search
       v-model:value="keyword"
-      placeholder="搜索文件名"
+      :placeholder="$t('docVersion.searchPlaceholder')"
       allow-clear
       class="document-search-input"
     />
 
     <div class="document-search-results">
-      <a-spin v-if="loading && items.length === 0" tip="正在搜索文档..." />
+      <a-spin v-if="loading && items.length === 0" :tip="$t('docVersion.searchingTip')" />
       <a-alert v-else-if="error" type="error" :message="error" show-icon />
-      <a-empty v-else-if="items.length === 0" description="没有找到可作为版本目标的当前文档" />
+      <a-empty v-else-if="items.length === 0" :description="$t('docVersion.noTargetDoc')" />
       <button
         v-for="item in items"
         v-else
@@ -54,6 +54,7 @@
 
 <script setup>
 import { onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { documentApi } from '@/apis/knowledge_api'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
@@ -64,6 +65,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:open', 'select'])
+
+const { t } = useI18n()
 
 const keyword = ref('')
 const items = ref([])
@@ -79,7 +82,7 @@ let requestId = 0
 const close = () => emit('update:open', false)
 
 const formatTime = (value) => {
-  if (!value) return '更新时间未知'
+  if (!value) return t('docVersion.updatedUnknown')
   return new Date(value).toLocaleString()
 }
 
@@ -96,7 +99,8 @@ const loadDocuments = async () => {
       page_size: pageSize
     })
     if (currentRequestId !== requestId) return
-    items.value = response?.items || []
+    // 版本目标必须是文档，过滤掉文件夹结果（search_documents 为全库搜索/知识库浏览保留文件夹）
+    items.value = (response?.items || []).filter((item) => !item.is_folder)
     total.value = Number(response?.total) || 0
     selectedDocument.value =
       items.value.find((item) => item.file_id === props.selectedFileId) || selectedDocument.value
@@ -104,7 +108,7 @@ const loadDocuments = async () => {
     if (currentRequestId !== requestId) return
     items.value = []
     total.value = 0
-    error.value = err?.message || '文档搜索失败'
+    error.value = err?.message || t('docVersion.searchFailed')
   } finally {
     if (currentRequestId === requestId) loading.value = false
   }

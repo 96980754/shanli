@@ -32,7 +32,7 @@
             :tool-name="toolName"
             :result-content="resultContent"
           >
-            工具&nbsp; <span class="tool-name">{{ toolName }}</span> &nbsp; 执行完成
+            {{ $t('toolCall.tool') }}&nbsp; <span class="tool-name">{{ toolName }}</span> &nbsp; {{ $t('toolCall.executed') }}
           </slot>
 
           <slot
@@ -41,12 +41,12 @@
             :tool-name="toolName"
             :error-message="toolCall.error_message"
           >
-            工具&nbsp; <span class="tool-name">{{ toolName }}</span> &nbsp; 执行失败
-            <span v-if="toolCall.error_message">（{{ toolCall.error_message }}）</span>
+            {{ $t('toolCall.tool') }}&nbsp; <span class="tool-name">{{ toolName }}</span> &nbsp; {{ $t('toolCall.execFailed') }}
+            <span v-if="toolCall.error_message">{{ $t('toolCall.errorDetail', { message: toolCall.error_message }) }}</span>
           </slot>
 
           <slot name="header-running" v-else :tool-name="toolName">
-            正在调用工具: &nbsp; <span class="tool-name">{{ toolName }}</span>
+            {{ $t('toolCall.callingTool') }}&nbsp; <span class="tool-name">{{ toolName }}</span>
           </slot>
         </template>
       </div>
@@ -67,7 +67,7 @@
       <div class="tool-params" v-if="hasParams && !hideParams">
         <slot name="params" :tool-call="toolCall" :args="formattedArgs">
           <div class="tool-params-content">
-            <strong>参数: </strong>
+            <strong>{{ $t('toolCall.params') }} </strong>
             <span>{{ formattedArgs }}</span>
           </div>
         </slot>
@@ -95,6 +95,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { Loader, ChevronsUpDown, ChevronsDownUp, XCircle, CheckCircle } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useAgentStore } from '@/stores/agent'
 import { storeToRefs } from 'pinia'
 import { getToolCallId, getToolIcon } from './toolRegistry'
@@ -130,6 +131,7 @@ const props = defineProps({
 
 const agentStore = useAgentStore()
 const { availableTools } = storeToRefs(agentStore)
+const { t } = useI18n()
 
 const isExpanded = ref(props.defaultExpanded)
 const isTimeline = computed(() => props.appearance === 'timeline')
@@ -185,8 +187,8 @@ const hasParams = computed(() => {
 const durationLabel = computed(() => {
   const durationMs = props.toolCall.tool_call_result?.duration_ms
   if (typeof durationMs !== 'number' || !Number.isFinite(durationMs)) return ''
-  if (durationMs >= 1000) return `耗时 ${(durationMs / 1000).toFixed(1)}s`
-  return `耗时 ${Math.max(0, Math.round(durationMs))}ms`
+  if (durationMs >= 1000) return t('toolCall.durationSec', { duration: (durationMs / 1000).toFixed(1) })
+  return t('toolCall.durationMs', { duration: Math.max(0, Math.round(durationMs)) })
 })
 
 // Result Logic

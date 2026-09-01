@@ -18,7 +18,7 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
-      path: '/auth/oidc/callback', // oidc登录回调页面
+      path: '/auth/oidc/callback', // oidc登录回调页面 // i18n-ignore
       name: 'OIDCCallback',
       component: () => import('@/views/OIDCCallbackView.vue'),
       meta: { public: true }
@@ -183,7 +183,7 @@ router.beforeEach(async (to) => {
       await userStore.getCurrentUser()
     } catch (error) {
       // 如果获取用户信息失败（如 token 过期），清除 token
-      console.error('获取用户信息失败:', error)
+      console.error('获取用户信息失败:', error) // i18n-ignore
       userStore.logout()
     }
   }
@@ -210,7 +210,7 @@ router.beforeEach(async (to) => {
       }
       return '/agent'
     } catch (error) {
-      console.error('获取智能体信息失败:', error)
+      console.error('获取智能体信息失败:', error) // i18n-ignore
       return '/agent'
     }
   }
@@ -224,7 +224,7 @@ router.beforeEach(async (to) => {
       }
       return '/agent'
     } catch (error) {
-      console.error('获取智能体信息失败:', error)
+      console.error('获取智能体信息失败:', error) // i18n-ignore
       return '/agent'
     }
   }

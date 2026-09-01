@@ -6,7 +6,9 @@
         class="item btn"
         :class="{ disabled: feedbackState.hasSubmitted }"
         @click="likeThisResponse(msg)"
-        :title="feedbackState.hasSubmitted && feedbackState.rating === 'like' ? '已点赞' : '点赞'"
+        :title="
+          t(feedbackState.hasSubmitted && feedbackState.rating === 'like' ? 'refs.liked' : 'refs.like')
+        "
       >
         <ThumbsUp size="12" :fill="feedbackState.rating === 'like' ? 'currentColor' : 'none'" />
       </span>
@@ -15,7 +17,9 @@
         :class="{ disabled: feedbackState.hasSubmitted }"
         @click="dislikeThisResponse(msg)"
         :title="
-          feedbackState.hasSubmitted && feedbackState.rating === 'dislike' ? '已点踩' : '点踩'
+          t(
+            feedbackState.hasSubmitted && feedbackState.rating === 'dislike' ? 'refs.disliked' : 'refs.dislike'
+          )
         "
       >
         <ThumbsDown
@@ -28,7 +32,7 @@
         <Bot size="12" /> {{ getModelName(msg) }}
       </span>
       <!-- 复制 -->
-      <span v-if="showKey('copy')" class="item btn" @click="copyText(msg.content)" title="复制">
+      <span v-if="showKey('copy')" class="item btn" @click="copyText(msg.content)" :title="t('refs.copy')">
         <Check v-if="isCopied" size="12" />
         <Copy v-else size="12" />
       </span>
@@ -38,7 +42,7 @@
         v-if="showKey('regenerate')"
         class="item btn"
         @click="regenerateMessage()"
-        title="重新生成"
+        :title="t('refs.regenerate')"
         ><RotateCcw size="12" />
       </span>
 
@@ -50,11 +54,11 @@
         class="item btn sources-btn"
         :class="{ expanded: isSourcesExpanded }"
         @click="toggleSources"
-        :title="isSourcesExpanded ? '收起详情' : '查看来源详情'"
+        :title="t(isSourcesExpanded ? 'refs.collapseDetails' : 'refs.viewSourceDetails')"
       >
         <BookOpen size="12" />
         <span class="sources-label">
-          来源
+          {{ $t('refs.sources') }}
           <template v-if="sourceCount > 0">
             {{ sourceCount }}
           </template>
@@ -73,26 +77,26 @@
   <!-- Dislike reason modal -->
   <a-modal
     v-model:open="dislikeModalVisible"
-    title="请告诉我们不满意的原因"
+    :title="t('refs.dislikeTitle')"
     @ok="submitDislikeFeedback"
     @cancel="cancelDislike"
     :confirmLoading="submittingFeedback"
-    okText="提交"
-    cancelText="取消"
+    :okText="t('refs.submit')"
+    :cancelText="t('common.cancel')"
   >
     <div class="dislike-form">
-      <div class="reason-hint">请选择一个最符合的原因</div>
+      <div class="reason-hint">{{ $t('refs.chooseReason') }}</div>
       <a-radio-group v-model:value="dislikeReasonCode" class="reason-options">
         <a-radio v-for="option in dislikeReasonOptions" :key="option.value" :value="option.value">
-          {{ option.label }}
+          {{ $t(option.label) }}
         </a-radio>
       </a-radio-group>
 
-      <div class="reason-hint detail-hint">补充说明（可选）</div>
+      <div class="reason-hint detail-hint">{{ $t('refs.detailOptional') }}</div>
       <a-textarea
         v-model:value="dislikeReasonDetail"
         :rows="4"
-        placeholder="可以补充具体问题，帮助管理员更快定位和改进"
+        :placeholder="t('refs.detailPlaceholder')"
         :maxlength="500"
         show-count
       />
@@ -104,6 +108,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { useClipboard } from '@vueuse/core'
 import { message as antMessage } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import {
   ThumbsUp,
   ThumbsDown,
@@ -120,6 +125,7 @@ import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
 
 const emit = defineEmits(['retry', 'openRefs'])
+const { t } = useI18n()
 const props = defineProps({
   message: Object,
   showRefs: {
@@ -202,15 +208,16 @@ const dislikeReasonCode = ref(null)
 const dislikeReasonDetail = ref('')
 const submittingFeedback = ref(false)
 const dislikeReasonOptions = [
-  { value: 'answer_incorrect', label: '答案有误' },
-  { value: 'outdated', label: '信息过时' },
-  { value: 'irrelevant', label: '答非所问' },
-  { value: 'other', label: '其他' }
+  { value: 'answer_incorrect', label: 'refs.reasonAnswerIncorrect' },
+  { value: 'outdated', label: 'refs.reasonOutdated' },
+  { value: 'irrelevant', label: 'refs.reasonIrrelevant' },
+  { value: 'other', label: 'refs.reasonOther' }
 ]
 
-const selectedReasonLabel = computed(
-  () => dislikeReasonOptions.find((item) => item.value === dislikeReasonCode.value)?.label || ''
-)
+const selectedReasonLabel = computed(() => {
+  const key = dislikeReasonOptions.find((item) => item.value === dislikeReasonCode.value)?.label
+  return key ? t(key) : ''
+})
 
 const resetDislikeForm = () => {
   dislikeReasonCode.value = null
@@ -241,18 +248,18 @@ const copyText = async (text) => {
   if (isSupported) {
     try {
       await copy(text)
-      antMessage.success('文本已复制到剪贴板')
+      antMessage.success(t('refs.copiedToClipboard'))
       isCopied.value = true
       setTimeout(() => {
         isCopied.value = false
       }, 2000)
     } catch (error) {
       console.error('复制失败:', error)
-      antMessage.error('复制失败，请手动复制')
+      antMessage.error(t('refs.copyFailedManual'))
     }
   } else {
     console.warn('浏览器不支持自动复制')
-    antMessage.warning('浏览器不支持自动复制，请手动复制')
+    antMessage.warning(t('refs.copyNotSupported'))
   }
 }
 
@@ -283,12 +290,12 @@ const getModelName = (msg) => {
 // Handle like action
 const likeThisResponse = async (msg) => {
   if (feedbackState.hasSubmitted) {
-    antMessage.info('您已经提交过反馈了')
+    antMessage.info(t('refs.feedbackAlreadySubmitted'))
     return
   }
 
   if (!msg?.id) {
-    antMessage.error('无法提交反馈：消息ID不存在')
+    antMessage.error(t('refs.feedbackNoMsgId'))
     console.error('Message object:', msg)
     return
   }
@@ -300,14 +307,14 @@ const likeThisResponse = async (msg) => {
     feedbackState.hasSubmitted = true
     feedbackState.rating = 'like'
 
-    antMessage.success('感谢您的反馈！')
+    antMessage.success(t('refs.feedbackThanks'))
   } catch (error) {
     console.error('Failed to submit like feedback:', error)
     if (error.message?.includes('already submitted')) {
-      antMessage.info('您已经提交过反馈了')
+      antMessage.info(t('refs.feedbackAlreadySubmitted'))
       feedbackState.hasSubmitted = true
     } else {
-      antMessage.error('提交反馈失败，请稍后重试')
+      antMessage.error(t('refs.feedbackSubmitFailed'))
     }
   } finally {
     submittingFeedback.value = false
@@ -317,12 +324,12 @@ const likeThisResponse = async (msg) => {
 // Handle dislike action
 const dislikeThisResponse = async (msg) => {
   if (feedbackState.hasSubmitted) {
-    antMessage.info('您已经提交过反馈了')
+    antMessage.info(t('refs.feedbackAlreadySubmitted'))
     return
   }
 
   if (!msg?.id) {
-    antMessage.error('无法提交反馈：消息ID不存在')
+    antMessage.error(t('refs.feedbackNoMsgId'))
     console.error('Message object:', msg)
     return
   }
@@ -334,7 +341,7 @@ const dislikeThisResponse = async (msg) => {
 // Submit dislike feedback with structured reason
 const submitDislikeFeedback = async () => {
   if (!dislikeReasonCode.value) {
-    antMessage.warning('请选择一个不满意的原因')
+    antMessage.warning(t('refs.chooseReasonFirst'))
     return
   }
 
@@ -351,16 +358,16 @@ const submitDislikeFeedback = async () => {
     dislikeModalVisible.value = false
     resetDislikeForm()
 
-    antMessage.success('感谢您的反馈！')
+    antMessage.success(t('refs.feedbackThanks'))
   } catch (error) {
     console.error('Failed to submit dislike feedback:', error)
     if (error.message?.includes('already submitted')) {
-      antMessage.info('您已经提交过反馈了')
+      antMessage.info(t('refs.feedbackAlreadySubmitted'))
       feedbackState.hasSubmitted = true
       dislikeModalVisible.value = false
       resetDislikeForm()
     } else {
-      antMessage.error('提交反馈失败，请稍后重试')
+      antMessage.error(t('refs.feedbackSubmitFailed'))
     }
   } finally {
     submittingFeedback.value = false

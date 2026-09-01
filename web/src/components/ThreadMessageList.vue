@@ -20,7 +20,7 @@
         />
       </template>
     </template>
-    <div v-if="conversations.length === 0" class="thread-message-list-empty">暂无消息</div>
+    <div v-if="conversations.length === 0" class="thread-message-list-empty">{{ $t('threadMsg.empty') }}</div>
   </div>
 </template>
 

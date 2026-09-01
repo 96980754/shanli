@@ -1,6 +1,7 @@
 /**
  * 问题和选项规范化工具
  */
+import { i18n } from '@/i18n'
 
 const DEFAULT_OTHER_OPTION_VALUE = '__other__'
 
@@ -19,7 +20,7 @@ export const isOtherOption = (option) => {
   return (
     value === DEFAULT_OTHER_OPTION_VALUE ||
     value === 'other' ||
-    label.includes('其他') ||
+    label.includes('其他') || // i18n-ignore
     label.includes('other')
   )
 }
@@ -65,7 +66,10 @@ export const normalizeQuestions = (rawQuestions) => {
       const hasOtherOption = baseOptions.some((option) => isOtherOption(option))
       const options =
         allowOther && !hasOtherOption
-          ? [...baseOptions, { label: '其他', value: DEFAULT_OTHER_OPTION_VALUE }]
+          ? [
+              ...baseOptions,
+              { label: i18n.global.t('question.otherOption'), value: DEFAULT_OTHER_OPTION_VALUE }
+            ]
           : baseOptions
 
       return {

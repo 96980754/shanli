@@ -7,15 +7,15 @@
           <div class="search-input-wrapper">
             <a-textarea
               v-model:value="queryText"
-              placeholder="输入查询内容..."
+              :placeholder="$t('querySection.inputPlaceholder')"
               :auto-size="{ minRows: 2, maxRows: 6 }"
               class="search-textarea"
               @press-enter.prevent="() => onQuery(true)"
             />
             <div class="search-actions">
-              <span class="query-hint">Enter 预览回答</span>
+              <span class="query-hint">{{ $t('querySection.enterHint') }}</span>
               <div style="display: flex; gap: 12px; align-items: center">
-                <a-tooltip :title="showRawData ? '切换至格式化显示' : '切换至原始数据'">
+                <a-tooltip :title="showRawData ? $t('querySection.switchToFormatted') : $t('querySection.switchToRaw')">
                   <a-button
                     type="text"
                     shape="circle"
@@ -31,7 +31,7 @@
                   :disabled="!queryText.trim() || searchLoading"
                   class="retrieval-only-button"
                 >
-                  仅检索
+                  {{ $t('querySection.retrievalOnly') }}
                 </a-button>
                 <a-button
                   @click="onQuery(true)"
@@ -41,7 +41,7 @@
                   :disabled="!queryText.trim()"
                   :icon="h(SearchOutlined)"
                 >
-                  预览回答
+                  {{ $t('querySection.previewAnswer') }}
                 </a-button>
               </div>
             </div>
@@ -57,9 +57,9 @@
           <div v-else class="preview-result">
             <div class="result-summary">
               <span>
-                {{ queryResult.retrieved_chunks.length }} 个文档块 ·
+                {{ $t('querySection.chunkCount', { count: queryResult.retrieved_chunks.length }) }} ·
                 {{ queryResult.retrieval.mode }}
-                <template v-if="queryResult.retrieval.rerank_applied"> · 已重排序</template>
+                <template v-if="queryResult.retrieval.rerank_applied"> · {{ $t('querySection.reranked') }}</template>
               </span>
               <a-button
                 type="text"
@@ -67,28 +67,28 @@
                 class="clear-results-btn"
                 @click="clearQueryResult"
               >
-                清空
+                {{ $t('querySection.clear') }}
               </a-button>
             </div>
 
             <section v-if="queryResult.answer" class="answer-preview-card">
-              <div class="preview-section-title">回答预览</div>
+              <div class="preview-section-title">{{ $t('querySection.answerPreview') }}</div>
               <MarkdownPreview :content="queryResult.answer" class="answer-content" />
-              <div class="answer-model">模型：{{ queryResult.model_spec }}</div>
+              <div class="answer-model">{{ $t('querySection.model', { model: queryResult.model_spec }) }}</div>
             </section>
 
             <section v-if="queryResult.citations.length" class="citation-preview-card">
-              <div class="preview-section-title">引用来源</div>
+              <div class="preview-section-title">{{ $t('querySection.citationSources') }}</div>
               <KnowledgeSourceSection :chunks="queryResult.citations" />
             </section>
 
             <a-collapse v-model:activeKey="retrievalActiveKeys" class="retrieval-details" ghost>
               <a-collapse-panel
                 key="retrieval"
-                :header="`检索详情（${queryResult.retrieved_chunks.length}）`"
+                :header="$t('querySection.retrievalDetail', { count: queryResult.retrieved_chunks.length })"
               >
                 <div v-if="queryResult.retrieved_chunks.length === 0" class="no-results">
-                  <p>未找到相关结果</p>
+                  <p>{{ $t('querySection.noResults') }}</p>
                 </div>
                 <div v-else class="result-list">
                   <div
@@ -109,7 +109,7 @@
                       </span>
                       <span class="result-score">{{ queryResult.retrieval.mode }}</span>
                       <span v-if="chunk.metadata?.document_version" class="result-version">
-                        V{{ chunk.metadata.document_version }} 当前版本
+                        {{ $t('querySection.currentVersion', { version: chunk.metadata.document_version }) }}
                       </span>
                     </div>
 
@@ -117,7 +117,7 @@
 
                     <div class="result-metadata">
                       <span v-if="chunk.metadata?.source" class="metadata-item">
-                        <strong>文件:</strong> {{ chunk.metadata.source }}
+                        <strong>{{ $t('querySection.metadataFile') }}</strong> {{ chunk.metadata.source }}
                       </span>
                       <span v-if="chunk.file_id" class="metadata-item">
                         <strong>file_id:</strong> {{ chunk.file_id }}
@@ -126,10 +126,10 @@
                         <strong>chunk_id:</strong> {{ chunk.id }}
                       </span>
                       <span v-if="chunk.metadata?.chunk_index !== undefined" class="metadata-item">
-                        <strong>块索引:</strong> {{ chunk.metadata.chunk_index }}
+                        <strong>{{ $t('querySection.metadataChunkIndex') }}</strong> {{ chunk.metadata.chunk_index }}
                       </span>
                       <span v-if="typeof chunk.distance === 'number'" class="metadata-item">
-                        <strong>距离:</strong> {{ chunk.distance.toFixed(4) }}
+                        <strong>{{ $t('querySection.metadataDistance') }}</strong> {{ chunk.distance.toFixed(4) }}
                       </span>
                     </div>
                   </div>
@@ -142,11 +142,11 @@
         <div v-else-if="showQuerySuggestions" class="query-suggestions">
           <div v-if="loadingQuestions || generatingQuestions" class="suggestions-loading">
             <a-spin size="small" />
-            <span>{{ generatingQuestions ? '正在生成示例问题...' : '正在加载示例问题...' }}</span>
+            <span>{{ generatingQuestions ? $t('querySection.generatingQuestions') : $t('querySection.loadingQuestions') }}</span>
           </div>
 
           <div v-else-if="queryExamples.length > 0" class="suggestions-list">
-            <div class="suggestions-title">示例问题</div>
+            <div class="suggestions-title">{{ $t('querySection.exampleQuestions') }}</div>
             <button
               v-for="(example, index) in visibleQueryExamples"
               :key="`${index}-${example}`"
@@ -164,7 +164,7 @@
               @click="() => generateSampleQuestions(false)"
             >
               <RefreshCw class="suggestion-icon" />
-              <span class="suggestion-text">重新生成</span>
+              <span class="suggestion-text">{{ $t('querySection.regenerate') }}</span>
             </button>
           </div>
 
@@ -175,7 +175,7 @@
               @click="() => generateSampleQuestions(false)"
             >
               <RefreshCw class="suggestion-icon" />
-              <span class="suggestion-text">生成示例问题</span>
+              <span class="suggestion-text">{{ $t('querySection.generateQuestions') }}</span>
             </button>
           </div>
         </div>
@@ -186,6 +186,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, h } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useDatabaseStore } from '@/stores/database'
 import { message } from 'ant-design-vue'
 import { queryApi } from '@/apis/knowledge_api'
@@ -196,6 +197,7 @@ import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import { normalizeKnowledgePreview } from '@/utils/knowledgePreview'
 
 const store = useDatabaseStore()
+const { t } = useI18n()
 const MAX_VISIBLE_EXAMPLES = 10
 
 const props = defineProps({
@@ -261,11 +263,11 @@ const loadSampleQuestions = async () => {
     if (
       error.status === 404 ||
       error?.message?.includes('404') ||
-      error?.message?.includes('还没有生成')
+      error?.message?.includes('还没有生成') // i18n-ignore
     ) {
       updateQueryExamples()
     } else {
-      console.error('加载示例问题失败:', error)
+      console.error(t('querySection.loadQuestionsFailedLog'), error)
     }
   } finally {
     loadingQuestions.value = false
@@ -287,11 +289,11 @@ const generateSampleQuestions = async (silent = false) => {
     if (data.questions && data.questions.length > 0) {
       updateQueryExamples(data.questions)
       if (!silent) {
-        message.success(`成功生成 ${data.questions.length} 个测试问题`)
+        message.success(t('querySection.generateSuccess', { count: data.questions.length }))
       }
     }
   } catch (error) {
-    console.error('生成示例问题失败:', error)
+    console.error(t('querySection.generateQuestionsFailedLog'), error)
     // 静默模式下不显示错误消息（自动生成时）
     if (!silent) {
       // 提取详细错误信息
@@ -307,7 +309,7 @@ const generateSampleQuestions = async (silent = false) => {
       } else {
         errorMsg = JSON.stringify(error)
       }
-      message.error('生成失败: ' + errorMsg)
+      message.error(t('querySection.generateFailed', { message: errorMsg }))
     }
   } finally {
     generatingQuestions.value = false
@@ -341,7 +343,7 @@ watch(
 
 const onQuery = async (generateAnswer = true) => {
   if (!queryText.value.trim()) {
-    message.error('请输入查询内容')
+    message.error(t('querySection.inputRequired'))
     return
   }
 
@@ -361,7 +363,7 @@ const onQuery = async (generateAnswer = true) => {
     retrievalActiveKeys.value = []
   } catch (error) {
     console.error(error)
-    message.error(error?.message || '预览失败，请稍后重试')
+    message.error(error?.message || t('querySection.previewFailed'))
     queryResult.value = null
   } finally {
     store.state.searchLoading = false

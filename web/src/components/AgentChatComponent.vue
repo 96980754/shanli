@@ -12,7 +12,7 @@
         <div class="header__left">
           <slot name="header-left"></slot>
           <div
-            v-if="currentThread?.title && currentThread.title !== '新的对话'"
+            v-if="currentThread?.title && currentThread.title !== $t('chat.newChat')"
             class="conversation-title"
           >
             {{ currentThread.title }}
@@ -176,7 +176,7 @@
                       :model_spec="currentModelSpec"
                       size="nano"
                       display-name="mini"
-                      placeholder="选择模型"
+                      :placeholder="t('chat.selectModel')"
                       @select-model="handleModelSelect"
                     />
                   </div>
@@ -194,7 +194,7 @@
               />
 
               <div class="bottom-actions" v-if="conversations.length > 0">
-                <p class="note">当前智能体：{{ currentThreadAgentName }}；请注意辨别内容的可靠性</p>
+                <p class="note">{{ $t('chat.currentAgentNote', { name: currentThreadAgentName }) }}</p>
               </div>
             </div>
           </div>
@@ -214,13 +214,13 @@
         >
           <div v-if="statePanelOpen" class="state-panel">
             <div class="side-panel__header state-panel-header">
-              <span class="state-panel-title">状态</span>
+              <span class="state-panel-title">{{ $t('chat.header.status') }}</span>
               <div class="state-panel-header-actions">
                 <span class="state-panel-summary">{{ stateSummaryLabel }}</span>
                 <button
                   type="button"
                   class="state-refresh-btn"
-                  title="刷新状态"
+                  :title="t('chat.refreshState')"
                   :disabled="isRefreshingState"
                   @click.stop="handleAgentStateRefresh()"
                 >
@@ -234,7 +234,7 @@
                 v-if="currentTokenUsage"
                 class="state-section"
                 :class="{ 'is-collapsed': !isStateSectionExpanded('tokenUsage') }"
-                aria-label="上下文使用情况"
+                :aria-label="t('chat.contextUsageAria')"
               >
                 <button
                   type="button"
@@ -244,7 +244,7 @@
                   @click="toggleStateSection('tokenUsage')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">上下文使用</span>
+                    <span class="state-section-title">{{ $t('chat.contextUsage') }}</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -263,17 +263,17 @@
                   <div class="token-usage-content">
                     <div class="token-usage-stack">
                       <div class="token-usage-stack-head">
-                        <span>当前上下文</span>
+                        <span>{{ $t('chat.currentContext') }}</span>
                         <strong>{{ tokenUsageStackHeadLabel }}</strong>
                       </div>
-                      <div class="token-usage-stack-track" aria-label="Token 构成">
+                      <div class="token-usage-stack-track" :aria-label="t('chat.tokenComposition')">
                         <div
                           v-for="segment in tokenUsageBarSegments"
                           :key="segment.key"
                           class="token-usage-stack-segment"
                           :class="segment.tone"
                           :style="{ width: segment.percent }"
-                          :title="`${segment.label}: ${segment.valueLabel}`"
+                          :title="`${$t(segment.label, segment.labelParams)}: ${segment.valueLabel}`"
                         ></div>
                       </div>
                       <div class="token-usage-stack-legend">
@@ -283,7 +283,7 @@
                           class="token-usage-stack-legend-item"
                         >
                           <i :class="segment.tone"></i>
-                          {{ segment.label }} {{ segment.valueLabel }}
+                          {{ $t(segment.label, segment.labelParams) }} {{ segment.valueLabel }}
                         </span>
                       </div>
                     </div>
@@ -294,7 +294,7 @@
                         :key="item.key"
                         class="token-usage-breakdown-row"
                       >
-                        <span>{{ item.label }}</span>
+                        <span>{{ $t(item.label) }}</span>
                         <strong>{{ item.value }}</strong>
                       </div>
                     </div>
@@ -315,7 +315,7 @@
                   @click="toggleStateSection('todos')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">待办</span>
+                    <span class="state-section-title">{{ $t('chat.todos') }}</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -368,7 +368,7 @@
                   @click="toggleStateSection('files')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">附件/文件</span>
+                    <span class="state-section-title">{{ $t('chat.attachmentsFiles') }}</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -411,7 +411,7 @@
                   @click="toggleStateSection('artifacts')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">产物</span>
+                    <span class="state-section-title">{{ $t('chat.artifacts') }}</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -431,7 +431,7 @@
                       :key="file.path"
                       type="button"
                       class="state-list-item state-list-item--button"
-                      :title="`打开 ${file.name}`"
+                      :title="t('chat.openFile', { name: file.name })"
                       @click="openPanelPreview(file)"
                     >
                       <FileTypeIcon
@@ -461,7 +461,7 @@
                   @click="toggleStateSection('subagents')"
                 >
                   <span class="state-section-label">
-                    <span class="state-section-title">子智能体</span>
+                    <span class="state-section-title">{{ $t('chat.subagents') }}</span>
                     <ChevronDown
                       :size="15"
                       class="state-section-chevron"
@@ -492,7 +492,7 @@
                         kind="agent"
                         :size="28"
                         shape="rounded"
-                        :alt="`${getSubagentRunName(run)}图标`"
+                        :alt="t('chat.subagentIconAlt', { name: getSubagentRunName(run) })"
                       />
                       <div class="state-list-item-body">
                         <div class="state-list-item-title state-subagent-title">
@@ -520,7 +520,9 @@
                 </div>
               </section>
 
-              <div v-if="!hasVisibleStateSections" class="state-panel-empty">暂无状态内容</div>
+              <div v-if="!hasVisibleStateSections" class="state-panel-empty">
+                {{ $t('chat.statePanelEmpty') }}
+              </div>
             </div>
           </div>
         </div>
@@ -828,20 +830,20 @@ const showFileTreePanel = () => {
 const getPanelFileName = (file) => {
   if (file?.name) return file.name
   if (file?.path) return String(file.path).split('/').pop() || String(file.path)
-  return '未知文件'
+  return t('chat.unknownFile')
 }
 
 const getArtifactMetaLabel = (path) => {
   const filename = getPanelFileName({ path })
-  if (!filename.includes('.')) return '交付文件'
+  if (!filename.includes('.')) return t('chat.deliveryFile')
   const extension = filename.split('.').pop()
-  return extension ? `交付文件 · ${extension.toUpperCase()}` : '交付文件'
+  return extension ? t('chat.deliveryFileWithExt', { ext: extension.toUpperCase() }) : t('chat.deliveryFile')
 }
 
 const getSubagentRunName = (run) => {
   const subagentSlug = run?.subagent_slug ? String(run.subagent_slug) : ''
   return (
-    run?.subagent_name || currentSubagentOptionBySlug.value.get(subagentSlug)?.name || '子智能体'
+    run?.subagent_name || currentSubagentOptionBySlug.value.get(subagentSlug)?.name || t('chat.subagents')
   )
 }
 
@@ -861,7 +863,7 @@ const getSubagentDefaultIconSrc = (run) =>
 
 const getSubagentRunMeta = (run) => {
   const artifacts = Array.isArray(run?.artifacts) ? run.artifacts.length : 0
-  return artifacts ? `${artifacts} 个产物` : run?.id || ''
+  return artifacts ? t('chat.artifactCount', { count: artifacts }) : run?.id || ''
 }
 
 const normalizePanelPath = (path) => String(path || '').replace(/\/+$/, '')
@@ -960,7 +962,7 @@ const currentAgentId = computed(() => {
 
 const currentAgentName = computed(() => {
   const agent = currentAgent.value
-  return agent ? agent.name : '智能体'
+  return agent ? agent.name : t('chat.agent')
 })
 
 const currentAgent = computed(() => {
@@ -1090,41 +1092,42 @@ const tokenUsageSegments = computed(() => {
   const rawSegments = [
     {
       key: 'cut',
-      label: '已压缩',
+      label: 'chat.tokenCut',
       value: cutMessageTokens,
       messageCount: cutMessageCount,
       tone: 'is-cut'
     },
     {
       key: 'messages',
-      label: '内容消息',
+      label: 'chat.tokenMessages',
       value: contentMessageTokens,
       messageCount: contentMessageCount,
       tone: 'is-messages'
     },
     {
       key: 'toolMessages',
-      label: '工具消息',
+      label: 'chat.tokenToolMessages',
       value: toolMessageTokens,
       messageCount: toolMessageCount,
       tone: 'is-tool-messages'
     },
     {
       key: 'summary',
-      label: '摘要',
+      label: 'chat.tokenSummary',
       value: summaryTokens,
       messageCount: usage.summary_active ? 1 : 0,
       tone: 'is-summary'
     },
     {
       key: 'system',
-      label: '系统消息',
+      label: 'chat.tokenSystem',
       value: systemTokens,
       tone: 'is-system'
     },
     {
       key: 'tools',
-      label: `工具定义 (${usage.tool_count || 0})`,
+      label: 'chat.tokenTools',
+      labelParams: { count: usage.tool_count || 0 },
       value: toolsTokens,
       tone: 'is-tools'
     }
@@ -1134,7 +1137,7 @@ const tokenUsageSegments = computed(() => {
   if (inputTokens > accountedInputTokens) {
     rawSegments.push({
       key: 'overhead',
-      label: '其他',
+      label: 'chat.tokenOther',
       value: inputTokens - accountedInputTokens,
       tone: 'is-overhead'
     })
@@ -1148,7 +1151,7 @@ const tokenUsageSegments = computed(() => {
       ...segment,
       percent: `${Math.max(0, Math.min(ratio * 100, 100)).toFixed(2)}%`,
       valueLabel: segment.messageCount
-        ? `${formatTokenCount(segment.value)} (${segment.messageCount}条)`
+        ? `${formatTokenCount(segment.value)} ${t('chat.tokenMessageCount', { count: segment.messageCount })}`
         : formatTokenCount(segment.value)
     }
   })
@@ -1204,7 +1207,7 @@ const tokenUsageMetaRows = computed(() => {
   if (toFiniteNumber(usage.context_window)) {
     rows.push({
       key: 'context',
-      label: '窗口/剩余',
+      label: 'chat.tokenWindowRemaining',
       value: `${formatTokenCount(usage.context_window)} / ${formatTokenCount(usage.remaining_context_tokens)}`
     })
   }
@@ -1296,7 +1299,7 @@ const toggleStateSection = (key) => {
 const currentStateFiles = computed(() => {
   const files = []
   const seenPaths = new Set()
-  const pushFile = (entry, fallbackName = '文件') => {
+  const pushFile = (entry, fallbackName = t('chat.file')) => {
     const path = String(entry?.path || entry?.file_path || entry?.file_name || entry?.name || '')
     if (!path || seenPaths.has(path)) return
     seenPaths.add(path)
@@ -1315,7 +1318,7 @@ const currentStateFiles = computed(() => {
   if (typeof rawFiles === 'object' && !Array.isArray(rawFiles)) {
     Object.entries(rawFiles).forEach(([path, fileData]) => pushFile({ path, ...fileData }))
   }
-  currentThreadAttachments.value.forEach((attachment) => pushFile(attachment, '附件'))
+  currentThreadAttachments.value.forEach((attachment) => pushFile(attachment, t('chat.attachment')))
 
   return files
 })
@@ -1336,7 +1339,7 @@ const stateSummaryLabel = computed(() => {
     currentStateFiles.value.length +
     currentArtifactFiles.value.length +
     displaySubagentRuns.value.length
-  return total ? `${total} 项` : '暂无内容'
+  return total ? t('chat.itemCount', { count: total }) : t('chat.emptyState')
 })
 const hasVisibleStateSections = computed(
   () =>
@@ -1490,7 +1493,7 @@ const runningSubagentRunsFromStream = computed(() => {
       return {
         id: call.id,
         subagent_slug: call.subagentSlug,
-        subagent_name: option?.name || call.subagentSlug || '子智能体',
+        subagent_name: option?.name || call.subagentSlug || t('chat.subagents'),
         description: call.description,
         child_thread_id: call.childThreadId || '',
         status: 'running'
@@ -1913,8 +1916,7 @@ const rollbackAttachments = (threadId, previousAttachments) => {
   threadAttachmentsMap.value[threadId] = previousAttachments
 }
 
-const CONFIG_CHANGE_NOTICE_MESSAGE =
-  '在运行过程中切换或修改配置可能会影响最终效果，建议新建一个对话。'
+const CONFIG_CHANGE_NOTICE_MESSAGE = t('chat.configChangeNotice')
 
 const withConfigNoticeSync = async (task) => {
   configNoticeSyncDepth.value += 1
@@ -2162,7 +2164,7 @@ const fetchThreads = async (agentId = null) => {
 }
 
 // 创建新线程
-const createThread = async (agentId, title = '新的对话') => {
+const createThread = async (agentId, title = t('chat.newChat')) => {
   if (!agentId) return null
 
   try {
@@ -2262,10 +2264,10 @@ const fetchAgentState = async (agentId, threadId) => {
   }
 }
 
-const ensureActiveThread = async (title = '新的对话') => {
+const ensureActiveThread = async (title = t('chat.newChat')) => {
   if (currentChatId.value) return currentChatId.value
   try {
-    const newThread = await createThread(currentAgentId.value, title || '新的对话')
+    const newThread = await createThread(currentAgentId.value, title || t('chat.newChat'))
     if (newThread) {
       setCurrentThreadId(newThread.id)
       return newThread.id
@@ -2280,7 +2282,7 @@ const handleAttachmentUpload = async (files = []) => {
   if (
     !AgentValidator.validateAgentIdWithError(
       currentAgentId.value,
-      '上传附件',
+      t('chat.uploadAttachment'),
       handleValidationError
     )
   )
@@ -2297,7 +2299,7 @@ const handleAttachmentUpload = async (files = []) => {
 
 const ensureAttachmentThread = async () => {
   if (currentChatId.value) return currentChatId.value
-  return await ensureActiveThread('新的对话')
+  return await ensureActiveThread(t('chat.newChat'))
 }
 
 const handleTmpAttachmentsAdded = async () => {
@@ -2406,11 +2408,13 @@ const selectChat = async (chatId) => {
   const previousThreadId = chatState.currentThreadId
 
   if (!targetAgentId) {
-    handleValidationError('选择对话失败：缺少智能体信息')
+    handleValidationError(t('chat.selectConvFailedNoAgent'))
     return
   }
 
-  if (!AgentValidator.validateAgentIdWithError(targetAgentId, '选择对话', handleValidationError))
+  if (
+    !AgentValidator.validateAgentIdWithError(targetAgentId, t('chat.selectConversation'), handleValidationError)
+  )
     return
 
   // 中断之前线程的流式输出（如果存在）
@@ -2522,7 +2526,7 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
   if (!threadId) {
     threadId = await ensureActiveThread(text)
     if (!threadId) {
-      message.error('创建对话失败，请重试')
+      message.error(t('chat.createConvFailed'))
       return
     }
     // 新建线程：把草稿态的模型/输出格式选择迁移到真实线程，避免选择丢失
@@ -2614,7 +2618,7 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
     })
     const runId = runResp?.run_id
     if (!runId) {
-      throw new Error('创建 run 失败：缺少 run_id')
+      throw new Error(t('chat.createRunFailed'))
     }
     await startRunStream(threadId, runId, 0)
   } catch (error) {
@@ -2630,11 +2634,11 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
 const handleIndustrySolutionToggle = async () => {
   industrySolutionMode.value = !industrySolutionMode.value
   if (industrySolutionMode.value) {
-    message.info('word产品方案模式已开启：直接输入需求发送即可，再次点击按钮关闭')
+    message.info(t('chat.wordModeOn'))
     await nextTick()
     agentInputAreaRef.value?.focus()
   } else {
-    message.info('word产品方案模式已关闭')
+    message.info(t('chat.wordModeOff'))
   }
 }
 
@@ -2653,7 +2657,7 @@ const handleSendOrStop = async (payload) => {
       if (approvalState.threadId === threadId) {
         hideApprovalState()
       }
-      message.info('已发送取消请求')
+      message.info(t('chat.cancelRequestSent'))
     } catch (error) {
       handleChatError(error, 'stop')
     }
@@ -2668,20 +2672,20 @@ const handleApprovalWithStream = async (answer) => {
   const threadId = approvalState.threadId
   const interruptedRunId = approvalState.interruptedRunId
   if (!threadId) {
-    message.error('无效的提问请求')
+    message.error(t('chat.invalidQuestionRequest'))
     approvalState.showModal = false
     return
   }
 
   const threadState = getThreadState(threadId)
   if (!threadState) {
-    message.error('无法找到对应的对话线程')
+    message.error(t('chat.threadNotFoundDetailed'))
     approvalState.showModal = false
     return
   }
 
   if (!interruptedRunId) {
-    message.error('无法找到需要恢复的运行任务')
+    message.error(t('chat.resumeRunNotFound'))
     approvalState.showModal = false
     return
   }
@@ -2704,7 +2708,7 @@ const handleApprovalWithStream = async (answer) => {
     })
     const runId = runResp?.run_id
     if (!runId) {
-      throw new Error('创建 resume run 失败：缺少 run_id')
+      throw new Error(t('chat.createResumeRunFailed'))
     }
     await startRunStream(threadId, runId, '0-0')
   } catch (error) {
@@ -2735,8 +2739,8 @@ const buildExportPayload = () => {
   }
 
   const payload = {
-    chatTitle: currentThread.value?.title || '新对话',
-    agentName: currentAgentName.value || currentAgent.value?.name || '智能助手',
+    chatTitle: currentThread.value?.title || t('chat.newThreadTitle'),
+    agentName: currentAgentName.value || currentAgent.value?.name || t('chat.assistant'),
     agentDescription: agentDescription || currentAgent.value?.description || '',
     messages: conversations.value ? JSON.parse(JSON.stringify(conversations.value)) : [],
     onGoingMessages: onGoingConvMessages.value

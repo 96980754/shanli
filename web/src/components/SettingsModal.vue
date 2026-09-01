@@ -12,7 +12,11 @@
     :bodyStyle="{ padding: 0 }"
   >
     <div class="settings-container">
-      <button class="settings-close-btn lucide-icon-btn" @click="handleClose" aria-label="关闭设置">
+      <button
+        class="settings-close-btn lucide-icon-btn"
+        @click="handleClose"
+        :aria-label="$t('settings.closeSettings')"
+      >
         <X :size="16" />
       </button>
 
@@ -26,7 +30,7 @@
             v-if="userStore.isLoggedIn"
           >
             <CircleUser class="icon" :size="18" />
-            <span>账户设置</span>
+            <span>{{ $t('settings.tabAccount') }}</span>
           </div>
           <div
             class="sider-item"
@@ -35,7 +39,7 @@
             v-if="userStore.isAdmin"
           >
             <Settings class="icon" :size="18" />
-            <span>基本设置</span>
+            <span>{{ $t('settings.tabBase') }}</span>
           </div>
           <div
             class="sider-item"
@@ -44,7 +48,7 @@
             v-if="userStore.isAdmin"
           >
             <User class="icon" :size="18" />
-            <span>用户管理</span>
+            <span>{{ $t('userMgmt.title') }}</span>
           </div>
           <div
             class="sider-item"
@@ -62,7 +66,7 @@
             v-if="userStore.isSuperAdmin"
           >
             <Users class="icon" :size="18" />
-            <span>部门管理</span>
+            <span>{{ $t('deptMgmt.title') }}</span>
           </div>
         </div>
       </div>
@@ -75,7 +79,7 @@
           @click="activeTab = 'account'"
           v-if="userStore.isLoggedIn"
         >
-          账户设置
+          {{ $t('settings.tabAccount') }}
         </div>
         <div
           class="nav-item"
@@ -83,7 +87,7 @@
           @click="activeTab = 'base'"
           v-if="userStore.isAdmin"
         >
-          基本设置
+          {{ $t('settings.tabBase') }}
         </div>
         <div
           class="nav-item"
@@ -91,7 +95,7 @@
           @click="activeTab = 'user'"
           v-if="userStore.isAdmin"
         >
-          用户管理
+          {{ $t('userMgmt.title') }}
         </div>
         <div
           class="nav-item"
@@ -107,7 +111,7 @@
           @click="activeTab = 'department'"
           v-if="userStore.isSuperAdmin"
         >
-          部门管理
+          {{ $t('deptMgmt.title') }}
         </div>
       </div>
 

@@ -2,6 +2,7 @@
   <div
     class="input-box"
     :class="[customClasses, { 'dragging-files': isDraggingFiles }]"
+    :style="dragStyleVars"
     @click="focusInput"
     @dragenter="handleDragEnter"
     @dragover="handleDragOver"
@@ -21,7 +22,7 @@
       >
         <template #content>
           <slot name="options-left">
-            <div class="no-options">没有配置 options</div>
+            <div class="no-options">{{ $t('msgInput.noOptions') }}</div>
           </slot>
         </template>
         <a-button type="text" class="expand-btn">
@@ -38,9 +39,9 @@
       class="user-input mention-editor"
       role="textbox"
       aria-multiline="true"
-      :aria-label="placeholder"
+      :aria-label="resolvedPlaceholder"
       :contenteditable="disabled ? 'false' : 'true'"
-      :data-placeholder="placeholder"
+      :data-placeholder="resolvedPlaceholder"
       @keydown="handleKeyPress"
       @keyup="handleKeyUp"
       @input="handleInput"
@@ -56,9 +57,9 @@
       <div class="mention-popup" @mousedown.prevent>
         <!-- 文件列表 -->
         <div v-if="mentionItems.files.length > 0 || showFileSearchPrompt" class="mention-group">
-          <div class="mention-group-title">文件</div>
+          <div class="mention-group-title">{{ $t('msgInput.files') }}</div>
           <div v-if="showFileSearchPrompt" class="mention-search-placeholder">
-            输入相关内容以搜索文件
+            {{ $t('msgInput.searchFileHint') }}
           </div>
           <template v-else>
             <div
@@ -104,7 +105,7 @@
 
         <!-- 知识库列表 -->
         <div v-if="mentionItems.knowledgeBases.length > 0" class="mention-group">
-          <div class="mention-group-title">知识库</div>
+          <div class="mention-group-title">{{ $t('db.title') }}</div>
           <div
             v-for="(item, index) in mentionItems.knowledgeBases"
             :key="'kb-' + item.value"
@@ -251,13 +252,13 @@
         </div>
 
         <!-- 无结果 -->
-        <div v-if="!hasAnyItems" class="mention-empty">暂无可引用的项</div>
+        <div v-if="!hasAnyItems" class="mention-empty">{{ $t('msgInput.noReferableItems') }}</div>
       </div>
     </div>
 
     <div class="send-button-container">
       <slot name="actions-right"></slot>
-      <a-tooltip :title="isLoading ? '停止回答' : ''">
+      <a-tooltip :title="isLoading ? t('msgInput.stopAnswering') : ''">
         <a-button
           @click="handleSendOrStop"
           :disabled="sendButtonDisabled"
@@ -291,6 +292,7 @@ import {
 } from 'vue'
 import { SendOutlined, ArrowUpOutlined, PauseOutlined } from '@ant-design/icons-vue'
 import { Paperclip } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { searchMentionFiles } from '@/apis/mention_api'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import {
@@ -320,7 +322,10 @@ const closeMentionPopup = (e) => {
 }
 
 const inputRef = ref(null)
+const { t } = useI18n()
 const optionsExpanded = ref(false)
+const resolvedPlaceholder = computed(() => props.placeholder || t('msgInput.inputPlaceholder'))
+const dragStyleVars = computed(() => ({ '--drop-hint': t('msgInput.dropToUpload') }))
 // 用于防抖的定时器
 const debounceTimer = ref(null)
 const props = defineProps({
@@ -330,7 +335,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '输入问题...'
+    default: ''
   },
   isLoading: {
     type: Boolean,
@@ -1348,7 +1353,7 @@ defineExpose({
     background: var(--main-10);
 
     &::after {
-      content: '释放以上传附件';
+      content: var(--drop-hint);
       position: absolute;
       inset: 6px;
       z-index: 5;

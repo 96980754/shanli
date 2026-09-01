@@ -11,19 +11,19 @@
     :root-label="rootLabel"
     :pagination="pagination"
     :selection="tableSelection"
-    empty-text="当前文件夹为空"
+    :empty-text="$t('workspace.emptyFolder')"
     @open-row="(entry) => $emit('select-entry', entry)"
     @breadcrumb-click="handleBreadcrumbClick"
     @page-change="(payload) => $emit('page-change', payload)"
   >
     <template #toolbar-actions>
       <span class="entry-count">{{ entryCountText }}</span>
-      <a-tooltip v-if="!readonly" title="多选">
+      <a-tooltip v-if="!readonly" :title="$t('workspace.multiSelect')">
         <a-button
           size="small"
           class="lucide-icon-btn"
           :type="effectiveSelectionMode ? 'primary' : 'default'"
-          aria-label="多选"
+          :aria-label="$t('workspace.multiSelect')"
           @click="toggleSelectionMode"
         >
           <ListChecks :size="14" />
@@ -37,7 +37,7 @@
         :loading="deletingPaths.length > 0"
         @click="$emit('delete-selected')"
       >
-        删除选中
+        {{ $t('workspace.deleteSelected') }}
       </a-button>
     </template>
 
@@ -62,7 +62,7 @@
           type="button"
           class="more-action"
           :disabled="isDeleting(row.path)"
-          aria-label="更多操作"
+          :aria-label="$t('common.moreActions')"
           @click.stop
         >
           <MoreHorizontal :size="16" />
@@ -72,13 +72,13 @@
             <a-menu-item v-if="!row.is_dir" key="download" @click="$emit('download-entry', row)">
               <span class="menu-item-content">
                 <Download :size="14" />
-                <span>下载</span>
+                <span>{{ $t('common.download') }}</span>
               </span>
             </a-menu-item>
             <a-menu-item v-if="!readonly" key="delete" danger @click="$emit('delete-entry', row)">
               <span class="menu-item-content">
                 <Trash2 :size="14" />
-                <span>删除</span>
+                <span>{{ $t('common.delete') }}</span>
               </span>
             </a-menu-item>
           </a-menu>
@@ -90,10 +90,13 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Download, ListChecks, MoreHorizontal, Trash2 } from 'lucide-vue-next'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import { formatFileSize, formatRelativeTime } from '@/utils/file_utils'
+
+const { t } = useI18n()
 
 const props = defineProps({
   entries: { type: Array, default: () => [] },
@@ -105,7 +108,7 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
   breadcrumbItems: { type: Array, default: null },
-  rootLabel: { type: String, default: '工作区' },
+  rootLabel: { type: String, default: '' },
   pagination: { type: Object, default: null }
 })
 
@@ -121,12 +124,12 @@ const emit = defineEmits([
   'page-change'
 ])
 
-const columns = [
-  { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
-  { title: '大小', dataIndex: 'size', key: 'size', width: 86 },
-  { title: '修改时间', dataIndex: 'modified_at', key: 'modified_at', width: 126 },
-  { title: '操作', key: 'action', dataIndex: 'path', width: 58, align: 'center' }
-]
+const columns = computed(() => [
+  { title: t('workspace.col.name'), dataIndex: 'name', key: 'name', ellipsis: true },
+  { title: t('workspace.col.size'), dataIndex: 'size', key: 'size', width: 86 },
+  { title: t('workspace.col.modifiedAt'), dataIndex: 'modified_at', key: 'modified_at', width: 126 },
+  { title: t('workspace.col.action'), key: 'action', dataIndex: 'path', width: 58, align: 'center' }
+])
 
 const deletingPathSet = computed(() => new Set(props.deletingPaths))
 const entryPathSet = computed(() => new Set(props.entries.map((entry) => entry.path)))
@@ -134,17 +137,18 @@ const normalizedCurrentPath = computed(() => (props.currentPath || '/').replace(
 const effectiveSelectionMode = computed(() => !props.readonly && props.selectionMode)
 const entryCountText = computed(() => {
   if (props.pagination?.total !== undefined) {
-    return `${props.pagination.total} 项`
+    return t('workspace.count', { count: props.pagination.total })
   }
-  return `${props.entries.length} 项`
+  return t('workspace.count', { count: props.entries.length })
 })
 
 const resolvedBreadcrumbItems = computed(() => {
   if (props.breadcrumbItems?.length) return props.breadcrumbItems
 
+  const rootLabel = props.rootLabel || t('workspace.title')
   const normalizedPath = normalizedCurrentPath.value
   if (normalizedPath === '/') {
-    return [{ name: props.rootLabel, path: '/' }]
+    return [{ name: rootLabel, path: '/' }]
   }
 
   const segments = normalizedPath.split('/').filter(Boolean)
@@ -155,7 +159,7 @@ const resolvedBreadcrumbItems = computed(() => {
       items.push({ name: segment, path })
       return items
     },
-    [{ name: props.rootLabel, path: '/' }]
+    [{ name: rootLabel, path: '/' }]
   )
 })
 

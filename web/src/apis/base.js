@@ -1,5 +1,11 @@
 import { useUserStore, checkAdminPermission, checkSuperAdminPermission } from '@/stores/user'
 import { message } from 'ant-design-vue'
+import { i18n } from '@/i18n'
+
+// 英文模式下，后端返回的中文错误详情无法在纯前端翻译，统一替换为通用英文提示
+const CJK = /[一-鿿]/
+const t = (key, params) => i18n.global.t(key, params)
+const isEnglishUI = () => i18n.global.locale.value === 'en-US'
 
 /**
  * 基础API请求封装
@@ -30,7 +36,7 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
     if (requiresAuth) {
       const userStore = useUserStore()
       if (!userStore.isLoggedIn) {
-        throw new Error('用户未登录')
+        throw new Error(t('common.notLoggedIn'))
       }
 
       Object.assign(requestOptions.headers, userStore.getAuthHeaders())
@@ -42,10 +48,10 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
     // 处理API返回的错误
     if (!response.ok) {
       // 尝试解析错误信息
-      let errorMessage = `请求失败: ${response.status}, ${response.statusText}`
+      let errorMessage = t('common.requestFailed', { code: response.status, text: response.statusText })
       let errorData = null
 
-      console.log('API请求失败:', {
+      console.log('API请求失败:', { // i18n-ignore
         url,
         status: response.status,
         statusText: response.statusText,
@@ -72,11 +78,11 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         } else {
           errorMessage = detail || errorData.message || errorMessage
         }
-        console.log('API错误详情:', errorData)
+        console.log('API错误详情:', errorData) // i18n-ignore
 
         // 如果是422错误，打印更详细的信息
         if (response.status === 422) {
-          console.error('422验证错误详情:', {
+          console.error('422验证错误详情:', { // i18n-ignore
             url,
             requestMethod: requestOptions.method,
             requestHeaders: requestOptions.headers,
@@ -86,7 +92,13 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         }
       } catch (e) {
         // 如果无法解析JSON，使用默认错误信息
-        console.log('无法解析错误响应JSON:', e)
+        console.log('无法解析错误响应JSON:', e) // i18n-ignore
+      }
+
+      // 英文模式下，后端返回的中文错误详情改为通用英文提示（纯前端无法逐条翻译）
+      const rawDetail = errorMessage
+      if (isEnglishUI() && errorMessage && CJK.test(errorMessage)) {
+        errorMessage = t('common.operationFailed')
       }
 
       // 特殊处理401和403错误
@@ -101,11 +113,10 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         // 如果是认证失败，可能需要重新登录
         const userStore = useUserStore()
 
-        // 检查是否是token过期（errorMessage 已统一为字符串，避免对对象 detail 调用 includes 抛错）
-        const isTokenExpired =
-          errorMessage?.includes('令牌已过期') || errorMessage?.includes('token expired')
+        // 检查是否是token过期（用替换前的原始 detail 判断，英文模式下不会被通用文案覆盖）// i18n-ignore
+        const isTokenExpired = rawDetail?.includes('令牌已过期') || rawDetail?.includes('token expired') // i18n-ignore
 
-        message.error(isTokenExpired ? '登录已过期，请重新登录' : '认证失败，请重新登录')
+        message.error(isTokenExpired ? t('common.sessionExpired') : t('common.authFailed'))
 
         // 如果用户当前认为自己已登录，则登出
         if (userStore.isLoggedIn) {
@@ -119,10 +130,10 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
 
         throw error
       } else if (response.status === 403) {
-        error.message = '没有权限执行此操作'
+        error.message = t('common.noPermission')
         throw error
       } else if (response.status === 500) {
-        error.message = '服务器内部错误，请使用 docker logs api-dev 查看详细日志'
+        error.message = t('common.serverError')
         throw error
       }
 

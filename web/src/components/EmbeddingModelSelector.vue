@@ -42,8 +42,11 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { modelProviderApi } from '@/apis/system_api'
 import { useModelStatus } from '@/composables/useModelStatus'
+
+const { t } = useI18n()
 
 const props = defineProps({
   value: {
@@ -52,7 +55,7 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: '请选择嵌入模型'
+    default: ''
   },
   size: {
     type: String,
@@ -74,7 +77,9 @@ const emit = defineEmits(['update:value', 'change'])
 const v2Models = ref({})
 const { getStatusIcon, getStatusClass, getStatusTooltip, checkV2Statuses } = useModelStatus()
 
-const displayText = computed(() => props.value || props.placeholder)
+const displayText = computed(
+  () => props.value || props.placeholder || t('modelSel.embeddingPlaceholder')
+)
 const resolvedSize = computed(() => props.size || 'small')
 const modelSelectClasses = computed(() => ({
   'model-select--middle': resolvedSize.value === 'middle',
@@ -94,7 +99,7 @@ const fetchV2Models = async () => {
       await checkV2ModelStatuses()
     }
   } catch (error) {
-    console.error('获取 embedding 模型失败:', error)
+    console.error(t('modelSel.embeddingLoadFailedLog'), error)
   }
 }
 
@@ -105,7 +110,7 @@ const checkV2ModelStatuses = async () => {
     )
     await checkV2Statuses(models)
   } catch (error) {
-    console.error('检查 embedding 模型状态失败:', error)
+    console.error(t('modelSel.embeddingStatusCheckFailedLog'), error)
   }
 }
 

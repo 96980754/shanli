@@ -2,12 +2,12 @@
   <div class="user-config-settings">
     <div class="header-section">
       <div class="header-content">
-        <div class="section-title">用户配置</div>
+        <div class="section-title">{{ $t('settings.userConfigTitle') }}</div>
       </div>
       <div class="header-actions">
         <a-button class="lucide-icon-btn" :loading="loading" @click="loadUserConfig">
           <template #icon><RefreshCw :size="16" :class="{ spin: loading }" /></template>
-          刷新
+          {{ $t('common.refresh') }}
         </a-button>
       </div>
     </div>
@@ -16,10 +16,10 @@
         <div class="config-row">
           <div class="config-meta">
             <div class="config-title-line">
-              <span class="config-title">是否启用 Memory</span>
-              <span class="reserved-badge">预留开关</span>
+              <span class="config-title">{{ $t('settings.enableMemory') }}</span>
+              <span class="reserved-badge">{{ $t('settings.reservedToggle') }}</span>
             </div>
-            <p class="config-description">当前仅保存配置值，暂不接入智能体运行逻辑。</p>
+            <p class="config-description">{{ $t('settings.memoryReservedDesc') }}</p>
           </div>
           <a-switch :checked="draftEnableMemory" @change="handleMemoryChange" />
         </div>
@@ -30,9 +30,12 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { RefreshCw } from 'lucide-vue-next'
 import { userConfigApi } from '@/apis/user_config_api'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -50,7 +53,7 @@ const loadUserConfig = async () => {
     const res = await userConfigApi.get()
     applyResponse(res)
   } catch (error) {
-    message.error(error.message || '加载用户配置失败')
+    message.error(error.message || t('settings.loadUserConfigFailed'))
   } finally {
     loading.value = false
   }
@@ -66,9 +69,9 @@ const saveUserConfig = async () => {
   try {
     const res = await userConfigApi.update({ enable_memory: draftEnableMemory.value })
     applyResponse(res)
-    message.success('用户配置已保存')
+    message.success(t('settings.userConfigSaved'))
   } catch (error) {
-    message.error(error.message || '保存用户配置失败')
+    message.error(error.message || t('settings.saveUserConfigFailed'))
   } finally {
     saving.value = false
   }

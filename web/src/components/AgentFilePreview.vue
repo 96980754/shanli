@@ -20,8 +20,8 @@
           v-if="canEdit && editMode !== 'edit'"
           class="modal-action-btn"
           @click="editMode = 'edit'"
-          title="编辑"
-          aria-label="编辑"
+          :title="t('common.edit')"
+          :aria-label="t('common.edit')"
         >
           <FilePen :size="18" />
         </button>
@@ -31,7 +31,7 @@
             class="preview-mode-btn"
             :class="{ active: htmlPreviewMode === 'render' }"
             @click="htmlPreviewMode = 'render'"
-            title="预览"
+            :title="t('msgInput.preview')"
           >
             <Globe :size="16" />
           </button>
@@ -39,7 +39,7 @@
             class="preview-mode-btn"
             :class="{ active: htmlPreviewMode === 'source' }"
             @click="htmlPreviewMode = 'source'"
-            title="源码"
+            :title="t('msgInput.sourceCode')"
           >
             <Code2 :size="16" />
           </button>
@@ -48,7 +48,7 @@
           v-if="showDownload && file"
           class="modal-action-btn"
           @click="$emit('download', file)"
-          title="下载"
+          :title="t('common.download')"
         >
           <Download :size="18" />
         </button>
@@ -56,7 +56,7 @@
           v-if="showFullscreen && file"
           class="modal-action-btn"
           @click="openFullscreenPreview"
-          title="全屏预览"
+          :title="t('msgInput.fullscreenPreview')"
         >
           <Maximize :size="18" />
         </button>
@@ -80,7 +80,7 @@
         class="preview-mode-btn"
         :class="{ active: htmlPreviewMode === 'render' }"
         @click="htmlPreviewMode = 'render'"
-        title="预览"
+        :title="t('msgInput.preview')"
       >
         <Globe :size="16" />
       </button>
@@ -88,21 +88,21 @@
         class="preview-mode-btn"
         :class="{ active: htmlPreviewMode === 'source' }"
         @click="htmlPreviewMode = 'source'"
-        title="源码"
+        :title="t('msgInput.sourceCode')"
       >
         <Code2 :size="16" />
       </button>
     </div>
 
     <div v-if="canEdit && editMode === 'edit'" class="edit-floating-actions">
-      <span v-if="draftChanged" class="edit-status-badge">未保存</span>
+      <span v-if="draftChanged" class="edit-status-badge">{{ $t('msgInput.unsaved') }}</span>
       <button
         v-if="draftChanged"
         class="edit-floating-btn edit-floating-btn-primary"
         :disabled="saving"
         @click="requestSave"
-        :title="saving ? '保存中' : '保存'"
-        :aria-label="saving ? '保存中' : '保存'"
+        :title="t(saving ? 'msgInput.saving' : 'common.save')"
+        :aria-label="t(saving ? 'msgInput.saving' : 'common.save')"
       >
         <Save :size="14" />
       </button>
@@ -111,8 +111,8 @@
         :class="{ 'edit-floating-btn-danger': draftChanged }"
         :disabled="saving"
         @click="cancelEdit"
-        title="取消"
-        aria-label="取消"
+        :title="t('common.cancel')"
+        :aria-label="t('common.cancel')"
       >
         <X :size="14" />
       </button>
@@ -159,7 +159,7 @@
       </template>
       <template v-else-if="file?.supported === false">
         <div class="unsupported-preview">
-          {{ file?.message || '当前文件暂不支持预览，请下载后查看' }}
+          {{ file?.message || $t('msgInput.previewNotSupported') }}
         </div>
       </template>
       <template v-else>
@@ -185,7 +185,7 @@
               class="preview-mode-btn"
               :class="{ active: htmlPreviewMode === 'render' }"
               @click="htmlPreviewMode = 'render'"
-              title="预览"
+              :title="t('msgInput.preview')"
             >
               <Globe :size="16" />
             </button>
@@ -193,7 +193,7 @@
               class="preview-mode-btn"
               :class="{ active: htmlPreviewMode === 'source' }"
               @click="htmlPreviewMode = 'source'"
-              title="源码"
+              :title="t('msgInput.sourceCode')"
             >
               <Code2 :size="16" />
             </button>
@@ -202,14 +202,14 @@
             v-if="showDownload && file"
             class="modal-action-btn fullscreen-action-btn"
             @click="$emit('download', file)"
-            title="下载"
+            :title="t('common.download')"
           >
             <Download :size="18" />
           </button>
           <button
             class="modal-action-btn fullscreen-action-btn"
             @click="closeFullscreenPreview"
-            title="关闭"
+            :title="t('common.close')"
           >
             <X :size="18" />
           </button>
@@ -242,7 +242,7 @@
             </template>
             <template v-else-if="file?.supported === false">
               <div class="unsupported-preview fullscreen-unsupported-preview">
-                {{ file?.message || '当前文件暂不支持预览，请下载后查看' }}
+                {{ file?.message || $t('msgInput.previewNotSupported') }}
               </div>
             </template>
             <template v-else>
@@ -267,6 +267,7 @@
 
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Code2,
   Download,
@@ -364,8 +365,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'download', 'save'])
 
 const themeStore = useThemeStore()
+const { t } = useI18n()
 const closeTitle = computed(() =>
-  props.closeVariant === 'collapse-right' ? '收起预览面板' : '关闭预览'
+  t(props.closeVariant === 'collapse-right' ? 'msgInput.collapsePanel' : 'msgInput.closePreview')
 )
 const closeIconComponent = computed(() =>
   props.closeVariant === 'collapse-right' ? PanelRightClose : X

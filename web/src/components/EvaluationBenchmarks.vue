@@ -5,18 +5,18 @@
       <div class="header-left">
         <a-button type="primary" class="lucide-icon-btn" @click="showUploadModal">
           <template #icon><Upload :size="16" /></template>
-          上传基准
+          {{ $t('benchmark.uploadBenchmark') }}
         </a-button>
         <a-button class="lucide-icon-btn" @click="showGenerateModal">
           <template #icon><Bot :size="16" /></template>
-          自动生成
+          {{ $t('benchmark.autoGenerate') }}
         </a-button>
-        <span class="total-count">{{ benchmarks.length }} 个基准</span>
+        <span class="total-count">{{ $t('benchmark.benchmarkCount', { count: benchmarks.length }) }}</span>
       </div>
       <div class="header-right">
         <a-button class="lucide-icon-btn" @click="loadBenchmarks">
           <template #icon><RefreshCw :size="16" /></template>
-          刷新
+          {{ $t('common.refresh') }}
         </a-button>
       </div>
     </div>
@@ -25,19 +25,19 @@
     <div class="benchmarks-list">
       <ResourceEmptyState
         v-if="!loading && benchmarks.length === 0"
-        title="暂无评估基准"
-        description="上传数据集，或从当前知识库自动生成评估问题。"
+        :title="t('benchmark.noBenchmarks')"
+        :description="t('benchmark.noBenchmarksDesc')"
         :icon="ClipboardList"
         size="compact"
       >
         <template #actions>
           <a-button type="primary" class="lucide-icon-btn" @click="showUploadModal">
             <template #icon><Upload :size="16" /></template>
-            上传基准
+            {{ $t('benchmark.uploadBenchmark') }}
           </a-button>
           <a-button class="lucide-icon-btn" @click="showGenerateModal">
             <template #icon><Bot :size="16" /></template>
-            自动生成
+            {{ $t('benchmark.autoGenerate') }}
           </a-button>
         </template>
       </ResourceEmptyState>
@@ -63,7 +63,7 @@
                   <button
                     type="button"
                     class="benchmark-more-action"
-                    aria-label="更多操作"
+                    :aria-label="t('benchmark.moreActions')"
                     @click.stop
                   >
                     <MoreVertical :size="16" />
@@ -80,7 +80,7 @@
                       >
                         <span class="benchmark-menu-item">
                           <Download :size="14" />
-                          <span>下载</span>
+                          <span>{{ $t('common.download') }}</span>
                         </span>
                       </a-menu-item>
                       <a-menu-item
@@ -91,7 +91,7 @@
                       >
                         <span class="benchmark-menu-item">
                           <Trash2 :size="14" />
-                          <span>删除</span>
+                          <span>{{ $t('common.delete') }}</span>
                         </span>
                       </a-menu-item>
                     </a-menu>
@@ -100,7 +100,7 @@
               </div>
             </div>
 
-            <p class="benchmark-desc">{{ benchmark.description || '暂无描述' }}</p>
+            <p class="benchmark-desc">{{ benchmark.description || $t('common.noDescription') }}</p>
 
             <!-- 标签区域 -->
             <div class="benchmark-meta">
@@ -109,19 +109,19 @@
                   v-if="benchmark.has_gold_chunks && !benchmark.has_gold_answers"
                   class="card-tag benchmark-tag tag-blue"
                 >
-                  检索评估
+                  {{ $t('benchmark.retrievalEvaluation') }}
                 </span>
                 <span
                   v-if="benchmark.has_gold_answers && !benchmark.has_gold_chunks"
                   class="card-tag benchmark-tag tag-gold"
                 >
-                  问答评估
+                  {{ $t('benchmark.qaEvaluation') }}
                 </span>
                 <span
                   v-if="!benchmark.has_gold_chunks && !benchmark.has_gold_answers"
                   class="card-tag benchmark-tag"
                 >
-                  仅查询
+                  {{ $t('benchmark.queryOnly') }}
                 </span>
 
                 <span v-if="benchmark.has_gold_chunks" class="card-tag benchmark-tag tag-green">
@@ -158,7 +158,7 @@
                 {{ getDatasetBuildMessage(benchmark) }}
               </span>
             </div>
-            <span v-else class="benchmark-count">{{ benchmark.item_count }} 个问题</span>
+            <span v-else class="benchmark-count">{{ $t('benchmark.questionCount', { count: benchmark.item_count }) }}</span>
           </div>
         </div>
       </div>
@@ -182,12 +182,12 @@
       <div v-if="previewModalVisible" class="evaluation-detail-overlay">
         <div class="evaluation-detail-panel">
           <div class="evaluation-detail-titlebar">
-            <div class="evaluation-detail-title">评估基准详情</div>
+            <div class="evaluation-detail-title">{{ $t('benchmark.detailTitle') }}</div>
             <a-button
               type="text"
               size="small"
               class="lucide-icon-btn"
-              title="关闭"
+              :title="t('common.close')"
               @click="previewModalVisible = false"
             >
               <X :size="16" />
@@ -199,19 +199,19 @@
               <h3>{{ previewData.name }}</h3>
               <div class="preview-meta">
                 <span class="meta-item">
-                  <span class="meta-label">问题数:</span>
+                  <span class="meta-label">{{ $t('benchmark.questionCountLabel') }}:</span>
                   {{ previewData.item_count }}
                 </span>
                 <span class="meta-item">
                   <span class="meta-label">Gold Chunks:</span>
                   <span :class="previewData.has_gold_chunks ? 'status-yes' : 'status-no'">
-                    {{ previewData.has_gold_chunks ? '有' : '无' }}
+                    {{ $t(previewData.has_gold_chunks ? 'benchmark.yes' : 'benchmark.no') }}
                   </span>
                 </span>
                 <span class="meta-item">
                   <span class="meta-label">Gold Answer:</span>
                   <span :class="previewData.has_gold_answers ? 'status-yes' : 'status-no'">
-                    {{ previewData.has_gold_answers ? '有' : '无' }}
+                    {{ $t(previewData.has_gold_answers ? 'benchmark.yes' : 'benchmark.no') }}
                   </span>
                 </span>
               </div>
@@ -220,13 +220,13 @@
             <div class="preview-questions" v-if="previewQuestions && previewQuestions.length > 0">
               <div class="table-section-header">
                 <div class="table-title-group">
-                  <h4>问题列表</h4>
-                  <span>共 {{ previewPagination.total }} 条</span>
+                  <h4>{{ $t('benchmark.questionList') }}</h4>
+                  <span>{{ $t('benchmark.totalQuestions', { total: previewPagination.total }) }}</span>
                 </div>
                 <a-switch
                   v-model:checked="previewAutoWrap"
-                  checked-children="换行"
-                  un-checked-children="不换行"
+                  :checked-children="t('eval.wrapText')"
+                  :un-checked-children="t('eval.noWrapText')"
                 />
               </div>
               <a-table
@@ -297,9 +297,12 @@ import {
 } from 'lucide-vue-next'
 import { evaluationApi } from '@/apis/knowledge_api'
 import { useTaskerStore } from '@/stores/tasker'
+import { useI18n } from 'vue-i18n'
 import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
 import BenchmarkUploadModal from './modals/BenchmarkUploadModal.vue'
 import BenchmarkGenerateModal from './modals/BenchmarkGenerateModal.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   kbId: {
@@ -383,7 +386,7 @@ const withResizableTitle = (column) => ({
 })
 
 // 表格列定义
-const questionColumns = [
+const questionColumns = computed(() => [
   {
     title: '#',
     key: 'index',
@@ -391,7 +394,7 @@ const questionColumns = [
     align: 'center'
   },
   {
-    title: '问题',
+    title: t('eval.questionColumn'),
     dataIndex: 'query',
     key: 'query',
     width: 280,
@@ -411,13 +414,13 @@ const questionColumns = [
     width: 420,
     ellipsis: false
   }
-]
+])
 
 const displayedQuestionColumns = computed(() => {
   const columns =
     previewData.value && previewData.value.has_gold_chunks === false
-      ? questionColumns.filter((c) => c.key !== 'gold_chunk_ids')
-      : questionColumns
+      ? questionColumns.value.filter((c) => c.key !== 'gold_chunk_ids')
+      : questionColumns.value
 
   return columns.map(withResizableTitle)
 })
@@ -434,7 +437,7 @@ const paginationConfig = computed(() => ({
   current: previewPagination.value.current,
   pageSize: previewPagination.value.pageSize,
   total: previewPagination.value.total,
-  showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+  showTotal: (total, range) => t('eval.paginationRange', { from: range[0], to: range[1], total }),
   showSizeChanger: true,
   pageSizeOptions: ['10', '20', '50', '100'],
   showQuickJumper: true,
@@ -468,17 +471,19 @@ const getDatasetProgress = (benchmark) => {
 
 const getDatasetSourceText = (benchmark) => {
   const source = getBuildMetadata(benchmark).source
-  return source === 'generated' ? '自动生成' : '上传'
+  return source === 'generated' ? t('benchmark.autoGenerate') : t('common.upload')
 }
 
 const getDatasetStatusText = (benchmark) => {
   const statusTextMap = {
-    pending: '等待生成',
-    running: '生成中',
-    completed: '已完成',
-    failed: '生成失败'
+    pending: 'benchmark.statusPending',
+    running: 'benchmark.statusBuilding',
+    completed: 'eval.statusCompleted',
+    failed: 'benchmark.statusBuildFailed'
   }
-  return statusTextMap[getDatasetBuildStatus(benchmark)] || getDatasetBuildStatus(benchmark)
+  return statusTextMap[getDatasetBuildStatus(benchmark)]
+    ? t(statusTextMap[getDatasetBuildStatus(benchmark)])
+    : getDatasetBuildStatus(benchmark)
 }
 
 const getDatasetStatusClass = (benchmark) => {
@@ -527,11 +532,11 @@ const loadBenchmarks = async (silent = false) => {
       benchmarks.value = response.data
     } else {
       console.error('响应格式不符合预期:', response)
-      message.error('基准数据格式错误')
+      message.error(t('benchmark.dataFormatError'))
     }
   } catch (error) {
     console.error('加载评估基准失败:', error)
-    if (!silent) message.error('加载评估基准失败')
+    if (!silent) message.error(t('benchmark.loadFailed'))
   } finally {
     if (!silent) loading.value = false
     syncBuildRefresh()
@@ -551,7 +556,7 @@ const showGenerateModal = () => {
 // 上传成功回调
 const onUploadSuccess = () => {
   loadBenchmarks()
-  message.success('基准上传成功')
+  message.success(t('benchmark.uploadSuccess'))
   taskerStore.loadTasks() // 刷新任务列表
   // 通知父组件刷新基准列表
   emit('refresh')
@@ -598,7 +603,7 @@ const loadPreviewQuestions = async () => {
     }
   } catch (error) {
     console.error('加载预览问题失败:', error)
-    message.error('加载预览问题失败')
+    message.error(t('benchmark.loadPreviewFailed'))
   } finally {
     previewPagination.value.loading = false
   }
@@ -607,7 +612,7 @@ const loadPreviewQuestions = async () => {
 // 预览基准
 const previewDataset = async (benchmark) => {
   if (!isDatasetCompleted(benchmark)) {
-    message.warning('评估基准生成完成后才能预览')
+    message.warning(t('benchmark.previewAfterBuild'))
     return
   }
 
@@ -639,7 +644,7 @@ const previewDataset = async (benchmark) => {
     }
   } catch (error) {
     console.error('获取基准详情失败:', error)
-    message.error('获取基准详情失败')
+    message.error(t('benchmark.loadDetailFailed'))
   }
 }
 
@@ -668,7 +673,7 @@ const downloadDataset = async (benchmark) => {
   const benchmarkId = benchmark?.dataset_id
   if (!benchmarkId) return
   if (!isDatasetCompleted(benchmark)) {
-    message.warning('评估基准生成完成后才能下载')
+    message.warning(t('benchmark.downloadAfterBuild'))
     return
   }
   if (downloadingDatasetMap[benchmarkId]) return
@@ -692,10 +697,10 @@ const downloadDataset = async (benchmark) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
 
-    message.success('下载成功')
+    message.success(t('benchmark.downloadSuccess'))
   } catch (error) {
     console.error('下载基准失败:', error)
-    message.error(`下载失败: ${error.message || '未知错误'}`)
+    message.error(t('benchmark.downloadFailed', { reason: error.message || t('benchmark.unknownError') }))
   } finally {
     delete downloadingDatasetMap[benchmarkId]
   }
@@ -704,25 +709,25 @@ const downloadDataset = async (benchmark) => {
 // 删除基准
 const deleteDataset = (benchmark) => {
   if (shouldShowBuildProgress(benchmark)) {
-    message.warning('评估基准生成中，暂不能删除')
+    message.warning(t('benchmark.buildingCannotDelete'))
     return
   }
 
   Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除评估基准"${benchmark.name}"吗？此操作不可恢复。`,
-    okText: '确定',
-    cancelText: '取消',
+    title: t('benchmark.deleteConfirmTitle'),
+    content: t('benchmark.deleteBenchmarkConfirm', { name: benchmark.name }),
+    okText: t('common.ok'),
+    cancelText: t('common.cancel'),
     onOk: async () => {
       try {
         const response = await evaluationApi.deleteDataset(benchmark.dataset_id)
         if (response.message === 'success') {
-          message.success('删除成功')
+          message.success(t('common.deleteSuccess'))
           loadBenchmarks()
         }
       } catch (error) {
         console.error('删除基准失败:', error)
-        message.error('删除基准失败')
+        message.error(t('benchmark.deleteFailed'))
       }
     }
   })

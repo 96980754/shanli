@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n'
 import { apiGet, apiPost, apiDelete, apiPut, apiRequest } from './base'
 import { useUserStore } from '@/stores/user'
 
@@ -27,7 +28,7 @@ export const agentApi = {
    */
   generateTitle: async (query, modelSpec) => {
     const response = await apiPost('/api/chat/call', {
-      query: `根据以下对话内容生成一个简短的标题（最多30个字符，中英文均可），不要包含 markdown 标记：\n\n${query.slice(0, 2000)}`,
+      query: `根据以下对话内容生成一个简短的标题（最多30个字符，中英文均可），不要包含 markdown 标记：\n\n${query.slice(0, 2000)}`, // i18n-ignore
       meta: { model_spec: modelSpec }
     })
     return response.response
@@ -257,7 +258,7 @@ export const threadApi = {
   createThread: (agentId, title, metadata) =>
     apiPost('/api/chat/thread', {
       agent_id: agentId,
-      title: title || '新的对话',
+      title: title || i18n.global.t('chat.newChat'),
       metadata: metadata || {}
     }),
 

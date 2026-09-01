@@ -1,4 +1,5 @@
 import { getDisplayFileName } from '@/utils/file_utils'
+import { i18n } from '@/i18n'
 
 export const mentionTypePrefixMap = {
   file: 'file',
@@ -124,7 +125,7 @@ export const getMentionDisplayLabel = (type, value, displayLabels = {}) => {
 
   if (type === 'file') {
     const normalizedPath = String(value ?? '').replace(/\/+$/, '')
-    return getDisplayFileName(normalizedPath || value, '文件')
+    return getDisplayFileName(normalizedPath || value, i18n.global.t('fileUtil.fileFallback'))
   }
   return String(value ?? '').trim() || type
 }

@@ -5,7 +5,7 @@
         class="conversation-search-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="搜索对话"
+        :aria-label="$t('kbBrowser.searchConversation')"
         @keydown.down.prevent="moveSelection(1)"
         @keydown.up.prevent="moveSelection(-1)"
         @keydown.enter.prevent="confirmSelection"
@@ -17,11 +17,11 @@
             v-model="searchText"
             class="conversation-search-input"
             type="text"
-            placeholder="搜索对话..."
+            :placeholder="$t('kbBrowser.searchConversationPlaceholder')"
             autocomplete="off"
-            aria-label="搜索对话"
+            :aria-label="$t('kbBrowser.searchConversation')"
           />
-          <button type="button" class="conversation-search-close" aria-label="关闭" @click="close">
+          <button type="button" class="conversation-search-close" :aria-label="$t('common.close')" @click="close">
             <X :size="20" />
           </button>
         </div>
@@ -50,7 +50,7 @@
               >
                 <MessageCircle :size="18" class="result-icon" />
                 <span class="result-main">
-                  <span class="result-title">{{ item.title || '新的对话' }}</span>
+                  <span class="result-title">{{ item.title || $t('conversation.newChat') }}</span>
                   <span class="result-snippet">
                     <template v-for="(part, partIndex) in splitSnippet(item)" :key="partIndex">
                       <mark v-if="part.match">{{ part.text }}</mark>
@@ -62,10 +62,10 @@
                   formatResultDate(item.latest_match_at || item.updated_at)
                 }}</span>
               </button>
-              <div v-if="isLoadingMore" class="conversation-search-loading-more">加载中...</div>
+              <div v-if="isLoadingMore" class="conversation-search-loading-more">{{ $t('common.loading') }}</div>
             </div>
 
-            <div v-else class="conversation-search-empty">未找到相关对话</div>
+            <div v-else class="conversation-search-empty">{{ $t('kbBrowser.noResults') }}</div>
           </template>
 
           <template v-else>
@@ -77,7 +77,7 @@
               @click="createThread"
             >
               <MessageCirclePlus :size="18" class="default-icon" />
-              <span>新对话</span>
+              <span>{{ $t('kbBrowser.newChat') }}</span>
             </button>
 
             <template v-for="row in recentRows" :key="row.key">
@@ -93,12 +93,12 @@
                 @click="selectRecentThread(row.thread)"
               >
                 <MessageCircle :size="18" class="default-icon" />
-                <span>{{ row.thread.title || '新的对话' }}</span>
+                <span>{{ row.thread.title || $t('conversation.newChat') }}</span>
               </button>
             </template>
 
             <div v-if="recentRows.length === 0" class="conversation-search-empty default-empty">
-              暂无对话历史
+              {{ $t('conversation.empty') }}
             </div>
           </template>
         </div>
@@ -109,9 +109,12 @@
 
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MessageCircle, MessageCirclePlus, X } from 'lucide-vue-next'
 import { threadApi } from '@/apis'
 import dayjs, { parseToShanghai } from '@/utils/time'
+
+const { t } = useI18n()
 
 const SEARCH_LIMIT = 20
 const RECENT_LIMIT = 30
@@ -283,7 +286,7 @@ const searchThreads = async ({ reset = false } = {}) => {
       results.value.length > 0 ? Math.min(selectedIndex.value, results.value.length - 1) : 0
   } catch (error) {
     if (requestId === searchRequestId) {
-      console.warn('搜索对话失败:', error)
+      console.warn(`${t('kbBrowser.searchFail')}:`, error)
       results.value = reset ? [] : results.value
       hasMore.value = false
     }
@@ -306,17 +309,17 @@ const handleResultScroll = () => {
 
 const getRecentGroupLabel = (thread) => {
   const parsed = parseToShanghai(thread.updated_at || thread.created_at)
-  if (!parsed) return '更早'
+  if (!parsed) return t('kbBrowser.earlier')
   const diffDays = dayjs().startOf('day').diff(parsed.startOf('day'), 'day')
-  if (diffDays <= 7) return '前 7 天'
-  if (diffDays <= 30) return '前 30 天'
-  return '更早'
+  if (diffDays <= 7) return t('kbBrowser.last7Days')
+  if (diffDays <= 30) return t('kbBrowser.last30Days')
+  return t('kbBrowser.earlier')
 }
 
 const formatResultDate = (value) => {
   const parsed = parseToShanghai(value)
   if (!parsed) return ''
-  if (parsed.year() === dayjs().year()) return parsed.format('M月D日')
+  if (parsed.year() === dayjs().year()) return parsed.format(t('kbBrowser.dateFormatMonthDay'))
   return parsed.format('YYYY-MM-DD')
 }
 

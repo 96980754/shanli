@@ -1,13 +1,13 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="文档清洗预览"
+    :title="$t('docModal.cleaningPreviewTitle')"
     width="1180px"
     :footer="null"
     :destroy-on-close="true"
   >
     <div v-if="loading" class="loading-state">
-      <a-spin tip="正在加载清洗草稿..." />
+      <a-spin :tip="$t('docModal.loadingCleaningDraft')" />
     </div>
     <a-alert
       v-else-if="errorMessage"
@@ -19,9 +19,9 @@
     <div v-else-if="draft" class="cleaning-shell">
       <div class="cleaning-summary">
         <a-tag :color="statusColor">{{ statusLabel }}</a-tag>
-        <span>草稿版本 {{ draft.cleaning_version }}</span>
-        <span v-if="draft.readonly">当前权限为只读</span>
-        <span v-if="draft.has_online_chunks">保存草稿不会影响当前在线索引</span>
+        <span>{{ $t('docModal.draftVersion', { version: draft.cleaning_version }) }}</span>
+        <span v-if="draft.readonly">{{ $t('docModal.readonly') }}</span>
+        <span v-if="draft.has_online_chunks">{{ $t('docModal.saveDraftNoIndexImpact') }}</span>
       </div>
       <a-alert
         v-if="draft.error_message"
@@ -32,17 +32,17 @@
       />
       <div class="comparison-grid">
         <section class="comparison-pane">
-          <header>解析原文</header>
+          <header>{{ $t('docModal.originalParsed') }}</header>
           <div class="preview-scroll">
             <MarkdownPreview :content="draft.original_markdown || ''" />
           </div>
         </section>
         <section class="comparison-pane">
           <header class="draft-header">
-            <span>清洗结果</span>
+            <span>{{ $t('docModal.cleaningResult') }}</span>
             <a-radio-group v-model:value="rightMode" size="small">
-              <a-radio-button value="edit">编辑</a-radio-button>
-              <a-radio-button value="preview">预览</a-radio-button>
+              <a-radio-button value="edit">{{ $t('common.edit') }}</a-radio-button>
+              <a-radio-button value="preview">{{ $t('upload.preview') }}</a-radio-button>
             </a-radio-group>
           </header>
           <textarea
@@ -59,7 +59,7 @@
         </section>
       </div>
       <a-collapse v-if="changes.length || warnings.length" ghost>
-        <a-collapse-panel key="changes" header="清洗变更与警告">
+        <a-collapse-panel key="changes" :header="$t('docModal.changesAndWarnings')">
           <a-alert
             v-for="warning in warnings"
             :key="warning"
@@ -77,16 +77,16 @@
         </a-collapse-panel>
       </a-collapse>
       <div class="modal-actions">
-        <a-button @click="visible = false">关闭</a-button>
+        <a-button @click="visible = false">{{ $t('common.close') }}</a-button>
         <template v-if="!draft.readonly">
-          <a-button :loading="actionLoading" @click="cancelDraft">取消草稿</a-button>
-          <a-button :loading="actionLoading" @click="regenerateDraft">重新生成</a-button>
+          <a-button :loading="actionLoading" @click="cancelDraft">{{ $t('docModal.cancelDraft') }}</a-button>
+          <a-button :loading="actionLoading" @click="regenerateDraft">{{ $t('upload.regenerate') }}</a-button>
           <a-button v-if="draft.status === 'waiting_confirmation'" @click="openQA"
-            >QA 知识对</a-button
+            >{{ $t('docModal.qaPairs') }}</a-button
           >
-          <a-button :loading="actionLoading" @click="saveDraft">保存草稿</a-button>
+          <a-button :loading="actionLoading" @click="saveDraft">{{ $t('docModal.saveDraft') }}</a-button>
           <a-button type="primary" :loading="actionLoading" @click="confirmDraft">
-            确认并入库
+            {{ $t('docModal.confirmAndIndex') }}
           </a-button>
         </template>
       </div>
@@ -95,6 +95,7 @@
 </template>
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
@@ -104,6 +105,7 @@ const props = defineProps({
   fileId: { type: [String, Number], default: '' }
 })
 const emit = defineEmits(['update:open', 'confirmed', 'changed', 'open-qa'])
+const { t } = useI18n()
 const visible = computed({
   get: () => props.open,
   set: (value) => emit('update:open', value)
@@ -118,16 +120,17 @@ const changes = computed(() => draft.value?.cleaning_metadata?.changes || [])
 const warnings = computed(() => draft.value?.cleaning_metadata?.warnings || [])
 const statusLabel = computed(() => {
   const labels = {
-    parsed: '待清洗',
-    cleaning: '清洗中',
-    waiting_confirmation: '待确认',
-    confirmed: '已确认',
-    indexing: '入库中',
-    indexed: '已入库',
-    error_cleaning: '清洗失败',
-    error_indexing: '入库失败'
+    parsed: 'docModal.cleanStatusParsed',
+    cleaning: 'docModal.cleanStatusCleaning',
+    waiting_confirmation: 'docModal.cleanStatusWaitingConfirm',
+    confirmed: 'docModal.statusConfirmed',
+    indexing: 'docModal.cleanStatusIndexing',
+    indexed: 'docModal.cleanStatusIndexed',
+    error_cleaning: 'docModal.cleanStatusErrorCleaning',
+    error_indexing: 'docModal.cleanStatusErrorIndexing'
   }
-  return labels[draft.value?.status] || draft.value?.status || ''
+  const key = labels[draft.value?.status]
+  return key ? t(key) : draft.value?.status || ''
 })
 const statusColor = computed(() => {
   if (String(draft.value?.status || '').startsWith('error_')) return 'red'
@@ -146,7 +149,7 @@ const loadDraft = async () => {
   try {
     applyPayload(await documentApi.getCleaningPreview(props.kbId, props.fileId))
   } catch (error) {
-    errorMessage.value = error.message || '加载清洗草稿失败'
+    errorMessage.value = error.message || t('docModal.loadCleaningDraftFailed')
   } finally {
     loading.value = false
   }
@@ -166,7 +169,7 @@ const runAction = async (action, successText) => {
     emit('changed', payload)
     return payload
   } catch (error) {
-    message.error(error.message || '操作失败，请刷新后重试')
+    message.error(error.message || t('docModal.operationFailedRetry'))
     return null
   } finally {
     actionLoading.value = false
@@ -181,39 +184,39 @@ const saveDraft = () =>
         editableContent.value,
         draft.value.cleaning_version
       ),
-    '草稿已保存'
+    t('docModal.draftSaved')
   )
 const regenerateDraft = () =>
   runAction(
     () =>
       documentApi.regenerateCleaningDraft(props.kbId, props.fileId, draft.value.cleaning_version),
-    '清洗草稿已重新生成'
+    t('docModal.cleaningDraftRegenerated')
   )
 const cancelDraft = () => {
   Modal.confirm({
-    title: '取消当前清洗草稿？',
-    content: '已入库文档会继续使用上一次确认的内容。',
-    okText: '确认取消',
-    cancelText: '返回',
+    title: t('docModal.cancelDraftTitle'),
+    content: t('docModal.cancelDraftContent'),
+    okText: t('docModal.confirmCancel'),
+    cancelText: t('common.back'),
     onOk: () =>
       runAction(
         () =>
           documentApi.cancelCleaningDraft(props.kbId, props.fileId, draft.value.cleaning_version),
-        '清洗草稿已取消'
+        t('docModal.cleaningDraftCancelled')
       )
   })
 }
 const confirmDraft = () => {
   Modal.confirm({
-    title: '确认清洗结果并入库？',
-    content: '系统会切片并写入向量库；已入库文档会在新索引验证成功后切换版本。',
-    okText: '确认并入库',
-    cancelText: '返回编辑',
+    title: t('docModal.confirmIndexTitle'),
+    content: t('docModal.confirmIndexContent'),
+    okText: t('docModal.confirmAndIndex'),
+    cancelText: t('docModal.backToEdit'),
     onOk: async () => {
       const payload = await runAction(
         () =>
           documentApi.confirmCleaningDraft(props.kbId, props.fileId, draft.value.cleaning_version),
-        '文档已确认并完成入库'
+        t('docModal.documentConfirmedIndexed')
       )
       if (payload) {
         emit('confirmed', payload)

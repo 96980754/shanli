@@ -21,8 +21,8 @@ assert.match(componentSource, /enqueueDuplicateConflict\(/)
 
 // 冲突弹窗模板
 assert.match(componentSource, /:open="duplicateConflictOpen"/)
-assert.match(componentSource, /保留两份/)
-assert.match(componentSource, /替换现有文件/)
+assert.match(componentSource, /\$t\('upload\.keepBoth'\)/)
+assert.match(componentSource, /\$t\('upload\.replaceExisting'\)/)
 
 // 处理函数
 assert.match(componentSource, /resolveDuplicateConflict\(/)

@@ -33,7 +33,7 @@
           </div>
         </div>
         <div v-if="todoListData(resultContent).length === 0" class="no-results">
-          <p>暂无待办事项</p>
+          <p>{{ $t('toolCall.todo.noTodos') }}</p>
         </div>
       </div>
     </template>
@@ -42,6 +42,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
 import {
   CheckCircleOutlined,
@@ -57,6 +58,8 @@ const props = defineProps({
     required: true
   }
 })
+
+const { t } = useI18n()
 
 const TODO_NAME_MAX_LENGTH = 20
 
@@ -76,15 +79,15 @@ const query = computed(() => {
     if (list && list.length > 0) {
       // 1. In Progress
       const inProgress = list.find((item) => item.status === 'in_progress')
-      if (inProgress) return `进行中: ${formatTodoName(inProgress.content)}`
+      if (inProgress) return t('toolCall.todo.inProgress', { name: formatTodoName(inProgress.content) })
 
       // 2. Pending
       const pending = list.find((item) => item.status === 'pending')
-      if (pending) return `待处理: ${formatTodoName(pending.content)}`
+      if (pending) return t('toolCall.todo.pending', { name: formatTodoName(pending.content) })
 
       // 3. Last item fallback
       const last = list[list.length - 1]
-      return `更新: ${formatTodoName(last.content)}`
+      return t('toolCall.todo.updated', { name: formatTodoName(last.content) })
     }
   }
 

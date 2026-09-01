@@ -14,15 +14,15 @@
     <template #result>
       <div class="ocr-result">
         <div class="result-row" v-if="resultData?.parsed_path">
-          <span class="label">结果文件</span>
+          <span class="label">{{ $t('toolCall.ocr.resultFile') }}</span>
           <span class="value code">{{ resultData.parsed_path }}</span>
         </div>
         <div class="result-row" v-if="Number.isFinite(resultData?.char_count)">
-          <span class="label">字符数</span>
+          <span class="label">{{ $t('toolCall.ocr.charCount') }}</span>
           <span class="value">{{ resultData.char_count }}</span>
         </div>
         <pre v-if="resultData?.preview" class="preview">{{ resultData.preview }}</pre>
-        <div v-if="resultData?.truncated" class="hint">预览已截断，完整内容请读取结果文件。</div>
+        <div v-if="resultData?.truncated" class="hint">{{ $t('toolCall.ocr.truncatedHint') }}</div>
       </div>
     </template>
   </BaseToolCall>

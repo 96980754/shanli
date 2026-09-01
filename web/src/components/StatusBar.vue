@@ -22,37 +22,37 @@
           <span class="user-greeting">{{ greeting }}</span>
         </div>
         <div class="header-actions">
-          <a-tooltip title="系统设置">
+          <a-tooltip :title="$t('status.settings')">
             <button
               type="button"
               class="header-action-button"
-              aria-label="系统设置"
+              :aria-label="$t('status.settings')"
               @click="openSettings"
             >
               <Settings class="icon" />
             </button>
           </a-tooltip>
-          <a-tooltip :title="themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'">
+          <a-tooltip :title="themeStore.isDark ? $t('user.menu.themeLight') : $t('user.menu.themeDark')">
             <button
               type="button"
               class="header-action-button"
-              aria-label="切换主题"
+              :aria-label="$t('status.toggleTheme')"
               @click="toggleTheme"
             >
               <Sun v-if="themeStore.isDark" class="icon" />
               <Moon v-else class="icon" />
             </button>
           </a-tooltip>
-          <a-tooltip title="任务中心">
+          <a-tooltip :title="$t('layout.taskCenter')">
             <button
               type="button"
               class="header-action-button task-center-button"
               :class="{ active: taskerStore.isDrawerOpen }"
-              aria-label="任务中心"
+              :aria-label="$t('layout.taskCenter')"
               @click="openTaskCenter"
             >
               <ClipboardList class="icon" />
-              <span class="task-center-label">任务中心</span>
+              <span class="task-center-label">{{ $t('layout.taskCenter') }}</span>
               <a-badge
                 :count="activeTaskCount"
                 :overflow-count="99"
@@ -69,6 +69,7 @@
 
 <script setup>
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useInfoStore } from '@/stores/info'
 import { useUserStore } from '@/stores/user'
 import { Clock, User, ClipboardList, Settings, Sun, Moon } from 'lucide-vue-next'
@@ -82,6 +83,7 @@ const infoStore = useInfoStore()
 const userStore = useUserStore()
 const taskerStore = useTaskerStore()
 const themeStore = useThemeStore()
+const { t } = useI18n()
 const { activeCount: activeCountRef } = storeToRefs(taskerStore)
 const { openSettingsModal } = inject('settingsModal', {})
 
@@ -93,7 +95,7 @@ const branding = computed(() => infoStore.branding)
 
 // 用户名计算属性
 const currentUser = computed(() => {
-  return userStore.username || '游客'
+  return userStore.username || t('status.guest')
 })
 
 // 问候语计算属性
@@ -102,18 +104,18 @@ const greeting = computed(() => {
   let greetingText
 
   if (hour >= 5 && hour < 12) {
-    greetingText = '早上好'
+    greetingText = t('status.greeting.morning')
   } else if (hour >= 12 && hour < 14) {
-    greetingText = '中午好'
+    greetingText = t('status.greeting.noon')
   } else if (hour >= 14 && hour < 18) {
-    greetingText = '下午好'
+    greetingText = t('status.greeting.afternoon')
   } else if (hour >= 18 && hour < 22) {
-    greetingText = '晚上好'
+    greetingText = t('status.greeting.evening')
   } else {
-    greetingText = '夜深了'
+    greetingText = t('status.greeting.lateNight')
   }
 
-  return `${greetingText}！${currentUser.value}`
+  return t('status.greetingFormat', { greeting: greetingText, user: currentUser.value })
 })
 
 const activeTaskCount = computed(() => activeCountRef.value || 0)
@@ -133,7 +135,7 @@ const toggleTheme = () => {
 // 更新时间
 const updateTime = () => {
   const now = dayjs().tz('Asia/Shanghai')
-  currentTime.value = now.format('YYYY年MM月DD日 HH:mm:ss')
+  currentTime.value = now.format(t('status.timeFormat'))
 }
 
 // 定时器
@@ -147,7 +149,7 @@ onMounted(async () => {
   try {
     await userStore.getCurrentUser()
   } catch (error) {
-    console.error('获取用户信息失败:', error)
+    console.error('获取用户信息失败:', error) // i18n-ignore
   }
 })
 
@@ -326,7 +328,7 @@ onUnmounted(() => {
   }
 
   .current-time {
-    display: none; // 在小屏幕上隐藏时间
+    display: none; // 在小屏幕上隐藏时间 // i18n-ignore
   }
 }
 </style>

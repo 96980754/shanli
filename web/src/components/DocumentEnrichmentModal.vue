@@ -1,13 +1,13 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="文档信息增强"
+    :title="$t('docModal.enrichmentTitle')"
     width="820px"
     :footer="null"
     :destroy-on-close="true"
   >
     <div v-if="loading" class="loading-state">
-      <a-spin tip="正在加载摘要、关键词和标签..." />
+      <a-spin :tip="$t('docModal.loadingEnrichment')" />
     </div>
     <a-alert
       v-else-if="errorMessage"
@@ -19,14 +19,14 @@
     <div v-else-if="payload" class="enrichment-shell">
       <div class="enrichment-meta">
         <a-tag :color="statusColor">{{ statusLabel }}</a-tag>
-        <span>版本 {{ payload.version }}</span>
-        <span v-if="payload.readonly">当前权限为只读</span>
+        <span>{{ $t('docModal.version', { version: payload.version }) }}</span>
+        <span v-if="payload.readonly">{{ $t('docModal.readonly') }}</span>
       </div>
       <a-alert
         v-if="payload.possibly_outdated"
         type="warning"
         show-icon
-        message="正文已变化，现有人工内容可能需要复核"
+        :message="$t('docModal.bodyChangedReviewManual')"
         class="enrichment-alert"
       />
       <a-alert
@@ -39,7 +39,7 @@
       <section class="enrichment-section">
         <header>
           <div>
-            <strong>摘要</strong>
+            <strong>{{ $t('docModal.summary') }}</strong>
             <a-tag v-if="payload.summary?.source" class="source-tag">
               {{ sourceLabel(payload.summary.source) }}
             </a-tag>
@@ -51,7 +51,7 @@
               :loading="actionLoading"
               @click="generate(['summary'])"
             >
-              重新生成
+              {{ $t('upload.regenerate') }}
             </a-button>
             <a-button
               v-if="payload.summary?.source === 'manual'"
@@ -59,7 +59,7 @@
               :loading="actionLoading"
               @click="replaceManual(['summary'])"
             >
-              用生成结果替换
+              {{ $t('docModal.replaceWithGenerated') }}
             </a-button>
           </div>
         </header>
@@ -68,13 +68,13 @@
           :readonly="payload.readonly"
           :maxlength="1000"
           :auto-size="{ minRows: 4, maxRows: 10 }"
-          placeholder="暂无摘要"
+          :placeholder="$t('docModal.noSummaryPlaceholder')"
         />
       </section>
       <section class="enrichment-section">
         <header>
           <div>
-            <strong>关键词</strong>
+            <strong>{{ $t('docModal.keywords') }}</strong>
             <a-tag v-if="keywordSource" class="source-tag">{{ sourceLabel(keywordSource) }}</a-tag>
           </div>
           <div v-if="!payload.readonly" class="section-actions">
@@ -84,7 +84,7 @@
               :loading="actionLoading"
               @click="generate(['keywords'])"
             >
-              重新生成
+              {{ $t('upload.regenerate') }}
             </a-button>
             <a-button
               v-if="keywordSource === 'manual'"
@@ -92,7 +92,7 @@
               :loading="actionLoading"
               @click="replaceManual(['keywords'])"
             >
-              用生成结果替换
+              {{ $t('docModal.replaceWithGenerated') }}
             </a-button>
           </div>
         </header>
@@ -102,13 +102,13 @@
           :disabled="payload.readonly"
           :open="false"
           :max-tag-count="12"
-          placeholder="输入关键词后按回车"
+          :placeholder="$t('docModal.keywordPlaceholder')"
         />
       </section>
       <section class="enrichment-section">
         <header>
           <div>
-            <strong>标签</strong>
+            <strong>{{ $t('docModal.tags') }}</strong>
             <a-tag v-if="tagSource" class="source-tag">{{ sourceLabel(tagSource) }}</a-tag>
           </div>
           <div v-if="!payload.readonly" class="section-actions">
@@ -118,7 +118,7 @@
               :loading="actionLoading"
               @click="generate(['tags'])"
             >
-              重新生成
+              {{ $t('upload.regenerate') }}
             </a-button>
             <a-button
               v-if="tagSource === 'manual'"
@@ -126,7 +126,7 @@
               :loading="actionLoading"
               @click="replaceManual(['tags'])"
             >
-              用生成结果替换
+              {{ $t('docModal.replaceWithGenerated') }}
             </a-button>
           </div>
         </header>
@@ -136,14 +136,14 @@
           :disabled="payload.readonly"
           :open="false"
           :max-tag-count="8"
-          placeholder="输入自由标签后按回车"
+          :placeholder="$t('docModal.tagPlaceholder')"
         />
       </section>
       <div class="modal-actions">
-        <a-button @click="visible = false">关闭</a-button>
+        <a-button @click="visible = false">{{ $t('common.close') }}</a-button>
         <template v-if="!payload.readonly">
-          <a-button :loading="actionLoading" @click="generateAll">自动生成全部</a-button>
-          <a-button type="primary" :loading="actionLoading" @click="saveAll">保存人工内容</a-button>
+          <a-button :loading="actionLoading" @click="generateAll">{{ $t('docModal.generateAll') }}</a-button>
+          <a-button type="primary" :loading="actionLoading" @click="saveAll">{{ $t('docModal.saveManualContent') }}</a-button>
         </template>
       </div>
     </div>
@@ -151,6 +151,7 @@
 </template>
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import { documentApi } from '@/apis/knowledge_api'
 const props = defineProps({
@@ -159,6 +160,7 @@ const props = defineProps({
   fileId: { type: [String, Number], default: '' }
 })
 const emit = defineEmits(['update:open', 'changed'])
+const { t } = useI18n()
 const visible = computed({
   get: () => props.open,
   set: (value) => emit('update:open', value)
@@ -172,14 +174,15 @@ const keywordValues = ref([])
 const tagValues = ref([])
 const statusLabel = computed(() => {
   const labels = {
-    not_generated: '未生成',
-    generating: '生成中',
-    ready: '已生成',
-    skipped: '未配置模型',
-    failed: '生成失败',
-    possibly_outdated: '可能已过期'
+    not_generated: 'docModal.statusNotGenerated',
+    generating: 'docModal.statusGenerating',
+    ready: 'docModal.statusReady',
+    skipped: 'docModal.statusSkipped',
+    failed: 'docModal.statusGenerationFailed',
+    possibly_outdated: 'docModal.statusPossiblyOutdated'
   }
-  return labels[payload.value?.status] || payload.value?.status || ''
+  const key = labels[payload.value?.status]
+  return key ? t(key) : payload.value?.status || ''
 })
 const statusColor = computed(() => {
   if (payload.value?.status === 'failed') return 'red'
@@ -193,7 +196,8 @@ const keywordSource = computed(
 const tagSource = computed(
   () => payload.value?.tag_source || payload.value?.tags?.[0]?.source || ''
 )
-const sourceLabel = (source) => (source === 'manual' ? '人工' : '自动')
+const sourceLabel = (source) =>
+  source === 'manual' ? t('docModal.manualSource') : t('docModal.autoSource')
 const applyPayload = (nextPayload) => {
   payload.value = nextPayload
   summaryText.value = nextPayload?.summary?.text || ''
@@ -208,7 +212,7 @@ const load = async () => {
   try {
     applyPayload(await documentApi.getEnrichment(props.kbId, props.fileId))
   } catch (error) {
-    errorMessage.value = error.message || '加载文档信息增强失败'
+    errorMessage.value = error.message || t('docModal.loadEnrichmentFailed')
   } finally {
     loading.value = false
   }
@@ -236,11 +240,11 @@ const generate = async (components, overwriteManual = false) => {
   const previousVersion = payload.value.version
   try {
     await documentApi.generateEnrichment(props.kbId, props.fileId, components, overwriteManual)
-    message.success('生成任务已提交')
+    message.success(t('docModal.generationSubmitted'))
     await waitForGeneration(previousVersion)
     emit('changed', payload.value)
   } catch (error) {
-    message.error(error.message || '生成失败，请稍后重试')
+    message.error(error.message || t('docModal.generationFailedRetry'))
   } finally {
     actionLoading.value = false
   }
@@ -251,17 +255,17 @@ const generateAll = () => {
     keywordSource.value === 'manual' &&
     tagSource.value === 'manual'
   ) {
-    message.info('全部内容均为人工结果，自动生成不会覆盖')
+    message.info(t('docModal.allManualInfo'))
     return
   }
   generate(['summary', 'keywords', 'tags'])
 }
 const replaceManual = (components) => {
   Modal.confirm({
-    title: '替换人工内容？',
-    content: '确认后，本次新生成结果会覆盖所选人工内容。',
-    okText: '确认替换',
-    cancelText: '取消',
+    title: t('docModal.replaceManualTitle'),
+    content: t('docModal.replaceManualContent'),
+    okText: t('docModal.confirmReplace'),
+    cancelText: t('common.cancel'),
     onOk: () => generate(components, true)
   })
 }
@@ -294,14 +298,14 @@ const saveAll = async () => {
       nextPayload = await documentApi.updateTags(props.kbId, props.fileId, tagValues.value, version)
     }
     if (nextPayload === payload.value) {
-      message.info('没有需要保存的修改')
+      message.info(t('docModal.noChangesToSave'))
       return
     }
     applyPayload(nextPayload)
-    message.success('文档信息已保存')
+    message.success(t('docModal.documentInfoSaved'))
     emit('changed', nextPayload)
   } catch (error) {
-    message.error(error.message || '保存失败，请刷新后重试')
+    message.error(error.message || t('docModal.saveFailedRetry'))
   } finally {
     actionLoading.value = false
   }

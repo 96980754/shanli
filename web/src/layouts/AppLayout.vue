@@ -9,6 +9,7 @@ import {
   Box,
   PanelLeftClose,
   PanelLeftOpen,
+  X,
   MessageCirclePlus,
   CircleHelp,
   Search,
@@ -80,7 +81,7 @@ const getRemoteConfig = async () => {
   try {
     await configStore.refreshConfig()
   } catch (error) {
-    console.warn('加载系统配置失败:', error)
+    console.warn('加载系统配置失败:', error) // i18n-ignore
   }
 }
 
@@ -88,7 +89,7 @@ const getRemoteDatabase = async () => {
   try {
     await databaseStore.loadDatabases()
   } catch (error) {
-    console.warn('加载知识库列表失败:', error)
+    console.warn('加载知识库列表失败:', error) // i18n-ignore
   }
 }
 
@@ -205,11 +206,17 @@ const setSidebarCollapsed = (collapsed) => {
   sidebarCollapsed.value = collapsed
 }
 
+const closeMobileSidebar = () => { mobileSidebarOpen.value = false }
+
 const toggleSidebar = () => {
+  // 移动端抽屉内的折叠按钮应关闭抽屉，而非进入折叠态（折叠态下抽屉仍占满屏宽，用户以为关闭失败）
+  if (window.innerWidth <= mobileBreakpoint) {
+    closeMobileSidebar()
+    return
+  }
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
 
-const closeMobileSidebar = () => { mobileSidebarOpen.value = false }
 const closeMobileSidebarOnDesktop = () => { if (window.innerWidth > mobileBreakpoint) closeMobileSidebar() }
 const toggleMobileSidebar = () => {
   if (!mobileSidebarOpen.value) setSidebarCollapsed(false)
@@ -233,7 +240,7 @@ const initAgentNavigation = async () => {
     }
     await chatThreadsStore.loadThreads()
   } catch (error) {
-    console.warn('加载对话导航失败:', error)
+    console.warn('加载对话导航失败:', error) // i18n-ignore
   }
 }
 
@@ -268,7 +275,7 @@ const handleDeleteChat = async (threadId) => {
       await router.replace({ name: 'AgentComp' })
     }
   } catch (error) {
-    console.warn('删除对话失败:', error)
+    console.warn('删除对话失败:', error) // i18n-ignore
   }
 }
 
@@ -276,7 +283,7 @@ const handleRenameChat = async ({ chatId, title }) => {
   try {
     await chatThreadsStore.updateThread(chatId, title)
   } catch (error) {
-    console.warn('重命名对话失败:', error)
+    console.warn('重命名对话失败:', error) // i18n-ignore
   }
 }
 
@@ -290,7 +297,7 @@ const handleTogglePinChat = async (threadId) => {
       chatThreadsStore.setCurrentThreadId(currentThreadId.value)
     }
   } catch (error) {
-    console.warn('更新置顶状态失败:', error)
+    console.warn('更新置顶状态失败:', error) // i18n-ignore
   }
 }
 
@@ -313,7 +320,7 @@ provide('settingsModal', {
 
 <template>
   <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'mobile-sidebar-open': mobileSidebarOpen }">
-    <button v-if="mobileSidebarOpen" type="button" class="mobile-sidebar-backdrop" aria-label="关闭导航菜单" @click="closeMobileSidebar" />
+    <button v-if="mobileSidebarOpen" type="button" class="mobile-sidebar-backdrop" :aria-label="$t('layout.closeNavMenu')" @click="closeMobileSidebar" />
     <div class="header">
       <div class="sidebar-brand" @click.stop>
         <router-link v-if="!sidebarCollapsed" to="/agent" class="brand-link" @click="closeMobileSidebar">
@@ -351,7 +358,7 @@ provide('settingsModal', {
           @click.stop="openGlobalKnowledgeSearch"
         >
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
-            <template #title>{{ $t('common.appName') }} · 全库搜索</template>
+            <template #title>{{ $t('common.appName') }} · {{ $t('layout.globalSearch') }}</template>
             <Search class="icon" size="18" />
           </a-tooltip>
           <span class="nav-text">{{ $t('layout.globalSearch') }}</span>
@@ -446,8 +453,15 @@ provide('settingsModal', {
         </div>
       </div>
     </div>
-    <button type="button" class="mobile-sidebar-trigger" :aria-expanded="mobileSidebarOpen" aria-label="打开导航菜单" @click="toggleMobileSidebar">
-      <PanelLeftOpen size="22" />
+    <button
+      type="button"
+      class="mobile-sidebar-trigger"
+      :aria-expanded="mobileSidebarOpen"
+      :aria-label="mobileSidebarOpen ? $t('layout.closeNavMenu') : $t('layout.openNavMenu')"
+      @click="toggleMobileSidebar"
+    >
+      <X v-if="mobileSidebarOpen" size="22" />
+      <PanelLeftOpen v-else size="22" />
     </button>
     <router-view v-slot="{ Component }" id="app-router-view">
       <keep-alive :include="KEEP_ALIVE_VIEWS">
@@ -968,7 +982,9 @@ div.header,
     width: 38px; height: 38px; padding: 0; border: 1px solid var(--gray-150); border-radius: 10px;
     background: var(--gray-0); color: var(--gray-700); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
-  .mobile-sidebar-open .mobile-sidebar-trigger { display: none; }
+  .mobile-sidebar-open .mobile-sidebar-trigger {
+    z-index: 1002; /* 侧栏打开时保持可见且位于侧栏(1001)之上，作为关闭按钮 */ // i18n-ignore
+  }
   .mobile-sidebar-backdrop { display: block; position: fixed; z-index: 1000; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(0, 0, 0, 0.42); }
 }
 </style>

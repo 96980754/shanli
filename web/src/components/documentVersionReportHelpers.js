@@ -1,12 +1,31 @@
-export const CHANGE_TYPE_VIEW = {
-  new: { label: '新增', color: 'blue' },
-  changed: { label: '变更', color: 'orange' },
-  removed: { label: '删除', color: 'red' },
-  conflict: { label: '冲突', color: 'red' }
+import { i18n } from '@/i18n'
+
+const CHANGE_TYPE_LABEL_KEYS = {
+  new: 'docVersion.changeNew',
+  changed: 'docVersion.changeChanged',
+  removed: 'docVersion.changeRemoved',
+  conflict: 'docVersion.changeConflict'
 }
 
-export const getChangeTypeView = (changeType) =>
-  CHANGE_TYPE_VIEW[changeType] || { label: changeType || '未知', color: 'default' }
+const CHANGE_TYPE_VIEW_META = {
+  new: { color: 'blue' },
+  changed: { color: 'orange' },
+  removed: { color: 'red' },
+  conflict: { color: 'red' }
+}
+
+export const CHANGE_TYPE_VIEW = Object.fromEntries(
+  Object.entries(CHANGE_TYPE_LABEL_KEYS).map(([type, key]) => [
+    type,
+    { label: i18n.global.t(key), ...CHANGE_TYPE_VIEW_META[type] }
+  ])
+)
+
+export const getChangeTypeView = (changeType) => {
+  const key = CHANGE_TYPE_LABEL_KEYS[changeType]
+  if (!key) return { label: changeType || i18n.global.t('docVersion.changeUnknown'), color: 'default' }
+  return { label: i18n.global.t(key), ...CHANGE_TYPE_VIEW_META[changeType] }
+}
 
 export const canReviewValidationReport = (report, canManage) =>
   Boolean(canManage && report?.status === 'review_required' && report?.decision === 'pending')
@@ -20,10 +39,10 @@ export const getFactValue = (fact) => {
 
 // 按变更场景给出"该侧不存在事实/证据"的文案，避免一律显示"无可用证据原文"误导用户
 export const getMissingFactText = (changeType, side) => {
-  if (changeType === 'new' && side === 'old') return '旧版无此事实'
-  if (changeType === 'removed' && side === 'new') return '新版已删除此事实'
-  if (changeType === 'conflict' && side === 'old') return '旧版无此事实'
-  return '无可用证据原文'
+  if (changeType === 'new' && side === 'old') return i18n.global.t('docVersion.missingFactOld')
+  if (changeType === 'removed' && side === 'new') return i18n.global.t('docVersion.missingFactRemoved')
+  if (changeType === 'conflict' && side === 'old') return i18n.global.t('docVersion.missingFactOld')
+  return i18n.global.t('docVersion.noEvidenceText')
 }
 
 // 报告项某一侧应展示的值：新增项的旧侧、删除项的新侧及否定不存在事实的冲突项旧侧

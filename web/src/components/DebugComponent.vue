@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="showModal"
-    title="调试面板（请在生产环境中谨慎使用）"
+    :title="$t('debug.panelTitle')"
     width="90%"
     :footer="null"
     :maskClosable="true"
@@ -21,32 +21,34 @@
           <a-button @click="clearLogs" :icon="h(ClearOutlined)" class="icon-only"> </a-button>
           <a-button @click="printSystemConfig">
             <template #icon><SettingOutlined /></template>
-            系统配置
+            {{ $t('debug.systemConfig') }}
           </a-button>
           <a-button @click="printUserInfo">
             <template #icon><UserOutlined /></template>
-            用户信息
+            {{ $t('debug.userInfo') }}
           </a-button>
           <a-button @click="printDatabaseInfo">
             <template #icon><DatabaseOutlined /></template>
-            知识库信息
+            {{ $t('debug.databaseInfo') }}
           </a-button>
           <a-button @click="printAgentConfig">
             <template #icon><RobotOutlined /></template>
-            智能体配置
+            {{ $t('debug.agentConfig') }}
           </a-button>
           <a-button @click="toggleDebugMode" :type="infoStore.debugMode ? 'primary' : 'default'">
             <template #icon><BugOutlined /></template>
-            Debug 模式: {{ infoStore.debugMode ? '开启' : '关闭' }}
+            {{ $t('debug.debugModeLabel') }} {{ infoStore.debugMode ? $t('debug.enabled') : $t('debug.disabled') }}
           </a-button>
           <a-button @click="toggleFullscreen">
             <template #icon>
               <FullscreenOutlined v-if="!state.isFullscreen" />
               <FullscreenExitOutlined v-else />
             </template>
-            {{ state.isFullscreen ? '退出全屏' : '全屏' }}
+            {{ state.isFullscreen ? $t('debug.exitFullscreen') : $t('debug.fullscreen') }}
           </a-button>
-          <a-tooltip :title="state.autoRefresh ? '点击停止自动刷新' : '点击开启自动刷新'">
+          <a-tooltip
+            :title="state.autoRefresh ? $t('debug.stopAutoRefresh') : $t('debug.startAutoRefresh')"
+          >
             <a-button
               :type="state.autoRefresh ? 'primary' : 'default'"
               :class="{ 'auto-refresh-button': state.autoRefresh }"
@@ -55,19 +57,19 @@
               <template #icon>
                 <SyncOutlined :spin="state.autoRefresh" />
               </template>
-              自动刷新
+              {{ $t('debug.autoRefresh') }}
               <span v-if="state.autoRefresh" class="refresh-interval">(5s)</span>
             </a-button>
           </a-tooltip>
           <a-button @click="openUserSwitcher">
             <template #icon><SwapOutlined /></template>
-            切换用户
+            {{ $t('debug.switchUser') }}
           </a-button>
         </div>
         <div class="filter-group">
           <a-input-search
             v-model:value="state.searchText"
-            placeholder="搜索日志..."
+            :placeholder="$t('debug.searchLogs')"
             style="width: 200px; height: 32px"
             @search="onSearch"
           />
@@ -108,13 +110,13 @@
             <span class="message">{{ log.message }}</span>
           </div>
         </div>
-        <div v-else class="empty-logs">暂无日志</div>
+        <div v-else class="empty-logs">{{ $t('debug.noLogs') }}</div>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
       <!-- 用户切换 Modal -->
       <a-modal
         v-model:open="state.showUserSwitcher"
-        title="切换用户"
+        :title="$t('debug.switchUser')"
         :confirmLoading="state.switchingUser"
         :footer="null"
         :bodyStyle="{ padding: '12px' }"
@@ -126,7 +128,7 @@
             </a-list-item>
           </template>
           <template #empty>
-            <a-empty description="暂无用户" />
+            <a-empty :description="$t('debug.noUsers')" />
           </template>
         </a-list>
       </a-modal>
@@ -158,6 +160,7 @@ watch(showModal, (isOpen) => {
   }
 })
 
+import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
 import { useUserStore } from '@/stores/user'
 import { useDatabaseStore } from '@/stores/database'
@@ -191,6 +194,7 @@ import dayjs from '@/utils/time'
 import { configApi } from '@/apis/system_api'
 import { checkSuperAdminPermission } from '@/stores/user'
 
+const { t } = useI18n()
 const configStore = useConfigStore()
 const userStore = useUserStore()
 const databaseStore = useDatabaseStore()
@@ -257,7 +261,7 @@ const formatTimestamp = (timestamp) => {
     const date = dayjs(normalizedTimestamp)
     return date.isValid() ? date.format('HH:mm:ss.SSS') : timestamp
   } catch (err) {
-    console.error('时间戳格式化错误:', err)
+    console.error(t('debug.timestampFormatError'), err)
     return timestamp
   }
 }
@@ -293,7 +297,7 @@ const fetchLogs = async () => {
     }, 100)
     scrollToBottom()
   } catch (err) {
-    error.value = `错误: ${err.message}`
+    error.value = t('debug.errorPrefix', { message: err.message })
   } finally {
     state.fetching = false
   }
@@ -373,7 +377,7 @@ const toggleFullscreen = async () => {
       }
     }
   } catch (err) {
-    console.error('全屏切换失败:', err)
+    console.error(t('debug.fullscreenToggleFailed'), err)
   }
 }
 
@@ -411,16 +415,16 @@ onUnmounted(() => {
 // 打印系统配置
 const printSystemConfig = () => {
   if (!checkSuperAdminPermission()) return
-  console.log('=== 系统配置 ===')
+  console.log(t('debug.systemConfigSection'))
   console.log(config)
 }
 
 // 打印用户信息
 const printUserInfo = () => {
   if (!checkSuperAdminPermission()) return
-  console.log('=== 用户信息 ===')
+  console.log(t('debug.userInfoSection'))
   const userInfo = {
-    token: userStore.token ? '*** (已隐藏)' : null,
+    token: userStore.token ? t('debug.tokenHidden') : null,
     userId: userStore.userId,
     username: userStore.username,
     uid: userStore.uid,
@@ -439,15 +443,15 @@ const printDatabaseInfo = async () => {
   if (!checkSuperAdminPermission()) return
 
   try {
-    console.log('=== 知识库信息 ===')
-    console.log('基本信息:', {
+    console.log(t('debug.databaseInfoSection'))
+    console.log(t('debug.basicInfo'), {
       kbId: databaseStore.kbId,
       databaseName: databaseStore.database.name,
       databaseDesc: databaseStore.database.description,
       fileCount: Object.keys(databaseStore.database.files || {}).length
     })
 
-    console.log('状态信息:', {
+    console.log(t('debug.statusInfo'), {
       databaseLoading: databaseStore.state.databaseLoading,
       searchLoading: databaseStore.state.searchLoading,
       lock: databaseStore.state.lock,
@@ -455,14 +459,14 @@ const printDatabaseInfo = async () => {
       queryParamsLoading: databaseStore.state.queryParamsLoading
     })
 
-    console.log('查询参数:', {
+    console.log(t('debug.queryParams'), {
       queryParams: databaseStore.queryParams,
       meta: databaseStore.meta,
       selectedFileCount: databaseStore.selectedRowKeys.length
     })
   } catch (error) {
-    console.error('获取知识库信息失败:', error)
-    message.error('获取知识库信息失败: ' + error.message)
+    console.error(t('debug.fetchDatabaseInfoFailed'), error)
+    message.error(t('debug.fetchDatabaseInfoFailed') + ': ' + error.message)
   }
 }
 
@@ -477,10 +481,10 @@ const printAgentConfig = async () => {
   if (!checkSuperAdminPermission()) return
 
   try {
-    console.log('=== 智能体配置信息 ===')
+    console.log(t('debug.agentConfigSection'))
 
     // Store状态信息
-    console.log('Store 状态:', {
+    console.log(t('debug.storeState'), {
       isInitialized: agentStore.isInitialized,
       selectedAgentId: agentStore.selectedAgentId,
       agentCount: agentStore.agentsList.length,
@@ -494,14 +498,14 @@ const printAgentConfig = async () => {
     })
 
     // 智能体列表信息
-    console.log('智能体列表:', {
+    console.log(t('debug.agentList'), {
       count: agentStore.agentsList.length,
       agents: toRaw(agentStore.agentsList)
     })
 
     // 当前选中智能体信息
     if (agentStore.selectedAgent) {
-      console.log('当前选中智能体:', {
+      console.log(t('debug.currentAgent'), {
         agent: toRaw(agentStore.selectedAgent),
         isBuiltin: isBuiltinAgent(agentStore.selectedAgent),
         configurableItemsCount: Object.keys(agentStore.configurableItems).length
@@ -509,30 +513,30 @@ const printAgentConfig = async () => {
 
       // 当前智能体配置（仅管理员可见）
       if (userStore.isAdmin) {
-        console.log('当前智能体配置:', {
+        console.log(t('debug.currentAgentConfig'), {
           current: toRaw(agentStore.agentConfig),
           original: toRaw(agentStore.originalAgentConfig),
           hasChanges: agentStore.hasConfigChanges
         })
       } else {
-        console.log('智能体配置: 需要管理员权限查看详细配置')
+        console.log(t('debug.agentConfigAdminOnly'))
       }
     }
 
     // 工具信息
     const toolsList = agentStore.availableTools ? Object.values(agentStore.availableTools) : []
-    console.log('可用工具:', {
+    console.log(t('debug.availableTools'), {
       count: toolsList.length,
       tools: toolsList
     })
 
     // 配置项信息（管理员可见）
     if (userStore.isAdmin && agentStore.selectedAgent) {
-      console.log('可配置项:', toRaw(agentStore.configurableItems))
+      console.log(t('debug.configurableItems'), toRaw(agentStore.configurableItems))
     }
   } catch (error) {
-    console.error('获取智能体配置失败:', error)
-    message.error('获取智能体配置失败: ' + error.message)
+    console.error(t('debug.fetchAgentConfigFailed'), error)
+    message.error(t('debug.fetchAgentConfigFailed') + ': ' + error.message)
   }
 }
 
@@ -543,11 +547,11 @@ const fetchUsers = async () => {
       headers: userStore.getAuthHeaders()
     })
     if (!response.ok) {
-      throw new Error('获取用户列表失败')
+      throw new Error(t('debug.fetchUsersFailed'))
     }
     state.users = await response.json()
   } catch (err) {
-    message.error(`获取用户列表失败: ${err.message}`)
+    message.error(t('debug.fetchUsersFailedDetail', { message: err.message }))
   }
 }
 
@@ -564,10 +568,10 @@ const switchToUser = async (user) => {
 
   // 危险操作确认
   Modal.confirm({
-    title: '⚠️ 危险操作确认',
-    content: `确定要切换为用户 "${user.username}" 吗？此操作将被记录。`,
-    okText: '确认切换',
-    cancelText: '取消',
+    title: t('debug.dangerConfirmTitle'),
+    content: t('debug.switchUserConfirmContent', { username: user.username }),
+    okText: t('debug.confirmSwitch'),
+    cancelText: t('common.cancel'),
     okType: 'danger',
     onOk: async () => {
       state.switchingUser = true
@@ -578,17 +582,17 @@ const switchToUser = async (user) => {
         })
         if (!response.ok) {
           const error = await response.json()
-          throw new Error(error.detail || '切换用户失败')
+          throw new Error(error.detail || t('debug.switchUserFailed'))
         }
         const data = await response.json()
         // 设置新 token
         localStorage.setItem('user_token', data.access_token)
-        message.success(`已切换用户: ${user.username}`)
+        message.success(t('debug.switchedUser', { username: user.username }))
         state.showUserSwitcher = false
         // 刷新页面以重新初始化应用
         window.location.reload()
       } catch (err) {
-        message.error(`切换失败: ${err.message}`)
+        message.error(t('debug.switchFailedDetail', { message: err.message }))
       } finally {
         state.switchingUser = false
       }

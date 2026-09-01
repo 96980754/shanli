@@ -1,23 +1,33 @@
-export const KNOWLEDGE_CONFLICT_RESOLUTIONS = [
-  { value: 'keep_old', label: '保留旧值' },
-  { value: 'use_new', label: '使用新值' },
-  { value: 'merge', label: '合并' },
-  { value: 'keep_both_by_version', label: '按版本分别保留' },
-  { value: 'mark_as_completion', label: '标记为补全' },
-  { value: 'link_existing_entity', label: '关联已有实体' },
-  { value: 'create_new_entity', label: '创建新实体' },
-  { value: 'defer', label: '暂缓' },
-  { value: 'reject_incoming', label: '拒绝新候选' }
-]
-export const knowledgeConflictClassificationLabel = (classification) =>
-  ({
-    DUPLICATE: '重复',
-    COMPLETION: '补全',
-    UPDATE: '更新',
-    CONFLICT: '冲突',
-    LINK_AMBIGUOUS: '实体待确认',
-    INVALID: '无效'
-  })[classification] || classification
+import { i18n } from '@/i18n'
+
+const RESOLUTION_LABEL_KEYS = {
+  keep_old: 'conflict.resolutionKeepOld',
+  use_new: 'conflict.resolutionUseNew',
+  merge: 'conflict.resolutionMerge',
+  keep_both_by_version: 'conflict.resolutionKeepBothByVersion',
+  mark_as_completion: 'conflict.resolutionMarkAsCompletion',
+  link_existing_entity: 'conflict.resolutionLinkExistingEntity',
+  create_new_entity: 'conflict.resolutionCreateNewEntity',
+  defer: 'conflict.resolutionDefer',
+  reject_incoming: 'conflict.resolutionRejectIncoming'
+}
+
+export const KNOWLEDGE_CONFLICT_RESOLUTIONS = Object.entries(RESOLUTION_LABEL_KEYS).map(
+  ([value, key]) => ({ value, label: i18n.global.t(key) })
+)
+
+export const knowledgeConflictClassificationLabel = (classification) => {
+  const key = {
+    DUPLICATE: 'conflict.classificationDuplicate',
+    COMPLETION: 'conflict.classificationCompletion',
+    UPDATE: 'conflict.classificationUpdate',
+    CONFLICT: 'conflict.classificationConflict',
+    LINK_AMBIGUOUS: 'conflict.classificationLinkAmbiguous',
+    INVALID: 'conflict.classificationInvalid'
+  }[classification]
+  return key ? i18n.global.t(key) : classification
+}
+
 export const knowledgeConflictClassificationColor = (classification) =>
   ({
     DUPLICATE: 'default',
@@ -27,20 +37,28 @@ export const knowledgeConflictClassificationColor = (classification) =>
     LINK_AMBIGUOUS: 'orange',
     INVALID: 'volcano'
   })[classification] || 'default'
-export const knowledgeConflictStatusLabel = (status) =>
-  ({ pending: '待处理', resolved: '已处理', deferred: '已暂缓', ignored: '已忽略' })[status] ||
-  status
-export const knowledgePublishStatusLabel = (status) =>
-  ({
-    not_requested: '未请求发布',
-    pending: '待发布',
-    processing: '发布中',
-    succeeded: '已发布',
-    failed: '发布失败',
-    dead_letter: '需人工处理'
-  })[status] ||
-  status ||
-  '未请求发布'
+
+export const knowledgeConflictStatusLabel = (status) => {
+  const key = {
+    pending: 'conflict.statusPending',
+    resolved: 'conflict.statusResolved',
+    deferred: 'conflict.statusDeferred',
+    ignored: 'conflict.statusIgnored'
+  }[status]
+  return key ? i18n.global.t(key) : status
+}
+
+export const knowledgePublishStatusLabel = (status) => {
+  const key = {
+    not_requested: 'conflict.publishNotRequested',
+    pending: 'conflict.publishPending',
+    processing: 'conflict.publishProcessing',
+    succeeded: 'conflict.publishSucceeded',
+    failed: 'conflict.publishFailed',
+    dead_letter: 'conflict.publishDeadLetter'
+  }[status]
+  return key ? i18n.global.t(key) : status || i18n.global.t('conflict.publishNotRequested')
+}
 export const canRetryKnowledgePublish = (item, readonly) =>
   !readonly && ['failed', 'dead_letter'].includes(item?.publish_status)
 export const formatKnowledgeValue = (value, unit = '') => {
