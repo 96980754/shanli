@@ -74,6 +74,11 @@ from yuxi.services.document_qa_service import (
     QAVersionConflict,
     enqueue_document_qa_generation,
 )
+from yuxi.services.document_diff_service import (
+    DocumentDiffFamilyMismatchError,
+    DocumentDiffNotFoundError,
+    DocumentDiffService,
+)
 from yuxi.services.document_version_service import DocumentVersionService
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
@@ -340,6 +345,13 @@ class DocumentVersionRejectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str | None = Field(default=None, max_length=500)
+
+
+class DocumentDiffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_a_file_id: str = Field(min_length=1, max_length=256)
+    version_b_file_id: str = Field(min_length=1, max_length=256)
 
 
 class PendingIndexDocumentsRequest(BaseModel):
@@ -1447,6 +1459,32 @@ async def list_source_versions(
         file_ids=request.file_ids,
     )
     return {"items": items}
+
+
+@knowledge.post("/databases/{kb_id}/documents/diff")
+async def diff_document_versions(
+    kb_id: str,
+    request: DocumentDiffRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """文本级逐行对比同一逻辑文档的两个版本，返回 base/target 元信息 + 行级 diff。
+
+    两个 file_id 都必须属于 kb_id 且同属一个文档家族（同 logical_document_id 或经
+    supersedes/previous 链可归并）；文本内容严格按各自 file_id 读取，历史版本不重定向
+    当前版。文本相同返回空 hunks + identical=true，不报错。
+    """
+    await _require_kb_permission(current_user, kb_id, "can_view")
+    await _ensure_database_supports_documents(kb_id, "文档版本对比")
+    try:
+        return await DocumentDiffService().diff_versions(
+            kb_id=kb_id,
+            version_a_file_id=request.version_a_file_id,
+            version_b_file_id=request.version_b_file_id,
+        )
+    except DocumentDiffNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentDiffFamilyMismatchError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @knowledge.get("/databases/{kb_id}/documents/{candidate_file_id}/validation-report")

@@ -567,7 +567,11 @@ export default {
     "originalDownloadSuccess": "Original downloaded successfully",
     "originalDownloadFailed": "Failed to download original",
     "historyDownloadSuccess": "Version V{version} downloaded successfully",
-    "historyDownloadFailed": "Failed to download history version"
+    "historyDownloadFailed": "Failed to download history version",
+    "answerBasedOnCurrentVersion": "This answer is based on the current version V{version} of “{name}”; historical versions were not part of this answer.",
+    "versionIntentHeading": "Your question may involve document versions.",
+    "versionIntentDocLine": "This answer is based on the current version V{current} of “{name}”; historical versions ({history}) were not used for retrieval.",
+    "versionIntentGuide": "To view a specific version or compare versions, use “Version Compare” or the history preview on the file side."
   },
   "msgInput": {
     "noOptions": "No options configured",
@@ -1563,7 +1567,19 @@ export default {
     "confirmRejectNewTitle": "Confirm rejecting the new version?",
     "confirmRejectNewContent": "After rejection, the old version remains active and the knowledge change report is kept.",
     "rejectedNewVersion": "New version rejected; the old version remains active",
-    "rejectNewVersionFailed": "Failed to reject the new version"
+    "rejectNewVersionFailed": "Failed to reject the new version",
+    "compareVersions": "Compare Versions",
+    "compareButton": "Compare",
+    "comparePickHint": "Selected {name} as the base (older). Click another version to compare; ordered oldest → newest",
+    "diffOldLabel": "Old version",
+    "diffNewLabel": "New version",
+    "diffStatAdded": "Added {count} lines",
+    "diffStatRemoved": "Removed {count} lines",
+    "diffStatUnchanged": "Unchanged {count} lines",
+    "diffIdentical": "The two versions have identical text content",
+    "backToVersionList": "Back to version list",
+    "swapAB": "Swap A/B",
+    "loadVersionDiffFailed": "Failed to load version diff"
   },
   "agentPanel": {
     "closeFilePanel": "Close file panel",

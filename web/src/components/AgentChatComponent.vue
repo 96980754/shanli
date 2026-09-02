@@ -103,6 +103,8 @@
                   :show-refs="['model', 'copy', 'sources']"
                   :is-latest-message="false"
                   :sources="getConversationSources(row.conv)"
+                  show-answer-notes
+                  :query-text="getConversationQuery(row.conv)"
                 />
               </div>
               <div v-else class="chat-inline-notice">
@@ -2923,6 +2925,12 @@ const getConversationSources = (conv) => {
   return MessageProcessor.hasKnowledgeRetrieval(conv)
     ? { ...extracted, knowledgeChunks: citedChunks, knowledgeActivity: true }
     : extracted
+}
+
+// 该轮对话的人类提问文本（供版本意图规则识别；会话首条消息即用户问题）
+const getConversationQuery = (conv) => {
+  const first = conv?.messages?.[0]
+  return first?.type === 'human' ? String(first.content || '').trim() : ''
 }
 
 // ==================== LIFECYCLE & WATCHERS ====================

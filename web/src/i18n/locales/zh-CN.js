@@ -567,7 +567,11 @@ export default {
     "originalDownloadSuccess": "原文下载成功",
     "originalDownloadFailed": "原文下载失败",
     "historyDownloadSuccess": "历史版本 V{version} 下载成功",
-    "historyDownloadFailed": "历史版本下载失败"
+    "historyDownloadFailed": "历史版本下载失败",
+    "answerBasedOnCurrentVersion": "本回答基于《{name}》当前版本 V{version} 生成，历史版本未参与本次回答。",
+    "versionIntentHeading": "您的问题可能涉及文档版本。",
+    "versionIntentDocLine": "本回答基于《{name}》当前版本 V{current} 回答；历史版本（{history}）内容未参与本次检索。",
+    "versionIntentGuide": "如需查看某版内容或版本差异，请使用文件侧『版本对比』或历史版本预览。"
   },
   "msgInput": {
     "noOptions": "没有配置 options",
@@ -1563,7 +1567,19 @@ export default {
     "confirmRejectNewTitle": "确认拒绝新版？",
     "confirmRejectNewContent": "拒绝后旧版继续生效，知识变更报告仍会保留。",
     "rejectedNewVersion": "已拒绝新版，旧版继续生效",
-    "rejectNewVersionFailed": "拒绝新版失败"
+    "rejectNewVersionFailed": "拒绝新版失败",
+    "compareVersions": "版本对比",
+    "compareButton": "对比",
+    "comparePickHint": "已选 {name} 作为基准（旧版），请再点击要对比的另一个版本，将按 旧→新 排列",
+    "diffOldLabel": "旧版",
+    "diffNewLabel": "新版",
+    "diffStatAdded": "新增 {count} 行",
+    "diffStatRemoved": "删除 {count} 行",
+    "diffStatUnchanged": "未变 {count} 行",
+    "diffIdentical": "两个版本文本内容一致，无差异",
+    "backToVersionList": "返回版本列表",
+    "swapAB": "交换 A/B",
+    "loadVersionDiffFailed": "加载版本对比失败"
   },
   "agentPanel": {
     "closeFilePanel": "关闭文件面板",

@@ -1,5 +1,11 @@
 <template>
   <div class="refs" v-if="showRefs">
+    <!-- 问答侧多版本提示/澄清：命中多版本文档时在回答底部提示「基于当前版本」；版本意图命中时切换为澄清注记与对比引导 -->
+    <AnswerVersionNotes
+      v-if="showAnswerNotes"
+      :chunks="knowledgeChunks"
+      :query-text="queryText"
+    />
     <div class="tags">
       <!-- 反馈 -->
       <span
@@ -123,6 +129,7 @@ import { agentApi } from '@/apis'
 import { MessageProcessor } from '@/utils/messageProcessor'
 import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
+import AnswerVersionNotes from '@/components/AnswerVersionNotes.vue'
 
 const emit = defineEmits(['retry', 'openRefs'])
 const { t } = useI18n()
@@ -139,6 +146,15 @@ const props = defineProps({
   sources: {
     type: Object,
     default: () => ({})
+  },
+  // 问答侧多版本提示：由对话级（会话底部）调用方开启并传入该轮用户问题
+  showAnswerNotes: {
+    type: Boolean,
+    default: false
+  },
+  queryText: {
+    type: String,
+    default: ''
   }
 })
 
