@@ -11,13 +11,8 @@ from urllib.parse import quote
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
-from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
-from yuxi.repositories.task_repository import TaskRepository
-from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from starlette.responses import StreamingResponse
 from yuxi import config
-from server.routers.workspace_router import _preview_response
 from yuxi.knowledge.chunking.ragflow_like.presets import get_chunk_preset_options
 from yuxi.knowledge.factory import KnowledgeBaseFactory
 from yuxi.knowledge.graphs.milvus_graph_service import (
@@ -33,12 +28,7 @@ from yuxi.knowledge.utils import (
     parse_minio_url,
     sanitize_processing_error,
 )
-from yuxi.knowledge.utils.office_content import extract_office_content
-from yuxi.knowledge.utils.office_writer import (
-    markdown_to_blocks,
-    markdown_to_sheets,
-    serialize_edited_content,
-)
+from yuxi.knowledge.utils.document_cleaner import clean_document_file, clean_document_markdown
 from yuxi.knowledge.utils.mindmap_utils import (
     batch_remove_files_from_mindmap,
     generate_database_mindmap,
@@ -48,7 +38,22 @@ from yuxi.knowledge.utils.mindmap_utils import (
     get_mindmap_diff,
     remove_file_from_mindmap,
 )
-from yuxi.knowledge.utils.document_cleaner import clean_document_file, clean_document_markdown
+from yuxi.knowledge.utils.office_content import extract_office_content
+from yuxi.knowledge.utils.office_writer import (
+    markdown_to_blocks,
+    markdown_to_sheets,
+    serialize_edited_content,
+)
+from yuxi.knowledge.utils.sample_question_utils import (
+    generate_database_sample_questions,
+    get_database_sample_questions,
+)
+from yuxi.knowledge.utils.url_fetcher import fetch_url_content
+from yuxi.models.providers.cache import model_cache
+from yuxi.permissions.knowledge import KNOWLEDGE_PERMISSION_ACTIONS, KnowledgePermissionService
+from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+from yuxi.repositories.knowledge_permission_repository import KnowledgePermissionRepository
+from yuxi.repositories.task_repository import TaskRepository
 from yuxi.services.document_cleaning_service import (
     CleaningVersionConflict,
     DocumentCleaningError,
@@ -69,20 +74,15 @@ from yuxi.services.document_qa_service import (
     QAVersionConflict,
     enqueue_document_qa_generation,
 )
+from yuxi.services.document_version_service import DocumentVersionService
+from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
 from yuxi.services.knowledge_conflict_service import (
     KnowledgeConflictError,
     KnowledgeConflictNotFound,
     KnowledgeConflictService,
     KnowledgeConflictVersionError,
 )
-from yuxi.knowledge.utils.sample_question_utils import (
-    generate_database_sample_questions,
-    get_database_sample_questions,
-)
-from yuxi.knowledge.utils.url_fetcher import fetch_url_content
-from yuxi.models.providers.cache import model_cache
-from yuxi.services.document_version_service import DocumentVersionService
-from yuxi.services.knowledge_category_service import KnowledgeCategoryError, KnowledgeCategoryService
 from yuxi.services.knowledge_preview_service import (
     KnowledgePreviewModelError,
     KnowledgePreviewRetrievalError,
@@ -91,7 +91,6 @@ from yuxi.services.knowledge_preview_service import (
 from yuxi.services.knowledge_source_version_service import KnowledgeSourceVersionService
 from yuxi.services.run_queue_service import get_arq_pool
 from yuxi.services.task_service import TaskContext, tasker
-from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.wecom_handoff_service import KnowledgeHandoffService
 from yuxi.services.workspace_service import MAX_WORKSPACE_UPLOAD_SIZE_BYTES, resolve_workspace_file_path
 from yuxi.storage.minio.client import MinIOClient, aupload_file_to_minio, get_minio_client
@@ -100,6 +99,7 @@ from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
+from server.routers.workspace_router import _preview_response
 from server.utils.auth_middleware import get_admin_user, get_required_user, get_superadmin_user
 
 knowledge = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -374,6 +374,7 @@ class SourceVersionBatchRequest(BaseModel):
 
 class KnowledgeHandoffRequest(BaseModel):
     query: str = Field(min_length=1, max_length=10_000)
+    disposition: dict | None = Field(default=None, description="拒答分类：domain/type/reason，用于按业务域路由企微客服")
 
 
 async def _document_browse_kb_ids(current_user: User) -> tuple[list[str], dict[str, str]]:
@@ -1847,6 +1848,7 @@ async def add_uploaded_documents(
     failed_items: list[dict] = []
     for index, item in enumerate(payload.items):
         try:
+            from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
             from yuxi.services.document_ingestion_service import (
                 DocumentIngestionService,
                 DuplicateConflictError,
@@ -1854,7 +1856,6 @@ async def add_uploaded_documents(
                 InvalidReplacementTargetError,
                 ReplacementInProgressError,
             )
-            from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
 
             creation = await DocumentIngestionService().create_uploaded_document(
                 kb_id=kb_id,
@@ -2675,7 +2676,7 @@ async def global_knowledge_search(
 
 @knowledge.post("/handoffs")
 async def create_knowledge_handoff(request: KnowledgeHandoffRequest, current_user: User = Depends(get_required_user)):
-    return await KnowledgeHandoffService().create_and_open(current_user, request.query)
+    return await KnowledgeHandoffService().create_and_open(current_user, request.query, disposition=request.disposition)
 
 
 @knowledge.post("/databases/{kb_id}/query-test")
@@ -3085,14 +3086,14 @@ async def upload_file(
     content_hash = await calculate_content_hash(file_bytes)
 
     # 重复检测策略（PR12 吸收）：prompt/skip/replace/keep_both
+    from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
     from yuxi.services.document_ingestion_service import (
+        DocumentIngestionService,
         DuplicateConflictError,
         DuplicateStrategyError,
-        DocumentIngestionService,
         InvalidReplacementTargetError,
         ReplacementInProgressError,
     )
-    from yuxi.repositories.knowledge_file_repository import ParentFolderNotFoundError
 
     if kb_id:
         try:

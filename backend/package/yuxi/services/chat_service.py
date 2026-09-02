@@ -33,9 +33,12 @@ from yuxi.repositories.subagent_thread_repository import SubagentThreadRepositor
 from yuxi.services.conversation_service import serialize_attachment
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.knowledge_answer_disposition import (
+    HANDOFF_REFUSAL_TYPES,
     apply_knowledge_disposition,
+    apply_refusal_judgment,
     build_knowledge_evidence,
     is_final_assistant_message,
+    judge_refusal,
 )
 from yuxi.services.knowledge_gap_service import record_knowledge_gap
 from yuxi.services.langfuse_service import (
@@ -628,6 +631,27 @@ async def save_partial_message(
         return None
 
 
+async def _resolve_agent_domain(conv_repo: ConversationRepository, thread_id: str) -> str | None:
+    """从会话对应 Agent 的配置解析业务域（Agent.config_json.escalation.domain）。
+
+    仅拒答时调用；解析失败或未配置返回 None，由调用方落 unknown。
+    """
+    try:
+        conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
+        agent_slug = str(getattr(conversation, "agent_id", "") or "")
+        if not agent_slug:
+            return None
+        async with pg_manager.get_async_session_context() as session:
+            agent = await AgentRepository(session).get_by_slug(agent_slug)
+        if agent is None:
+            return None
+        domain = (agent.config_json or {}).get("escalation", {}).get("domain")
+        return str(domain).strip() or None
+    except Exception as exc:  # noqa: BLE001 — 域解析失败不影响消息保存
+        logger.warning("解析 agent 业务域失败，按 unknown 处理: {}", exc)
+        return None
+
+
 async def save_messages_from_langgraph_state(
     agent_instance,
     thread_id: str,
@@ -676,11 +700,25 @@ async def save_messages_from_langgraph_state(
                 question=knowledge_question,
                 evidence=knowledge_evidence,
             )
-            # 拒答消息标记可转人工，前端据此展示「转人工」按钮（企微客服）。
+            # 拒答消息：无检索证据的分支用 LLM judge 区分知识缺口/跑题/跨域/策略拦截，
+            # 再落业务域；仅知识类/范围类标记可转人工，策略类拒答不转普通客服。
+            # 域解析只在拒答分支执行，正常回答零额外 DB/LLM 开销。
             disposition = msg_dict.get("knowledge_disposition") or {}
-            if disposition.get("type") == "knowledge_refusal":
-                msg_dict["handoff_available"] = True
-                msg_dict["handoff_query"] = knowledge_question or ""
+            if disposition.get("judgment_required"):
+                judgment = await judge_refusal(knowledge_question or "")
+                disposition = apply_refusal_judgment(disposition, judgment)
+                msg_dict["knowledge_disposition"] = disposition
+            if disposition.get("type") in HANDOFF_REFUSAL_TYPES or disposition.get("type") == "policy_refusal":
+                # 业务域：agent 绑域优先（零调用、可靠），judge 猜测仅在未绑定时兜底。
+                agent_domain = await _resolve_agent_domain(conv_repo, thread_id)
+                if agent_domain:
+                    disposition["domain"] = agent_domain
+                else:
+                    disposition.setdefault("domain", "unknown")
+                msg_dict["knowledge_disposition"] = disposition
+                if disposition.get("type") in HANDOFF_REFUSAL_TYPES:
+                    msg_dict["handoff_available"] = True
+                    msg_dict["handoff_query"] = knowledge_question or ""
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,

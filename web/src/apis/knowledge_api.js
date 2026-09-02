@@ -714,7 +714,8 @@ export const queryApi = {
   globalSearch: async (query, limit = 10) => {
     return apiPost('/api/knowledge/search', { query, limit })
   },
-  createHandoff: async (query) => apiPost('/api/knowledge/handoffs', { query }),
+  createHandoff: async (query, disposition = null) =>
+    apiPost('/api/knowledge/handoffs', { query, disposition }),
 
   /**
    * 查询知识库

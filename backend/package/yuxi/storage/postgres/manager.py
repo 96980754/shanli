@@ -911,6 +911,9 @@ class PostgresManager(metaclass=SingletonMeta):
             """,
             "CREATE INDEX IF NOT EXISTS ix_knowledge_handoffs_uid_query_created "
             "ON knowledge_handoffs(uid, query_hash, created_at DESC)",
+            "ALTER TABLE IF EXISTS knowledge_handoffs ADD COLUMN IF NOT EXISTS domain VARCHAR(64)",
+            "ALTER TABLE IF EXISTS knowledge_handoffs ADD COLUMN IF NOT EXISTS refusal_type VARCHAR(32)",
+            "ALTER TABLE IF EXISTS knowledge_handoffs ADD COLUMN IF NOT EXISTS refusal_reason VARCHAR(64)",
             """
             CREATE TABLE IF NOT EXISTS agent_envs (
                 id SERIAL PRIMARY KEY,

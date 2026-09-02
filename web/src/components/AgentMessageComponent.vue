@@ -233,7 +233,10 @@ const createHandoff = async () => {
   }
   handoffSending.value = true
   try {
-    const result = await queryApi.createHandoff(handoffQuery.value)
+    const result = await queryApi.createHandoff(
+      handoffQuery.value,
+      props.message.extra_metadata?.knowledge_disposition || null
+    )
     if (!result.customer_service_url) {
       throw new Error(t('chat.wecomNotConfigured'))
     }

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import tomli
 import tomli_w
 from pydantic import BaseModel, Field, PrivateAttr
+from pydantic_core import PydanticUndefined
 
 from yuxi.config import cache as runtime_cache
 from yuxi.knowledge.parser.registry import PROCESSOR_TYPES
@@ -27,6 +30,52 @@ def _normalize_default_ocr_engine(value: Any) -> str:
     if engine not in _get_available_ocr_engines():
         raise ValueError(f"不支持的默认 OCR 引擎: {engine}")
     return engine
+
+
+def _is_https_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme == "https" and bool(parsed.netloc)
+
+
+def _parse_wecom_customer_service_urls(raw: str) -> dict[str, str]:
+    """解析 WECOM_CUSTOMER_SERVICE_URLS 环境变量（JSON：{业务域: URL}）。"""
+    if not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("企微客服域名 URL 配置不是合法 JSON，已忽略: {}", raw[:120])
+        return {}
+    if not isinstance(payload, dict):
+        logger.warning("企微客服域名 URL 配置应为 JSON 对象，已忽略")
+        return {}
+    return {str(key).strip(): str(value).strip() for key, value in payload.items() if str(value).strip()}
+
+
+def _normalize_wecom_customer_service_url(value: Any) -> str:
+    url = str(value or "").strip()
+    if url and not _is_https_url(url):
+        raise ValueError(f"企微客服 URL 必须是 https 地址: {url[:80]}")
+    return url
+
+
+def _normalize_wecom_customer_service_urls(value: Any) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("企微客服域名 URL 配置必须是 {业务域: https地址} 的映射")
+    normalized = {}
+    for key, url in value.items():
+        domain = str(key).strip()
+        if not domain:
+            continue
+        clean_url = str(url or "").strip()
+        if not clean_url:
+            continue
+        if not _is_https_url(clean_url):
+            raise ValueError(f"企微客服域名 {domain} 的 URL 必须是 https 地址: {clean_url[:80]}")
+        normalized[domain] = clean_url
+    return normalized
 
 
 class Config(BaseModel):
@@ -104,6 +153,17 @@ class Config(BaseModel):
     sandbox_max_output_bytes: int = Field(default=262144, description="沙箱最大输出字节数")
     sandbox_keepalive_interval_seconds: int = Field(default=30, description="沙箱保活间隔")
 
+    # 拒答转人工：企微客服入口（管理界面可配，保存后立即生效并同步到各进程）。
+    # 环境变量 WECOM_CUSTOMER_SERVICE_URL / WECOM_CUSTOMER_SERVICE_URLS 仅作为首次启动的默认值。
+    wecom_customer_service_url: str = Field(
+        default="",
+        description="企微客服（微信客服）入口 URL；未配置或非 https 时转人工不可用",
+    )
+    wecom_customer_service_urls: dict[str, str] = Field(
+        default_factory=dict,
+        description="按业务域配置企微客服入口 URL，如 {\"diaodutai\": \"https://...\"}；未配置的域回退全局 URL",
+    )
+
     _config_file: Path | None = PrivateAttr(default=None)
     _runtime_sync_thread: Any = PrivateAttr(default=None)
 
@@ -161,6 +221,14 @@ class Config(BaseModel):
             os.getenv("SANDBOX_KEEPALIVE_INTERVAL_SECONDS") or self.sandbox_keepalive_interval_seconds or 30
         )
 
+        # 企微客服入口：环境变量仅作首次启动默认；管理界面保存过（base.toml 已持久化）后以此为准。
+        if not self.wecom_customer_service_url:
+            self.wecom_customer_service_url = (os.getenv("WECOM_CUSTOMER_SERVICE_URL") or "").strip()
+        if not self.wecom_customer_service_urls:
+            self.wecom_customer_service_urls = _parse_wecom_customer_service_urls(
+                os.getenv("WECOM_CUSTOMER_SERVICE_URLS", "")
+            )
+
         if self.sandbox_provider.lower() != "provisioner":
             raise ValueError("Only sandbox_provider=provisioner is supported.")
         if not self.sandbox_provisioner_url:
@@ -191,7 +259,11 @@ class Config(BaseModel):
             if field_info.exclude:
                 continue
             current_value = getattr(self, field_name)
-            if current_value != field_info.default:
+            # default_factory 字段没有字面 default（PydanticUndefined），按工厂值比较，避免空容器被无谓落盘。
+            default_value = field_info.default
+            if default_value is PydanticUndefined and field_info.default_factory is not None:
+                default_value = field_info.default_factory()
+            if current_value != default_value:
                 user_modified[field_name] = current_value
 
         try:
@@ -239,6 +311,10 @@ class Config(BaseModel):
     def _normalize_config_value(self, key: str, value: Any) -> Any:
         if key == "default_ocr_engine":
             return _normalize_default_ocr_engine(value)
+        if key == "wecom_customer_service_url":
+            return _normalize_wecom_customer_service_url(value)
+        if key == "wecom_customer_service_urls":
+            return _normalize_wecom_customer_service_urls(value)
         return value
 
 

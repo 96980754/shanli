@@ -123,6 +123,47 @@
           </div>
         </div>
       </template>
+
+      <!-- 企微客服（拒答转人工） -->
+      <div class="section-title">{{ $t('settings.wecomTitle') }}</div>
+      <div class="section wecom-section">
+        <p class="section-description">{{ $t('settings.wecomDesc') }}</p>
+        <div class="setting-row">
+          <div class="col-item">
+            <div class="setting-label">{{ $t('settings.wecomGlobalUrl') }}</div>
+            <a-input
+              v-model:value="globalWecomUrl"
+              :placeholder="$t('settings.wecomGlobalUrlPlaceholder')"
+              @change="wecomDirty = true"
+              @blur="saveGlobalWecomUrl"
+            />
+          </div>
+        </div>
+        <div class="setting-label wecom-domain-title">{{ $t('settings.wecomDomainUrls') }}</div>
+        <div v-for="(row, index) in wecomRows" :key="index" class="wecom-row">
+          <a-input
+            v-model:value="row.domain"
+            :placeholder="$t('settings.wecomDomainKeyPlaceholder')"
+            class="wecom-domain-key"
+            @change="wecomDirty = true"
+          />
+          <a-input
+            v-model:value="row.url"
+            :placeholder="$t('settings.wecomDomainUrlPlaceholder')"
+            class="wecom-domain-url"
+            @change="wecomDirty = true"
+          />
+          <a-button type="text" class="wecom-remove-btn" @click="removeWecomRow(index)">
+            {{ $t('settings.wecomDelete') }}
+          </a-button>
+        </div>
+        <div class="wecom-actions">
+          <a-button size="small" @click="addWecomRow">{{ $t('settings.wecomAddDomain') }}</a-button>
+          <a-button size="small" type="primary" @click="saveWecomConfig">
+            {{ $t('settings.wecomSave') }}
+          </a-button>
+        </div>
+      </div>
     </template>
 
     <!-- 服务链接部分 -->
@@ -195,13 +236,17 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
+import { computed, h, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
+import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
 import { useUserStore } from '@/stores/user'
 import { Globe } from 'lucide-vue-next'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import RerankModelSelector from '@/components/RerankModelSelector.vue'
+
+const { t } = useI18n()
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
@@ -241,6 +286,69 @@ const handleContentGuardModelSelect = (spec) => {
   if (typeof spec === 'string' && spec) {
     configStore.setConfigValue('content_guard_llm_model', spec)
   }
+}
+
+// ---- 企微客服（拒答转人工）配置 ----
+const isHttpsUrl = (url) => {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const wecomDirty = ref(false)
+const globalWecomUrl = ref('')
+const wecomRows = ref([])
+
+// 配置异步加载时回填一次；用户在编辑中（wecomDirty）不覆盖。
+watch(
+  () => configStore.config?.wecom_customer_service_urls,
+  (urls) => {
+    if (wecomDirty.value) return
+    wecomRows.value = Object.entries(urls || {}).map(([domain, url]) => ({ domain, url }))
+    globalWecomUrl.value = configStore.config?.wecom_customer_service_url || ''
+  },
+  { immediate: true, deep: true }
+)
+
+const addWecomRow = () => {
+  wecomRows.value.push({ domain: '', url: '' })
+  wecomDirty.value = true
+}
+
+const removeWecomRow = (index) => {
+  wecomRows.value.splice(index, 1)
+  wecomDirty.value = true
+}
+
+const saveGlobalWecomUrl = () => {
+  const url = (globalWecomUrl.value || '').trim()
+  if (url && !isHttpsUrl(url)) {
+    message.error(t('settings.wecomInvalidUrl'))
+    return
+  }
+  wecomDirty.value = false
+  configStore.setConfigValue('wecom_customer_service_url', url)
+}
+
+const saveWecomConfig = () => {
+  const urls = {}
+  for (const row of wecomRows.value) {
+    const domain = (row.domain || '').trim()
+    const url = (row.url || '').trim()
+    if (!domain) continue
+    if (!url) continue
+    if (!isHttpsUrl(url)) {
+      message.error(t('settings.wecomInvalidUrl'))
+      return
+    }
+    urls[domain] = url
+  }
+  wecomDirty.value = false
+  configStore.setConfigValue('wecom_customer_service_urls', urls)
+  message.success(t('settings.wecomSaved'))
 }
 
 const openLink = (url) => {
@@ -330,6 +438,36 @@ const openLink = (url) => {
   .agent-select {
     width: 320px;
     max-width: 100%;
+  }
+
+  .wecom-section {
+    .wecom-domain-title {
+      margin-top: 8px;
+    }
+
+    .wecom-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+
+      .wecom-domain-key {
+        width: 200px;
+        max-width: 30%;
+      }
+
+      .wecom-domain-url {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+
+    .wecom-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
   }
 
   .services-grid {

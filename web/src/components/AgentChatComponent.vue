@@ -2904,7 +2904,8 @@ const getConversationSources = (conv) => {
   const lastMessage = getLastMessage(conv)
   const disposition = lastMessage?.extra_metadata?.knowledge_disposition
   const dispositionType = disposition?.type
-  if (dispositionType === 'knowledge_refusal' || dispositionType === 'system_error') {
+  // 拒答（含策略拦截/范围类）与系统错误均无可用来源：点开为空即可，不展示检索候选。
+  if (['knowledge_refusal', 'scope_refusal', 'policy_refusal', 'system_error'].includes(dispositionType)) {
     return { knowledgeChunks: [], webSources: [], knowledgeActivity: true }
   }
   const extracted = MessageProcessor.extractSourcesFromConversation(
