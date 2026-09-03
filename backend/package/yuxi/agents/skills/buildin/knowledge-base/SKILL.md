@@ -17,6 +17,7 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 - `open_kb_document`：按 `kb_id` 和 `file_id` 打开文档原文窗口。
 - `find_kb_document`：在已知文档内使用关键词或正则定位段落。
 - `search_file`：按文件名关键词搜索知识库文件。
+- `read_document_version`：读取某文档**历史归档版本**的正文（只读）。仅当用户问历史/旧版内容、或要做版本对比时使用；它不返回当前版本（当前版本用 `query_kb` / `open_kb_document`）。版本号以文件名标签为准（如《测试文档-v1.1.docx》→ V1.1）；不知道有哪些历史版本时先不带 `document_version` 调用，看返回清单再选定。
 
 ## 标准操作流程
 
@@ -30,6 +31,12 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 6. Dify、Notion 等外部只读知识库可能只支持检索，不一定支持打开全文或文档内查找；工具返回能力限制时应如实告知用户，不要重复调用不支持的操作。
 7. 仅依据本轮真实返回的片段形成答案，并按业务问题类型组织输出。
 8. 仅展示本轮工具真实返回的来源字段；相同来源去重。
+
+### 历史版本 / 版本对比
+
+- 用户询问某文档的历史/旧版内容，或要求对比新旧版本时：先定位家族与版本——不确定家族名先 `search_file`；不知道有哪些历史版本时先不带 `document_version` 调用 `read_document_version` 看清单，再按选定版本读取归档正文。
+- 要对比“当前 vs 某历史版本”时：当前版本正文用 `query_kb` / `open_kb_document` 读取，历史版本用 `read_document_version`；两边正文都在手再组织对比，不要凭空猜测旧版内容。
+- 归档正文只代表该文件被替换前的历史状态；引用时注明版本与文件名（如“该说法来自历史版本 V1.1《测试文档-v1.1.docx》”），并提示可能与当前版本不同。
 
 ## 证据质量判断
 
@@ -67,7 +74,7 @@ description: "使用 AI 知识库检索企业资料并生成有真实依据、�
 
 ## 出处追溯约束
 
-- 来源只能来自本轮 `query_kb`、`query_kbs`、`open_kb_document`、`find_kb_document` 或 `search_file` 的真实返回结果。
+- 来源只能来自本轮 `query_kb`、`query_kbs`、`open_kb_document`、`find_kb_document`、`search_file` 或 `read_document_version` 的真实返回结果。
 - 不得编造或修改 `kb_id`、`file_id`、`document_id`、`chunk_id`、文档名、链接、页码、版本和更新时间。
 - 工具没有返回的字段不要展示。
 - 引用片段应与回答结论直接相关，不得引用无关片段充当依据。

@@ -57,7 +57,8 @@ class ReadOnlyConnectors(KnowledgeBase):
     async def update_content(self, kb_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
         raise self._readonly_error()
 
-    async def delete_file(self, kb_id: str, file_id: str) -> None:
+    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = True) -> None:
+        del family
         raise self._readonly_error()
 
     async def get_file_basic_info(self, kb_id: str, file_id: str) -> dict:

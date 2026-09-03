@@ -364,8 +364,14 @@ async def create_agent_run_view(
     model_spec: str | None = None,
     resume: object | None = None,
     created_by_run_id: str | None = None,
+    version_ask: dict | None = None,
 ) -> dict:
-    """创建 chat/resume run 的 HTTP 入口，输入正文由 Message 承载，run 只登记运行元数据。"""
+    """创建 chat/resume run 的 HTTP 入口，输入正文由 Message 承载，run 只登记运行元数据。
+
+    version_ask：历史版本阅读/对比的结构化请求（kb_id/action/file_ids/versions），
+    命中时 worker 走封闭的 document_version 生成器（不经 agent 图与检索），此处
+    仅透传进 run.input_payload。
+    """
     meta = meta or {}
     if input_message is None and resume is None:
         raise HTTPException(status_code=422, detail="input_message 或 resume 不能为空")
@@ -413,6 +419,16 @@ async def create_agent_run_view(
         input_message=run_input_message,
     )
     input_payload = {"model_spec": resolved_model_spec}
+    # 历史版本阅读/对比：chat 且携带 version_ask 结构化请求时打标，供 worker 分派到
+    # 封闭的 document_version 生成器（仿 industry_solution 标记通道，仅 chat，不继承）。
+    if run_type == "chat" and version_ask:
+        input_payload["version_ask"] = version_ask
+    # 行业方案显式门禁：chat 仅在携带 industry_solution 结构化请求时打标；
+    # resume 继承被恢复 run 的标记，保证行业方案流程中断续答期间技能不丢。
+    if run_type == "chat" and (input_message.extra_metadata or {}).get("industry_solution"):
+        input_payload["industry_solution"] = True
+    elif run_type == "resume" and (scope.parent_run.input_payload or {}).get("industry_solution"):
+        input_payload["industry_solution"] = True
 
     run, created = await persist_agent_run_record(
         agent_slug=agent_slug,

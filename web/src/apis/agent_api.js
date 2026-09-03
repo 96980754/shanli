@@ -110,6 +110,7 @@ export const agentApi = {
       resume: data.resume ?? null,
       created_by_run_id: data.created_by_run_id || null,
       industry_solution: data.industry_solution || null,
+      version_ask: data.version_ask || null,
       output_format: data.output_format || 'default'
     }),
 

@@ -1,0 +1,29 @@
+{"index": 1, "section": "miniserver", "query": "miniserver-miniserver支持监听吗?", "gold_answer": "支持监听"}
+{"index": 2, "section": "miniserver", "query": "miniserver-Miniserver数据保存多久", "gold_answer": "语音记录保存3个月"}
+{"index": 3, "section": "miniserver", "query": "miniserver-Miniserver的OS（操作系统）是什么", "gold_answer": "Debian 9.基于Linux内核"}
+{"index": 4, "section": "miniserver", "query": "miniserver-miniserver支持的数据传输速率是 1gbit/s", "gold_answer": "1gbit/s指的是网卡的带宽即硬件的带宽"}
+{"index": 5, "section": "miniserver", "query": "miniserver-Miniserver调度台定位上报时间不准确/谷歌Key导致地图不显示", "gold_answer": "更新网盘解决对应问题的ROM"}
+{"index": 6, "section": "miniserver", "query": "miniserver-Miniserver规格书", "gold_answer": "Miniserver M200规格书20251125.xlsx"}
+{"index": 7, "section": "miniserver", "query": "miniserver-miniserver网口最大的传输速度", "gold_answer": "1Gbps"}
+{"index": 8, "section": "miniserver", "query": "miniserver-Minisever 上没有多媒体消息菜单", "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放"}
+{"index": 9, "section": "miniserver", "query": "miniserver-Miniserver的3种使用方式", "gold_answer": "局域网方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.终端配置内网IP和context，终端登录（Miniserver tools显示的） c.调度台和运营平台通过内网IP访问 d.不需要在Miniserver管理平台激活 e.不支持容灾 2.固定IP公网方式 a.开机后使用Tools设置本机内网IP，公网IP配置固定的公网IP（如果不固定，重启路由会变，导致终端和调度台无法使用） b.路由上做端口映射 c.终端配置公网IP和context，终端登录（Miniserver tools显示的） d.调度台和运营平台通过公网IP访问 e.不需要在Miniserver管理平台激活 f.不支持容灾 3.代理方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.在Miniserver管理平台上注册设备并激活（激活后语音服务就会走代理） c.终端配置miniserver.pocstar.com:10200和pocstar，终端登录（升级后不需要终端配置，用大公网的版本即可登录） d.调度台和运营平台通过内网IP访问 e.支持容灾（激活时选择）"}
+{"index": 10, "section": "miniserver", "query": "miniserver-固定IP的网络是否支持外网访问运营平台和调度台", "gold_answer": "使用固定IP公网方式配置，此方式可以外网访问运营平台调度台"}
+{"index": 11, "section": "miniserver", "query": "miniserver-miniserver是否支持配置域名和证书", "gold_answer": "不支持配置域名。对于证书，已经添加了SSL证书。对于动态IP的网络，我们系统目前设计是https+IP的方式，而非域名+ssl的方式。对于https+IP的方式，在激活时已经自动添加了SSL加密证书，所以无需再额外申请域名和SSL证书"}
+{"index": 12, "section": "miniserver", "query": "miniserver-新版本是否支持组织/部门管理", "gold_answer": "已发布版本不支持，下一个版本支持"}
+{"index": 13, "section": "miniserver", "query": "miniserver-Mini Server 是否支持多名调度员？", "gold_answer": "支持，调度员占用户数"}
+{"index": 14, "section": "miniserver", "query": "miniserver-Mini Server 是否支持下载单个用户的录音记录？", "gold_answer": "支持，通过调度台下载"}
+{"index": 15, "section": "miniserver", "query": "miniserver-miniserver支持监听吗?", "gold_answer": "支持监听"}
+{"index": 16, "section": "miniserver", "query": "miniserver-Miniserver的OS（操作系统）是什么", "gold_answer": "debian 12"}
+{"index": 17, "section": "miniserver", "query": "miniserver-关于MiniServer（微型服务器）相关能力与限制的结论", "gold_answer": "存量设备不支持升级：今年之前发货的存量MiniServer，由于架构或版本限制，不支持升级到最新版本。 2、新设备支持升级，但需具备镜像恢复能力：今年发货的MiniServer支持版本升级。升级需通过镜像方式进行，我们将提供详细的操作手册，但要求客户具备一定的技术能力以完成镜像恢复操作。 3、账号不支持改名：MiniServer上的用户账号一旦创建，不支持修改名称。 4、热备功能暂不支持，但可定制开发：当前MiniServer版本不支持主备热切换（热备）功能。如有需求，可评估并支持定制开发。 5、DMR网关暂不支持，但可定制开发：当前MiniServer版本不支持DMR网关功能。如有需求，可评估并支持定制开发。 6、容灾功能已支持：MiniServer目前已支持容灾机制，前提条件是只有走代理的方式才支持容灾，能够在异常情况下保障业务的连续性。"}
+{"index": 18, "section": "miniserver", "query": "miniserver-miniserver 云容灾", "gold_answer": "目前是手动，需要在Miniserver管理平台切换。后续看下如何判断异常后，做成自动切。 当初定的自动切会引起不必要的切换，需要有客户使用后，根据实际情况再定自动切换机制 前期方案是运维通过监控Miniserver是否异常发出告警，然后在Miniserver管理平台根据实际情况点击按钮去切"}
+{"index": 19, "section": "miniserver", "query": "miniserver-MINISEVER 新版 录音记录/定位保存多久", "gold_answer": "录音记录6个月，定位记录3个月"}
+{"index": 20, "section": "miniserver", "query": "miniserver-imei在公网激活的，要先删除再激活吗？", "gold_answer": "imei在公网激活的，需要先删除再激活到新版Miniserver下使用"}
+{"index": 21, "section": "miniserver", "query": "miniserver-公司版miniserver可以添加imei吗？", "gold_answer": "可以通过直接输入imei号添加到公司"}
+{"index": 22, "section": "miniserver", "query": "miniserver-调度员如何连接到miniserver", "gold_answer": "ip+端口的方式，但和端口没有任何关系，一个账号连接也不会占用一个端口"}
+{"index": 23, "section": "miniserver", "query": "miniserver-miniserver更换logo/运营平台/调度台", "gold_answer": "属于商机问题，转销售处理。（有量才有可能支持修改logo，需销售去沟通）"}
+{"index": 24, "section": "miniserver", "query": "miniserver-miniserver的终端apk是否支持录音记录功能", "gold_answer": "录音一直都有.小屏机的话得终端改个版本"}
+{"index": 25, "section": "miniserver", "query": "miniserver-miniserver如何开启AES256加密功能", "gold_answer": "miniserver配置完成后，需要在这台机器的运营平台上登录对应的代理商账 号，在公司设置里面把AES256打开 若公司账号是:admin@org.hxd，那么代理商账号是:admin@hxd，密码 是默认的"}
+{"index": 26, "section": "miniserver", "query": "miniserver-miniserver升级后 重新添加账号提示超出授权无法创建", "gold_answer": "联系邹波报客户名字 查询记录，.Miniserver刷镜像后.需要在管理平台上删除重建"}
+{"index": 27, "section": "miniserver", "query": "miniserver-cat1机器智能收到按麦提示音，没有语音", "gold_answer": "检查是否开启了AES256功能，cat1目前不支持语音加密功能"}
+{"index": 28, "section": "miniserver", "query": "miniserver-如果创建好的账号提示账号不存在排查思路", "gold_answer": "检查配置的什么网络； 2、如果是代理模式，我们自己登录看能否登录：如果也登录不了，切换下网络为内网，再切换回去（目的是同步数据到云端） 如果我们可以登录，检查终端登录方式，账号输入之类的 3、如果是固定公网模式，需要改终端的context DNS信息"}
+{"index": 29, "section": "miniserver", "query": "miniserver-miniserver重置网络", "gold_answer": "重置网络：从代理模式-固定ip或者内网模式、固定公网ip模式------恢复到代理模式自动获取ip（其它模式时重置网络慎用） 如果是代理模式自动获取ip换了网线会自动检测，，如果失败就重启Miniserver 如果代理模式固定ip换了网线，需要tools手动设置新的ip，或者重置网络"}

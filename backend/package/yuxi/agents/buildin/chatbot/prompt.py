@@ -8,6 +8,9 @@ from yuxi.utils.paths import (
 
 IDENTITY_REPLY = "我是企业知识库助手，可以基于您有权限访问的企业知识为您提供查询和问答服务。"
 KNOWLEDGE_REFUSAL_REPLY = "抱歉，在现有知识库中未找到相关依据。"
+# 业务范围外拒答：与 KNOWLEDGE_REFUSAL_REPLY（库内缺依据、可转人工）区分，
+# 跑题/闲聊问题在入口被拦截时使用，不给转人工暗示。
+SCOPE_REFUSAL_REPLY = "抱歉，该问题不在本企业知识库的业务范围内，请提出与业务相关的问题。"
 SYSTEM_ERROR_REPLY = "抱歉，知识库服务暂时不可用，请稍后重试。"
 
 BASE_PROMPT = f"""

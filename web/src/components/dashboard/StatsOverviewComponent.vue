@@ -60,9 +60,12 @@
         <div class="stat-icon">
           <Heart class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.satisfactionRateTip')">
           <div class="stat-value">{{ basicStats?.feedback_stats?.satisfaction_rate || 0 }}%</div>
           <div class="stat-label">{{ $t('dash.satisfactionRate') }}</div>
+          <div class="stat-sub" v-if="feedbackStats">
+            {{ $t('dash.participationRate', { rate: feedbackStats.participation_rate || 0 }) }}
+          </div>
         </div>
       </div>
     </div>
@@ -70,6 +73,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import {
   MessageCircle,
   Activity,
@@ -92,6 +96,8 @@ const props = defineProps({
 // Emits
 const emit = defineEmits(['open-feedback'])
 
+const feedbackStats = computed(() => props.basicStats?.feedback_stats || null)
+
 // Methods
 const handleFeedbackClick = () => {
   emit('open-feedback')
@@ -99,7 +105,7 @@ const handleFeedbackClick = () => {
 
 // Methods
 const getSatisfactionClass = () => {
-  const rate = props.basicStats?.feedback_stats?.satisfaction_rate || 0
+  const rate = feedbackStats.value?.satisfaction_rate || 0
   if (rate >= 80) return 'satisfaction-high'
   if (rate >= 60) return 'satisfaction-medium'
   return 'satisfaction-low'
@@ -233,6 +239,13 @@ const getSatisfactionClass = () => {
           color: var(--gray-600);
           font-weight: 500;
           margin-bottom: 8px;
+        }
+
+        .stat-sub {
+          font-size: 12px;
+          color: var(--gray-500);
+          line-height: 1.3;
+          margin-top: -4px;
         }
 
         .stat-trend {

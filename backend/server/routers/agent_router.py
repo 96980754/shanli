@@ -23,6 +23,7 @@ from yuxi.services.agent_run_service import (
     stream_agent_run_events,
 )
 from yuxi.services.curated_qa_run_service import try_create_curated_qa_run
+from yuxi.services.document_version_run_service import DocumentVersionAskRequest
 from yuxi.services.industry_solution_service import IndustrySolutionRequest
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.storage.postgres.models_business import User
@@ -65,6 +66,9 @@ class AgentRunCreate(BaseModel):
     resume: Any | None = Field(None, description="可选，恢复时传给 LangGraph 的输入载荷，非布尔值")
     created_by_run_id: str | None = Field(None, description="可选，创建本 run 的父 run ID；resume 时为被恢复的 run ID")
     industry_solution: IndustrySolutionRequest | None = Field(None, description="可选，结构化多产品行业解决方案请求")
+    version_ask: DocumentVersionAskRequest | None = Field(
+        None, description="可选，历史版本阅读/对比的结构化请求（read 一个版本 / compare 两个版本）"
+    )
     output_format: Literal["default", "table", "steps", "list"] = Field(
         "default", description="可选，本次回答输出格式：table=表格；steps=步骤；list=列表；default=不指定"
     )
@@ -275,6 +279,18 @@ async def create_agent_run(
 
     meta = dict(payload.meta or {})
     if input_message is not None and payload.resume is None:
+        # 历史版本阅读/对比：结构化请求先于人工 QA 命中检测短路，避免合成提问被问答对劫持。
+        if payload.version_ask is not None:
+            return await create_agent_run_view(
+                input_message=input_message,
+                agent_slug=payload.agent_slug,
+                thread_id=payload.thread_id,
+                meta=meta,
+                model_spec=payload.model_spec,
+                current_uid=str(current_user.uid),
+                db=db,
+                version_ask=payload.version_ask.model_dump(),
+            )
         curated_run = await try_create_curated_qa_run(
             input_message=input_message,
             agent_slug=payload.agent_slug,

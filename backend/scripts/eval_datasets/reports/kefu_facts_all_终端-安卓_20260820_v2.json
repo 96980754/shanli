@@ -1,0 +1,2266 @@
+{
+  "run_name": "all_终端-安卓_20260820_v2",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 0.9843137254901961,
+    "scored": 102,
+    "answered": 102,
+    "refusal_gap": 0,
+    "clarify_missing": 0,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 2,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端无法对讲，按下ptt按键后会有tone音但是无法对讲",
+      "gold_answer": "通过重新创建群组添加用户后解决",
+      "agent_answer": "## 结论\n\n该问题在客服知识库中有明确记录，处理方式为：**通过重新创建群组并添加用户后解决**。\n\n## 故障排查信息\n\n| 项目 | 内容 |\n| --- | --- |\n| 现象 | 终端无法对讲，按下 PTT 按键后有 tone 音，但无法对讲 |\n| 处理建议 | 重新创建群组，并将用户添加到新群组中 |\n\n知识库中仅记录了上述现象及对应解决方式，未包含更多可能原因或排查步骤，如需进一步原因分析，建议补充更多现场信息（如群组配置、终端版本等）以便定位。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了明确处理建议，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 1,
+      "section": "终端-安卓",
+      "query": "终端-安卓-固定群组讲话和单呼的临时群组讲话最长时间",
+      "gold_answer": "都是300S.单呼的临时群组最长120S没人讲话会自动解散",
+      "agent_answer": "根据客服知识库中的记载，安卓终端固定群组讲话与单呼临时群组讲话的最长时间如下：\n\n| 项目 | 最长时间 |\n| --- | --- |\n| 固定群组讲话 | 300 秒 |\n| 单呼的临时群组讲话 | 300 秒 |\n| 单呼的临时群组无人讲话自动解散 | 120 秒 |\n\n补充说明（平台可配置范围）：\n- 临时组通话时长可配置范围为 10–300 秒（代理商登录后：公司管理 → 设置）。\n- 临时组超时解散时长可配置范围为 10–120 秒（代理商登录后：公司管理 → 设置）。\n- 平台侧对应参数为 `tempCallDuration = 300`（临时群组通话时长）、`callDuration = 300`（群组通话时长）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了具体时长数据。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 3,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达apphytalk 卸载",
+      "gold_answer": "直接恢复出厂设置就可以",
+      "agent_answer": "**结论**：海能达 HYTalk 应用卸载方式为直接恢复出厂设置。\n\n依据客服知识库记载：\n\n> 海能达 app hytalk 卸载：直接恢复出厂设置就可以。\n\n即通过终端\"设置 → 恢复出厂设置\"操作完成卸载，无需其他特殊步骤。\n\n来源：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了卸载方式，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "终端-安卓",
+      "query": "终端-安卓-打电话和ptt对讲两者接收到的声音都出现了 掺杂在一起",
+      "gold_answer": "需要在手机设置--移动网络里关闭VoIP（VoLTE）功能，不生效就得需要联系运营商 手机安卓10以下有此功能按钮，10以上版本没有此按钮",
+      "agent_answer": "根据客服知识库中的记录，该问题有明确的处理方案：\n\n## 问题：打电话和 PTT 对讲两者接收到的声音掺杂在一起\n\n**处理建议**\n\n1. 在手机 **设置 → 移动网络** 中关闭 **VoIP（VoLTE）** 功能；\n2. 若关闭后仍不生效，需要**联系运营商**处理。\n\n**注意事项**\n\n- 手机 **安卓 10 以下**版本有该功能按钮；\n- 手机 **安卓 10 以上**版本没有此按钮（无法在手机端直接关闭）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了处理方案和注意事项，切题且非拒答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机播报“Try Communication\" 尝试通话",
+      "gold_answer": "需要在account里关闭--reminder定时提醒",
+      "agent_answer": "根据客服知识库中的记录，该问题有明确处理方式：\n\n**结论**：小屏机播报“Try Communication / 尝试通话”，需要在 **account（账号设置）** 中关闭 **reminder（定时提醒）**。\n\n**说明**：这是终端侧提醒功能触发的提示音，关闭 account 下的定时提醒后即可不再播报。\n\n来源：客服知识库（文件：客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了处理方案，与问题相关，实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "终端-安卓",
+      "query": "终端-安卓-查看IMEI 账号",
+      "gold_answer": "setting--about phone--status--imei information",
+      "agent_answer": "**结论**：在安卓终端上查看 IMEI 账号，路径为：设置（setting）→ 关于本机（about phone）→ 状态（status）→ IMEI 信息（imei information）。\n\n知识库中还记载了另一种查询 IMEI 号的方法，可作补充：\n\n| 方式 | 操作 |\n|------|------|\n| 拨号键盘查询 | 在拨号键盘输入 `*#06#`，适用于大部分手机，输入后自动显示 IMEI |\n| 设备设置查看 | 设置 > 关于本机 > IMEI |\n\n**相关限制**：若终端读取不到 IMEI（提示 202），需检查机器安卓版本——安卓 10 以上（多为大屏机）需要厂家签名 APK 才能读取；同时确认机器是否有 IMEI，必要时联系厂家或客服协助咨询。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了查看IMEI的路径。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "终端-安卓",
+      "query": "终端-安卓-启动命令",
+      "gold_answer": "启动小屏机apk： adb shell am start -n com.shanlitech.ptt/com.shanli.pocstar.SplashActivity 启动无屏机apk： adb shell am start -n com.shanlitech.noscreen/com.shanli.pocstar.SplashActivity 启动大屏/车台apk： adb shell am start -n com.shli.interphone/com.shanli.pocstar.SplashActivity",
+      "agent_answer": "根据客服知识库中的记录，安卓终端的 APK 启动命令如下：\n\n## 终端-安卓 启动命令\n\n| 设备类型 | 启动命令 |\n| --- | --- |\n| 小屏机 | `adb shell am start -n com.shanlitech.ptt/com.shanli.pocstar.SplashActivity` |\n| 无屏机 | `adb shell am start -n com.shanlitech.noscreen/com.shanli.pocstar.SplashActivity` |\n| 大屏/车台 | `adb shell am start -n com.shli.interphone/com.shanli.pocstar.SplashActivity` |\n\n三条命令均通过 adb 方式启动对应设备的 POCSTARS SplashActivity 界面。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了三条启动命令，实质作答且与问题相关",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "终端-安卓",
+      "query": "终端-安卓-森海克斯NX-300 允许安装apk",
+      "gold_answer": "通过电话按键密码来解锁 *#*#275#*#*",
+      "agent_answer": "根据知识库记录，森海克斯 NX-300 可以安装 APK，但需要通过电话按键密码解锁后才可以安装。\n\n**操作方法：**\n\n1. 在终端拨号键盘输入解锁密码：`*#*#275#*#*`\n2. 解锁后即可安装 APK。\n\n**来源：** 客服知识库（《客服知识库.md》，条目「森海克斯NX-300 允许安装apk」）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，给出了解锁密码和安装 APK 的说明，与问题切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "终端-安卓",
+      "query": "终端-安卓-ASAPP开头的APK包，用手机安装登录不上",
+      "gold_answer": "ASAPP开头的APK包，用新主线的版本，只能使用相对应的机型来登录，不同机型获取的配置信息不同",
+      "agent_answer": "根据知识库检索结果，为您说明如下：\n\n## 结论\n\n**ASAPP 开头的 APK 包属于新主线版本，只能用与之相对应的机型来登录，不同机型获取的配置信息不同。** 普通手机不是该 APK 对应的终端机型，无法获取正确配置信息，因此安装后登录不上。\n\n## 故障排查说明\n\n按\"现象—原因—处理建议\"梳理如下：\n\n| 项目 | 说明 |\n|------|------|\n| 现象 | 手机安装 ASAPP 开头的 APK 包后登录不上 |\n| 可能原因 | ASAPP 开头的 APK 是终端专用版本（新主线版本），只适配对应机型；不同机型获取的配置信息不同，手机与 APK 不匹配 |\n| 处理建议 | 换用与 APK 版本对应的终端机型安装登录；如客户终端型号不同，需提供与其机型匹配的 APK 版本 |\n\n补充说明：知识库中其他登录问题（如登录超时、账号不存在 301、登录无群组等）均有各自的排查路径，若确认是 APK 版本匹配无误后的其他登录异常，可进一步按对应条目排查。\n\n**来源**：客服知识库（客服知识库.md，条目\"ASAPP开头的APK包，用手机安装登录不上\"）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了实质性的原因说明和处理建议，切题且非拒答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "终端-安卓",
+      "query": "终端-安卓-全双工通话讲话最长时间",
+      "gold_answer": "没有限制",
+      "agent_answer": "根据客服知识库记载：\n\n**全双工通话讲话最长时间：没有限制。**\n\n补充说明：全双工通话（语音通话）与半双工对讲（PTT 讲话）不同，对讲讲话时长有 300 秒限制（固定群组讲话和单呼的临时群组讲话最长均为 300 秒），而全双工通话本身不设讲话时长限制。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出全双工通话讲话最长时间没有限制。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "终端-安卓",
+      "query": "终端-安卓-测试中的imei账号，只显示：",
+      "gold_answer": "群组列表， 2.成员列表， 3.多媒体消息（发送不了/查看不了历史记录） 4.调度台上报（只能发文字和文件） 5.定位 6.漏话提醒",
+      "agent_answer": "根据客服知识库中的记载，**测试中的 IMEI 账号**只显示以下内容：\n\n1. 群组列表\n2. 成员列表\n3. 多媒体消息（发送不了/查看不了历史记录）\n4. 调度台上报（只能发文字和文件）\n5. 定位\n6. 漏话提醒\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，完整列出了测试IMEI账号显示的内容。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APP巡更功能支持在信号差或者没有信号的时候打点巡更、也有记录、然后到信号好的地方自动更新上传数据吗？",
+      "gold_answer": "目前不支持，得提需求给产品",
+      "agent_answer": "**结论：目前不支持。**\n\n根据客服知识库中的明确记载：\n\n> APP巡更功能支持在信号差或者没有信号的时候打点巡更、也有记录、然后到信号好的地方自动更新上传数据吗？\n> 目前不支持，得提需求给产品。\n\n也就是说，巡更打点依赖网络在线进行数据上传，**不具备离线打点、断网缓存、信号恢复后自动补传的能力**。如客户有此需求，需要**向产品提需求**。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出结论并说明需提需求，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "终端-安卓",
+      "query": "终端-安卓-app发送图片视频支持格式类型以及大小",
+      "gold_answer": "图片和视频发送，需要从相册选。 从文件选的支持的格式：\"txt\", \"doc\", \"docx\", \"pdf\", \"ppt\", \"pptx\", \"xls\", \"xlsx\", \"zip\", \"rar\",\"wav\",\"mp4\",\"jpg\" 多媒体消息大小限制调整：图片10M/视频20M",
+      "agent_answer": "根据客服知识库中的记载，安卓 APP 发送图片、视频的格式类型及大小限制如下：\n\n**结论**\n\n- **图片和视频发送**：需要从相册中选择（即支持相册中的图片和视频）。\n- **从文件管理器选择的文件格式**：`txt`、`doc`、`docx`、`pdf`、`ppt`、`pptx`、`xls`、`xlsx`、`zip`、`rar`、`wav`、`mp4`、`jpg`。\n- **多媒体消息大小限制**：图片 10M，视频 20M。\n\n**补充说明**\n\n- 大小限制可通过后台调整（知识库原文记载为\"多媒体消息大小限制调整：图片10M/视频20M\"）。\n\n**来源**：客服知识库（`客服知识库.md`，文件 `file_d72ba9`）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答与问题主题一致，实质给出了发送图片视频的格式类型和大小限制，非拒答或离题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK是否支持鸿蒙系统",
+      "gold_answer": "不支持纯血鸿蒙",
+      "agent_answer": "根据知识库记录，结论如下：\n\n**终端安卓 APK 不支持纯血鸿蒙系统。**\n\n知识库（客服知识库）明确记载：\n\n> APK是否支持鸿蒙系统：不支持纯血鸿蒙\n\n说明：\n- 该结论针对\"纯血鸿蒙\"（HarmonyOS NEXT，即不再兼容安卓应用的鸿蒙版本）。\n- 知识库未记载 APK 在其他鸿蒙版本（如兼容安卓应用的鸿蒙版本）上的支持情况，如需进一步确认，可提供具体机型或系统版本进一步查询。\n\n**来源**：客服知识库.md",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出结论且切题，未拒答或答非所问",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端录制视频上传调度台每秒消耗多少流量",
+      "gold_answer": "357KB 每秒",
+      "agent_answer": "**结论：终端（安卓）录制视频上传调度台时，每秒消耗约 357KB 流量。**\n\n来源说明：该数据来自客服知识库中\"终端录制视频上传调度台每秒消耗多少流量\"条目，明确记载为 357KB 每秒。知识库未提供该数值对应的具体机型、视频分辨率、编码方式或网络条件等适用前提，如需精确评估请以实际测试为准。\n\n**来源**\n- 知识库：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了每秒消耗流量数值，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "终端-安卓",
+      "query": "终端-安卓-查看终端型号命令",
+      "gold_answer": "adb shell getprop ro.product.model",
+      "agent_answer": "**结论：查看安卓终端型号的命令为：**\n\n```\nadb shell getprop ro.product.model\n```\n\n**说明：**\n- 该命令通过 ADB（Android Debug Bridge）读取系统属性 `ro.product.model`，可获取终端设备型号。\n- 使用前提：终端已开启 USB 调试（ADB），并通过数据线连接电脑。\n\n**来源：**\n- 客服知识库《客服知识库.md》（chunk：file_d72ba9_chunk_17）中\"查看终端型号命令\"条目明确记载：`adb shell getprop ro.product.model`",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了查看终端型号的命令，切题且非拒答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何通过elk查看apk版本号",
+      "gold_answer": "https://elk.poctalktest.vip:5601 用户名：elastic密码:9R26NQyuPio85Dt3LfxQ 查询apk步骤：Discover--tomcat upgrade--输入终端账号",
+      "agent_answer": "## 结论\n\n通过 ELK 查看 APK 版本号的方法如下（知识库记载）：\n\n1. 访问 ELK 平台：`https://elk.poctalktest.vip:5601`\n2. 登录账号：\n   - 用户名：`elastic`\n   - 密码：`9R26NQyuPio85Dt3LfxQ`\n3. 查询步骤：进入 **Discover** → 选择 **tomcat upgrade** 索引 → 输入**终端账号**进行查询\n\n---\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质提供了通过ELK查看APK版本号的具体步骤和登录信息，完全切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "终端-安卓",
+      "query": "终端-安卓-大屏/中屏apk左下角显示NONE",
+      "gold_answer": "表示的是没有来自调度台的消息",
+      "agent_answer": "**结论**：大屏/中屏 APK 左下角显示\"NONE\"，表示**没有来自调度台的消息**。\n\n这是界面上的状态提示，说明当前没有收到调度台下发的消息内容，并非报错。\n\n**来源**\n\n- 客服知识库（kb_2ak3wcz9wx）：客服知识库.md，条目\"大屏/中屏apk左下角显示NONE\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确解释了NONE的含义。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "终端-安卓",
+      "query": "终端-安卓-支持NFC巡更的终端有哪些",
+      "gold_answer": "NFC巡更大屏小屏都支持，无屏不支持",
+      "agent_answer": "根据知识库记载：\n\n**结论：NFC 巡更功能大屏、小屏终端都支持，无屏终端不支持。**\n\n补充说明：\n\n- 支持范围：大屏、小屏终端均可使用 NFC 巡更功能；无屏终端不支持。\n- 版本相关：巡更功能需要 APK 2.6 版本及以上才支持；读取 NFC code 需要使用安卓版本 2.9.3.14 及以上，直接打卡后即可显示识别的 code。\n- 信号弱场景：目前 APP 巡更不支持在信号差或没有信号时打点巡更并稍后自动补传数据，如需要需提需求给产品。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了NFC巡更支持大屏小屏、不支持无屏的结论，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更是否支持实时监测",
+      "gold_answer": "有任务开始提醒，运营平台可以设置提醒时间",
+      "agent_answer": "根据知识库记录，**巡更支持任务开始提醒形式的实时监测，运营平台可设置提醒时间**。\n\n具体说明：\n\n- 巡更是否支持实时监测：**支持**，体现为\"任务开始提醒\"。\n- 运营平台可以设置提醒时间。\n\n补充说明（与巡更相关的其他知识库结论，供参考）：\n\n- APP 巡更功能暂不支持在信号差或无信号时打点巡更后自动补传数据，需要提需求给产品。\n- 巡更刷卡不显示时，需检查使用版本是否支持巡更（2.6 版本及以上支持巡更）。\n- 支持 NFC 巡更的终端：大屏、小屏均支持，无屏终端不支持。\n- 巡更点设置数量没有上限。\n- 巡更漏打卡提醒：终端进入巡更任务查看；或运营平台登录公司账号，进入 Execute Plan 查看。\n\n来源：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，直接回应巡更是否支持实时监测，内容与问题切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更是否有漏打卡提醒",
+      "gold_answer": "终端进入巡更任务查看 2.运营平台登录公司账号，进入Execute Plan查看",
+      "agent_answer": "**结论：有。** 巡更的漏打卡情况可以通过以下两种方式查看（知识库中记载的方式）：\n\n1. **终端侧（安卓终端）**：进入巡更任务查看漏打卡情况。\n2. **运营平台侧**：登录公司账号，进入 **Execute Plan** 查看。\n\n需要说明的是，知识库中\"漏打卡提醒\"的记载即以上两种查看入口，未提及终端是否会自动弹出漏打卡提醒消息或推送通知，如需要更细节的行为说明，可进一步查阅巡更相关文档。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回答有漏打卡提醒并给出两种查看方式。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK支持的最低系统是多少",
+      "gold_answer": "支持安卓4.4及以上，安卓7及以上的才支持新视频apk",
+      "agent_answer": "**结论：终端安卓 APK 支持的最低系统为安卓 4.4 及以上；其中安卓 7 及以上才支持新视频 APK。**\n\n具体说明：\n\n| 项目 | 要求 |\n| --- | --- |\n| APK 最低支持系统 | 安卓 4.4 及以上 |\n| 新视频 APK 支持系统 | 安卓 7 及以上 |\n\n来源：客服知识库《客服知识库.md》——\"APK支持的最低系统是多少：支持安卓4.4及以上，安卓7及以上的才支持新视频apk\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出了最低系统版本及新视频APK的支持条件。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达SC580/SC780apk安装步骤",
+      "gold_answer": "使用工具BWC Manager 2.App Whitelist中添加apk包名 com.shli.interphone 3.点击Program保存 4.APP Management中安装我们的apk",
+      "agent_answer": "根据客服知识库中的记录，海能达SC580/SC780的APK安装步骤如下：\n\n**海能达SC580/SC780 APK安装步骤**\n\n1. 使用工具 **BWC Manager**\n2. 在 **App Whitelist** 中添加APK包名：`com.shli.interphone`\n3. 点击 **Program** 保存\n4. 在 **APP Management** 中安装我们的APK\n\n---\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了APK安装步骤，且完全切题",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "终端-安卓",
+      "query": "终端-安卓-客户咨询TN301 apk",
+      "gold_answer": "可发中瑞科T320 apk给客户",
+      "agent_answer": "**结论**：客户咨询 TN301 的 APK 时，可发给客户**中瑞科 T320 的 APK**。\n\n知识库（客服知识库）中\"客户咨询TN301 apk\"条目的明确处理方式为：**可发中瑞科T320 apk给客户**。\n\n**来源**：客服知识库.md（客服知识库，kb_2ak3wcz9wx）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出了可发中瑞科T320 APK给客户的结论。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "终端-安卓",
+      "query": "终端-安卓-SOS功能故障排查",
+      "gold_answer": "按下SOS提醒“发送失败”——需登录调度台处理SOS报警 2.按下SOS没有任何反应——按键适配问题",
+      "agent_answer": "根据客服知识库，安卓终端 SOS 功能故障排查结论如下：\n\n## SOS 功能故障排查\n\n| 现象 | 原因 / 处理方式 |\n|------|----------------|\n| 按下 SOS 提醒\"发送失败\" | 需登录调度台处理 SOS 报警 |\n| 按下 SOS 没有任何反应 | 按键适配问题 |\n\n## 相关 SOS 故障场景（调度台侧）\n\n| 现象 | 处理建议 |\n|------|----------|\n| 调度台关闭 SOS 时提示\"一次只能处理一个\" | 关闭 SOS 需由对应的调度员（dp1 或 dp2）来关闭 |\n| 调度台接收 SOS 没声音，或终端发送 SOS 时接收不到，刷新页面后才出现 SOS 警报 | 需在调度台设置里开启 SOS 警报 |\n| 调度台操作开启 SOS 提示\"操作成功\"但并未生效 | 可能是下级组织调度员操作了上级组织的账号，提示成功但实际无反应 |\n\n## 其他 SOS 相关说明\n\n- **发送范围**：终端发送 SOS 后，公司下的所有调度员和本组织下的群组会收到 SOS 警报。\n- **数据保留**：SOS 记录数量没有限制，可一直保存；SOS 数据与定位相关联，定位数据只保留三个月，但 SOS 记录可一直查看。\n- **设置范围**：SOS 只能设置到公司层级，不可以设置单个账号生效。\n- **功能版本**：SOS 无限发送和 1/3 秒设置功能需要 APK 版本 2.9.4.0.4 及以上。\n\n**来源**：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》（file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓终端SOS功能故障排查，列出了SOS发送失败和无反应两种现象及处理方式，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "终端-安卓",
+      "query": "终端-安卓-SOS是否可以不需要登录调度台进行处理就发送第二次",
+      "gold_answer": "sos无限发送和1/3秒设置功能需要apk版本2.9.4.0 4以上",
+      "agent_answer": "**结论：可以。** 安卓终端支持不登录调度台处理就再次发送 SOS，即“SOS 无限发送”功能，但需要满足 APK 版本要求。\n\n依据客服知识库中的记录：\n\n- **SOS 是否可以不需要登录调度台进行处理就发送第二次**：SOS 无限发送和 1/3 秒设置功能需要 APK 版本 **2.9.4.0 4 及以上**。\n- 需要注意的对应场景：若按下 SOS 提醒“发送失败”，说明需登录调度台处理 SOS 报警；在旧版本（低于上述版本）或未启用该功能的情况下，仍需调度台处理后才能再次发送。\n\n**来源**：客服知识库.md（kb_2ak3wcz9wx / file_d72ba9，客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "终端-安卓",
+      "query": "终端-安卓-用户优先级",
+      "gold_answer": "优先级：P1 表示高级，P2 表示中级，P3 表示普通，P4 表示仅听",
+      "agent_answer": "根据客服知识库中的记录，关于\"用户优先级\"的信息如下：\n\n## 用户优先级定义\n\n| 优先级 | 含义 |\n|---|---|\n| P1 | 高级 |\n| P2 | 中级 |\n| P3 | 普通 |\n| P4 | 仅听 |\n\n## 如何设置成员优先级\n\n群组列表 → 设置图标 → 群组成员 → 设置优先级。\n\n## 注意事项\n\n- **监听功能对优先级的影响**：群组设置了监听功能时，高优先级无法打断普通优先级的讲话；未设置监听功能的群组，抢麦功能正常。该问题已在版本 1.23.12 解决，客户版本低于此版本时需要升级更新。\n- **优先级功能不起作用的排查**：账号优先级功能不起作用，通常与群组监听相关，可通过升级解决。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了用户优先级定义，与问题切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "终端-安卓",
+      "query": "终端-安卓-客户咨询API文档",
+      "gold_answer": "公网版本不提供，只有独立部署提供API文档",
+      "agent_answer": "根据知识库中的记载，关于\"客户咨询API文档\"的结论如下：\n\n**公网版本不提供API文档，只有独立部署才提供API文档。**\n\n即：\n- 公网（公有云）版本：不提供客户咨询API文档；\n- 独立部署（私有化部署）版本：提供API文档。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回应了API文档的提供范围。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "终端-安卓",
+      "query": "终端-安卓-IOS版本是否支持换肤",
+      "gold_answer": "不支持换肤，由于APP STORE审核严格，源代码相似度太高会导致无法上架",
+      "agent_answer": "根据企业知识库检索结果：\n\n**IOS 版本：不支持换肤。** 知识库明确记载，IOS 版本不支持换肤，原因是 APP STORE 审核严格，源代码相似度太高会导致无法上架。\n\n**安卓终端：现有知识库中未找到是否支持换肤的相关记载。** 检索到的换肤相关内容仅涉及 H5 运营平台和 web 调度台的换肤步骤，均不适用于安卓终端，因此无法给出安卓终端换肤支持情况的结论。\n\n来源：客服知识库（客服知识库.md）——“IOS版本是否支持换肤”条目。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕问题实质作答，给出了IOS不支持换肤并检索了安卓情况，非拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [
+        "安卓版本不支持换肤"
+      ],
+      "supp_missed": [],
+      "score": 0.6000000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 30,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机/无屏机录音回放",
+      "gold_answer": "回放收听到的最后10条",
+      "agent_answer": "**结论**：小屏机/无屏机支持录音回放，可回放收听到的最后 10 条录音。\n\n相关说明（均为知识库中记载的补充信息）：\n\n- 录音记录功能一直都有，小屏机如需使用录音记录，终端需要更换相应版本（如涉及 miniserver 场景）。\n- 若小屏机版本不显示录音菜单，需检查服务包是否配置了多媒体功能。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了小屏机/无屏机录音回放的核心结论，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 32,
+      "section": "终端-安卓",
+      "query": "终端-安卓-对讲时延最大承受范围",
+      "gold_answer": "我们对基站的网络要求就是时延不超过100ms，，丢包不超过5%",
+      "agent_answer": "**结论**：对讲时延的最大承受范围为**时延不超过 100ms**，同时要求**丢包不超过 5%**。\n\n这是企业对基站网络的明确要求，即在此网络指标下可保障对讲业务正常使用。\n\n来源：客服知识库（文档：客服知识库.md，条目\"对讲时延最大承受范围\"）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出对讲时延和丢包指标，切题且实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 33,
+      "section": "终端-安卓",
+      "query": "终端-安卓-POCSTARS的音频编解码器、采样率",
+      "gold_answer": "amr, 8k",
+      "agent_answer": "**结论：POCSTARS（安卓终端）的音频编解码器为 AMR，采样率为 8kHz（8k）。**\n\n依据客服知识库中\"POCSTARS的音频编解码器、采样率\"条目，明确记载为 **amr, 8k**。\n\n**来源：** 客服知识库（客服知识库.md，片段 file_d72ba9_chunk_18）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出AMR和8kHz。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 31,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机操作手册/PNC380操作手册(User Manual)",
+      "gold_answer": "网盘归档路径：/知识库附件/海外/文档/app manual/User Manual of PNC380.pdf",
+      "agent_answer": "根据客服知识库中的记录：\n\n**小屏机操作手册/PNC380操作手册（User Manual）**\n\n- 网盘归档路径：`/知识库附件/海外/文档/app manual/User Manual of PNC380.pdf`\n\n说明：当前知识库中仅记录了该手册的归档路径，未检索到该 PDF 文件本体已索引入库，因此无法直接提供手册的具体内容，需按上述路径在网盘归档中获取。\n\n来源：客服知识库（客服知识库.md，条目「小屏机操作手册/PNC380操作手册(User Manual)」）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了手册的归档路径，与问题相关且实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 34,
+      "section": "终端-安卓",
+      "query": "终端-安卓-VP760锁屏后无法用键盘解锁",
+      "gold_answer": "需要使用投屏工具先解锁屏幕锁定, 然后进入设置→安全→屏幕锁定, 选择无",
+      "agent_answer": "根据客服知识库中的记载，该问题处理方式如下：\n\n**现象**：VP760 锁屏后无法用键盘解锁。\n\n**处理建议**：\n1. 使用投屏工具先解锁屏幕锁定；\n2. 进入 **设置 → 安全 → 屏幕锁定**；\n3. 选择 **无**（关闭屏幕锁定）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体的处理步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 35,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端断网重连机制",
+      "gold_answer": "网络断开后我们会立马进行访问服务器，如果访问服务器时网络差3s没有收到服务的响应，会再次发出请求，一直循环直到登录成功",
+      "agent_answer": "根据客服知识库中的记录，安卓终端断网重连机制如下：\n\n- 网络断开后，终端会**立即访问服务器**进行重连尝试。\n- 如果访问服务器时网络状况差，**3 秒内未收到服务器的响应**，会**再次发出请求**。\n- 该过程**一直循环，直到登录成功**为止。\n\n来源：客服知识库（客服知识库.md，条目“终端断网重连机制”）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕断网重连机制展开",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 36,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何读取NFC code",
+      "gold_answer": "使用安卓版本2.9.3.14及以上版本直接打卡后显示识别的code",
+      "agent_answer": "根据知识库中的记载：\n\n**如何读取 NFC code**\n\n- 使用**安卓版本 2.9.3.14 及以上**版本，**直接打卡**后即可显示识别的 code。\n\n补充说明（同一知识库中的相关内容）：\n- 支持 NFC 巡更的终端：大屏、小屏均支持，无屏终端不支持。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了读取NFC code的操作方法和版本要求，属实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 38,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端提示没有群组，但是运营平台显示已加入群组",
+      "gold_answer": "尝试清除缓存，设置--apps--pocstar--清除缓存",
+      "agent_answer": "## 终端提示没有群组，但运营平台显示已加入群组\n\n**现象**：安卓终端登录后提示\"没有群组\"，但运营平台侧显示该终端已加入群组。\n\n**处理建议（知识库记载的处理方式）**：\n1. 尝试清除终端缓存：\n   - 设置（Settings）→ Apps → POCSTAR（pocstar）→ 清除缓存（Clear cache）\n\n知识库中仅记载了上述处理方式；若清除缓存后问题仍存在，需按常规故障流程进一步排查（如收集问题复现步骤、终端日志等反馈适配组）。\n\n**来源**：客服知识库.md（`客服知识库.md`，片段 file_d72ba9_chunk_18）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了清除缓存的具体操作建议，与问题相关且实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 37,
+      "section": "终端-安卓",
+      "query": "终端-安卓-机器变成飞行模式",
+      "gold_answer": "一些机器插入数据线后会变成飞行模式",
+      "agent_answer": "根据知识库检索结果，关于\"安卓终端变成飞行模式\"的情况如下：\n\n**现象（知识库记载）**\n- 一些机器插入数据线后会变成飞行模式。\n\n**说明**\n- 知识库中仅记载了上述现象，未包含该问题的具体原因分析、检查方法或处理建议，也未说明适用于哪些具体机型或 APK 版本。\n\n如需进一步定位，建议补充以下信息后我再尝试检索：触发机型/型号、APK 版本、插入的是否为原装数据线、现象是否可复现。\n\n**来源**\n- 《客服知识库.md》（客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了与问题相关的现象描述，构成实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 39,
+      "section": "终端-安卓",
+      "query": "终端-安卓-安装不上",
+      "gold_answer": "远程给客户安装：adb安装，投屏工具安装",
+      "agent_answer": "根据客服知识库中的记载，针对终端（安卓）APK 安装不上的情况，处理方式如下：\n\n**结论**：终端安装不上时，可远程给客户安装，采用 **adb 安装**或**投屏工具安装**两种方式。\n\n**具体处理建议**\n\n1. **远程安装方式**\n   - 使用 adb 安装 APK；\n   - 或使用投屏工具安装。\n\n2. **adb 安装报错处理**\n   - 若 adb 安装时报错 `adb: error: failed to read copy response`，依次执行以下命令重启 adb 服务解决：\n     - `adb kill-server`\n     - `adb start-server`\n     - `adb devices`\n\n3. **安装后运行不了（补充）**\n   - 确认是否启动了 APK；\n   - 若运行崩溃，需抓取日志排查。\n\n**来源**：客服知识库.md（kb_2ak3wcz9wx）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕安卓APK安装不上给出处理方式。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 41,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号不存在（301 Account Unexist)",
+      "gold_answer": "登录客户账号测试下 2、测试可以登录，检查版本给的对不对 3、测试账号不存在，检查平台注册账号是否正确，IMEI有没有输入空格，机器的IMEI是否是客户注册的IMEI 4、检查授权账号数是否超了",
+      "agent_answer": "根据客服知识库中的记录，安卓终端提示\"账号不存在（301 Account Unexist）\"可按以下步骤排查：\n\n**排查步骤**\n\n1. 用客户账号登录测试，确认账号本身是否可登录。\n2. 若测试账号可以登录：检查给终端安装的 APK 版本是否正确（对应 APK 匹配对应终端）。\n3. 若测试账号不存在：检查平台注册账号是否正确、IMEI 是否有输入空格、机器 IMEI 是否为客户注册的 IMEI。\n4. 检查授权账号数是否已超限。\n\n**补充排查思路（针对已创建账号仍提示账号不存在）**\n\n1. 检查终端配置的是什么网络模式。\n2. 若为代理模式：先用平台账号自行登录验证；若自己也登录不了，将网络切换为内网再切回代理模式（目的为同步数据到云端）；若可正常登录，则检查终端的登录方式及账号输入是否正确。\n3. 若为固定公网模式：需要修改终端的 context DNS 信息。\n\n**来源**\n\n- 客服知识库（kb_2ak3wcz9wx）《客服知识库.md》（file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了针对该问题的具体排查步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 40,
+      "section": "终端-安卓",
+      "query": "终端-安卓-安装了运行不了",
+      "gold_answer": "是否启动apk 2、运行崩溃的抓日志",
+      "agent_answer": "根据客服知识库的记载，针对\"终端（安卓）安装了运行不了\"的情况，处理建议如下：\n\n## 现象\n安卓终端安装 APK 后无法运行。\n\n## 处理建议（知识库记载）\n\n1. **确认是否启动了 APK**：先确认 APK 是否正确启动。\n2. **运行崩溃时抓取日志**：若 APK 运行崩溃，抓取运行日志提交分析。\n\n## 相关补充（安装环节）\n\n知识库另记载了\"安装不上\"的处理方式，可一并参考：\n\n- **远程给客户安装**：通过 adb 安装、投屏工具安装。\n- **adb 安装报错** `adb: error: failed to read copy response` 时：依次执行 `adb kill-server`、`adb start-server`、`adb devices`，重启 adb 服务解决。\n\n---\n\n**说明**：知识库对该问题记载较简短，仅包含上述处理建议；若上述步骤无法解决，知识库未提供进一步处理方案，建议结合运行日志联系适配/开发人员进一步排查。\n\n**来源**：客服知识库.md（kb_2ak3wcz9wx）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了针对“终端安卓安装了运行不了”的处理建议，与问题相关且未拒答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 42,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录超时",
+      "gold_answer": "登录相同节点的账号测试 2、若测试账号登录不上，联系运维检查 3、若测试账号登录成功，检查网络：换卡/WiFi尝试、APN是否正确、机器是否能识别到卡，联系厂家",
+      "agent_answer": "根据知识库中\"登录超时\"的相关记载，处理步骤如下：\n\n## 终端登录超时排查步骤\n\n**现象**：安卓终端登录时提示登录超时。\n\n**排查流程**（按顺序执行）：\n\n1. **登录相同节点的账号测试**——使用测试账号在相同节点尝试登录，用于区分是账号问题还是网络/服务问题。\n2. **若测试账号也登录不上**：联系运维检查服务器节点。\n3. **若测试账号可以登录成功**：检查终端网络，依次排查：\n   - 换卡 / 切换 WiFi 尝试；\n   - 检查 APN 是否正确；\n   - 检查机器是否能识别到 SIM 卡；\n   - 以上均无法解决时，联系厂家处理。\n\n**补充说明**：\n- 若 APP 已写入环境配置后仍提示登录超时：写完环境后需**杀掉 APP 重新登录**。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了安卓终端登录超时的排查步骤。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 43,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录无群组",
+      "gold_answer": "登录账号测试，检查平台是否添加 2. 检查网络情况，尝试切换wifi或运营商SIM卡 3、已添加的，抓日志提交开发核实具体问题，给出解决方案",
+      "agent_answer": "## 终端-安卓-登录无群组\n\n根据客服知识库记载，针对\"登录无群组\"问题，按以下顺序排查处理：\n\n1. **核对平台侧群组配置**：登录账号测试，检查运营平台上是否已为终端账号添加群组。\n2. **检查网络情况**：尝试切换 WiFi 或运营商 SIM 卡，排除网络因素导致的群组信息未同步。\n3. **群组已添加但仍不显示**：抓取日志提交开发核实具体问题，由开发给出解决方案。\n\n补充：若属于\"终端提示没有群组，但运营平台显示已加入群组\"的情况，可先尝试清除终端缓存，操作路径为：设置 → apps → pocstar → 清除缓存。\n\n**来源**：客服知识库（kb_2ak3wcz9wx），文档《客服知识库.md》（file_d72ba9）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对登录无群组问题给出了具体排查步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 44,
+      "section": "终端-安卓",
+      "query": "终端-安卓-读取不到IMEI（提示202）",
+      "gold_answer": "检查机器安卓版本，安卓10以上（多为大屏机）的需要厂家签名apk才能读取到 2、机器有没有IMEI，客户联系厂家或者客服协助咨询厂家",
+      "agent_answer": "**结论**：终端读取不到 IMEI 提示 202，主要原因与安卓系统版本和 APK 签名有关；其次需确认机器本身是否具备 IMEI。\n\n**处理建议（按顺序排查）：**\n\n1. **检查机器安卓版本**\n   - 安卓 10 及以上系统（多为大屏机）限制普通应用读取 IMEI，**需要厂家签名的 APK 才能读取到**。\n2. **确认 APK 是否已签名**\n   - 安卓 10 以上的机器，检查安装的 APK 是否为签名版本；无签名则可能报 202 读取不到 IMEI。\n3. **确认机器是否有 IMEI**\n   - 在设置里查看能否显示 IMEI（如：设置 > 关于本机 > IMEI 信息）。\n   - 若机器本身没有 IMEI，需由客户联系厂家，或客服协助咨询厂家确认。\n\n**来源**：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对读取不到IMEI提示202给出了具体排查步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 46,
+      "section": "终端-安卓",
+      "query": "终端-安卓-待机收不到语音",
+      "gold_answer": "客户登录自己的代理商账号，调整心跳 2、若1无法解决，可能是版本APK问题，需提交产研",
+      "agent_answer": "根据客服知识库中的记录，针对\"终端-安卓-待机收不到语音\"的处理如下：\n\n## 现象\n安卓终端待机（灭屏/待机）状态下收不到语音。\n\n## 处理建议\n1. **调整心跳**：客户登录自己的代理商账号，在运营平台调整心跳（将心跳调小）。\n2. **提交产研**：若调整心跳后仍无法解决，可能是版本 APK 问题，需提交产研处理。\n\n## 补充排查项\n若问题表现为\"收不到对讲\"，可同时检查：\n- 是否调成了静音；\n- 是否设置了\"仅听\"；\n- 编码是否不同；\n- 音频通道是否不支持。\n\n来源：客服知识库.md（客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了具体处理步骤",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 45,
+      "section": "终端-安卓",
+      "query": "终端-安卓-延迟大，丢音，被3S摘麦",
+      "gold_answer": "客户登录自己的代理商账号，调整心跳 2、若1无法解决，可能是版本APK问题，需提交产研",
+      "agent_answer": "已在客服知识库中找到与该问题对应的排查记录，结论如下。\n\n## 结论\n\n安卓终端出现\"延迟大、丢音、被3S摘麦\"，知识库记载的排查处理步骤为：\n\n1. **调整心跳**：客户登录自己的代理商账号，调整心跳参数。\n2. **提交产研**：若调整心跳无法解决，可能是版本 APK 问题，需提交产研核实处理。\n\n## 补充说明\n\n- 知识库同时记载了网络要求参考：**对讲时延最大承受范围为时延不超过 100ms，丢包不超过 5%**，可结合终端实际网络状况判断是否为网络原因。\n- 需注意机型差异：**Cat1 机器（如 E600）不支持平台修改心跳**，其\"延迟大、丢音、被3S摘麦、收不到语音消息\"的症状是通过本地修改电量管理模式（心跳档位）处理，如 high（心跳15秒）、standard（30秒）、power（42秒）、super power-saving 1（42秒深度睡眠）、super power-saving 2（42秒深度睡眠，发心跳3秒休眠）等。您反馈的是安卓终端，适用于上方\"调整心跳→提交产研\"的通用排查路径。\n\n## 来源\n\n- 客服知识库（`客服知识库.md`，客服知识库 Q&A）：\n  - \"延迟大，丢音，被3S摘麦\"条目\n  - \"E600欧版电量管理模式\"条目\n  - \"对讲时延最大承受范围\"条目\n  - \"Cat1机器是否支持修改心跳\"条目",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了具体的排查步骤。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 47,
+      "section": "终端-安卓",
+      "query": "终端-安卓-有显示**在讲话，但是没有语音",
+      "gold_answer": "更改网络测试 2、提交客诉，需提交产研",
+      "agent_answer": "根据客服知识库中的记录，该问题有明确处理步骤：\n\n**现象**：安卓终端有显示\"**在讲话\"，但没有语音。\n\n**处理建议**：\n1. 更改网络测试（例如切换 WiFi / 运营商 SIM 卡，排除网络问题）；\n2. 若更改网络后仍未解决，提交客诉，交由产研处理。\n\n知识库中未记载该问题更具体的原因分析，仅记录了上述处理路径。\n\n**来源**：客服知识库（客服知识库.md，终端-安卓章节）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了具体处理步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 48,
+      "section": "终端-安卓",
+      "query": "终端-安卓-语音卡顿",
+      "gold_answer": "平台调整模式为流畅模式（公司管理-语音质量-高音质/流畅） 2.若1无法解决，需提交产研",
+      "agent_answer": "## 安卓终端语音卡顿\n\n**处理建议（依据客服知识库）：**\n\n1. 在平台端调整语音质量为**流畅模式**：路径为「公司管理 → 语音质量」，将模式从\"高音质\"切换为\"流畅\"。\n2. 若调整后仍无法解决，需**提交产研**进一步排查。\n\n**说明：**\n- 该处理方式适用于安卓终端语音卡顿问题，先通过平台侧切换流畅模式降低语音质量以缓解卡顿。\n- 知识库中未记载其他针对安卓终端语音卡顿的具体排查步骤或原因说明。\n\n来源：客服知识库.md",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了处理步骤",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 49,
+      "section": "终端-安卓",
+      "query": "终端-安卓-PTT按键不可用",
+      "gold_answer": "检查使用的版本对不对，不对的给客户正确的版本（对应的APK匹配对应的终端） 2、若版本对的，检查ROM是不是定制ROM",
+      "agent_answer": "## 终端-安卓-PTT按键不可用\n\n根据客服知识库，该问题的排查步骤如下：\n\n1. **检查版本**：确认终端使用的 APK 版本是否正确。版本不对时，给客户正确的版本（对应的 APK 需匹配对应的终端）。\n2. **检查 ROM**：若版本正确，检查终端的 ROM 是否为定制 ROM。\n\n**补充场景**：RG170 / RG360 机型在**后台运行或息屏时 PTT 按键用不了**，处理方式为：\n1. 进入 CustomKey 设置成 PTT——常规情况设置后即可解决；如果还不行，执行步骤 2 后再重复步骤 1（操作视频已存网盘知识库附件）。\n2. 刷纯净 ROM——原因为 rg170 bundling with waveptx motorola。\n\n来源：客服知识库.md（file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕PTT按键不可用给出了排查步骤。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 51,
+      "section": "终端-安卓",
+      "query": "终端-安卓-定位不显示",
+      "gold_answer": "是否充值定位卡 2、检查客户使用节点是否正确 3、测试同节点的账号是否可以显示 4、可以显示，检查机器使用版本是不是Google定位，是Google定位的，查机器是否支持Google 5、测试账号也不显示，提交运维排查",
+      "agent_answer": "根据客服知识库的记载，安卓终端定位不显示可按下述步骤排查处理：\n\n## 定位不显示排查步骤\n\n1. **确认定位服务已开通**\n   - 检查是否充值定位卡、充值的服务包是否包含定位功能。\n   - 检查服务包状态是否正常。\n\n2. **检查终端设置**\n   - 确认终端是否已开启定位功能。\n   - 确认调度台定位是否已开启。\n\n3. **确认节点与账号**\n   - 检查客户使用的节点是否正确。\n   - 用同节点的账号测试是否可以正常显示定位。\n\n4. **检查定位方式与机型支持**\n   - 若同节点账号可以显示，检查机器使用版本是否为 Google 定位；若是 Google 定位，进一步查机器是否支持 Google。\n\n5. **异常处理**\n   - 测试账号也不显示定位的，提交运维排查。\n\n## 补充说明（cat1 机器）\n\n若为 cat1 机器调度台不显示定位：\n- 确认终端是否在能够获取 GPS 信号的位置（如室外开阔地带）产生过有效的定位点。\n- 第一次定位时可在室内开阔位置多停留一段时间。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓定位不显示给出了具体排查步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 52,
+      "section": "终端-安卓",
+      "query": "终端-安卓-速度显示错误",
+      "gold_answer": "错误的版本使用的是哪种定位方式的 2、检查是不是存在单位转换的问题",
+      "agent_answer": "根据客服知识库中的记录，\"终端-安卓-速度显示错误\"的排查处理步骤如下：\n\n## 现象\n终端速度显示错误。\n\n## 处理建议\n1. **检查定位方式**：确认当前使用错误的版本采用的是哪种定位方式。\n2. **检查单位转换**：确认是否存在单位转换的问题。\n\n如上述检查无法定位问题，可收集机型、APK 版本、ROM 版本及问题账号等信息进一步反馈排查。\n\n---\n**来源**：客服知识库《客服知识库.md》\"速度显示错误\"条目",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对速度显示错误给出了定位方式和单位转换的检查步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 50,
+      "section": "终端-安卓",
+      "query": "终端-安卓-定位不准",
+      "gold_answer": "更改定位方式使用是否正确（客户修改定位方式-大屏机（2.9以上版本），小屏机需确认）",
+      "agent_answer": "根据知识库中「客服知识库」的记载，安卓终端定位不准的排查方式如下：\n\n## 现象\n安卓终端在调度台上显示定位不准（定位不准确）。\n\n## 检查方法与处理建议\n\n1. **检查定位方式使用是否正确**\n   - 由客户修改定位方式；大屏机需使用 2.9 以上版本，小屏机需先确认是否支持。\n\n2. **核实终端与账号信息后进行验证**\n   - 确认机型、APK 版本、ROM 版本；\n   - 确认问题账号（终端账号、调度台账号）后，使用客户账号进行验证。\n\n若上述步骤无法解决，知识库中未记载进一步的定位不准处理措施（相关条目未说明后续升级或提交流程）。\n\n---\n\n**来源**：客服知识库（《客服知识库.md》）：\n- 「定位不准」条目：更改定位方式使用是否正确（客户修改定位方式-大屏机（2.9以上版本），小屏机需确认）\n- 「终端定位不准确」条目：确认机型、apk版本、rom版本，问题账号（终端账号、调度台账号）进行验证",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质性地给出了安卓定位不准的排查步骤，且与问题直接相关。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 53,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更刷卡不显示",
+      "gold_answer": "检查使用版本是否支持巡更(2.6版本及以上支持巡更） 2、支持的话，安装客户APK版本登录客户账号测试下；不支持的，提供新版本 3、测试没问题，检查机器是否支持；测试（登录客户账号）有问题，检查安卓版本/提交客诉",
+      "agent_answer": "根据知识库中客服知识库的记载，\"终端-安卓-巡更刷卡不显示\"的排查步骤如下：\n\n## 巡更刷卡不显示排查\n\n1. **检查版本是否支持巡更**\n   - 巡更功能需 **2.6 版本及以上** 才支持。\n\n2. **确认支持后，安装客户 APK 版本登录客户账号测试**\n   - 若当前版本**不支持巡更**：提供新版本（2.6 及以上）。\n   - 若**支持巡更**，继续进行下一步判断。\n\n3. **根据测试结果分流处理**\n   - **测试没问题**：检查机器是否支持巡更功能。\n   - **测试（登录客户账号）有问题**：检查安卓版本，或提交客诉处理。\n\n## 相关适用说明\n\n- 巡更功能与终端硬件相关：**NFC 巡更大屏、小屏终端均支持，无屏终端不支持**。\n- 巡更打点依赖任务计划生效：巡更任务的时间点需创建在当前时间之后；若任务为新建或暂停后重新启用，其时间点若包含已过时段，任务需到次日 23:00 后刷新才可打卡，否则会出现\"没有可用的计划\"或显示 None。\n- APP 巡更目前**不支持**在无信号/信号差时本地打点并在恢复信号后自动上传。\n\n来源：客服知识库.md（客服知识库，kb_2ak3wcz9wx）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对巡更刷卡不显示提供了完整排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 54,
+      "section": "终端-安卓",
+      "query": "终端-安卓-多媒体录音播放不了",
+      "gold_answer": "测试同节点的账号是否有问题（登录客户账号-调度台） 2、确认有问题，提交运维排查 3、没问题，要客户账号，不能播放的语音是那条，提交客诉",
+      "agent_answer": "根据客服知识库中的记录，针对\"多媒体录音播放不了\"问题，处理步骤如下：\n\n## 现象\n终端-安卓端多媒体录音无法播放。\n\n## 排查与处理建议（按顺序执行）\n\n1. **同节点账号测试**：测试同节点的账号是否有问题（登录客户账号-调度台），确认是否仅个别账号异常。\n2. **确认有问题**：若同节点账号确认存在问题，提交运维排查。\n3. **确认无问题**：若同节点账号无问题，则需要客户提供账号，并确认\"不能播放的语音是哪一条\"，提交客诉处理。\n\n## 来源\n- 客服知识库.md（客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对多媒体录音播放不了问题给出了实质性排查步骤，未拒答或答非所问。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 55,
+      "section": "终端-安卓",
+      "query": "终端-安卓-mandown不生效或轻放就触发 / 跌倒报警 /跌落报警",
+      "gold_answer": "查看版本是否支持mandown（mandown是发给调度台提示，APK2.5及以上版本且有屏幕的终端机器才支持此功能） 2、进入设置调灵敏度，方法有提供 High Threshold Value 值越小越灵敏 Low Threshold Value 值越大越灵敏 跌落报警咱们的APK默认是加速度触发的，默认加速度是3-35，加速度在极短时间内同时触发大于35并且小于3，然后静止3秒钟，才会触发",
+      "agent_answer": "根据客服知识库中的故障排查记录，该问题有明确的处理流程，结论如下：\n\n## mandown不生效 / 轻放就触发（跌倒报警、跌落报警）排查\n\n**1. 先确认版本是否支持 mandown**\n- mandown 报警是发给调度台的提示。\n- 仅 **APK 2.5 及以上版本**且**有屏幕的终端机器**支持此功能。\n- 机型差异示例：海能达 **P50 不支持** mandown，**P50pro 支持**。\n\n**2. 灵敏度设置（对应\"轻放就触发\"）**\n进入设置调整灵敏度，调节项如下：\n- **High Threshold Value**：值越小越灵敏；\n- **Low Threshold Value**：值越大越灵敏。\n\n**3. 跌落报警触发机制（默认逻辑）**\n- 咱们的 APK 默认采用**加速度触发**方式。\n- 默认加速度范围为 **3–35**。\n- 触发条件：加速度在极短时间内**同时触发大于 35 且小于 3**，随后**静止 3 秒钟**，才会触发报警。\n\n**处理建议**：若 mandown 不生效，先核对终端 APK 版本是否 ≥2.5 且终端有屏幕；若轻放即触发，则按上述灵敏度和加速度参数调高阈值。\n\n---\n\n来源：客服知识库（`客服知识库.md`，客服知识库 Q&A）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答并切题，包含版本、灵敏度和触发机制等排查要点。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 57,
+      "section": "终端-安卓",
+      "query": "终端-安卓-个别机器灭屏收不到对讲",
+      "gold_answer": "运营平台调整心跳，调小",
+      "agent_answer": "**结论**：个别机器灭屏收不到对讲，处理方式是**在运营平台调整心跳，将心跳调小**。\n\n补充说明（同一知识库中针对\"收不到对讲\"的其他排查项，供参考）：\n\n- 检查是否调成了静音；\n- 检查是否设置了\"仅听\"；\n- 检查编码是否不同；\n- 检查音频通道是否不支持。\n\n**来源**：客服知识库（kb_2ak3wcz9wx）·《客服知识库.md》\"终端-安卓\"章节",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了处理方式，属于实质作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 56,
+      "section": "终端-安卓",
+      "query": "终端-安卓-视频无画面（调度台看不到终端画面）",
+      "gold_answer": "检查版本是否正确，有新视频版本和老视频版本 2、切换网络试试 3、测试相同节点的账号有没有问题，有问题，反馈运维排查 4、调度台视频的注意节点是否使用正确 5、",
+      "agent_answer": "根据知识库（客服知识库）中的记载，针对\"终端-安卓-视频无画面（调度台看不到终端画面）\"的问题，排查处理如下：\n\n## 排查步骤\n\n按知识库记载，按以下顺序排查：\n\n1. **检查版本是否正确**：区分新视频版本和老视频版本，确认使用的 APK 版本是否正确。\n2. **切换网络试试**：更换网络环境验证是否为网络因素导致。\n3. **测试相同节点的账号是否有问题**：登录客户账号在调度台测试；\n   - 有问题 → 反馈运维排查；\n   - 没问题 → 继续下一步。\n4. **检查本级及上级组织是否有调度员**：无调度员则无法强拉回传视频。终端账号的当前组织及所有父级组织都没有调度员时，强拉会失败，本级组织和上级组织需要有调度员。\n5. **检查调度台视频的节点是否使用正确**。\n\n## 补充情况\n\n- **调度台强拉或单呼终端视频没画面，但终端回传视频有画面**：可找运维清理脏数据；如果没效果，可以尝试让客户更换公司节点。\n- **调度台强拉提示\"已发送请求但没画面\"**：同样先检查版本（新/老视频版本）、切换网络、测试同节点账号，并确认本级及上级有无调度员。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对视频无画面问题给出了具体排查步骤，实质作答且切题",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 58,
+      "section": "终端-安卓",
+      "query": "终端-安卓-收不到对讲",
+      "gold_answer": "是否调成了静音；2、设置了仅听；3、编码不同；4、音频通道不支持",
+      "agent_answer": "根据客服知识库中的记录，安卓终端收不到对讲可按以下路径排查：\n\n## 现象：安卓终端收不到对讲\n\n### 常见原因与检查方法\n\n| 可能原因 | 检查/处理方法 |\n|---|---|\n| 终端被调成静音 | 检查终端是否调成了静音 |\n| 设置了\"仅听\"权限 | 检查终端是否设置了仅听（P4 表示仅听） |\n| 编码不同 | 检查终端编码是否一致 |\n| 音频通道不支持 | 检查音频通道是否支持 |\n| 个别机器灭屏收不到对讲 | 到运营平台调整心跳，将心跳调小 |\n| 待机收不到语音 | 1. 客户登录自己的代理商账号，调整心跳；2. 若无法解决，可能是版本 APK 问题，需提交产研 |\n| 按下 PTT 按键后有 tone 音但无法对讲 | 通过重新创建群组并添加用户后解决 |\n| 有显示\"XX在讲话\"但没有语音 | 1. 更改网络测试；2. 提交客诉，需提交产研 |\n\n### 处理建议\n\n1. 按上述顺序先检查终端侧设置（静音、仅听、编码、音频通道），这是最常见的直接原因。\n2. 若仅个别机器或待机状态下收不到，优先通过代理商账号调整运营平台心跳。\n3. 若调整心跳后仍无法解决，或涉及 PTT 无响应、显示讲话却无语音等异常，需提交产研进一步核实。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，针对安卓收不到对讲给出了排查路径。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 59,
+      "section": "终端-安卓",
+      "query": "终端-安卓-TE300K流量消耗【科威特数据】",
+      "gold_answer": "机型：TE300K APP版本：NSAPP_2.8.2.36_TeltraPTT_TE300K_1 ROM：TE300K_INT_V10P_20230306（Android系统） 测试项 流量消耗（单位KB） 关定位待机 10分钟 29.63KB 开定位待机 10分钟 87.78KB 发射对讲 10分钟 985.56KB 接收对讲 10分钟 944.92KB 语音流量消耗只和编码方式、打包帧数有关",
+      "agent_answer": "根据知识库中“TE300K流量消耗【科威特数据】”条目，结论如下：\n\n**测试环境**\n\n- 机型：TE300K\n- APP版本：NSAPP_2.8.2.36_TeltraPTT_TE300K_1\n- ROM：TE300K_INT_V10P_20230306（Android系统）\n\n**流量消耗测试数据（单位：KB）**\n\n| 测试项 | 时长 | 流量消耗 |\n| --- | --- | --- |\n| 关定位待机 | 10 分钟 | 29.63 KB |\n| 开定位待机 | 10 分钟 | 87.78 KB |\n| 发射对讲 | 10 分钟 | 985.56 KB |\n| 接收对讲 | 10 分钟 | 944.92 KB |\n\n补充说明：知识库记载“语音流量消耗只和编码方式、打包帧数有关”。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，且完整切题地给出了流量消耗数据与说明。",
+      "key_facts": {
+        "total": 7,
+        "hit": 7
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 60,
+      "section": "终端-安卓",
+      "query": "终端-安卓-使用adb安装apk",
+      "gold_answer": "Use adb to install apk.zip",
+      "agent_answer": "根据客服知识库中的记载，关于\"终端-安卓-使用adb安装apk\"，相关结论如下：\n\n## 使用 adb 安装 APK\n\n**安装命令：**\n```\nadb install apk\n```\n\n**卸载命令：**\n```\nadb uninstall 包名\n```\n\n**adb 抓日志命令：**\n```\nadb logcat -v time >>存储文本文档\n```\n\n## 安装报错处理\n\n当出现 `adb: error: failed to read copy response` 报错时，重启 adb 服务解决：\n\n```\nadb kill-server\nadb start-server\nadb devices\n```\n\n## 相关说明\n\n- 远程给客户安装 APK 时，可采用两种方式：**adb 安装** 或 **投屏工具安装**。\n- 部分机型安装 APK 前需要解锁或使用特定密码（如森海克斯 NX-300 需通过电话按键密码 `*#*#275#*#*` 解锁允许安装；天龙世纪设备安装 APK 通用密码为 `TL0066`）。\n- 小屏机 APK 安装后可使用启动命令验证：`adb shell am start -n com.shanlitech.ptt/com.shanli.pocstar.SplashActivity`。\n\n---\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕adb安装APK给出命令和说明，内容切题且为实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 61,
+      "section": "终端-安卓",
+      "query": "终端-安卓-P50提示306网络连接超时",
+      "gold_answer": "切换WiFi 2、机器是否需要写apn 3、连接机器，adb shell /ping sgdns.shanlipoc.com/usdns.shanlipoc.com",
+      "agent_answer": "根据知识库记载，针对\"终端-安卓-P50提示306网络连接超时\"的处理方式如下：\n\n## 现象\nP50（安卓终端）提示 **306 网络连接超时**。\n\n## 处理建议（知识库记载步骤）\n\n1. **切换 WiFi** —— 尝试切换到其他 WiFi 网络排除当前网络问题；\n2. **检查 APN** —— 确认机器是否需要写入 APN（运营商接入点配置）；\n3. **检查域名连通性** —— 连接机器后执行 adb shell 命令，ping 以下域名确认网络可达：\n   - `sgdns.shanlipoc.com`\n   - `usdns.shanlipoc.com`\n\n---\n\n**来源**：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》（file_d72ba9）\n\n注：知识库中仅记载上述排查步骤，未包含关于 306 报错的其他详细说明（如具体原因分类或更多检查项）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了针对306网络连接超时的处理步骤，与问题相关且非拒答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 62,
+      "section": "终端-安卓",
+      "query": "终端-安卓-没有视频图标有两个可能",
+      "gold_answer": "机器没有摄像头； 2、安卓版本是安卓7以下的",
+      "agent_answer": "**结论**：安卓终端没有视频图标，知识库记载有两种可能：\n\n1. **机器没有摄像头**；\n2. **安卓版本是安卓 7 以下的**。\n\n即设备本身无摄像头硬件，或系统安卓版本过低（低于 Android 7），这两种情况下终端不会显示视频图标。\n\n**来源**：客服知识库（`kb_2ak3wcz9wx`，文件：客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，直接给出了两种可能原因。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 63,
+      "section": "终端-安卓",
+      "query": "终端-安卓-签名版本登录报错202读取不到IMEI",
+      "gold_answer": "设置里能不能显示imei；2、安卓10以上的，apk有没有签名",
+      "agent_answer": "根据知识库中的记录，该问题的处理建议如下：\n\n## 现象\n终端-安卓签名版本登录报错 202，提示读取不到 IMEI。\n\n## 处理步骤\n1. **检查机器设置中能否显示 IMEI**：进入设备设置查看是否能查询到 IMEI 号（路径通常为 设置 > 关于本机 > IMEI，或拨号键盘输入 `*#06#`）。\n2. **检查机器安卓版本**：安卓 10 及以上（多为大屏机）需要厂家**签名 apk** 才能读取到 IMEI，确认当前安装的 apk 是否有签名。\n3. **确认机器是否有 IMEI**：若机器本身没有 IMEI，需由客户联系厂家或由客服协助咨询厂家核实。\n\n## 关键点\n- 报错 202 读取不到 IMEI 时，优先确认两点：**设备设置里能否显示 IMEI**、**安卓 10 以上的 apk 是否已签名**。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了检查IMEI显示和APK签名的处理步骤。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 65,
+      "section": "终端-安卓",
+      "query": "终端-安卓-系统使用的编译解码器和网络速度",
+      "gold_answer": "解码器AMR， 网速8K/S",
+      "agent_answer": "根据客服知识库中的记录，该问题的结论如下：\n\n**系统使用的编解码器和网络速度**\n\n- **解码器**：AMR\n- **网速**：8K/S\n\n相关补充信息（同一知识库）：\n\n- **POCSTARS 音频编解码器、采样率**：amr，8k\n- **语音流量消耗**只与编码方式、打包帧数有关\n- **不同视频分辨率对应的网络带宽**：360P-704Kbps、480P-938Kbps、720P-1.38Mbps\n\n来源：客服知识库（客服知识库.md，条目“系统使用的编译解码器和网络速度”）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出了解码器和网速信息。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 64,
+      "section": "终端-安卓",
+      "query": "终端-安卓-调度台强拉不成功/无法强拉",
+      "gold_answer": "终端账号的当前组织及所有父级组织都没有调度员的话，就会强拉失败 本级组织和上级组织需要有调度员",
+      "agent_answer": "## 调度台强拉不成功/无法强拉\n\n**核心原因**：终端账号的当前组织及其所有父级组织都没有配置调度员时，强拉就会失败。**本级组织和上级组织必须要有调度员**，强拉才能成功。\n\n### 排查与处理建议\n\n1. **检查调度员配置**：确认该终端账号所属组织的本级及所有上级组织中，是否都已配置调度员；缺少则补配调度员后重试。\n2. **确认操作方式正确**：调度员在\"实时视频\"中选中在线成员，点击\"视频强拉\"发起强拉。\n3. **确认强拉概念**：强拉是指调度员将当前所在群组中\"在线但不在组\"状态的用户，拉回到调度台当前所在的群组。若目标成员处于在讲话、已在其他临时群组或离线等状态，也可能无法被拉入。\n\n### 相关场景补充\n\n- 若强拉提示\"已发送请求\"但看不到画面（视频无画面）：按顺序排查 ① 检查版本是否正确（区分新/老视频版本）；② 切换网络重试；③ 测试同节点的账号是否有问题，有问题则反馈运维排查；④ 检查本级及上级是否有调度员，无调度员则无法强拉回传视频。\n- 若强拉或单呼终端视频没画面、但终端回传视频有画面：可联系运维清理脏数据，若无效可尝试让客户更换公司节点。\n\n---\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕调度台强拉不成功的原因与排查建议展开，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 66,
+      "section": "终端-安卓",
+      "query": "终端-安卓-关于流量卡设置APN",
+      "gold_answer": "橙卡：ctm-mobile 绿卡：indosatgprs 蓝卡：gdyc.gziot 欧盟卡：data641003 在对应终端APN设置界面：APN设置为对应卡种代码即可。例如欧盟卡(APN:data641003)",
+      "agent_answer": "根据知识库记载，安卓终端设置流量卡 APN 的方式如下：\n\n## 流量卡 APN 设置\n\n不同卡种的 APN 代码对应关系：\n\n| 卡种 | APN 代码 |\n| --- | --- |\n| 橙卡 | ctm-mobile |\n| 绿卡 | indosatgprs |\n| 蓝卡 | gdyc.gziot |\n| 欧盟卡 | data641003 |\n\n**操作方法**：在对应终端的 APN 设置界面，将 APN 设置为对应卡种的代码即可。例如欧盟卡，APN 设置为 `data641003`。\n\n来源：客服知识库（客服知识库.md，片段 file_d72ba9_chunk_21）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对安卓终端设置流量卡APN给出了具体卡种代码和操作步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 67,
+      "section": "终端-安卓",
+      "query": "终端-安卓-森海克斯NX-300群组内从相册选择视频发送，调度台无法查看/播放",
+      "gold_answer": "机器兼容问题，已单独修改版本",
+      "agent_answer": "**结论**：该问题在知识库中有明确记载，属于**机器兼容问题**，已通过**单独修改版本**解决。\n\n具体说明：\n\n| 项目 | 内容 |\n| --- | --- |\n| 现象 | 森海克斯NX-300在群组内从相册选择视频发送，调度台无法查看/播放 |\n| 原因 | 机器兼容问题 |\n| 处理方式 | 已单独修改版本（为该机型提供单独适配的版本） |\n\n建议做法：为森海克斯NX-300终端升级/安装单独适配的修改版本后再测试视频发送，即可在调度台正常查看/播放。\n\n来源：客服知识库（客服知识库.md，file_d72ba9，chunk 21）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了原因和处理方式。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 68,
+      "section": "终端-安卓",
+      "query": "终端-安卓-高达E720",
+      "gold_answer": "和etera的 e980 apk公用(仅限这个版本)",
+      "agent_answer": "根据知识库中的记载，关于安卓终端「高达E720」的信息如下：\n\n**高达E720**：与 etera 的 E980 APK 公用（仅限这个版本）。\n\n即：高达E720 终端当前知识库中仅有一条记录，说明其使用的是与 etera E980 共用的 APK，且仅限该版本。知识库中未记载该终端的其他参数、规格或使用说明。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出了高达E720与etera E980 APK共用的信息。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 69,
+      "section": "终端-安卓",
+      "query": "终端-安卓-RG170/rg360 后台运行/息屏时 ptt按键用不了",
+      "gold_answer": "进入CustomKey设置成PTT ——常规情况设置后就解决，如果还不行，进行步骤2再重复步骤1---视频已存网盘知识库附件 2.刷纯净ROM —— 原因：rg170 bundling with waveptx motorola here",
+      "agent_answer": "已在客服知识库中找到该问题的处理方案，结论如下。\n\n## RG170/RG360 后台运行/息屏时 PTT 按键用不了\n\n**处理步骤（按顺序执行）：**\n\n1. **进入 CustomKey 设置，将按键设置为 PTT**\n   - 常规情况设置后即可解决。\n   - 如果设置后仍不行，先执行步骤 2，再重复步骤 1。\n   - 相关操作视频已存网盘知识库附件。\n\n2. **刷纯净 ROM**\n   - 原因：RG170 预装捆绑了 WavePTX（Motorola）应用导致。\n\n**补充排查（通用\"PTT按键不可用\"条目）：**\n- 检查使用的 APK 版本是否正确，版本不对时给客户正确的版本（对应 APK 需匹配对应终端）。\n- 若版本正确，检查 ROM 是否为定制 ROM。\n\n**来源：** 客服知识库（kb_2ak3wcz9wx）— 《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体处理步骤和原因，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 70,
+      "section": "终端-安卓",
+      "query": "终端-安卓-设备息屏状态下不能调节音量",
+      "gold_answer": "息屏状态调节音量是系统行为，app不干预无法修改",
+      "agent_answer": "**结论：设备息屏状态下不能调节音量属于安卓系统行为，App 不干预，无法修改。**\n\n知识库中的相关说明如下：\n\n- 息屏状态下调节音量是系统行为，App 不干预，因此无法修改。\n- 该现象并非 App 故障，而是系统层面在息屏状态下的音量调节限制。\n\n**处理建议：** 如需在息屏状态下调节音量，需在点亮屏幕后进行调节，或确认终端系统（ROM）本身是否支持息屏按键调音量，该能力取决于终端系统，而非 App 可以控制的范围。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕息屏不能调音量问题给出明确结论和处理建议，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 71,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端报错‘Fixed group PTT right closed, Please contact administrator.’固定群组对讲权限关闭，请联系管理员",
+      "gold_answer": "登录运营平台，开启终端账号的“群组菜单”，关闭“固定群组禁言”",
+      "agent_answer": "## 结论\n\n该报错表示终端的固定群组对讲权限被关闭，处理方式如下：\n\n1. 登录**运营平台**；\n2. 开启终端账号的**“群组菜单”**权限；\n3. 关闭**“固定群组禁言”**。\n\n完成以上设置后，终端即可恢复固定群组对讲。\n\n**来源：** 客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，给出登录运营平台、开启群组菜单、关闭固定群组禁言的完整处理步骤，与问题切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 72,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号从旧的群组中移除/加入新群组/仍然显示旧群组：",
+      "gold_answer": "收集并验证问题账号： （1）问题能复现→ 询问客户做了哪些操作导致的问题，转开发排查 （2）问题复现不了： ①尝试清除终端缓存 ②抓取logcat日志，反馈适配组排查",
+      "agent_answer": "已在客服知识库中找到该问题的处理依据，结论如下。\n\n## 现象\n\n终端（安卓）账号从旧群组中移除、加入新群组后，终端仍然显示旧群组。\n\n## 处理流程\n\n按以下步骤收集并验证问题账号：\n\n1. **验证问题是否可复现**\n   - **可复现**：询问客户做了哪些操作导致该问题，整理后转开发排查。\n   - **不可复现**：继续执行第 2 步。\n\n2. **尝试清除终端缓存**，观察问题是否恢复。\n\n3. **若仍未解决**：抓取 logcat 日志，反馈适配组排查。\n\n## 说明\n\n- 知识库未记载该现象的具体根因，处理方式以\"先复现、后缓存、再抓日志反馈\"为主线，未包含其他排查手段时请勿自行扩展。\n\n**来源**：客服知识库《客服知识库.md》（file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了具体处理流程，实质作答且切题",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 73,
+      "section": "终端-安卓",
+      "query": "终端-安卓-免打扰和自动应答模式",
+      "gold_answer": "APK 内设置了免打扰，单呼过去，会显示 对方已挂断 自动应答模式是单呼的一种模式，半双 全双 都支持",
+      "agent_answer": "根据客服知识库中的记录，安卓终端\"免打扰和自动应答模式\"说明如下：\n\n## 免打扰模式\n- 在 APK 内设置了免打扰后，对方发起单呼，终端侧会显示 **\"对方已挂断\"**。\n\n## 自动应答模式\n- 自动应答是**单呼的一种模式**。\n- **半双工、全双工都支持**自动应答。\n\n来源：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了免打扰和自动应答模式的说明。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 74,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何查询IMEI号",
+      "gold_answer": "设备拨号键盘查询: *拨号输入#06#**‌：适用于大部分手机，输入后自动显示IMEI 2.设备设置查看‌： 路径通常为设置 > 关于本机 > IMEI",
+      "agent_answer": "根据客服知识库中的记载，安卓终端查询 IMEI 号有以下两种方式：\n\n## 如何查询 IMEI 号\n\n1. **设备拨号键盘查询**：在拨号界面输入 `*#06#`，输入后自动显示 IMEI。适用于大部分手机。\n2. **设备设置查看**：路径通常为 **设置 > 关于本机 > IMEI**。\n\n**来源**：客服知识库（客服知识库.md，file_id: file_d72ba9）\n\n补充说明：若涉及读取不到 IMEI（提示 202）的情况，知识库记载安卓 10 以上（多为大屏机）需要厂家签名 APK 才能读取到，可另行咨询。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕问题给出了两种查询IMEI的方式，实质切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 75,
+      "section": "终端-安卓",
+      "query": "终端-安卓-不同视频分辨率对应的网络带宽",
+      "gold_answer": "360P-704Kbps 480P-938Kbps 720P-1.38Mbps",
+      "agent_answer": "根据客服知识库中的记载，不同视频分辨率对应的网络带宽如下：\n\n| 视频分辨率 | 网络带宽 |\n| --- | --- |\n| 360P | 704Kbps |\n| 480P | 938Kbps |\n| 720P | 1.38Mbps |\n\n**来源**：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了不同视频分辨率对应的网络带宽表格，实质作答且完全切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 76,
+      "section": "终端-安卓",
+      "query": "终端-安卓-执法记录仪进入设置密码",
+      "gold_answer": "密码0506（所有执法记录仪统一的密码）",
+      "agent_answer": "根据知识库记录：\n\n**执法记录仪进入设置的密码为 `0506`**（所有执法记录仪统一使用的密码）。\n\n来源：客服知识库（客服知识库.md）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了密码0506，与问题直接相关，属于实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 77,
+      "section": "终端-安卓",
+      "query": "终端-安卓-adb安装apk报错adb: error:failed to read copy response",
+      "gold_answer": "adb kill-server adb start-server adb devices 重启adb服务解决",
+      "agent_answer": "**结论**：知识库中记载的解决方法是重启 adb 服务，具体操作如下：\n\n1. 执行 `adb kill-server` 停止 adb 服务\n2. 执行 `adb start-server` 重新启动 adb 服务\n3. 执行 `adb devices` 确认设备连接正常\n4. 重新执行 apk 安装命令\n\n按上述步骤重启 adb 服务即可解决该报错。\n\n**来源**：客服知识库（`客服知识库.md`，\"adb安装apk报错adb: error:failed to read copy response\" 条目）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了重启adb服务的具体操作步骤。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 78,
+      "section": "终端-安卓",
+      "query": "终端-安卓-RC26 刷机后显示信号操作步骤 Settings→ Network → Restore network settings",
+      "gold_answer": "RC26 Signal.mp4",
+      "agent_answer": "根据知识库记录，RC26 刷机后显示信号的操作步骤如下：\n\n**Settings → Network → Restore network settings**（设置 → 网络 → 恢复网络设置）\n\n知识库中该条目同时附有演示视频 **RC26 Signal.mp4**，可参照视频操作。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了操作步骤和视频引用。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 79,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录提示“Check for Updates.” 卡在这个界面不动",
+      "gold_answer": "每个apk都会检测升级，检查不到就正常登录了，检查到了就提示升级， 一直卡着不动就有问题，需要反馈适配",
+      "agent_answer": "**结论**：登录时出现\"Check for Updates.\"提示并卡住不动属于异常情况，知识库记载的处理方式是反馈适配排查。\n\n**说明**\n\n- 每个 APK 启动登录时都会检测升级：检测不到新版本会正常登录；检测到新版本会提示升级。\n- 如果一直卡在\"Check for Updates.\"界面不动，说明检测环节出现异常，需要反馈适配排查处理。\n\n**处理建议**\n\n- 将该问题（终端型号、APK 版本、复现情况）反馈给适配组排查。\n\n**来源**\n\n- 客服知识库.md（客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕登录卡在Check for Updates的问题给出了结论和处理建议。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 80,
+      "section": "终端-安卓",
+      "query": "终端-安卓-从主线版本开始 RSAPP_2.9.4.9_POCSTARS_CP680_HW_7 多媒体和执法仪视频/音频对应保存路径",
+      "gold_answer": "#多媒体 /storage/emulated/0/LocalRecords/videos #执法记录仪 /storage/emulated/0/LocalRecords/audios",
+      "agent_answer": "根据客服知识库记载，从主线版本 RSAPP_2.9.4.9_POCSTARS_CP680_HW_7 开始，多媒体与执法仪视频/音频的保存路径如下：\n\n| 类别 | 保存路径 |\n|------|----------|\n| 多媒体 | /storage/emulated/0/LocalRecords/videos |\n| 执法记录仪 | /storage/emulated/0/LocalRecords/audios |\n\n说明：知识库仅记载上述两个路径（多媒体对应 videos 目录，执法记录仪对应 audios 目录），未区分视频与音频的单独子目录。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了多媒体和执法记录仪的保存路径。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 81,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端按下PTT按键提醒“Audio disabled”",
+      "gold_answer": "终端被摇闭，登录调度台遥开",
+      "agent_answer": "根据知识库检索结果，该问题已有明确处理方案：\n\n## 结论\n\n终端按下 PTT 按键提醒 **“Audio disabled”**，原因是**终端被遥闭（远程关闭）**，需要**登录调度台对终端执行遥开（远程开启）**。\n\n## 处理建议\n\n1. 确认该终端账号是否被调度台执行过遥闭操作。\n2. 登录调度台，找到对应终端账号，执行“遥开”操作，恢复终端语音发射功能。\n\n---\n\n**来源**：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》—「终端-安卓」章节\n\n如需进一步了解遥闭/遥开的具体操作路径（如调度台哪个菜单、是否需要特定权限），可继续补充问题，我再帮您检索。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出了原因和操作步骤",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 82,
+      "section": "终端-安卓",
+      "query": "终端-安卓-文件管理支持的发送文件格式（图片，视频，音频，文档等）",
+      "gold_answer": "[\"txt\", \"doc\", \"docx\", \"pdf\", \"ppt\", \"pptx\", \"xls\", \"xlsx\", \"zip\", \"rar\",\"wav\",\"mp4\",\"jpg\"]",
+      "agent_answer": "**结论**：终端（安卓）文件管理支持的发送文件格式共 13 种：\n\n| 类别 | 支持的格式 |\n|------|-----------|\n| 图片 | jpg |\n| 视频 | mp4 |\n| 音频 | wav |\n| 文档 | txt、doc、docx、pdf、ppt、pptx、xls、xlsx |\n| 压缩包 | zip、rar |\n\n补充说明（来自同一知识库）：\n- 图片和视频的发送需要从相册选择；从文件选择支持上述格式。\n- 多媒体消息大小限制：图片 10M，视频 20M。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，列出了发送文件格式。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 84,
+      "section": "终端-安卓",
+      "query": "终端-安卓-apk是否支持显示账号有效期",
+      "gold_answer": "小屏机支持显示，大屏机不支持",
+      "agent_answer": "**结论：支持，但仅限小屏机；大屏机不支持显示账号有效期。**\n\n依据客服知识库中的记载：\n\n| 终端类型 | 是否支持显示账号有效期 |\n| --- | --- |\n| 小屏机 | 支持显示 |\n| 大屏机 | 不支持 |\n\n来源：客服知识库（客服知识库.md）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，直接给出了支持显示账号有效期的终端类型结论。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 83,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端功耗和流量数据汇总",
+      "gold_answer": "包含TE300K和PNC550的数据",
+      "agent_answer": "根据知识库检索结果，客服知识库中有\"终端功耗和流量数据汇总\"条目，声明包含 TE300K 和 PNC550 的数据。以下为知识库中实际可查到的内容：\n\n## 终端功耗和流量数据汇总（终端-安卓）\n\n### TE300K 流量消耗（科威特数据）\n\n| 项目 | 机型/版本信息 |\n|---|---|\n| 机型 | TE300K |\n| APP 版本 | NSAPP_2.8.2.36_TeltraPTT_TE300K_1 |\n| ROM | TE300K_INT_V10P_20230306（Android 系统） |\n\n| 测试项 | 流量消耗（单位 KB） |\n|---|---|\n| 关定位待机 10 分钟 | 29.63 KB |\n| 开定位待机 10 分钟 | 87.78 KB |\n| 发射对讲 10 分钟 | 985.56 KB |\n| 接收对讲 10 分钟 | 944.92 KB |\n\n补充说明：语音流量消耗只和编码方式、打包帧数有关。\n\n### 功耗相关\n\n- 开启定位，终端电池功耗会增加 **30 毫安左右**。\n- 运营平台修改心跳所对应的功耗，知识库中以图片形式记录（无文字数值）。\n\n### PNC550\n\n知识库中\"终端功耗和流量数据汇总\"条目注明包含 PNC550 的数据，但检索到的正文中未找到 PNC550 的具体功耗或流量数值记录。\n\n**来源**：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》（file_d72ba9）\n\n如需 PNC550 的具体数据，当前知识库中暂无可用依据，建议补充相关文档。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，提供了知识库条目内容及相关数据。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "包含PNC550的数据"
+      ],
+      "supp_missed": [],
+      "score": 0.6000000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 86,
+      "section": "终端-安卓",
+      "query": "终端-安卓-谷歌商店版本从ASAPP_2.9.5.2_POCSTARS 1.apk及其以上的版本支持短号功能",
+      "gold_answer": "短号功能演示视频.mp4",
+      "agent_answer": "您的说法与知识库记载一致。\n\n**结论**：谷歌商店版本从 **ASAPP_2.9.5.2_POCSTARS 1.apk** 及其以上的版本支持短号功能。\n\n**来源**：客服知识库（`客服知识库.md`，终端-安卓相关条目）中明确记载\"谷歌商店版本从ASAPP_2.9.5.2_POCSTARS 1.apk及其以上的版本支持短号功能\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答对问题给出了肯定性答复并引用知识库，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提及短号功能演示视频.mp4"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 85,
+      "section": "终端-安卓",
+      "query": "终端-安卓-执法记录仪如何发送音频.图片.视频到调度台以及如何设置launcher",
+      "gold_answer": "具体操作见知识库--/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/执法记录仪如何发送音频.图片.视频到调度台以及如何设置launcher",
+      "agent_answer": "根据企业知识库检索结果，回答如下：\n\n## 结论\n\n知识库中明确记载：**执法记录仪如何发送音频、图片、视频到调度台以及如何设置 launcher 的具体操作，见知识库附件中的操作视频**，视频位置为：\n\n> 知识库--/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/执法记录仪如何发送音频.图片.视频到调度台以及如何设置launcher\n\n知识库文本部分未收录该操作的分步文字说明，请在上述视频中查看具体步骤。\n\n## 相关知识库记载的配套信息\n\n以下为知识库中与执法记录仪操作直接相关的其他记载，可辅助操作：\n\n| 事项 | 说明 |\n| --- | --- |\n| 执法记录仪进入设置密码 | 0506（所有执法记录仪统一密码） |\n| 多媒体/执法仪文件保存路径（自主线版本 RSAPP_2.9.4.9_POCSTARS_CP680_HW_7 起） | 多媒体：`/storage/emulated/0/LocalRecords/videos`；执法记录仪：`/storage/emulated/0/LocalRecords/audios` |\n\n来源：客服知识库（file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体视频路径，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 87,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APP写了环境后仍提示登录超时",
+      "gold_answer": "写完以后 杀掉APP 重新登录",
+      "agent_answer": "根据知识库记载，针对安卓终端 APP 写入环境后仍提示登录超时的问题，处理方式如下：\n\n**直接处理建议**\n\n写完环境后，先杀掉 APP，再重新登录。\n\n**若重新登录后仍提示\"登录超时\"，按以下步骤排查（知识库\"登录超时\"条目）：**\n\n1. 登录相同节点的账号进行测试；\n2. 若测试账号也登录不上，联系运维检查；\n3. 若测试账号登录成功，则检查网络相关问题：\n   - 换卡或切换 WiFi 尝试；\n   - 检查 APN 是否正确；\n   - 检查机器是否能识别到 SIM 卡；\n   - 以上均无法解决时，联系厂家处理。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了处理建议而非拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 88,
+      "section": "终端-安卓",
+      "query": "终端-安卓-Estalky E120如何抓取MTK LOG",
+      "gold_answer": "/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频",
+      "agent_answer": "根据客服知识库的记载：\n\n**结论**：知识库中记录\"Estalky E120如何抓取MTK LOG\"的操作说明以视频形式存放，路径为：\n\n- `/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频`\n\n**说明**：\n- 知识库正文仅提供上述附件路径，未收录文字版的具体抓取步骤（如抓取工具、命令、操作顺序等），具体操作步骤请以该目录下的视频为准。\n- 如您需要，可在知识库附件中打开对应视频查看完整操作流程。\n\n**来源**：客服知识库（客服知识库.md）——\"Estalky E120如何抓取MTK LOG\"条目。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了知识库中的附件路径，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 90,
+      "section": "终端-安卓",
+      "query": "终端-安卓-天龙世纪设备安装APK密码",
+      "gold_answer": "通用密码“TL0066\"",
+      "agent_answer": "根据客服知识库记载，天龙世纪设备安装 APK 的通用密码为：\n\n**TL0066**\n\n来源：客服知识库（客服知识库.md）—\"天龙世纪设备安装APK密码\"条目。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了通用密码TL0066，切题且有效作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 89,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号增加定位功能",
+      "gold_answer": "公司账号下用户管理，定位设置",
+      "agent_answer": "**结论**：为安卓终端账号增加定位功能，需在**公司账号**下的**用户管理**中进行**定位设置**。\n\n知识库原文记载：\n\n> ## 账号增加定位功能\n> 公司账号下用户管理，定位设置\n\n即：使用公司账号登录管理平台，进入\"用户管理\"，找到对应终端账号并进行\"定位设置\"即可为该账号开启定位功能。\n\n**来源**：客服知识库（客服知识库.md，第 853-854 行）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出在“公司账号-用户管理-定位设置”的操作路径，是实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 91,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK安装/卸载/抓日志",
+      "gold_answer": "安装命令：adb install apk 卸载命令：adb uninstall 包名 adb抓日志：adb logcat -v time >>存储文本文档-回车 2.复现问题 3.记录时间多少秒，Ctrl+c 结束抓日志 adb logcat -v time >>",
+      "agent_answer": "已在知识库中找到相关依据，以下是根据《客服知识库》记载的操作说明。\n\n## APK 安装 / 卸载 / 抓日志\n\n**结论**：知识库中明确记载了通过 adb 命令进行 APK 安装、卸载及抓取日志的标准操作。\n\n### 操作步骤\n\n1. **安装 APK**\n   - 命令：`adb install apk`\n\n2. **卸载 APK**\n   - 命令：`adb uninstall 包名`\n\n3. **抓取日志**\n   - 执行命令：`adb logcat -v time >>存储文本文档`（回车开始）\n   - 复现问题\n   - 记录问题发生的时间（多少秒）\n   - 按 `Ctrl+c` 结束抓日志\n\n### 相关补充（同知识库记载）\n\n- **adb 安装报错**：出现 `adb: error: failed to read copy response` 时，依次执行 `adb kill-server` → `adb start-server` → `adb devices`，重启 adb 服务解决。\n- **查看终端型号**：`adb shell getprop ro.product.model`\n\n**来源**：客服知识库（文件：客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，提供了APK安装、卸载和抓日志的具体adb操作步骤。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 93,
+      "section": "终端-安卓",
+      "query": "终端-安卓-收到的语音串音排查步骤",
+      "gold_answer": "谁的语音串到了哪个群组中 2、登录账号是否设置了对该用户所在群组的监听 3、串音的时间点，串音视频",
+      "agent_answer": "根据客服知识库中的记录，\"收到的语音串音排查步骤\"如下：\n\n**排查步骤**\n\n1. 确认谁的语音串到了哪个群组中；\n2. 检查登录账号是否设置了对该用户所在群组的监听；\n3. 记录串音的时间点，并提供串音视频。\n\n**说明**\n\n- 以上内容为客服知识库中该问题的既有排查步骤，未包含更多补充说明或进一步处理建议。\n\n**来源**\n\n- 客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了语音串音排查步骤，与问题相关且实质作答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 92,
+      "section": "终端-安卓",
+      "query": "终端-安卓-临时群组解散逻辑",
+      "gold_answer": "调度员跟用户创建的临时群组超过三个人只要创建者不退出就不会解散。",
+      "agent_answer": "根据客服知识库中的记载，安卓终端临时群组的解散逻辑如下：\n\n## 结论\n\n临时群组的解散主要取决于**创建者是否退出**、**是否有人讲话**以及**平台设置的超时解散时长**，具体规则分场景如下。\n\n## 知识库明确记载的解散规则\n\n| 场景 | 解散逻辑 |\n|------|----------|\n| 调度员与用户创建的临时群组 | 群组**超过三个人**时，只要**创建者不退出就不会解散** |\n| 单呼产生的临时群组 | 单呼临时群组讲话最长时间为 **300 秒**；**最长 120 秒没人讲话会自动解散** |\n| 远程麦克风场景 | 远程麦克风自动关闭时长取决于临时群组通话时长的设置；时间到后自动关闭麦克风并进入临时群组状态，**如果没有进行对讲，到了临时群组解散时间后自动解散** |\n| 平台超时解散时长 | 代理商可配置临时组超时解散时长，配置范围 **10–120 秒**（公司管理 → 设置） |\n| 公网默认参数 | 公网临时群组通话时长默认值 `tempCallDuration = 300`（秒） |\n\n## 说明\n\n- 临时群组（紫色）在终端群组排序中位于第一位（临时组 → 自建组 → 固定组 → 区域组）。\n- 解散时间配置在代理商公司层级，通过\"公司管理 → 设置 → 临时组超时解散时长\"修改，输入范围为 10–120 秒。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对临时群组解散逻辑进行了详细分场景说明，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 94,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何查看设备ICCID",
+      "gold_answer": "设置里或拨号界面输入 *#*#4636#*#* 用这两个方法看下设备显示的iccid号",
+      "agent_answer": "**结论**：安卓终端查看设备 ICCID 有两种方法，均可直接从设备上读取。\n\n**操作步骤**：\n\n1. **通过设置查看**\n   - 进入设备「设置」，找到「关于本机 / 关于设备」相关入口，查看显示的 ICCID 号。\n\n2. **通过拨号界面查看**\n   - 打开设备拨号界面，输入 `*#*#4636#*#*`，在弹出的页面中查看设备显示的 ICCID 号。\n\n> 说明：以上两种方法均来自知识库中\"如何查看设备ICCID\"的记载；知识库未说明不同型号终端的设置菜单路径差异，如某型号在设置中找不到对应入口，可优先使用拨号指令方式。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了查看设备ICCID的两种具体操作方法，与问题直接相关，属实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 95,
+      "section": "终端-安卓",
+      "query": "终端-安卓-T710A切换wifi的时候会出现断连的现象，需要重启apk解决",
+      "gold_answer": "apk域名解析问题，DNS由写入域名改为直接写入IP后解决",
+      "agent_answer": "根据知识库记录，该问题已有明确结论：\n\n**现象**\nT710A 终端在切换 WiFi 时出现断连，需要重启 APK 才能恢复。\n\n**原因**\n属于 APK 域名解析问题（DNS 问题）。\n\n**处理建议**\n将 DNS 配置由“写入域名”改为“直接写入 IP”，即可解决该断连问题。\n\n来源：客服知识库（客服知识库.md，file_d72ba9，chunk 23）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且与问题切题，给出了原因和处理建议。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 96,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达P50和P50pro是否支持mandown",
+      "gold_answer": "P50不支持，P50pro支持",
+      "agent_answer": "**结论：海能达 P50 不支持 mandown（倒地报警），海能达 P50pro 支持。**\n\n依据客服知识库的明确记载：\n\n> 海能达P50和P50pro是否支持mandown：**P50不支持，P50pro支持**\n\n补充说明（mandown 功能的通用适用条件，来源于同一知识库）：\n- mandown 是终端发给调度台的提示，需 APK 2.5 及以上版本且终端有屏幕的机器才支持该功能；\n- 若出现\"mandown 不生效或轻放就触发\"，可在设置中调节灵敏度（High Threshold Value 值越小越灵敏，Low Threshold Value 值越大越灵敏），跌落报警默认由加速度触发（默认加速度区间 3–35，极短时间内同时触发大于 35 且小于 3，并静止 3 秒后触发）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了P50不支持、P50pro支持的结论，切题且实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 98,
+      "section": "终端-安卓",
+      "query": "终端-安卓-T68为安卓设备，内置了apk无需安装，只需切平台就可以",
+      "gold_answer": "切平台操作视频：/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/T68切换pocstar平台操作视频",
+      "agent_answer": "根据客服知识库中的记载，您说的信息属实：\n\n**T68 为安卓设备，内置了 APK 无需安装，只需切换平台即可。**\n\n知识库还记录了配套的切换平台操作视频：\n- 路径：/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/T68切换pocstar平台操作视频\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，确认T68设备相关信息并提供操作视频路径，切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 99,
+      "section": "终端-安卓",
+      "query": "终端-安卓-开启定位，终端电池功耗会增加多少毫安",
+      "gold_answer": "30毫安左右",
+      "agent_answer": "根据知识库记载：\n\n**开启定位后，终端电池功耗会增加约 30 毫安。**\n\n说明：\n- 该数值为知识库客服问答中给出的通用参考值，未区分具体机型。\n- 若需了解具体机型（如 TE300K、E600 等）的定位待机流量消耗数据，知识库中另有记录，可另行查询。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了开启定位后功耗增加约30毫安的结论，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 97,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机版本不显示录音菜单",
+      "gold_answer": "检查服务包是否有多媒体功能",
+      "agent_answer": "根据知识库记录，安卓小屏机版本不显示录音菜单时，应**检查终端账号的服务包是否含有多媒体功能**。\n\n## 排查结论\n\n| 项目 | 内容 |\n|------|------|\n| 现象 | 终端（安卓）小屏机版本不显示录音菜单 |\n| 可能原因 | 服务包未包含多媒体功能 |\n| 检查方法 | 检查服务包是否含有多媒体功能 |\n\n## 相关补充\n\n- 录音功能的开启/关闭在运营平台侧操作：登录公司账号 → 用户列表 → 勾选对应账号 → **录音设置** 开启/关闭。\n- 另有记录提到：miniserver 环境下终端 APK 的录音记录功能，**小屏机需要终端更换对应版本**才支持录音记录。\n\n## 来源\n\n- 客服知识库（客服知识库.md）：\"小屏机版本不显示录音菜单——检查服务包是否有多媒体功能\"；\"如何关闭录音功功能——登录公司账号--用户列表--勾选对应账号--录音设置 开启/关闭\"；\"miniserver的终端apk是否支持录音记录功能——录音一直都有，小屏机的话得终端改个版本\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕问题给出了实质性的排查步骤，切题且非拒答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 100,
+      "section": "终端-安卓",
+      "query": "终端-安卓-在线的终端在调度台显示为离线且只在用户列表显示",
+      "gold_answer": "关闭大群组功能",
+      "agent_answer": "## 结论\n\n在线的终端在调度台显示为离线、且只在用户列表显示时，处理方式为：**关闭大群组功能**。\n\n## 说明\n\n- 该问题为常见售后问题，知识库中给出的解决办法是关闭大群组功能，关闭后终端即可正常在调度台显示在线状态。\n- 知识库中未记载更多关于该问题成因的详细说明，仅记录了上述处理方式。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了明确的处理方式，与问题相关，属于实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 101,
+      "section": "终端-安卓",
+      "query": "终端-安卓-按返回键无法返回到主页面",
+      "gold_answer": "尝试长按ok键和返回键 2.或者用adb命令进入：adb shell am start -a android.settings.HOME_SETTINGS",
+      "agent_answer": "**结论**：按返回键无法返回到主页面时，知识库给出的处理方式如下：\n\n1. 尝试长按 OK 键和返回键。\n2. 若仍无法返回，可通过 ADB 命令进入：\n   ```\n   adb shell am start -a android.settings.HOME_SETTINGS\n   ```\n\n**来源**：客服知识库（《客服知识库.md》，chunk: file_d72ba9_chunk_24）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体的处理步骤和ADB命令，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 102,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏优惠卡逻辑",
+      "gold_answer": "优惠卡： 1. 旧版本终端---优惠卡---不支持使用（旧版本终端没有上报版本信息的能力） 2. 旧版本终端--普通卡--支持使用（现有逻辑） 3. 新版本终端---优惠卡--符合版本要求支持使用（新版本终端可上报版本信息） 4. 新版本终端--普通卡--支持使用（沿用现有逻辑） 5. 最低版本2.9.5.1 先看是否优惠卡，是的话判断版本号，版本号高于配置，登录，小于或者没有，不登录；不是优惠卡的话，直接登录",
+      "agent_answer": "根据知识库（客服知识库）中的记载，安卓小屏机优惠卡的登录判断逻辑如下：\n\n## 小屏优惠卡逻辑\n\n**使用规则：**\n\n| 终端类型 | 卡类型 | 是否支持使用 |\n|---|---|---|\n| 旧版本终端 | 优惠卡 | 不支持使用（旧版本终端没有上报版本信息的能力） |\n| 旧版本终端 | 普通卡 | 支持使用（现有逻辑） |\n| 新版本终端 | 优惠卡 | 符合版本要求时支持使用（新版本终端可上报版本信息） |\n| 新版本终端 | 普通卡 | 支持使用（沿用现有逻辑） |\n\n**版本要求：** 最低版本为 2.9.5.1\n\n**登录判断流程：**\n1. 先判断是否为优惠卡；\n2. 若是优惠卡，判断版本号：\n   - 版本号高于配置 → 登录；\n   - 版本号小于配置或没有版本信息 → 不登录；\n3. 若不是优惠卡（普通卡），直接登录。\n\n**来源：** 客服知识库《客服知识库.md》（file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓小屏优惠卡逻辑给出规则表、版本要求和判断流程，实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    }
+  ]
+}

@@ -842,20 +842,23 @@ const updateMentionItems = (query = '') => {
 
         // 竞态校验锁，确保是当前最新响应
         if (currentId === searchRequestId.value && Array.isArray(responseData)) {
-          const remoteFileItems = responseData.map((f) => {
-            const path = f.path || ''
-            const fileName = f.name || path.split('/').pop() || path
-            return {
-              value: path,
-              label: fileName,
-              type: 'file',
-              insertValue: path || fileName,
-              tokenLabel: formatMentionToken('file', fileName),
-              description: path,
-              is_dir: f.is_dir,
-              source: f.source
-            }
-          })
+          // bug3：主对话只读本会话文件，跨会话共享工作区文档不作为 @ 引用候选
+          const remoteFileItems = responseData
+            .filter((f) => f.source !== 'workspace')
+            .map((f) => {
+              const path = f.path || ''
+              const fileName = f.name || path.split('/').pop() || path
+              return {
+                value: path,
+                label: fileName,
+                type: 'file',
+                insertValue: path || fileName,
+                tokenLabel: formatMentionToken('file', fileName),
+                description: path,
+                is_dir: f.is_dir,
+                source: f.source
+              }
+            })
 
           // 合并本地临时文件与后端高匹配度文件（使用 Set 进行去重，防止重复展示）
           const seenValues = new Set(filteredLocalFiles.map((x) => x.value))

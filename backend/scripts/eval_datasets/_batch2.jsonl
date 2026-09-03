@@ -1,0 +1,10 @@
+{"index": 57, "section": "调度台", "query": "调度台-录音记录更新不及时/消息记录显示时间比实际慢1小时", "gold_answer": "验证问题-问题复现-运维解决"}
+{"index": 58, "section": "调度台", "query": "调度台-换肤调度台显示pocstar logo", "gold_answer": "验证问题-问题复现-运维解决"}
+{"index": 59, "section": "调度台", "query": "调度台-调度台闪退", "gold_answer": "追踪客户复现步骤 2、做问题复现 3、可复现联系开发，并共享步骤 4、不可复现获取调度台日志和库日志，联系运维获取服务日志，关联获取调度台日志方法"}
+{"index": 60, "section": "调度台", "query": "调度台-调度台无法访问/域名ping不通", "gold_answer": "对域名进行CNAME解析"}
+{"index": 61, "section": "调度台", "query": "调度台-调度台轨迹回放报错400", "gold_answer": "去掉群组名字中的特殊字符"}
+{"index": 62, "section": "调度台", "query": "调度台-网页调度台地图显示中文", "gold_answer": "修改系统语音为英文后解决"}
+{"index": 63, "section": "调度台", "query": "调度台-qt调度台下载视频/录音记录提示文件已加密无法下载", "gold_answer": "①保存录音文件时，不要删除“wav”的后缀 ②推荐使用web调度台，可直接在浏览器下载录音记录"}
+{"index": 64, "section": "调度台", "query": "调度台-调度台显示群组成员0/0", "gold_answer": "检查大群组是否开启"}
+{"index": 65, "section": "调度台", "query": "调度台-调度台选择显示在线成员后无法全部显示", "gold_answer": "进入群组，会显示当前群组全部有定位的成员 点击群组名称，会显示点击的群组并显示全部有定位的成员 Video 1:Click this icon to join the group. All members who have reported their location will be shown on the map. Video 2::Click the \"group name\". Only members of the selected group who have reported their location will be shown on the map."}
+{"index": 66, "section": "调度台", "query": "调度台-切换web调度台语言及调度台地图语言", "gold_answer": "系统语言，浏览器语言，调度台语言都切换，然后重启电脑： 调度台语言跟随系统语言，需要重启电脑 地图语言跟随浏览器语言，需要重启浏览器"}

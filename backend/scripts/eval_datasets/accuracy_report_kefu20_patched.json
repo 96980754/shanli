@@ -1,0 +1,407 @@
+{
+  "run_name": "kefu20_20260819",
+  "disclaimer": "本报告为内部整体质量评估（不交付甲方）：用业务方人工整理的业务验证集驱动生产真实 Agent 作答，由评测模型评估系统答案对用户问题的贴合度。",
+  "contract_disclaimer": "本报告「答案准确率」为内部质量口径（RAGAS Answer Relevancy：系统答案对用户问题的语义贴合度），测试集为业务方人工整理的业务验证集。它**不是**《AI知识库软件开发合同终稿》中的验收指标——合同验收指标为：答案可接受准确率 ≥ 80%（一期 ≥90%，三期 ≥95%）、引用正确率 ≥ 95%。两者口径、判定方法与数据来源不同，本报告不得用于替代合同验收结论。",
+  "threshold": 0.8,
+  "headline_metric": "answer_relevancy",
+  "metrics": {
+    "answer_correctness": 0.25241276371317606,
+    "citation_recall@1": null,
+    "citation_recall@5": null,
+    "citation_f1@5": null
+  },
+  "metric_counts": {
+    "answer_correctness": 16,
+    "citation_recall@1": 0,
+    "citation_recall@5": 0,
+    "citation_f1@5": 0
+  },
+  "passed": false,
+  "total_items": 20,
+  "kbs": [
+    {
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819",
+      "count": 20,
+      "metrics": {
+        "answer_correctness": 0.25241276371317606,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      }
+    }
+  ],
+  "items": [
+    {
+      "index": 0,
+      "query": "新建APP和调度员账号时“开户数量”自动填充为字母",
+      "ragas_metrics": {
+        "answer_correctness": 0.12438303192424907,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "浏览器行为，开启无痕模式后不会有自动填充",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 1,
+      "query": "登录代理商后如何修改本级公司的登录密码",
+      "ragas_metrics": {
+        "answer_correctness": 0.33040398099375906,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库《POCSTARS运营平台用户手册V3.0》中的记载，以代理商身份登录后，可通过以下方式修改本级公司（即代理商自身账号）的登录密码：\n\n## 修改本级公司（代理商自身）登录密码\n\n1. 使用代理商账号登录 POCSTARS 运营平台。\n2. 点击左侧菜单 **\"个人中心\"**，进入个人中心页面（页面展示代理商的基本信息）。\n3. 点击 **【修改密码】**，打开修改密码弹窗。\n4. 在弹窗中设置新的登录密码并保存。\n5. 修改成功后，**需使用新密码重新登录运营平台**。\n\n## 补充说明：修改名下公司用户的登录密码\n\n如果您指的是修改代理商名下的公司用户的登录密码，操作路径不同：\n\n1. 进入 **\"公司管理\" → \"公司列表\"**。\n2. 点击对应公司的 **【修改密码】**，打开修改密码弹窗。\n3. 输入符合密码规则的新密码，并在确认密码中输入相同密码，点击 **【保存】**。\n4. 被修改密码的公司用户需使用新密码重新登录运营平台。\n\n密码规则（知识库明确记载）：长度为 6~16 个字符，字母、数字和特殊字符至少包含 2 种组合，特殊字符支持输入 `!` `@` `.` `*` `_`。\n\n**来源**：poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx（代理商篇 2.6 个人中心、2.3.1.7 修改公司用户的登录密码）；POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（公司管理-公司列表-修改密码）。",
+      "gold_answer": "登录代理商账号--公司管理--公司列表--找到对应公司--修改密码",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 2,
+      "query": "运营平台打开是英文",
+      "ragas_metrics": {
+        "answer_correctness": 0.3117282278130977,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库中《MCSTARS 运维管理平台用户手册V1.1.1》的说明，运营平台界面显示英文时，可通过\"我的账号\"面板切换系统显示语言为简体中文。\n\n操作步骤：\n\n1. 登录运营平台后，点击顶部右上角的账号名称（如 admin）。\n2. 展开\"我的账号\"面板。\n3. 在面板中切换系统界面的显示语言为简体中文（该面板同时支持修改密码和退出登录）。\n\n说明：该语言切换功能在《MCSTARS 运维管理平台用户手册V1.1.1》\"个人账号信息\"章节中有明确记载。\n\n来源：\n- MCX资料/MCX V1.1.1 word/【8】MCSTARS 运维管理平台用户手册V1.1.1.docx\n- MCX资料/MCX V1.1.1 word/【8】MCSTARS Operations Administration and Maintenance User Manual V1.1.0.docx",
+      "gold_answer": "右上角，语言改成简体中文即可",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 3,
+      "query": "T710A切换wifi的时候会出现断连的现象，需要重启apk解决",
+      "ragas_metrics": {
+        "answer_correctness": 0.10660749825980512,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "apk域名解析问题，DNS由写入域名改为直接写入IP后解决",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 4,
+      "query": "对讲时延最大承受范围",
+      "ragas_metrics": {
+        "answer_correctness": 0.15684049677232292,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库中的产品白皮书和标准资料，对讲（PTT/MCPTT）时延的相关上限要求如下：\n\n## 结论\n\n知识库中对\"对讲时延最大承受范围\"的界定来自两方面：**3GPP/ETSI 标准要求**（MCPTT 业务时延上限）和**网络 QoS 承载**（QCI/5QI 允许的最大时延）。\n\n### 1. 标准定义的最大时延（MCPTT 关键任务对讲）\n\n| 指标 | 标准要求上限 | 备注 |\n|------|------------|------|\n| MCPTT 按麦接通时间 | ≤ 300 ms | 按下 PTT 到可开始发言 |\n| 端到端呼叫建立 | ≤ 1,000 ms | 含呼叫建立和确认 |\n| 对讲起呼时延（口到耳） | ≤ 300 ms | 讲话到收听端播放出的时间差 |\n\n> 来源：《MCSTARS产品白皮书V1.1.1》《MCSTARS White Paper V1.1.1》（MCX资料）\n\n### 2. 网络承载层允许的最大时延（QCI/5QI）\n\n| 业务类型 | QCI/5QI | 允许最大时延 | 丢包率 |\n|---------|---------|------------|--------|\n| MCPTT 语音（关键任务对讲） | 65 | 75 ms | 10⁻² |\n| 非关键任务 PTT 语音 | 66 | 100 ms | 10⁻² |\n\n即 4G/5G 网络中，MCPTT 对讲业务被分配 QCI/5QI=65，网络允许的最大时延为 **75 ms**（明显优于普通语音 QCI=1 的 100 ms）。\n\n> 来源：《MCSTARS产品白皮书V1.1.1》2.4.2 基于核心网章节\n\n### 3. 公司产品实际指标（均低于标准上限）\n\n| 产品 | 对讲起呼时延 | PTT抢麦时延 | 端到端呼叫建立 | 端到端语音传输时延 |\n|------|------------|------------|--------------|------------------|\n| POCSTARS PRO（4G） | 350 ms | 200 ms | 300 ms | 100 ms |\n| POCSTARS MNO（4G/WiFi） | 700 ms | 300 ms | 500 ms | 100 ms |\n| MCSTARS（MCPTT） | 300 ms（与标准一致） | 100 ms | 500 ms | — |\n\n> 来源：《POCSTARS PRO产品白皮书V1.1》《【修订中】POCSTARS MNO产品白皮书V1.1》《MCSTARS产品白皮书V1.1.1》\n\n### 4. 行业参照\n\nPRO 解决方案资料记载：4G 网络下时延可达 400 ms 左右，5G 网络下可达 100 ms 左右；**业界同类产品时延基本在 600~800 ms 左右**。\n\n> 来源：《POCSTARS PRO产品解决方案 V1.2-202605》\n\n**综合来看**：按标准口径，对讲（口到耳）时延最大承受上限为 300 ms；网络承载层 MCPTT 允许最大时延为 75 ms；业界同类产品的实际对讲时延一般在 600~800 ms 区间。",
+      "gold_answer": "我们对基站的网络要求就是时延不超过100ms，，丢包不超过5%",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 5,
+      "query": "如何读取NFC code",
+      "ragas_metrics": {
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "",
+      "gold_answer": null,
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 6,
+      "query": "电子围栏报警记录",
+      "ragas_metrics": {
+        "answer_correctness": 0.21352953991721893,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库检索结果，关于\"电子围栏报警记录\"的功能记载主要分布在 **POCSTARS PRO/MNO 公网对讲调度平台**和 **POCSTARS Geo-location 融合定位系统** 两个产品中，分别说明如下。\n\n## 一、POCSTARS PRO / MNO 平台（公网对讲调度）\n\n- **越界报警记录**：调度台可以搜索和查看**当前生效中**的电子围栏的报警记录；也可以搜索和查看电子围栏报警的**历史记录（不含生效中）**。\n- **越界报警快速查看**：一旦发生电子围栏越界报警，调度台首页将出现明显的 UI 报警提示，调度员可及时发现并可快捷查看对应的电子围栏报警记录。\n- **功能界面**：产品解决方案中将\"电子围栏\"、\"越界报警\"、\"报警记录\"、\"区域群组\"列为电子围栏功能模块下的界面入口。\n- **终端联动**：终端用户离开或进入电子围栏触发报警条件时，调度台和终端都收到越界报警提示；终端用户在越界状态下，每次按 PTT 按钮，终端界面也会收到报警提示。\n- **API 对接**：电子围栏接口支持电子围栏创建、更新、删除、查询，以及告警消息通知和**越界记录查询**。\n\n## 二、POCSTARS Geo-location 融合定位系统\n\n- **人员定位报警记录（手册 4.8.2 节）**：用于集中管理与展示人员相关的所有报警事件。\n- 当前版本主要**展示报警信息，暂不支持报警事件的回溯查询**功能。\n- 报警记录中可查看所有报警事件的基本信息，包括：\n  - 报警状态\n  - 报警类型\n  - 报警对象\n  - 报警时间\n  - 报警位置\n  - 处理状态\n  - 处理时间\n\n## 来源\n\n| 知识库 | 文件 |\n|---|---|\n| poc-资料 | POCSTARS PRO产品解决方案 V1.2-202605.pptx |\n| poc-资料 | POCSTARS MNO产品解决方案-V1.2-202605.pptx |\n| poc-资料 | POCSTARS MNO全平台功能清单V1.0-20260522.xlsx |\n| poc-资料 | POCSTARS PRO产品白皮书V1.1.docx |\n| 定位资料 | POCSTARS-Geo-location 融合定位系统产品操作手册V1.1-中文.pdf |\n\n如需了解某个平台（PRO/MNO 或融合定位系统）更具体的报警记录操作步骤，可以进一步说明，我再为您检索。",
+      "gold_answer": "点击“搜索记录”菜单-可以搜索和查看当前生效中的电子围栏的报警记录",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 7,
+      "query": "调度台多媒体限制多少个字",
+      "ragas_metrics": {
+        "answer_correctness": 0.11259926552310066,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "限制4000个字",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 8,
+      "query": "什么是下发消息",
+      "ragas_metrics": {
+        "answer_correctness": 0.4280873282525727,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "**下发消息**是指从管理/调度平台向终端设备或用户发送文本、多媒体内容的消息操作。知识库中主要体现在两类平台功能中：\n\n## 1. MDM 平台「系统消息」（系统工具 / 系统消息）\n\n- 用于向**终端设备**发送文本消息，并**跟踪消息的投递状态**。\n- 发送范围支持：指定设备、设备组合、策略配置、所有设备。\n- 消息内容上限：最大 2000 字符。\n- 结果反馈：\n  - 发送成功后，消息记录进入列表并显示初始投递状态；\n  - 随着终端接收状态变化，消息状态更新为**已发送、已送达或已读**；\n  - 若发送范围未选完整或消息内容为空，系统会提示补充必要信息。\n\n## 2. MNO 平台「调度台下发消息」（多媒体模块）\n\n- **调度台下发文本消息**：调度员可动态选择全体 / 群组 / 成员，下发文本消息。\n- **调度台下发多媒体**：调度员可动态选择全体 / 群组 / 成员，下发多媒体消息，包括文字、图片、短视频。\n- 平台记录所有调度台下发的文本及多媒体消息，调度台可查看下发的文字，对图片可在线浏览和下载，对视频可在线播放和下载。\n\n## 小结\n\n下发消息的本质是由平台侧（MDM 管理平台或 MNO 调度台）主动向终端侧（单台设备、设备组合、策略配置范围、全体/群组/成员）发送消息，发送后可查询消息记录，并可跟踪消息从已发送到已送达、已读的投递状态。\n\n**来源**\n- poc资料/MDM/POCSTARS MDM平台操作说明书V1.0-20260415.docx（4.13.2 系统消息）\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（多媒体模块）",
+      "gold_answer": "调度员向群组内的成员下发的图片/短视频/文本消息/位置/文件/语音",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 9,
+      "query": "MDM平台对终端设备的要求及前提条件说明",
+      "ragas_metrics": {
+        "answer_correctness": 0.9566188022933159,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库中的《MDM平台对终端设备的要求及前提条件说明》，MDM平台对终端设备的要求如下：\n\n为确保MDM平台能够正常部署和运行，需提前与终端厂家确认以下事项：\n\n**1. 终端型号确认**\n- 提前明确并提供终端设备的具体型号，以便进行兼容性评估。\n\n**2. 操作系统要求**\n- 设备需搭载谷歌认证的原生 Android 系统（GMS）；\n- 系统版本要求：Android 9 及以上；\n- 不支持以下系统：\n  - 深度定制或阉割版 Android 系统；\n  - 非 GMS 认证系统（如部分国内品牌定制系统）。\n\n**3. MDM 软件冲突限制**\n- 设备中不得预安装或已安装其他第三方 MDM 软件；\n- 避免系统权限冲突或设备管理权限被占用。\n\n**4. 二维码扫码功能要求**\n- 设备需支持开机引导阶段的二维码扫描（Zero-touch / Enrollment）；\n- 验证方式：\n  1. 将设备恢复出厂设置；\n  2. 开机进入\"Hello\"欢迎界面；\n  3. 在屏幕空白处点击 7 次；\n  4. 若可调出二维码扫描界面，则说明设备支持该功能。\n\n**5. 提前沟通要求**\n- 请厂家在项目初期提前提供终端型号及系统信息，以便完成测试与适配；\n- 未经验证的设备可能影响项目进度及交付质量。\n\n**来源**：poc-资料知识库《MDM平台对终端设备的要求及前提条件说明-20260424.docx》",
+      "gold_answer": "为确保MDM平台能够正常部署和运行，请提前与终端厂家确认以下事项： 1. 终端型号确认 请提前明确并提供终端设备的具体型号，以便进行兼容性评估。 2. 操作系统要求 ~设备需搭载谷歌认证的原生Android系统（GMS）； ~系统版本要求：Android 9及以上； ~不支持以下系统： ①深度定制或阉割版Android系统 ②非GMS认证系统（如部分国内品牌定制系统） 3. MDM软件冲突限制 ~设备中不得预安装或已安装其他第三方MDM软件； ~避免系统权限冲突或设备管理权限被占用。 4. 二维码扫码功能要求 ~设备需支持开机引导阶段的二维码扫描（Zero-touch / Enrollment）； ~验证方式如下： ①.将设备恢复出厂设置； ②.开机进入“Hello”欢迎界面； ③.在屏幕空白处点击7次； ④.若可调出二维码扫描界面，则说明设备支持该功能。 5. 提前沟通要求 ~请厂家在项目初期提前提供终端型号及系统信息，以便完成测试与适配； ~未经验证的设备可能影响项目进度及交付质量。",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 10,
+      "query": "批量导入设备时，Excel 文件提示 “格式错误”。",
+      "ragas_metrics": {
+        "answer_correctness": 0.10920061001148185,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "检查 Excel 列顺序是否为 “设备编号（A 列）、IMEI（B 列）”（文档要求固定映射）；确保无合并单元格，IMEI 为 15 位纯数字；删除多余空行后重新上传。",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 11,
+      "query": "设备 “屏幕截图” 功能被禁用，但用户仍能截图。",
+      "ragas_metrics": {
+        "answer_correctness": 0.12331492657501994,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "确认策略中 “禁用屏幕截图” 已勾选；检查设备是否处于 “宽容模式”（宽容模式解除所有限制，需关闭）；重启设备使策略生效。",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 12,
+      "query": "D22 修改开机页面图片的工具",
+      "ragas_metrics": {
+        "answer_correctness": 0.1219946074776905,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "界面配置工具 V1.01.0010(1).zip",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 13,
+      "query": "E600流量消耗",
+      "ragas_metrics": {
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "",
+      "gold_answer": null,
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 14,
+      "query": "E600如何切换平台",
+      "ragas_metrics": {
+        "answer_correctness": 0.11205716638922518,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "gold_answer": "长按侧边“+”键 进入切换平台页面，POC change Global 和Stars",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 15,
+      "query": "Miniserver的OS（操作系统）是什么",
+      "ragas_metrics": {
+        "answer_correctness": 0.13631172093006247,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库资料，**Miniserver（M200）的操作系统为 Debian 12**（方案资料中表述为\"Debian 12.9 系统以上\"）。\n\n相关记载如下：\n\n| 资料来源 | 操作系统描述 |\n|---|---|\n| Miniserver M200 规格书（2025-11-25） | 基本信息-操作系统：Debian 12 |\n| POCSTARS PRO 产品解决方案 V1.2（2026-05） | Miniserver M200 CPU 栏：Intel 赛扬 J1900 四核，主频 2.0GHz，Debian 12.9 系统以上 |\n\n补充说明：\n- 规格书中标注 Miniserver M200 为 Mini 型桌面式路由整机，处理器为 Intel 赛扬 J1900（四核四线程，2.0GHz-2.42GHz）。\n- 上述为产品出厂预装操作系统；产品方案中另有\"支持第三方 x86 服务器、ARM 服务器，操作系统可选 Debian 12.9、欧拉等国产系统\"的表述，适用于服务器/私有云中型部署场景。\n\n来源：\n- poc-资料 / Miniserver M200规格书20251125.xlsx（kb_3cm2gz6tyb）\n- poc-资料 / POCSTARS PRO产品解决方案 V1.2-202605.pptx（kb_3cm2gz6tyb）",
+      "gold_answer": "Debian 9.基于Linux内核",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 16,
+      "query": "miniserver网口最大的传输速度",
+      "ragas_metrics": {
+        "answer_correctness": 0.519222091611393,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库中《Miniserver M200规格书》的记录：\n\n**Miniserver（M200）网口最大传输速度为 1000Mbps（千兆，即 1Gbps）。**\n\n具体规格如下：\n\n| 项目 | 规格 |\n|------|------|\n| 网卡芯片 | Intel I211-AT 千兆网卡（备注：82574L/82583V/1211） |\n| 网络接口 | RJ45 × 4 |\n\n即该设备配备 4 个千兆 RJ45 网口，单口最大传输速率为 1000Mbps。\n\n来源：\n- poc资料/miniserver/Miniserver M200规格书20251125.xlsx",
+      "gold_answer": "1Gbps",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 17,
+      "query": "Minisever 上没有多媒体消息菜单",
+      "ragas_metrics": {
+        "answer_correctness": 0.3008861402880476,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "**结论：MiniServer 本身不支持多媒体消息功能，运营平台上没有\"多媒体消息\"菜单是正常的，无需排查。**\n\n## 依据说明\n\n**1. MiniServer 的功能范围不含多媒体消息**\n\nPOCSTARS Miniserver 小型一体机（M200，面向 200 个以内终端规模客户）的核心功能仅为：\n\n- 语音对讲（群呼、半双工单呼、临时群组、话权优先级、AES256 加密、多群组监听等）\n- 语音调度（强拉进组、话权强拆、遥闭/遥开）\n- GIS 地图可视化调度（GPS 定位、成员实时位置）\n- 对讲录音\n- 安全报警（SOS）\n\n其基础服务系统的业务功能也只包含：语音对讲、定位、SOS、录音，管理功能为管用户、管群组，搭配 Web 调度台。\n\n**2. MiniServer 运营平台菜单本身没有该入口**\n\n运营平台（用户手册 V2.3）左侧菜单只有：组织管理、调度员管理、群组管理、用户管理、APK 下载、个人中心，不包含多媒体消息相关菜单项。\n\n**3. 多媒体消息是 MNO/PRO 平台的能力**\n\n文字、图片、视频、语音、文件和位置等多媒体消息收发功能，属于 POCSTARS MNO（及 PRO）产品方案的功能范围，与 MiniServer 不是同一产品线，不能混用。\n\n## 参考来源\n\n- POCSTARS Miniserver 销售\"一纸禅\" V2.3（poc资料/miniserver）\n- POCSTAR MiniServer V2.3 运营平台用户手册（poc资料/miniserver）\n- Miniserver 产品解决方案.pptx（poc资料/miniserver）\n- POCSTARS MNO 产品解决方案 V1.2（poc资料/MNO，用于对照多媒体消息能力归属）",
+      "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 18,
+      "query": "需要给客户提供API 的技术文档",
+      "ragas_metrics": {
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "",
+      "gold_answer": null,
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    },
+    {
+      "index": 19,
+      "query": "如何导出用户的通话记录（如群呼、单呼、SOS）",
+      "ragas_metrics": {
+        "answer_correctness": 0.17570492466650164,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "根据知识库资料，POC 与 MCX 两条产品线的调度台均支持通话相关记录的查询与导出，操作路径如下。\n\n## 一、POCSTARS 调度台（POC 平台）：通话录音筛选及导出\n\n来源：《POCSTARS调度台用户手册V3.0》第 3.9 节\"通话录音筛选及导出\"。\n\n**1. 搜索并收听通话录音**\n1. 点击菜单栏上的 **\"Records\"** 按钮，进入通话历史记录页。\n2. 设置筛选条件（可选）：选择要收听录音的**通话组（小组）**、**组织**、**起止日期**、**用户**，以及**关键字和群组类型**。\n3. 点击**搜索图标**，列表中呈现搜索结果。\n4. 点击**麦克风图标**，收听历史通话录音。\n\n**2. 下载单个通话录音**\n1. 点击**录音下载图标**，开始下载录音文件（需等待）。\n2. 下载完成后，页面提示\"下载成功\"。\n3. 在浏览器的下载标签中呈现已下载的录音文件，以 **.wav 格式**保存到下载目录。\n\n**3. 下载批量通话录音**\n1. 在录音列表中选择要下载的录音文件。\n2. 点击搜索图标旁边的**下载图标**，开始批量下载（需等候）。\n3. 下载完成后提示\"下载成功\"。\n4. 浏览器下载签页提示完成下载的文件，文件以**压缩包**形式保存。\n\n## 二、MCSTARS 调度台（MCX 平台）：记录模块批量导出\n\n来源：《MCSTARS 调度台用户手册V1.1.1》第 4.3 节\"记录\"及 5.9 节\"记录\"操作说明。\n\n- **记录模块**可查询该调度员可调度用户的**单呼记录**、可调度群组的**组呼记录**、登录登出记录、多媒体消息记录，并**支持批量导出、批量下载**。\n- **呼叫记录（5.9.2）**：展示完整呼叫详情（呼叫发起方/接收方的用户名称、账号、所属组织，呼叫开始时间、持续时长、结束时间、结束原因、是否录制等）。支持按**时间、发起方用户、接收方用户、组织、呼叫类型**等条件组合筛选，**所有查询结果均支持一键批量导出**；录制了音视频的呼叫还支持在线播放。\n- **录音录像记录（5.9.3）**：可按时间、文件名称、用户、呼叫类型等条件筛选，并将筛选结果**批量导出**。\n\n## 三、关于 SOS\n\n- **POC 平台**：SOS 相关记录在调度台**\"报警记录\"**模块查询（点击菜单栏\"报警记录\"进入），可按群组、状态、发送人、操作人、时间区间等条件筛选，状态区分为未处理/处理中/处理完成；处理 SOS 报警时，可在报警弹窗点击\"回听\"回放该群组报警前 10 分钟内的对讲录音（来源：《POCSTARS MiniServer V2.3-调度台用户手册-20260601.docx》）。\n- **MCX 平台**：SOS（紧急呼叫/紧急警报）属于用户呼叫行为，可在调度台**呼叫记录**中按呼叫类型等条件筛选并批量导出。\n\n## 来源\n\n- poc资料/MNO/POCSTARS调度台用户手册V3.0-20260409.docx（kb_3cm2gz6tyb）\n- MCX资料/MCX V1.1.1 word/【5】MCSTARS 调度台用户手册V1.1.1.docx（kb_mvng8u1201）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx（kb_3cm2gz6tyb）\n\n如需针对某一具体产品（POC 或 MCX）或版本（如 MiniServer、MNO、PRO）给出更精确的步骤，可以告诉我，我再补充。",
+      "gold_answer": "存储在mysql里，调度台上有导出功能",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "agent_e2e_kefu20_20260819"
+    }
+  ],
+  "low_accuracy": [],
+  "justified_refusals": [],
+  "excluded_from_aggregate": []
+}

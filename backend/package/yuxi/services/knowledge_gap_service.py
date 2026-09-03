@@ -14,7 +14,14 @@ from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
 from yuxi.utils.logging_config import logger
 
 GAP_STATUSES = {"new", "processing", "resolved", "ignored"}
-GAP_REASONS = {"no_enabled_knowledge_base", "no_results", "empty_content", "insufficient_evidence"}
+# no_evidence_output：决策② 兜底——业务内问题模型零检索硬答（守规失败）转人工，同样记缺口。
+GAP_REASONS = {
+    "no_enabled_knowledge_base",
+    "no_results",
+    "empty_content",
+    "insufficient_evidence",
+    "no_evidence_output",
+}
 
 
 def normalize_question(question: str) -> str:

@@ -299,6 +299,7 @@ def test_knowledge_base_builtin_skill_spec():
         "find_kb_document",
         "open_kb_document",
         "search_file",
+        "read_document_version",
     ]
     assert (knowledge_base["source_dir"] / "SKILL.md").exists()
 

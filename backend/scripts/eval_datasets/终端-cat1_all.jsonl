@@ -1,0 +1,33 @@
+{"index": 1, "section": "终端-cat1", "query": "终端-cat1-E600如何查看版本", "gold_answer": "长按 音量“-” （下）键. 出现user后 再继续按下就会出现版本"}
+{"index": 2, "section": "终端-cat1", "query": "终端-cat1-E600如何切换平台", "gold_answer": "长按侧边“+”键 进入切换平台页面，POC change Global 和Stars"}
+{"index": 3, "section": "终端-cat1", "query": "终端-cat1-E600流量消耗", "gold_answer": "机型：E600东南亚 ROM版本：BQ_F1_E600_WORX_YY_EC600MCN_LE_SL_HW2in1_v1.01.16_250410（RTOS系统） 测试项 流量消耗（单位KB） 关定位待机 10分钟 12.58KB 开定位待机 10分钟 17.77KB 发射对讲 10分钟 518.05KB 接收对讲 10分钟 542.5KB"}
+{"index": 4, "section": "终端-cat1", "query": "终端-cat1-cat1机器调度台不显示定位", "gold_answer": "确认有正常定位点：检查终端是否在能够获取GPS信号的位置（如在室外开阔地带）产生过有效的定位点。 2、第一次定位在室内开阔位置多停留一段时间"}
+{"index": 5, "section": "终端-cat1", "query": "终端-cat1-cat1机器调度台定位飘", "gold_answer": "在室内飘？室外如何 2、运动过程中轨迹是否正确，静止状态可能有飘的情况"}
+{"index": 6, "section": "终端-cat1", "query": "终端-cat1-Cat1机器是否支持修改心跳", "gold_answer": "cat1机器不支持平台修改心跳"}
+{"index": 7, "section": "终端-cat1", "query": "终端-cat1-D11 D22 EH01是否支持SOS", "gold_answer": "D11 D22 EH01不支持SOS，（D系列都不支持SOS） 接受和发送都不支持 所以e600发了SOS,这几款都收不到"}
+{"index": 8, "section": "终端-cat1", "query": "终端-cat1-JT8988如何关闭TTS", "gold_answer": "非安卓机界面显示和播报都由方案控制"}
+{"index": 9, "section": "终端-cat1", "query": "终端-cat1-E600欧版电量管理模式 （延迟大，丢音，被3S摘麦。收不到语音消息 ：调整心跳）", "gold_answer": "high---高耗电 心跳15秒 发心跳14秒左右休眠 standard--标准耗电 心跳30秒 发心跳14秒左右休眠 power---省电 心跳42秒 发心跳14秒左右秒休眠 super power-saving 1 心跳42秒深度睡眠 发心跳7秒休眠 需开启休眠模式 supre power-saving 2 心跳42秒 深度睡眠 发心跳3秒休眠 需开启休眠模式 刷机默认省电模式是supre power-saving 2 休眠模式是Sleep 默认是开的"}
+{"index": 10, "section": "终端-cat1", "query": "终端-cat1-E600 电池充电问题", "gold_answer": "是否可以有座充?——不支持。 2、是否可以通过增加电池容量?——不支持 3、是否可以支持电池单充?——目前不支持。可以做给单电池的充电器,条件是：开模费2W元+订单2K起，定金先付一半，成品单价15/台。 4、其它方案：双电池使用，即额外多购买一块电池，延长使用时间。"}
+{"index": 11, "section": "终端-cat1", "query": "终端-cat1-LT-V10PLUS 属于ROTS机器 飞捷厂家，跟Spender 的机器一样", "gold_answer": "飞捷厂家不提供版本，需要客户推动联系厂家 这个厂家只有出厂固定版本，中间不刷"}
+{"index": 12, "section": "终端-cat1", "query": "终端-cat1-E600设置群组监听", "gold_answer": "不支持终端设置群组监听的CAT1机器，平台设置群组监听和取消监听群组后，都需要重启终端，才会生效"}
+{"index": 13, "section": "终端-cat1", "query": "终端-cat1-RTOS是否支持自建组", "gold_answer": "我们的库支持，但是目前E600和D系列还未实现"}
+{"index": 14, "section": "终端-cat1", "query": "终端-cat1-D22如何查看版本号", "gold_answer": "Steps to check version of D22: menu→arrow button→Device Info.→menu→POC uer→menu"}
+{"index": 15, "section": "终端-cat1", "query": "终端-cat1-P67双模机写频工具和驱动以及操作步骤", "gold_answer": "已归档网盘"}
+{"index": 16, "section": "终端-cat1", "query": "终端-cat1-Wor X 就是E600", "gold_answer": "E600加入的群组数量没有上限，和设备内存相关 测试加入100个群组没有问题"}
+{"index": 17, "section": "终端-cat1", "query": "终端-cat1-Q85 debug版本刷机步骤及固件+ 如何开启usb debugging操作视频", "gold_answer": "/硬件产品归档/宏博智能/Q85 debug版本+刷机工具"}
+{"index": 18, "section": "终端-cat1", "query": "终端-cat1-E600 按下menu键机器会重启", "gold_answer": "群组名称太长了，需要改短名称.E600群组名称最多支持22个字符"}
+{"index": 19, "section": "终端-cat1", "query": "终端-cat1-E600接收SOS会白屏", "gold_answer": "群组名称过长，需要在22个字符以内"}
+{"index": 20, "section": "终端-cat1", "query": "终端-cat1-D21 登录白屏提示服务连接中，或者自动重启的问题", "gold_answer": "使用D21写号工具写入APN"}
+{"index": 21, "section": "终端-cat1", "query": "终端-cat1-D21 .D22是否支持远程麦克风", "gold_answer": "D系列不支持e600有一个版本开始支持了"}
+{"index": 22, "section": "终端-cat1", "query": "终端-cat1-cat1机器不响应应答模式", "gold_answer": "只支持立即接通模式，不支持应答模式"}
+{"index": 23, "section": "终端-cat1", "query": "终端-cat1-3s被摘麦", "gold_answer": "修改心跳，本地修改 D22： E600："}
+{"index": 24, "section": "终端-cat1", "query": "终端-cat1-e600 提示“out of service” 或者 log out", "gold_answer": "三种原因: 1.首先验证账号是否过期/账号状态(expired,unexist etc..) 2.确认网络是否正常 3.在其他地方登录"}
+{"index": 25, "section": "终端-cat1", "query": "终端-cat1-e600 提示“Network time out”", "gold_answer": "RTOS设备是4G网络，只有4G下能用 安卓是全网通，所以3G能使用"}
+{"index": 26, "section": "终端-cat1", "query": "终端-cat1-P67是否支持SOS", "gold_answer": "不支持，但支持修改频点，也不支持接收调度台消息"}
+{"index": 27, "section": "终端-cat1", "query": "终端-cat1-终端功耗和流量数据汇总", "gold_answer": "包含E600和F10的数据"}
+{"index": 28, "section": "终端-cat1", "query": "终端-cat1-D22 修改开机页面图片的工具", "gold_answer": "界面配置工具 V1.01.0010(1).zip"}
+{"index": 29, "section": "终端-cat1", "query": "终端-cat1-cat1的库有哪几种", "gold_answer": "移远的不都是一个库。EC600M和EC800M是一个库 EC600U EC200U是一个库"}
+{"index": 30, "section": "终端-cat1", "query": "终端-cat1-Linux和CAT1机器是否支持OPUS语音编码", "gold_answer": "都不支持"}
+{"index": 31, "section": "终端-cat1", "query": "终端-cat1-国内miniserver，卡商需要开放的白名单", "gold_answer": "*.shanliptt.com 47.93.34.158"}
+{"index": 32, "section": "终端-cat1", "query": "终端-cat1-海外miniserver，卡商需要开放的白名单", "gold_answer": "*.shanlipoc.com 调度器 47.245.104.125 新加坡代理 47.87.12.48 墨西哥代理"}
+{"index": 33, "section": "终端-cat1", "query": "终端-cat1-E600的认证报告中的频段和产品规格中的频段不一致，规格中有B5，认证报告中不包含B5，确认设备是否支持B5？", "gold_answer": "设备是支持B5频段的。测试报告中没有B5的原因是，咱们的测试报告是CE认证的测试报告，CE是欧盟认证，B5不是欧盟的频段，所以不会测B5，在测试报告中也不会体现。"}

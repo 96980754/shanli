@@ -135,7 +135,7 @@
                   :class="{ 'compare-active': item.file_id === compareBaseId }"
                   @click="toggleCompareVersion(item)"
                 >
-                  {{ $t('docModal.compareButton') }}
+                  {{ compareActionLabel(item) }}
                 </a-button>
                 <a-button type="link" @click="emit('download', item)">{{ $t('common.download') }}</a-button>
                 <a-button v-if="item.validation_report" type="link" @click="openReport(item)">
@@ -405,6 +405,14 @@ const toggleCompareVersion = (item) => {
   }
   const baseItem = compareBaseItem.value
   if (baseItem) enterCompare(baseItem, item)
+}
+
+// 与 toggleCompareVersion 三分支一一对应：未选基准＝选为基准；已是基准＝取消；
+// 已选基准且是其它版本＝发起对比。避免每行同名「对比」造成第一步点选困惑。
+const compareActionLabel = (item) => {
+  if (item.file_id === compareBaseId.value) return t('docModal.compareCancelBase')
+  if (compareBaseId.value) return t('docModal.compareToBase')
+  return t('docModal.comparePickBase')
 }
 
 const enterCompare = (baseItem, targetItem) => {

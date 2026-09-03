@@ -1,80 +1,65 @@
-import json
-from collections.abc import Callable
-
 import pytest
 
 from yuxi.config.app import config
 from yuxi.services.wecom_handoff_service import WeComCustomerService
 
-DOMAIN_URL = "https://work.weixin.qq.com/kf/diaodutai"
-GLOBAL_URL = "https://work.weixin.qq.com/kf/default"
+URL_A = "https://work.weixin.qq.com/kf/a"
+URL_B = "https://work.weixin.qq.com/kf/b"
+INVALID_URL = "http://example.com"
 
 
-def _env(overrides: dict) -> Callable[[str, str], str]:
-    def getenv(key: str, default: str = "") -> str:
-        return overrides.get(key, default)
-
-    return getenv
-
-
-def _domain_service(domain_urls: dict | None = None, global_url: str = ""):
-    overrides = {"WECOM_CUSTOMER_SERVICE_URL": global_url}
-    if domain_urls is not None:
-        overrides["WECOM_CUSTOMER_SERVICE_URLS"] = json.dumps(domain_urls)
-    return WeComCustomerService(_env(overrides))
+def _reset_round_robin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("yuxi.services.wecom_handoff_service._ROUND_ROBIN_COUNTER", 0)
 
 
 def test_customer_service_requires_https_url():
-    assert WeComCustomerService(lambda _key, _default: "").is_configured is False
-    assert WeComCustomerService(lambda _key, _default: "http://example.com").is_configured is False
+    assert WeComCustomerService(urls=[]).is_configured is False
+    assert WeComCustomerService(urls=[INVALID_URL]).is_configured is False
 
 
-def test_customer_service_accepts_wecom_customer_service_url():
-    service = _domain_service(global_url=GLOBAL_URL)
-    assert service.is_configured is True
+def test_customer_service_accepts_https_urls():
+    assert WeComCustomerService(urls=[URL_A]).is_configured is True
 
 
-def test_get_url_uses_domain_url_when_configured():
-    service = _domain_service({"diaodutai": DOMAIN_URL})
-    assert service.get_url("diaodutai") == DOMAIN_URL
+def test_get_url_round_robins_across_pool(monkeypatch: pytest.MonkeyPatch):
+    """P1 反馈：多个客服入口时转人工轮替转接。"""
+    _reset_round_robin(monkeypatch)
+    service = WeComCustomerService(urls=[URL_A, URL_B])
+    assert service.get_url() == URL_A
+    assert service.get_url() == URL_B
+    assert service.get_url() == URL_A
 
 
-def test_get_url_falls_back_to_global_for_unmapped_domain():
-    service = _domain_service({"diaodutai": DOMAIN_URL}, global_url=GLOBAL_URL)
-    assert service.get_url("terminal") == GLOBAL_URL
+def test_get_url_ignores_invalid_pool_entries(monkeypatch: pytest.MonkeyPatch):
+    _reset_round_robin(monkeypatch)
+    service = WeComCustomerService(urls=[INVALID_URL, URL_A])
+    assert service.get_url() == URL_A
+    assert service.get_url() == URL_A
+
+
+def test_get_url_domain_still_does_not_affect_routing(monkeypatch: pytest.MonkeyPatch):
+    """domain 参数保留兼容：只做轮替，不按域挑 URL。"""
+    _reset_round_robin(monkeypatch)
+    service = WeComCustomerService(urls=[URL_A, URL_B])
+    assert service.get_url("diaodutai") == URL_A
+    assert service.get_url("terminal") == URL_B
 
 
 def test_get_url_empty_when_nothing_configured():
-    service = _domain_service()
+    service = WeComCustomerService(urls=[])
+    assert service.get_url() == ""
     assert service.get_url("diaodutai") == ""
-
-
-def test_is_configured_true_with_only_domain_urls():
-    service = _domain_service({"ops": "https://work.weixin.qq.com/kf/ops"})
-    assert service.is_configured is True
-
-
-def test_invalid_domain_urls_json_ignored():
-    service = WeComCustomerService(_env({"WECOM_CUSTOMER_SERVICE_URLS": "not json at all"}))
-    assert service.is_configured is False
-    assert service.get_url("diaodutai") == ""
-
-
-def test_non_https_domain_url_ignored_and_falls_back():
-    service = _domain_service({"diaodutai": "http://insecure.example.com"}, global_url=GLOBAL_URL)
-    assert service.get_url("diaodutai") == GLOBAL_URL
 
 
 def test_default_constructor_reads_app_config(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(config, "wecom_customer_service_url", GLOBAL_URL)
-    monkeypatch.setattr(config, "wecom_customer_service_urls", {"diaodutai": DOMAIN_URL})
+    monkeypatch.setattr(config, "wecom_customer_service_urls", [URL_A])
+    _reset_round_robin(monkeypatch)
     service = WeComCustomerService()
     assert service.is_configured is True
-    assert service.get_url("diaodutai") == DOMAIN_URL
-    assert service.get_url("terminal") == GLOBAL_URL
+    assert service.get_url() == URL_A
+    assert service.get_url("diaodutai") == URL_A
 
 
 def test_default_constructor_empty_when_config_unset(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(config, "wecom_customer_service_url", "")
-    monkeypatch.setattr(config, "wecom_customer_service_urls", {})
+    monkeypatch.setattr(config, "wecom_customer_service_urls", [])
     assert WeComCustomerService().is_configured is False

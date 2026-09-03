@@ -52,9 +52,6 @@ const agentForm = reactive({
   description: '',
   icon: ''
 })
-const agentEscalationDomain = ref('')
-const agentEscalationDomainOriginal = ref('')
-
 const normalizeAgent = (agent) => {
   const agentId = agent?.agent_id || agent?.slug || agent?.id
   return agentId
@@ -148,8 +145,6 @@ const handleAgentModalAfterOpenChange = (open) => {
 
 const openCreate = () => {
   editingAgentId.value = null
-  agentEscalationDomain.value = ''
-  agentEscalationDomainOriginal.value = ''
   agentModalActiveTab.value = 'basic'
   resetAgentForm()
   agentStore.resetAgentConfig()
@@ -178,8 +173,6 @@ const openEdit = async (agent) => {
   agentShareConfig.value = isBuiltinAgent(detail)
     ? { access_level: 'global', department_ids: [], user_uids: [] }
     : detail.share_config || getInitialShareConfig()
-  agentEscalationDomain.value = detail?.config_json?.escalation?.domain || ''
-  agentEscalationDomainOriginal.value = agentEscalationDomain.value
   await agentStore.selectAgent(detail.id, { allowSubagent: true })
   showAgentModal.value = true
 }
@@ -268,18 +261,9 @@ const saveAgent = async () => {
       ) {
         agentStore.updateAgentConfig(validatedConfig)
       }
-      // 业务域（拒答转人工）变化，或 context 变化，都需要重写 config_json；
-      // 写回时必须保留既有 escalation，避免改动 context 时把业务域顶掉。
-      const escalationChanged =
-        (agentEscalationDomain.value || '') !== (agentEscalationDomainOriginal.value || '')
-      if (agentStore.hasConfigChanges || escalationChanged) {
-        const configJson = { context: agentStore.agentConfig }
-        if (agentEscalationDomain.value) {
-          configJson.escalation = { domain: agentEscalationDomain.value }
-        } else if (agentEscalationDomainOriginal.value) {
-          configJson.escalation = {}
-        }
-        payload.config_json = configJson
+      // context 变化时重写 config_json（业务域字段已随拒答转人工单入口移除，不再写 escalation）。
+      if (agentStore.hasConfigChanges) {
+        payload.config_json = { context: agentStore.agentConfig }
       }
       const updated = await agentStore.updateAgentProfile(editingAgentId.value, payload)
       agentStore.originalAgentConfig = { ...agentStore.agentConfig }
@@ -448,18 +432,6 @@ defineExpose({
             </label>
           </div>
 
-          <div v-if="userStore.isAdmin && editingAgentId" class="modal-form">
-            <label class="form-label full-width">
-              <span>{{ $t('agentCfg.escalationDomain') }}</span>
-              <a-input
-                v-model:value="agentEscalationDomain"
-                :placeholder="$t('agentCfg.escalationDomainPlaceholder')"
-                allow-clear
-              />
-              <span class="escalation-domain-hint">{{ $t('agentCfg.escalationDomainHint') }}</span>
-            </label>
-          </div>
-
           <div v-if="canEditAgentShareConfig" class="share-config-block">
             <div class="section-heading">
               <span>{{ $t('agentCfg.sharePermission') }}</span>
@@ -489,14 +461,6 @@ defineExpose({
 </template>
 
 <style lang="less" scoped>
-.escalation-domain-hint {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--gray-500);
-}
-
 .agent-modal-titlebar {
   display: flex;
   align-items: center;

@@ -8,16 +8,18 @@ Provides centralized dashboard APIs for monitoring system-wide statistics.
 
 import traceback
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import Integer, String, cast, distinct, func, select, text
+from sqlalchemy import Integer, String, cast, distinct, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
+from yuxi.services.feedback_service import build_satisfaction_stats, count_evaluable_answers
 from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
@@ -502,7 +504,7 @@ async def get_agent_analytics(
         total_agents = len(agents)
         agent_conversation_counts = [{"agent_id": agent_id, "conversation_count": count} for agent_id, count in agents]
 
-        # 智能体满意度统计
+        # 智能体满意度统计（口径：未反馈默认计满意）
         agent_satisfaction = []
         for agent_id, _ in agents:
             total_feedbacks_result = await db.execute(
@@ -519,12 +521,26 @@ async def get_agent_analytics(
                 .join(Conversation, Message.conversation_id == Conversation.id)
                 .filter(Conversation.agent_id == agent_id, MessageFeedback.rating == "like")
             )
-            positive_feedbacks = positive_feedbacks_result.scalar() or 0
+            like_count = positive_feedbacks_result.scalar() or 0
+            dislike_count = total_feedbacks - like_count
 
-            satisfaction_rate = round((positive_feedbacks / total_feedbacks * 100), 2) if total_feedbacks > 0 else 100
+            evaluable_count = await count_evaluable_answers(db=db, agent_id=agent_id) if agent_id else 0
+            stats = build_satisfaction_stats(
+                evaluable_count=evaluable_count,
+                like_count=like_count,
+                dislike_count=dislike_count,
+            )
 
             agent_satisfaction.append(
-                {"agent_id": agent_id, "satisfaction_rate": satisfaction_rate, "total_feedbacks": total_feedbacks}
+                {
+                    "agent_id": agent_id,
+                    "satisfaction_rate": stats["satisfaction_rate"],
+                    "total_feedbacks": total_feedbacks,
+                    "like_count": like_count,
+                    "dislike_count": dislike_count,
+                    "evaluable_count": stats["evaluable_count"],
+                    "silent_count": stats["silent_count"],
+                }
             )
 
         # 智能体工具使用统计
@@ -610,7 +626,7 @@ async def get_dashboard_stats(
         total_users_result = await db.execute(select(func.count(User.id)).filter(User.is_deleted == 0))
         total_users = total_users_result.scalar() or 0
 
-        # Feedback statistics
+        # Feedback statistics（满意度口径：未反馈默认计满意）
         total_feedbacks_result = await db.execute(select(func.count(MessageFeedback.id)))
         total_feedbacks = total_feedbacks_result.scalar() or 0
 
@@ -618,9 +634,14 @@ async def get_dashboard_stats(
             select(func.count(MessageFeedback.id)).filter(MessageFeedback.rating == "like")
         )
         like_count = like_count_result.scalar() or 0
+        dislike_count = total_feedbacks - like_count
 
-        # Calculate satisfaction rate
-        satisfaction_rate = round((like_count / total_feedbacks * 100), 2) if total_feedbacks > 0 else 100
+        evaluable_count = await count_evaluable_answers(db=db)
+        satisfaction_stats = build_satisfaction_stats(
+            evaluable_count=evaluable_count,
+            like_count=like_count,
+            dislike_count=dislike_count,
+        )
 
         return {
             "total_conversations": total_conversations,
@@ -629,7 +650,7 @@ async def get_dashboard_stats(
             "total_users": total_users,
             "feedback_stats": {
                 "total_feedbacks": total_feedbacks,
-                "satisfaction_rate": satisfaction_rate,
+                **satisfaction_stats,
             },
         }
     except Exception as e:
@@ -642,76 +663,196 @@ async def get_dashboard_stats(
 # 反馈管理（超级管理员权限）
 # =============================================================================
 
+# 消息被归类为拒答（知识缺口/跑题/策略拦截）即视为「拒答来源」反馈，便于管理员优先补答。
+_REFUSAL_DISPOSITION_TYPES = {"knowledge_refusal", "scope_refusal", "policy_refusal"}
+_FEEDBACK_STATUSES = {"pending", "processed", "ignored"}
+
+
+def _is_refusal_source_message(extra_metadata: dict | None) -> bool:
+    """按消息 extra_metadata 中的 knowledge_disposition 判定是否为拒答来源。"""
+    metadata = extra_metadata or {}
+    disposition = metadata.get("knowledge_disposition") or {}
+    if disposition.get("type") in _REFUSAL_DISPOSITION_TYPES:
+        return True
+    return metadata.get("knowledge_no_evidence") is True
+
 
 class FeedbackListItem(BaseModel):
     """反馈列表项"""
 
     id: int
+    message_id: int
+    conversation_thread_id: str
     uid: str
     username: str | None
     avatar: str | None
     rating: str
+    status: str
     reason: str | None
     created_at: str
     message_content: str
     conversation_title: str | None
     agent_id: str
+    is_refusal_source: bool
+    has_qa_pair: bool
 
 
-@dashboard.get("/feedbacks", response_model=list[FeedbackListItem])
+class FeedbackListResponse(BaseModel):
+    total: int
+    items: list[FeedbackListItem]
+
+
+class FeedbackStatusUpdate(BaseModel):
+    status: Literal["pending", "processed", "ignored"]
+
+
+@dashboard.get("/feedbacks", response_model=FeedbackListResponse)
 async def get_all_feedbacks(
     rating: str | None = None,
+    status: str | None = None,
+    keyword: str | None = None,
     agent_id: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    order_by: Literal["created_desc", "created_asc"] = "created_desc",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_superadmin_user),
 ):
-    """获取所有反馈记录（超级管理员权限）"""
+    """分页查询反馈记录（超级管理员权限），支持 评分/状态/关键词/agent 筛选。
+
+    行级派生字段：
+    - is_refusal_source：被评消息为拒答（knowledge_refusal/scope_refusal/policy_refusal）来源；
+    - has_qa_pair：该反馈对应的用户问题是否已存在人工问答对（与调优弹窗同口径）。
+    """
+    from yuxi.repositories.curated_qa_repository import hash_qa_question, normalize_qa_question
     from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback, User
+    from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
 
-    try:
-        query = (
-            select(MessageFeedback, Message, Conversation, User)
-            .join(Message, MessageFeedback.message_id == Message.id)
-            .join(Conversation, Message.conversation_id == Conversation.id)
-            .outerjoin(User, MessageFeedback.uid == User.uid)
+    conditions = []
+    if rating in {"like", "dislike"}:
+        conditions.append(MessageFeedback.rating == rating)
+    if status in _FEEDBACK_STATUSES:
+        conditions.append(MessageFeedback.status == status)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        conditions.append(
+            or_(
+                Message.content.ilike(pattern),
+                Conversation.title.ilike(pattern),
+                MessageFeedback.uid.ilike(pattern),
+                User.username.ilike(pattern),
+            )
         )
+    if agent_id:
+        conditions.append(Conversation.agent_id == agent_id)
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
 
-        # Apply filters
-        if rating and rating in ["like", "dislike"]:
-            query = query.filter(MessageFeedback.rating == rating)
-        if agent_id:
-            query = query.filter(Conversation.agent_id == agent_id)
+    count_stmt = (
+        select(func.count(MessageFeedback.id))
+        .join(Message, MessageFeedback.message_id == Message.id)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .outerjoin(User, MessageFeedback.uid == User.uid)
+        .where(*conditions)
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
 
-        # Order by creation time (most recent first)
-        query = query.order_by(MessageFeedback.created_at.desc())
+    prior_msg = aliased(Message)
+    prior_question = (
+        select(prior_msg.content)
+        .where(
+            prior_msg.conversation_id == Message.conversation_id,
+            prior_msg.role == "user",
+            prior_msg.id < Message.id,
+        )
+        .order_by(prior_msg.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(MessageFeedback, Message, Conversation, User, prior_question.label("prior_question"))
+        .join(Message, MessageFeedback.message_id == Message.id)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .outerjoin(User, MessageFeedback.uid == User.uid)
+        .where(*conditions)
+    )
+    if order_by == "created_asc":
+        stmt = stmt.order_by(MessageFeedback.created_at.asc(), MessageFeedback.id.asc())
+    else:
+        stmt = stmt.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc())
+    rows = (await db.execute(stmt.limit(limit).offset(offset))).all()
 
-        results = await db.execute(query)
-        results = results.all()
+    # 已补答：一次性拉取本页 (agent, question_hash) 命中的人工问答对
+    def _qa_key(agent_slug: str, question: str | None) -> tuple[str, str] | None:
+        normalized = normalize_qa_question(question)
+        if not normalized:
+            return None
+        return (str(agent_slug), hash_qa_question(normalized))
 
-        # Debug logging (privacy-safe)
-        logger.info(f"Found {len(results)} feedback records")
-        # Removed sensitive user data from logs for privacy compliance
+    wanted_agents: set[str] = set()
+    wanted_hashes: set[str] = set()
+    row_keys: list[tuple[str, str] | None] = []
+    for _feedback, _message, conversation, _user, question in rows:
+        key = _qa_key(conversation.agent_id, question)
+        row_keys.append(key)
+        if key:
+            wanted_agents.add(key[0])
+            wanted_hashes.add(key[1])
+    matched_qa: set[tuple[str, str]] = set()
+    if wanted_agents:
+        qa_result = await db.execute(
+            select(CuratedQAPair.agent_slug, CuratedQAPair.question_hash).where(
+                CuratedQAPair.agent_slug.in_(list(wanted_agents)),
+                CuratedQAPair.question_hash.in_(list(wanted_hashes)),
+            )
+        )
+        matched_qa = {(agent_slug, q_hash) for agent_slug, q_hash in qa_result.all()}
 
-        return [
+    items = []
+    for (feedback, message, conversation, user, _question), key in zip(rows, row_keys, strict=True):
+        items.append(
             {
                 "id": feedback.id,
                 "message_id": feedback.message_id,
+                "conversation_thread_id": conversation.thread_id,
                 "uid": feedback.uid,
                 "username": user.username if user else None,
                 "avatar": user.avatar if user else None,
                 "rating": feedback.rating,
+                "status": feedback.status,
                 "reason": feedback.reason,
                 "created_at": feedback.created_at.isoformat(),
                 "message_content": message.content,
                 "conversation_title": conversation.title,
                 "agent_id": conversation.agent_id,
+                "is_refusal_source": _is_refusal_source_message(message.extra_metadata),
+                "has_qa_pair": key is not None and key in matched_qa,
             }
-            for feedback, message, conversation, user in results
-        ]
-    except Exception as e:
-        logger.error(f"Error getting feedbacks: {e}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to get feedbacks: {str(e)}")
+        )
+
+    # Debug logging (privacy-safe)
+    logger.info(f"Found {total} feedback records")
+    # Removed sensitive user data from logs for privacy compliance
+    return {"total": total, "items": items}
+
+
+@dashboard.patch("/feedbacks/{feedback_id}/status", response_model=dict)
+async def update_feedback_status(
+    feedback_id: int,
+    payload: FeedbackStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """更新反馈处理状态（pending/processed/ignored），超级管理员权限。"""
+    del current_user
+    from yuxi.storage.postgres.models_business import MessageFeedback
+
+    feedback = await db.get(MessageFeedback, feedback_id)
+    if feedback is None:
+        raise HTTPException(status_code=404, detail="反馈记录不存在")
+    feedback.status = payload.status
+    await db.commit()
+    return {"id": feedback_id, "status": feedback.status}
 
 
 # =============================================================================

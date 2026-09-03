@@ -19,8 +19,18 @@
         class="tip"
       />
 
+      <a-alert
+        v-if="isJsonQuestion"
+        type="warning"
+        show-icon
+        :message="t('feedback.jsonQuestionTip')"
+        class="tip"
+      />
+
       <a-form-item :label="t('feedback.userQuestionLabel')">
-        <div class="readonly-block">{{ context.question }}</div>
+        <div class="readonly-block" :class="{ 'question-json': isJsonQuestion }">
+          {{ displayQuestion }}
+        </div>
       </a-form-item>
 
       <a-form-item :label="t('feedback.originalAnswerLabel')">
@@ -45,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
@@ -59,6 +69,30 @@ const saving = ref(false)
 const feedbackId = ref(null)
 const context = ref(null)
 const answer = ref('')
+
+// 结构化 JSON 指令（评测/联调产生）不适合作为面向终端用户的人工问答问题键，
+// 识别后美化展示并提示；是否仍保存由运营决定。
+const isJsonQuestion = computed(() => {
+  const raw = context.value?.question
+  if (!raw) return false
+  const trimmed = raw.trim()
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return false
+  try {
+    JSON.parse(trimmed)
+    return true
+  } catch {
+    return false
+  }
+})
+const displayQuestion = computed(() => {
+  const raw = context.value?.question || ''
+  if (!isJsonQuestion.value) return raw
+  try {
+    return JSON.stringify(JSON.parse(raw.trim()), null, 2)
+  } catch {
+    return raw
+  }
+})
 
 async function show(id) {
   feedbackId.value = id
@@ -126,6 +160,12 @@ defineExpose({ show })
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.question-json {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .original-answer {
   max-height: 180px;

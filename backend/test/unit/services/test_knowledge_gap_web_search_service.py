@@ -41,21 +41,82 @@ async def test_search_returns_draft_answer_and_safe_sources(monkeypatch):
         }
     )
 
+    async def fake_compose(question, sources):
+        assert question == gap.question
+        assert sources[0]["url"] == "https://example.com/a"
+        return "平台模型归纳的中文草稿"
+
     monkeypatch.setattr(
         "yuxi.services.knowledge_gap_web_search_service.KnowledgeGapRepository",
         lambda session: gap_repo,
     )
     monkeypatch.setattr(KnowledgeGapWebSearchService, "_build_client", staticmethod(lambda: client))
+    monkeypatch.setattr(KnowledgeGapWebSearchService, "_compose_chinese_draft", staticmethod(fake_compose))
 
     result = await KnowledgeGapWebSearchService().search(object(), gap.id)
 
-    assert result["draft_answer"] == "候选联网答案"
+    assert result["draft_answer"] == "平台模型归纳的中文草稿"
     assert result["question"] == gap.question
     assert result["sources"] == [
         {"title": "官方资料", "url": "https://example.com/a", "content": "正文 A", "score": 0.9}
     ]
     assert client.calls[0]["include_answer"] is True
     assert client.calls[0]["search_depth"] == "advanced"
+
+
+@pytest.mark.asyncio
+async def test_search_falls_back_to_tavily_answer_when_compose_empty(monkeypatch):
+    """归纳失败（返回空串）时回退搜索引擎自带摘要，不把草稿变空。"""
+    gap = _gap()
+    gap_repo = SimpleNamespace(get=AsyncMock(return_value=gap))
+    client = _FakeSearchClient(
+        {
+            "answer": "搜索引擎摘要",
+            "results": [{"title": "T", "url": "https://example.com/a", "content": "正文", "score": 0.8}],
+        }
+    )
+
+    async def fake_compose(question, sources):
+        return ""
+
+    monkeypatch.setattr(
+        "yuxi.services.knowledge_gap_web_search_service.KnowledgeGapRepository",
+        lambda session: gap_repo,
+    )
+    monkeypatch.setattr(KnowledgeGapWebSearchService, "_build_client", staticmethod(lambda: client))
+    monkeypatch.setattr(KnowledgeGapWebSearchService, "_compose_chinese_draft", staticmethod(fake_compose))
+
+    result = await KnowledgeGapWebSearchService().search(object(), gap.id)
+
+    assert result["draft_answer"] == "搜索引擎摘要"
+    assert len(result["sources"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_compose_chinese_draft_forces_chinese_and_uses_sources(monkeypatch):
+    """平台模型归纳提示词必须带“中文”约束并把片段原文交给模型，杜绝英文草稿。"""
+    captured = {}
+
+    class _FakeModel:
+        async def call(self, messages, **kwargs):
+            captured["messages"] = messages
+            captured["stream"] = kwargs.get("stream")
+            return SimpleNamespace(content="归纳出的中文草稿")
+
+    monkeypatch.setattr("yuxi.agents.models.resolve_chat_model_spec", lambda model=None: "default:model")
+    monkeypatch.setattr("yuxi.models.chat.select_model", lambda spec: _FakeModel())
+
+    result = await KnowledgeGapWebSearchService._compose_chinese_draft(
+        "项目何时发布？",
+        [{"title": "官方资料", "url": "https://example.com/a", "content": "正文 A"}],
+    )
+
+    assert result == "归纳出的中文草稿"
+    system_content = captured["messages"][0]["content"]
+    user_content = captured["messages"][1]["content"]
+    assert "中文" in system_content and "编造" in system_content
+    assert "项目何时发布？" in user_content
+    assert "正文 A" in user_content
 
 
 def test_build_client_requires_tavily_api_key(monkeypatch):

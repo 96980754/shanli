@@ -16,6 +16,7 @@ from sqlalchemy import (
     and_,
     case,
     cast,
+    delete,
     func,
     lateral,
     literal,
@@ -40,6 +41,18 @@ FAILED_REPLACEMENT_CANDIDATE_STATUSES = {
     "index_failed",
     "error_parsing",
     "error_indexing",
+}
+
+# 新版本候选仍需人工处理/仍在分析中的状态：候选未激活前属于这些状态时，
+# 文件行应提示“版本变更待审核/冲突待处理”（见 list_document_files 的
+# version_review_pending 聚合），引导用户点开版本历史查看变更报告。
+VERSION_REVIEW_PENDING_STATUSES = {
+    "conflict_detecting",
+    "conflict_clear",
+    "conflict_review",
+    "conflict_inconclusive",
+    "validation_processing",
+    "validation_review",
 }
 
 
@@ -310,11 +323,17 @@ class KnowledgeFileRepository:
             ]
             logical_ids = {record.logical_document_id for record in logical_currents}
             if logical_ids:
+                # 家族成员须曾生效（激活过或已被后续版本替换归档），排除从未激活的候选版本。
+                # 被替换归档的原首版没有 activated_at（原始上传不经 activate_candidate），
+                # 但 superseded_at 已打点——若只按 activated_at 过滤会把该首版漏掉，问答侧版本提示将不可见。
                 logical_result = await session.execute(
                     select(KnowledgeFile).where(
                         KnowledgeFile.kb_id == kb_id,
                         KnowledgeFile.logical_document_id.in_(logical_ids),
-                        KnowledgeFile.activated_at.is_not(None),
+                        or_(
+                            KnowledgeFile.activated_at.is_not(None),
+                            KnowledgeFile.superseded_at.is_not(None),
+                        ),
                         KnowledgeFile.is_folder.is_(False),
                     )
                 )
@@ -1211,6 +1230,19 @@ class KnowledgeFileRepository:
         )
 
     @staticmethod
+    def _current_document_condition():
+        """仅匹配当前可见文档行。
+
+        版本链归档的旧版本（is_active=False / is_current=False）以及删除文档后遗留的
+        同 logical_document_id 孤儿行不参与“内容相同”重复判定：否则删除文档后再次上传
+        同名旧版本内容会被误判为与隐藏残留重复而拒绝入库。
+        """
+        return and_(
+            KnowledgeFile.is_current.is_(True),
+            KnowledgeFile.is_active.is_(True),
+        )
+
+    @staticmethod
     def _normalize_parent_id(parent_id: object) -> str | None:
         normalized = str(parent_id or "").strip()
         return normalized or None
@@ -1290,7 +1322,7 @@ class KnowledgeFileRepository:
                             KnowledgeFile.kb_id == kb_id,
                             KnowledgeFile.is_folder.is_(False),
                             KnowledgeFile.content_hash == content_hash,
-                            self._not_failed_replacement_candidate_condition(),
+                            self._current_document_condition(),
                         )
                         .order_by(KnowledgeFile.created_at.desc(), KnowledgeFile.file_id.asc())
                     )
@@ -1769,6 +1801,7 @@ class KnowledgeFileRepository:
             KnowledgeFile.path.label("path"),
             KnowledgeFile.minio_url.label("minio_url"),
             KnowledgeFile.markdown_file.label("markdown_file"),
+            KnowledgeFile.logical_document_id.label("logical_document_id"),
             literal(False).label("is_virtual_folder"),
             cast(literal(None), String).label("path_prefix"),
             literal(0).label("virtual_children_count"),
@@ -1788,6 +1821,7 @@ class KnowledgeFileRepository:
                 cast(literal(None), String).label("path"),
                 cast(literal(None), String).label("minio_url"),
                 cast(literal(None), String).label("markdown_file"),
+                cast(literal(None), String).label("logical_document_id"),
                 literal(True).label("is_virtual_folder"),
                 virtual_path_prefix,
                 func.count().label("virtual_children_count"),
@@ -1998,36 +2032,64 @@ class KnowledgeFileRepository:
             )
             return result.scalar_one_or_none()
 
-    async def delete(self, file_id: str) -> None:
-        """删除文件记录，并级联清理指向它的未完成版本/替换候选。
+    async def delete(self, file_id: str, *, family: bool = True) -> None:
+        """删除文件记录，并级联清理同一 logical_document_id 版本链及指向它的候选。
 
-        版本候选（supersedes_file_id）与替换候选（replacement_target_file_id）在
-        被替换的当前版本删除后若不清理，会留下 is_current=false 但 is_active 的
-        孤儿记录：列表不可见，却仍会被重复上传检测按文件名/is_active 匹配到，
-        导致“知识库中没有该文档却提示重复”。
+        删除的是某版本链的当前文档（family=True 且 is_current）时，连同归档旧版本与
+        待激活候选整族删除，避免留下 is_current=false / is_active=false 的孤儿行：
+        否则列表不可见，却仍会被“内容相同/文件名”重复检测命中，导致删除后再次上传
+        同名旧版本内容失败（任务中心报“文件处理完成，失败 1 个”）。
+        内部内容替换流程（编辑保存后删旧版）以 family=False 调用，只删当前行与其候选。
         """
+        file_ids = await self.resolve_delete_file_ids(file_id, family=family)
+        if not file_ids:
+            return
         async with pg_manager.get_async_session_context() as session:
-            pending = list(
+            rows = list(
                 (
                     await session.execute(
-                        select(KnowledgeFile).where(
-                            KnowledgeFile.is_current.is_(False),
-                            or_(
-                                KnowledgeFile.supersedes_file_id == file_id,
-                                KnowledgeFile.replacement_target_file_id == file_id,
-                            ),
-                        )
+                        select(KnowledgeFile).where(KnowledgeFile.file_id.in_(file_ids)).order_by(KnowledgeFile.file_id)
                     )
                 )
                 .scalars()
                 .all()
             )
-            for record in pending:
+            for record in rows:
                 await session.delete(record)
-            result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.file_id == file_id))
-            record = result.scalar_one_or_none()
-            if record is not None:
-                await session.delete(record)
+
+    async def resolve_delete_file_ids(self, file_id: str, *, family: bool = True) -> list[str]:
+        """计算删除 file_id 时应一并清理的 file_id 集合。
+
+        - 始终包含：目标行本身；
+        - 指向目标的未完成版本/替换候选（supersedes / replacement_target / previous）；
+        - family=True 且目标是某版本链当前文档时：同 kb + logical_document_id 的整族行。
+        """
+        async with pg_manager.get_async_session_context() as session:
+            target = (
+                await session.execute(select(KnowledgeFile).where(KnowledgeFile.file_id == file_id))
+            ).scalar_one_or_none()
+            if target is None:
+                return []
+            conditions = [
+                KnowledgeFile.file_id == file_id,
+                or_(
+                    KnowledgeFile.supersedes_file_id == file_id,
+                    KnowledgeFile.replacement_target_file_id == file_id,
+                    KnowledgeFile.previous_version_id == file_id,
+                ),
+            ]
+            if family and target.is_current and target.logical_document_id:
+                conditions.append(
+                    and_(
+                        KnowledgeFile.kb_id == target.kb_id,
+                        KnowledgeFile.logical_document_id == target.logical_document_id,
+                        KnowledgeFile.is_folder.is_(False),
+                    )
+                )
+            result = await session.execute(
+                select(KnowledgeFile.file_id).where(KnowledgeFile.kb_id == target.kb_id, or_(*conditions))
+            )
+            return list(dict.fromkeys(row[0] for row in result.all()))
 
     async def list_pending_candidate_file_ids(self, *, file_id: str) -> list[str]:
         """列出指向某文件的未完成版本/替换候选 file_id（删除时用于级联清理 chunks）。"""
@@ -2043,8 +2105,26 @@ class KnowledgeFileRepository:
             )
             return [row[0] for row in result.all()]
 
+    async def version_review_pending_counts(self, kb_id: str, logical_document_ids: list[str]) -> dict[str, int]:
+        """统计各文档家族中“待处理/待审核”的新版本候选数（文件行提示用）。"""
+        if not logical_document_ids:
+            return {}
+        async with pg_manager.get_async_session_context() as session:
+            result = await session.execute(
+                select(KnowledgeFile.logical_document_id, func.count(KnowledgeFile.file_id))
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.logical_document_id.in_(logical_document_ids),
+                    KnowledgeFile.is_current.is_(False),
+                    KnowledgeFile.is_active.is_(True),
+                    KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.status.in_(sorted(VERSION_REVIEW_PENDING_STATUSES)),
+                )
+                .group_by(KnowledgeFile.logical_document_id)
+            )
+            return {logical_id: int(count) for logical_id, count in result.all()}
+
     async def delete_by_kb_id(self, kb_id: str) -> None:
         async with pg_manager.get_async_session_context() as session:
-            result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id))
-            for record in result.scalars().all():
-                await session.delete(record)
+            # 单条批量 DELETE：子表依赖 DB 级 ON DELETE CASCADE，避免逐行 ORM 删除
+            await session.execute(delete(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id))

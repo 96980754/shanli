@@ -71,22 +71,25 @@ def _path_overlaps_root(path: str, root: str) -> bool:
     return _is_same_or_child(path, root) or _is_same_or_child(root, path)
 
 
-def _can_read_path(path: str) -> bool:
-    return any(_is_same_or_child(path, root) for root in _READABLE_ROOTS)
+def _can_read_path(path: str, roots: tuple[str, ...] | None = None) -> bool:
+    roots = _READABLE_ROOTS if roots is None else roots
+    return any(_is_same_or_child(path, root) for root in roots)
 
 
-def _can_list_path(path: str) -> bool:
-    return any(_path_overlaps_root(path, root) for root in _READABLE_ROOTS)
+def _can_list_path(path: str, roots: tuple[str, ...] | None = None) -> bool:
+    roots = _READABLE_ROOTS if roots is None else roots
+    return any(_path_overlaps_root(path, root) for root in roots)
 
 
 def _can_write_path(path: str) -> bool:
     return any(_is_same_or_child(path, root) for root in _WRITABLE_ROOTS)
 
 
-def _readable_search_paths(path: str) -> list[str]:
-    if _can_read_path(path):
+def _readable_search_paths(path: str, roots: tuple[str, ...] | None = None) -> list[str]:
+    roots = _READABLE_ROOTS if roots is None else roots
+    if _can_read_path(path, roots):
         return [path]
-    return [root for root in _READABLE_ROOTS if _is_same_or_child(root, path)]
+    return [root for root in roots if _is_same_or_child(root, path)]
 
 
 def _glob_for_search_root(pattern: str, root: str) -> str:
@@ -100,26 +103,28 @@ def _glob_for_search_root(pattern: str, root: str) -> str:
     return pattern
 
 
-def _filter_readable_infos(infos: list[FileInfo]) -> list[FileInfo]:
+def _filter_readable_infos(infos: list[FileInfo], roots: tuple[str, ...] | None = None) -> list[FileInfo]:
+    roots = _READABLE_ROOTS if roots is None else roots
     result: list[FileInfo] = []
     for info in infos:
         try:
             path = _normalize_path(info.get("path", ""))
         except ValueError:
             continue
-        if _can_list_path(path):
+        if _can_list_path(path, roots):
             result.append(info)
     return result
 
 
-def _filter_readable_matches(matches: list[GrepMatch]) -> list[GrepMatch]:
+def _filter_readable_matches(matches: list[GrepMatch], roots: tuple[str, ...] | None = None) -> list[GrepMatch]:
+    roots = _READABLE_ROOTS if roots is None else roots
     result: list[GrepMatch] = []
     for match in matches:
         try:
             path = _normalize_path(match.get("path", ""))
         except ValueError:
             continue
-        if _can_read_path(path):
+        if _can_read_path(path, roots):
             result.append(match)
     return result
 
@@ -182,6 +187,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
         readable_skills: list[str] | None = None,
         file_thread_id: str | None = None,
         skills_thread_id: str | None = None,
+        readable_roots: tuple[str, ...] | None = None,
     ):
         self._thread_id = str(thread_id or "").strip()
         if not self._thread_id:
@@ -197,6 +203,8 @@ class ProvisionerSandboxBackend(BaseSandbox):
             raise ValueError("uid is required for ProvisionerSandboxBackend")
 
         self._readable_skills = list(readable_skills or [])
+        # 主对话只读本会话 uploads/outputs + skills 时传入受限 roots；None 保持全量默认。
+        self._readable_roots = tuple(readable_roots) if readable_roots else None
         self._provider = get_sandbox_provider()
         self._id = sandbox_id_for_thread(self._file_thread_id, self._skills_thread_id, uid=self._uid)
         self._client: Any | None = None
@@ -335,7 +343,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
             normalized_path = _normalize_path(file_path)
         except Exception as exc:  # noqa: BLE001
             return ReadResult(error=f"Invalid path '{file_path}': {exc}")
-        if not _can_read_path(normalized_path):
+        if not _can_read_path(normalized_path, self._readable_roots):
             return ReadResult(error=_permission_error("read", normalized_path))
 
         document_read_error = (
@@ -405,7 +413,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
             normalized_path = _normalize_path(path)
         except Exception as exc:  # noqa: BLE001
             return LsResult(error=f"Invalid path '{path}': {exc}")
-        if not _can_list_path(normalized_path):
+        if not _can_list_path(normalized_path, self._readable_roots):
             return LsResult(error=_permission_error("read", normalized_path))
 
         try:
@@ -432,7 +440,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
                 elif isinstance(modified_time, (int, float)):
                     info["modified_at"] = datetime.fromtimestamp(modified_time).isoformat()
             infos.append(info)
-        return LsResult(entries=_filter_readable_infos(infos))
+        return LsResult(entries=_filter_readable_infos(infos, self._readable_roots))
 
     def write(self, file_path: str, content: str) -> WriteResult:
         """Write a new text file.
@@ -529,7 +537,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
         except Exception as exc:  # noqa: BLE001
             return GrepResult(error=f"Invalid path '{path or '/'}': {exc}")
 
-        search_paths = _readable_search_paths(normalized_path)
+        search_paths = _readable_search_paths(normalized_path, self._readable_roots)
         if not search_paths:
             return GrepResult(error=_permission_error("read", normalized_path))
 
@@ -539,7 +547,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
             if result.error:
                 return result
             matches.extend(result.matches or [])
-        return GrepResult(matches=_filter_readable_matches(matches))
+        return GrepResult(matches=_filter_readable_matches(matches, self._readable_roots))
 
     def glob(self, pattern: str, path: str = "/") -> GlobResult:
         """Return files matching a glob pattern under allowed sandbox paths."""
@@ -550,7 +558,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
         if ".." in PurePosixPath(str(pattern or "")).parts:
             return GlobResult(error="Invalid glob pattern: path traversal is not allowed")
 
-        search_paths = _readable_search_paths(normalized_path)
+        search_paths = _readable_search_paths(normalized_path, self._readable_roots)
         if not search_paths:
             return GlobResult(error=_permission_error("read", normalized_path))
 
@@ -565,7 +573,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
                 return GlobResult(error=str(exc) or f"Failed to glob '{path}'")
             for file_path in result.data.files or []:
                 infos.append({"path": file_path})
-        infos = _filter_readable_infos(infos)
+        infos = _filter_readable_infos(infos, self._readable_roots)
         infos.sort(key=lambda item: item.get("path", ""))
         return GlobResult(matches=infos)
 
@@ -614,7 +622,7 @@ class ProvisionerSandboxBackend(BaseSandbox):
         for path in paths:
             try:
                 normalized_path = _normalize_path(path)
-                if not _can_read_path(normalized_path):
+                if not _can_read_path(normalized_path, self._readable_roots):
                     responses.append(
                         FileDownloadResponse(path=normalized_path, content=None, error="permission_denied")
                     )

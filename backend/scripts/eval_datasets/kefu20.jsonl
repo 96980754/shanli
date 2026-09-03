@@ -1,0 +1,20 @@
+{"index": 1, "section": "运营平台", "query": "运营平台-新建APP和调度员账号时“开户数量”自动填充为字母", "gold_answer": "浏览器行为，开启无痕模式后不会有自动填充"}
+{"index": 2, "section": "运营平台", "query": "运营平台-登录代理商后如何修改本级公司的登录密码", "gold_answer": "登录代理商账号--公司管理--公司列表--找到对应公司--修改密码"}
+{"index": 3, "section": "运营平台", "query": "运营平台-运营平台打开是英文", "gold_answer": "右上角，语言改成简体中文即可"}
+{"index": 4, "section": "运营平台", "query": "运营平台-独立部署弱网环境下运营平台显示pocstars的logo", "gold_answer": "升级解决"}
+{"index": 5, "section": "终端-安卓", "query": "终端-安卓-如何读取NFC code", "gold_answer": "使用安卓版本2.9.3.14及以上版本直接打卡后显示识别的code"}
+{"index": 6, "section": "终端-安卓", "query": "终端-安卓-对讲时延最大承受范围", "gold_answer": "我们对基站的网络要求就是时延不超过100ms，，丢包不超过5%"}
+{"index": 7, "section": "终端-安卓", "query": "终端-安卓-IOS版本是否支持换肤", "gold_answer": "不支持换肤，由于APP STORE审核严格，源代码相似度太高会导致无法上架"}
+{"index": 8, "section": "终端-安卓", "query": "终端-安卓-大屏/中屏apk左下角显示NONE", "gold_answer": "表示的是没有来自调度台的消息"}
+{"index": 9, "section": "调度台", "query": "调度台-什么是下发消息", "gold_answer": "调度员向群组内的成员下发的图片/短视频/文本消息/位置/文件/语音"}
+{"index": 10, "section": "调度台", "query": "调度台-AES256加密工作逻辑", "gold_answer": "AES256加密是打开时，“本次”加密和不加密的语音记录都能播放，上次或者往上加密期间的录音播放不了 AES256加密是关闭时，只有不加密的可以播放和下载 每次加密的密钥 都不一样"}
+{"index": 11, "section": "调度台", "query": "调度台-什么是群组消息多媒体", "gold_answer": "各群组内成员发送的语音/文本/图片/短视频/位置/文件等多媒体消息"}
+{"index": 12, "section": "MDM", "query": "MDM-在 MDM 设置中输入 “no_camera” 指令后，摄像头仍可使用。", "gold_answer": "检查指令是否拼写正确（小写字母，无空格）；确认指令已 “存储” 并下发，重启设备使策略生效（部分设备需重启）。"}
+{"index": 13, "section": "MDM", "query": "MDM-远程锁定设备后，用户反馈无法解锁（密码正确）。", "gold_answer": "确认锁定密码为 6 位数字（控制台默认格式）；通过控制台发送 “密码重置” 指令；若仍失败，执行 “远程擦除” 后重新注册。"}
+{"index": 14, "section": "MDM", "query": "MDM-终端设备开机后，在欢迎页无法调出二维码扫码页面。", "gold_answer": "指导用户在系统重置欢迎页顶部空白区域连续点击 7 次（需快速点击，间隔不超过 1 秒）；若仍无反应，检查设备是否为出厂状态（未进行过初始化设置），需恢复出厂设置后重试。"}
+{"index": 15, "section": "终端-cat1", "query": "终端-cat1-E600如何切换平台", "gold_answer": "长按侧边“+”键 进入切换平台页面，POC change Global 和Stars"}
+{"index": 16, "section": "终端-cat1", "query": "终端-cat1-Cat1机器是否支持修改心跳", "gold_answer": "cat1机器不支持平台修改心跳"}
+{"index": 17, "section": "终端-cat1", "query": "终端-cat1-D22如何查看版本号", "gold_answer": "Steps to check version of D22: menu→arrow button→Device Info.→menu→POC uer→menu"}
+{"index": 18, "section": "miniserver", "query": "miniserver-Minisever 上没有多媒体消息菜单", "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放"}
+{"index": 19, "section": "miniserver", "query": "miniserver-关于MiniServer（微型服务器）相关能力与限制的结论", "gold_answer": "存量设备不支持升级：今年之前发货的存量MiniServer，由于架构或版本限制，不支持升级到最新版本。 2、新设备支持升级，但需具备镜像恢复能力：今年发货的MiniServer支持版本升级。升级需通过镜像方式进行，我们将提供详细的操作手册，但要求客户具备一定的技术能力以完成镜像恢复操作。 3、账号不支持改名：MiniServer上的用户账号一旦创建，不支持修改名称。 4、热备功能暂不支持，但可定制开发：当前MiniServer版本不支持主备热切换（热备）功能。如有需求，可评估并支持定制开发。 5、DMR网关暂不支持，但可定制开发：当前MiniServer版本不支持DMR网关功能。如有需求，可评估并支持定制开发。 6、容灾功能已支持：MiniServer目前已支持容灾机制，前提条件是只有走代理的方式才支持容灾，能够在异常情况下保障业务的连续性。"}
+{"index": 20, "section": "miniserver", "query": "miniserver-imei在公网激活的，要先删除再激活吗？", "gold_answer": "imei在公网激活的，需要先删除再激活到新版Miniserver下使用"}

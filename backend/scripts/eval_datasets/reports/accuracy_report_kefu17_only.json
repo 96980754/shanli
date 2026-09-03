@@ -1,0 +1,58 @@
+{
+  "run_name": "kefu17_only",
+  "disclaimer": "本报告为内部整体质量评估（不交付甲方）：用业务方人工整理的业务验证集驱动生产真实 Agent 作答，由评测模型评估系统答案对用户问题的贴合度。",
+  "contract_disclaimer": "本报告「答案准确率」为内部质量口径（RAGAS Answer Relevancy：系统答案对用户问题的语义贴合度），测试集为业务方人工整理的业务验证集。它**不是**《AI知识库软件开发合同终稿》中的验收指标——合同验收指标为：答案可接受准确率 ≥ 80%（一期 ≥90%，三期 ≥95%）、引用正确率 ≥ 95%。两者口径、判定方法与数据来源不同，本报告不得用于替代合同验收结论。",
+  "threshold": 0.8,
+  "headline_metric": "answer_relevancy",
+  "metrics": {
+    "answer_correctness": 0.3008861402880476,
+    "citation_recall@1": null,
+    "citation_recall@5": null,
+    "citation_f1@5": null
+  },
+  "metric_counts": {
+    "answer_correctness": 1,
+    "citation_recall@1": 0,
+    "citation_recall@5": 0,
+    "citation_f1@5": 0
+  },
+  "passed": false,
+  "total_items": 1,
+  "kbs": [
+    {
+      "kb_id": "kefu20",
+      "dataset": "kefu17_only",
+      "count": 1,
+      "metrics": {
+        "answer_correctness": 0.3008861402880476,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      }
+    }
+  ],
+  "items": [
+    {
+      "index": 0,
+      "query": "Minisever 上没有多媒体消息菜单",
+      "ragas_metrics": {
+        "answer_correctness": 0.3008861402880476,
+        "citation_recall@1": null,
+        "citation_recall@5": null,
+        "citation_f1@5": null
+      },
+      "answer_scores": {},
+      "retrieval_scores": {},
+      "agent_answer": "**结论：MiniServer 本身不支持多媒体消息功能，运营平台上没有\"多媒体消息\"菜单是正常的，无需排查。**\n\n## 依据说明\n\n**1. MiniServer 的功能范围不含多媒体消息**\n\nPOCSTARS Miniserver 小型一体机（M200，面向 200 个以内终端规模客户）的核心功能仅为：\n\n- 语音对讲（群呼、半双工单呼、临时群组、话权优先级、AES256 加密、多群组监听等）\n- 语音调度（强拉进组、话权强拆、遥闭/遥开）\n- GIS 地图可视化调度（GPS 定位、成员实时位置）\n- 对讲录音\n- 安全报警（SOS）\n\n其基础服务系统的业务功能也只包含：语音对讲、定位、SOS、录音，管理功能为管用户、管群组，搭配 Web 调度台。\n\n**2. MiniServer 运营平台菜单本身没有该入口**\n\n运营平台（用户手册 V2.3）左侧菜单只有：组织管理、调度员管理、群组管理、用户管理、APK 下载、个人中心，不包含多媒体消息相关菜单项。\n\n**3. 多媒体消息是 MNO/PRO 平台的能力**\n\n文字、图片、视频、语音、文件和位置等多媒体消息收发功能，属于 POCSTARS MNO（及 PRO）产品方案的功能范围，与 MiniServer 不是同一产品线，不能混用。\n\n## 参考来源\n\n- POCSTARS Miniserver 销售\"一纸禅\" V2.3（poc资料/miniserver）\n- POCSTAR MiniServer V2.3 运营平台用户手册（poc资料/miniserver）\n- Miniserver 产品解决方案.pptx（poc资料/miniserver）\n- POCSTARS MNO 产品解决方案 V1.2（poc资料/MNO，用于对照多媒体消息能力归属）",
+      "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放",
+      "justified_refusal": false,
+      "exclude_from_aggregate": false,
+      "exclude_reason": "",
+      "kb_id": "kefu20",
+      "dataset": "kefu17_only"
+    }
+  ],
+  "low_accuracy": [],
+  "justified_refusals": [],
+  "excluded_from_aggregate": []
+}

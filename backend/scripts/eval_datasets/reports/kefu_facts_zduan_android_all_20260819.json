@@ -1,0 +1,2587 @@
+{
+  "run_name": "zduan_android_all_20260819",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 0.14026143790849674,
+    "scored": 102,
+    "answered": 47,
+    "refusal_gap": 54,
+    "clarify_missing": 1,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 2,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端无法对讲，按下ptt按键后会有tone音但是无法对讲",
+      "gold_answer": "通过重新创建群组添加用户后解决",
+      "agent_answer": "根据知识库中《POCSTAR MiniServer V2.3-终端APP用户手册》的记载，您描述的现象与\"获取麦权失败\"的典型表现一致：按下PTT后听到按麦Tone音，但未能成功获取麦权，无法开始讲话。\n\n## 故障排查\n\n**现象**：按下PTT按键，听到按麦Tone音（提示音），但无法对讲。\n\n**可能原因**（听到按麦Tone音后马上/短时间内听到摘麦Tone音，即获取麦权失败）：\n\n1. **用户掉线**：听到按麦Tone音后马上听到摘麦Tone音。\n2. **用户处于被遥闭状态**：听到按麦Tone音后马上听到摘麦Tone音。\n3. **当前话权非空时抢麦**：群组中其他人正在讲话时无法抢麦，听到按麦Tone音后马上听到摘麦Tone音。\n4. **网络不稳定**：获取麦权失败，听到按麦Tone音后，3秒内听到摘麦Tone音。\n5. **话权优先级为\"仅听\"**：该用户在该群组的话权优先级被设置为\"仅听\"时，获取麦权失败。\n6. **连续频繁按放PTT**：连续频繁按放PTT超过两次，获取麦权失败。\n\n**检查方法**（手册\"无法对讲\"常见问题章节）：\n\n1. 确认是否已经成功登录终端应用软件。\n2. 确认自己当前所在群组是否正确。\n3. 确认网络是否正常、是否连接成功。\n4. 确认终端设备按键是否失灵。\n\n**处理建议**：\n\n- 若为网络问题：检查终端网络连接，网络恢复正常后重试。\n- 若提示掉线：重新登录应用后再对讲。\n- 若为被遥闭状态：需由调度台解除遥闭后方可正常对讲。\n- 若为话权被占用：等待当前讲话者松开PTT后再抢麦。\n- 若为\"仅听\"优先级：需由调度侧调整该用户在该群组的话权优先级。\n- 若为频繁按放PTT：避免连续频繁按放，间隔后再操作。\n\n另外，知识库《快速适配工具使用手册》提示：**终端之间对讲需保持语音编码方式相同**（POCSTARS的APK默认为amrnb），如双方编码不一致也可能影响对讲，可检查两端APK的声音配置。\n\n---\n\n**来源**：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（语音对讲、获取麦权失败、无法对讲FAQ）\n- poc资料/快速适配工具使用手册 V2.5.pdf（声音配置-语音编码方式）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了故障排查和处理建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "通过重新创建群组添加用户解决"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 1,
+      "section": "终端-安卓",
+      "query": "终端-安卓-固定群组讲话和单呼的临时群组讲话最长时间",
+      "gold_answer": "都是300S.单呼的临时群组最长120S没人讲话会自动解散",
+      "agent_answer": "根据知识库资料，结论如下：\n\n## 结论\n\n| 讲话场景 | 最长时间 | 说明 |\n|---|---|---|\n| 固定群组讲话（组呼） | 群组设置的\"通话时长\"，默认 **30 秒** | 该时长即群组内用户**每次按麦对讲的最长对讲时间**，可在运营平台创建/编辑群组时设置 |\n| 单呼的临时群组讲话 | 默认 **30 秒** | 单次通话默认 30S，**与组呼时长设置一致** |\n\n## 说明\n\n1. **固定群组讲话**：群组创建时可配置\"通话时长（秒）\"，该参数即为群组用户每次按麦对讲的最长对讲时间，默认 30 秒（POCSTAR MiniServer V2.3 运营平台手册记载默认 30S；MNO 运营平台 V3.0 手册同样将\"通话时长\"定义为每次按麦对讲的最长对讲时间）。因此固定群组每次讲话上限跟随该群组设置的时长，并非固定值。\n2. **单呼的临时群组讲话**：单呼时系统创建临时单呼群组，单次通话时长默认 30S，且与组呼时长设置一致。\n3. 另外，终端 APP 手册还记载：临时单呼群组内所有成员**静默超过 60S** 时，该群组会自动解散——这是群组解散机制，与单次讲话时长上限（30S）不同。\n\n**来源：**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕固定群组和单呼临时群组讲话时长给出具体数值和说明，属实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "固定群组讲话最长时间为300S",
+        "单呼的临时群组讲话最长时间为300S"
+      ],
+      "supp_missed": [
+        "单呼临时群组120S没人讲话会自动解散"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 3,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达apphytalk 卸载",
+      "gold_answer": "直接恢复出厂设置就可以",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质答案",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "直接恢复出厂设置"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机播报“Try Communication\" 尝试通话",
+      "gold_answer": "需要在account里关闭--reminder定时提醒",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "需要在account里关闭reminder定时提醒"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "终端-安卓",
+      "query": "终端-安卓-打电话和ptt对讲两者接收到的声音都出现了 掺杂在一起",
+      "gold_answer": "需要在手机设置--移动网络里关闭VoIP（VoLTE）功能，不生效就得需要联系运营商 手机安卓10以下有此功能按钮，10以上版本没有此按钮",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，明确表示未找到相关依据，未实质作答且不切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "在手机设置-移动网络里关闭VoIP（VoLTE）功能",
+        "不生效需联系运营商"
+      ],
+      "supp_missed": [
+        "安卓10以下有此功能按钮",
+        "安卓10以上没有此按钮"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "终端-安卓",
+      "query": "终端-安卓-启动命令",
+      "gold_answer": "启动小屏机apk： adb shell am start -n com.shanlitech.ptt/com.shanli.pocstar.SplashActivity 启动无屏机apk： adb shell am start -n com.shanlitech.noscreen/com.shanli.pocstar.SplashActivity 启动大屏/车台apk： adb shell am start -n com.shli.interphone/com.shanli.pocstar.SplashActivity",
+      "agent_answer": "根据知识库检索结果，关于“终端-安卓-启动命令”可确认的信息如下：\n\n## 结论\n\n知识库中记载的安卓终端（客户端）启动方式为**点击终端设备桌面上的应用图标启动**；未查到命令行形式（如 adb/shell 命令）的终端启动命令。\n\n## 具体说明\n\n**1. MCSTARS 客户端（MCX 安卓终端）**\n- 启动方式：在终端设备桌面上点击 MCSTARS 图标即可启动客户端。\n- 首次启动时需授权以下权限（点击“允许”）：拨打电话和管理通话、拍摄照片和录制视频、录音、访问照片/媒体内容/文件、获取位置信息、始终处于应用上层。\n- 启动前环境准备：正确插入 SIM 卡、确保网络畅通（移动数据或 WiFi）、开启 GPS 定位、调好媒体音量。\n\n**2. POCSTAR 大屏终端 APP（安卓大屏终端）**\n- 该 APP 主要针对基于安卓系统的大尺寸屏幕终端产品。\n- 获取方式：在大屏终端设备上找到“谷歌 play store”，搜索“POCSTAR”，点击下载并安装。\n- 使用前需确保设备正常开机、电量充足、网络畅通。\n\n**补充说明**：知识库中涉及 adb 的内容是 PC 端“快速适配工具”（用于终端按键适配和 APK 打包，如安装 adb、验证 adb 安装、配置环境变量），不属于安卓终端的启动命令。\n\n## 来源\n\n- MCX资料/MCX V1.1.1 word/【6】MCSTARS Client安装手册V1.1.1.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓终端启动方式作答，未拒答且与问题主题相关，故硬门槛判定为pass。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未给出小屏机apk的adb启动命令",
+        "未给出无屏机apk的adb启动命令",
+        "未给出大屏/车台apk的adb启动命令"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "终端-安卓",
+      "query": "终端-安卓-查看IMEI 账号",
+      "gold_answer": "setting--about phone--status--imei information",
+      "agent_answer": "根据知识库资料，安卓终端（POCSTARS 对讲 APP）查看 IMEI 账号的操作如下。\n\n## 结论\n\n在安卓大屏终端的 POCSTARS 对讲 APP 中，通过 **\"个人中心 → 用户名称/个人信息 → 账号管理\"** 查看当前账号信息。以 IMEI 作为登录凭证的终端账号，其账号即为该终端的 IMEI 号。\n\n## 操作步骤（依据终端 APP 用户手册）\n\n1. 在 APP 应用界面，进入右上角 **\"个人中心\"** 菜单；\n2. 选择 **用户名称**（或点击个人信息）；\n3. 进入 **\"账号管理\"** 界面，即可查询账号名称、账号类型等信息。\n\n> 说明：POCSTARS 大屏终端 APP 用户手册（V3.0）中对应入口为：首页点击右上角设置或个人相关入口进入个人中心 → 点击个人信息进入账号管理页，可查看当前账号信息与角色信息。\n\n## 相关概念说明\n\n- **IMEI**：即终端设备序列号（官方名称\"国际移动设备识别码\"），用于在网络中识别每一部独立的手机、对讲机等移动通信设备。\n- **IMEI 账号**：对讲账号的一种，以终端的 IMEI 号码作为登录凭证。安卓终端登录时可在\"登录方式\"中选择 **IMEI 自动登录**，但需平台侧已提前完成 IMEI 绑定，否则无法正常登录。\n\n**来源**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.8 查看账户信息、2.6 术语解释）\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（3.21 个人中心、3.2 登录）\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx（1.3 名词解释）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了在POCSTARS APP内查看IMEI账号信息的操作步骤，属于实质作答且与问题相关。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "应通过设置→关于手机→状态→IMEI信息查看"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "终端-安卓",
+      "query": "终端-安卓-森海克斯NX-300 允许安装apk",
+      "gold_answer": "通过电话按键密码来解锁 *#*#275#*#*",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且不切题",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "通过电话按键密码解锁 *#*#275#*#*"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "终端-安卓",
+      "query": "终端-安卓-测试中的imei账号，只显示：",
+      "gold_answer": "群组列表， 2.成员列表， 3.多媒体消息（发送不了/查看不了历史记录） 4.调度台上报（只能发文字和文件） 5.定位 6.漏话提醒",
+      "agent_answer": "您的问题似乎不完整，“只显示：”后面缺少具体内容，我无法据此定位到知识库中的对应场景。\n\n请补充以下信息，以便准确回答：\n\n1. **“只显示”什么？** 例如：只显示部分字段（如设备名称、状态）、只显示某几列、只显示部分 IMEI 号码，还是其他现象？\n2. **“终端-安卓-测试”具体指哪个场景？** 例如：运营平台的终端管理页面中的“测试”状态列表、某个测试环境下的终端账号，还是其他位置？\n\n补充完整后，我将基于您有权限访问的知识库为您查询。",
+      "cls": "answered",
+      "gate": "fail",
+      "gate_reason": "系统回答为反问澄清，未实质作答，属于拒答。",
+      "key_facts": {
+        "total": 6,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "群组列表",
+        "成员列表",
+        "多媒体消息（发送不了/查看不了历史记录）",
+        "调度台上报（只能发文字和文件）",
+        "定位",
+        "漏话提醒"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APP巡更功能支持在信号差或者没有信号的时候打点巡更、也有记录、然后到信号好的地方自动更新上传数据吗？",
+      "gold_answer": "目前不支持，得提需求给产品",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答，未回答支持与否。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "目前不支持"
+      ],
+      "supp_missed": [
+        "得提需求给产品"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "终端-安卓",
+      "query": "终端-安卓-全双工通话讲话最长时间",
+      "gold_answer": "没有限制",
+      "agent_answer": "已在现有知识库中完成检索，结论如下。\n\n## 结论\n\n知识库中**未找到\"安卓终端全双工通话讲话最长时间\"这一参数的具体数值记载**。现有资料只说明全双工通话期间双方可同时自由发言，未对单次讲话时长设置上限；而知识库中提到的\"讲话/发言时长限制\"均明确针对**群组和半双工（按麦）对讲**，不适用于全双工通话。\n\n## 相关依据\n\n**1. 全双工通话的讲话方式（无时长上限记载）**\n- MCSTARS Client 用户手册（安卓终端）：\"全双工语音在通话期间，双方可同时自由发言\"，通话中可执行的操作仅为音量调节、扬声器/听筒/耳机切换、麦克风开关、呼叫转移、挂断等，未提及讲话时长限制。\n- POCSTARS 大屏终端 APP 用户手册：\"语音通话……通话双方可同时讲话和收听……（语音通话为全双工通话）\"，通话界面显示通话时长及静音、免提、挂断等操作，同样无时长限制说明。\n\n**2. 时长限制仅针对群组/半双工对讲（与全双工无关）**\n- MCSTARS 产品白皮书：\"基本话权控制——支持**群组和半双工呼叫**过程中进行话权控制……支持发言时长限制，发言超时后，服务自动撤销该用户话权\"（未给出具体数值）。\n- POCSTARS 运营平台手册：\"临时组通话时长：设置该公司**单呼和临时群组**中用户单次按麦可发言的最大时长，默认为 30s\"；\"通话时长（秒）：设置该群组通话时长，为该群组的用户每次**按麦对讲**的最长对讲时间（默认 30S）\"。\n- 全双工通话在运营平台中仅为功能开关：\"全双工通话：设置是否开启 1V1 全双工实时语音通话\"，不设时长参数。\n\n## 说明\n\n若您需要\"全双工通话讲话最长时间\"的明确数值（例如是否存在超时自动挂断或最大通话时长），当前知识库资料未包含该信息，无法给出具体数值，建议以产品实际配置或厂商确认结果为准。\n\n**来源：**\n- MCX 资料/MCX V1.1.1 word/【4】MCSTARS Client 用户手册 V1.1.1.docx\n- MCX 资料/MCX V1.1.1 word/【2】MCSTARS 产品白皮书 V1.1.1.docx\n- poc 资料/MNO/POCSTARS 运营平台用户手册 V3.0-20260409.docx\n- poc 资料/MNO/POCSTARS 大屏终端 APP 用户手册 V3.0-20260409.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，明确表示全双工通话未对讲话时长设置上限，切题且与标准答案一致。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "终端-安卓",
+      "query": "终端-安卓-ASAPP开头的APK包，用手机安装登录不上",
+      "gold_answer": "ASAPP开头的APK包，用新主线的版本，只能使用相对应的机型来登录，不同机型获取的配置信息不同",
+      "agent_answer": "根据知识库中《POCSTAR MiniServer V2.3-终端APP用户手册》及《快速适配工具使用手册 V2.5》的记载，安卓终端APP（APK）在手机上安装后登录不上，可按以下思路排查：\n\n**现象**：终端安卓版APP安装到手机后无法登录/登录失败。\n\n**按登录提示区分的可能原因与处理建议**\n\n| 登录提示 | 可能原因 | 检查/处理方法 |\n|---|---|---|\n| 提示\"账号密码错误\" | 密码错误 | 检查密码后重新输入 |\n| 提示\"账号不存在\" | （1）账号输入错误；（2）终端版本所属平台与账号所在平台不匹配 | 检查账号后重新输入；确认APK所属平台与账号所在平台一致 |\n| 提示\"无网络连接\" | 网络不正常 | 检查网络连接是否正常 |\n| 提示\"当前版本不匹配\" | 当前安装的APK版本与账号充值的服务包中限制的APK版本不一致 | 升级/安装指定版本 |\n\n**登录环境配置检查（非大公网环境必查）**\n1. APP默认出厂版本为 POCSTAR 大公网环境；若使用的是独立部署或 miniserver 等非大公网环境，需在登录界面进入\"登录设置\"配置环境参数。\n2. 环境参数配置方式有两种：\n   - 手动配置：输入环境参数，其中 context（即 Brand）和 DNS 为必填项；\n   - 扫码自动配置：扫描运营平台【用户列表-APK下载】功能生成的配置二维码，系统自动识别并填充 DNS、context 参数（仅支持平台生成的标准二维码）。\n3. 配置完成后需退出应用、重新运行APP再登录。\n4. 若登录超时30秒并提示\"登录超时\"，说明当前配置的环境参数有误；可通过登录设置中的\"恢复默认设置\"切回 POCSTAR 大公网环境。\n\n**安装方式注意事项**\n- 若手机先前安装过该APP，安装新APP时采用了覆盖安装方式，会导致配置不生效，需先卸载再安装新APP。\n\n**来源**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.9 常见登录失败的提示和原因、3.1.10 登录环境设置、4.1 无法登录）\n- poc资料/快速适配工具使用手册 V2.5.pdf（5.4 使用APP时配置未生效）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对安卓APP登录不上给出了排查步骤，与问题主题相关，属于实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "ASAPP开头APK包是新主线版本",
+        "只能用对应机型登录，不同机型配置信息不同"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK是否支持鸿蒙系统",
+      "gold_answer": "不支持纯血鸿蒙",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答（未找到相关依据），未实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "不支持纯血鸿蒙"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何通过elk查看apk版本号",
+      "gold_answer": "https://elk.poctalktest.vip:5601 用户名：elastic密码:9R26NQyuPio85Dt3LfxQ 查询apk步骤：Discover--tomcat upgrade--输入终端账号",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且与问题无关",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "访问ELK地址及账号密码",
+        "查询步骤Discover--tomcat upgrade--输入终端账号"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "终端-安卓",
+      "query": "终端-安卓-查看终端型号命令",
+      "gold_answer": "adb shell getprop ro.product.model",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "adb shell getprop ro.product.model"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端录制视频上传调度台每秒消耗多少流量",
+      "gold_answer": "357KB 每秒",
+      "agent_answer": "## 结论\n\n知识库中**没有单独给出\"终端录制视频上传调度台\"这一场景的每秒流量数值**，但给出了与视频上传/回传最直接相关的带宽规划指标：**一路视频占用 1M 带宽（1Mbps）**，即每秒约消耗 **0.125MB（约 128KB）** 流量（此为 Mbps 单位换算值，非知识库原文数值）。\n\n## 依据说明\n\n| 来源文档 | 原文记载 |\n|---|---|\n| 《MCSTARS产品白皮书V1.1.1》（MCX资料） | \"最大视频并发数：100（有带宽限制，一路视频1M带宽）\"；英文版为 \"1Mbps per stream\" |\n| 《POCSTARS PRO产品白皮书V1.1》（poc资料） | \"最低带宽：4Mbps（可支持4路点对点视频通话…）。每新增1路视频：需额外增加1Mbps带宽\"；\"最大视频并发数：200（有带宽限制，一路视频1M带宽）\" |\n\n## 适用说明\n\n- 上述\"一路视频 1M 带宽\"是系统**视频业务（含视频回传/上传）的带宽规划指标**，按此推算单路视频上传每秒流量约为 1Mbit ≈ 0.125MB。\n- 知识库中另一处流量数据（POCSTARS MNO 产品白皮书）仅覆盖 **GPS 待机流量（0.97M/24h 等）和语音呼叫流量（6.7M/h）**，未包含视频上传流量，因此不能作为本问题的直接依据。\n- 实际每秒流量还会受视频分辨率、编码（系统支持 H.264/H.265）、网络状况等因素影响，知识库未记载这些变量下的具体流量值。\n\n如需更精确的数字，建议以现场实测或产品规格确认单路视频码率配置为准。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了视频上传流量估算，因此通过硬门槛。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "357KB每秒"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更是否支持实时监测",
+      "gold_answer": "有任务开始提醒，运营平台可以设置提醒时间",
+      "agent_answer": "**结论：支持。** 安卓终端巡更具备实时记录巡检轨迹与检查点状态的能力，平台侧支持查看巡更执行结果并生成巡更报表。\n\n## 说明\n\n**1. 巡更可实时记录巡检过程**\n- 知识库中明确记载：在工业园区、化工园区等巡检场景中，“在巡检过程中，巡更可以实时记录巡检人员的巡检轨迹和检查点状态，确保每个关键设备或区域都得到及时、有效的检查”。\n\n**2. 平台侧支持查看与监测巡更执行情况**\n- 支持查看终端巡更结果；\n- 执行计划管理可展示巡更计划的执行结果、执行人员、巡更时间等；\n- 巡更报表支持按巡更人员、统计方式（按日/按周/按月）、统计时间段生成，并可导出（Excel 格式）。\n\n**3. 相关前提条件**\n- 参与巡更的用户须为已充值巡更卡的账号，未充值巡更卡的账号无法被选为巡更用户；\n- 巡更打卡通过 NFC 方式完成；在规定时间内未完成所有巡更点签到，任务自动结束并标记为漏巡，漏巡任务结束后不可补录。\n\n## 来源\n\n- poc资料/PRO/POCSTARS PRO产品解决方案 V1.2-202605.pptx\n- poc资料/PRO/POCSTARS PRO产品白皮书V1.1.docx\n- poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出支持结论并围绕巡更实时记录、平台查看展开，属实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "有任务开始提醒",
+        "运营平台可以设置提醒时间"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "终端-安卓",
+      "query": "终端-安卓-大屏/中屏apk左下角显示NONE",
+      "gold_answer": "表示的是没有来自调度台的消息",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为抱歉未找到相关依据，属于拒答，未实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "左下角NONE表示无来自调度台的消息"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK支持的最低系统是多少",
+      "gold_answer": "支持安卓4.4及以上，安卓7及以上的才支持新视频apk",
+      "agent_answer": "根据知识库资料，MCSTARS 移动客户端（安卓 APK）支持的最低系统为 **Android 10 及以上**。\n\n依据：MCX 产品资料《MCSTARS关键任务通信系统产品V1.1.1》中\"运行环境\"部分明确列出：\n\n| 配置对象 | 配置项 | 关键配置参数 |\n|---|---|---|\n| 移动客户端 | 软件（APP） | 操作系统：Android 10 及以上 |\n\n来源：MCX资料/MCX V1.1.1 -产品介绍-一指禅-中英文/【3】MCSTARS关键任务通信系统产品V1.1.1.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了APK支持的最低系统版本，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "支持安卓4.4及以上"
+      ],
+      "supp_missed": [
+        "安卓7及以上才支持新视频apk"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更是否有漏打卡提醒",
+      "gold_answer": "终端进入巡更任务查看 2.运营平台登录公司账号，进入Execute Plan查看",
+      "agent_answer": "根据知识库检索，结论如下：\n\n**安卓终端侧未记载\"漏打卡提醒\"功能**（即巡更打卡超时、形成漏巡后向终端用户推送提醒）。现有资料中记载的巡更相关提醒均为\"巡更开始前\"的事前提醒，具体如下：\n\n## 知识库中已记载的巡更提醒相关功能\n\n**1. 终端侧：巡更任务提醒（事前提醒）**\n- 终端APP功能清单中记载\"巡更任务提醒：用户可以收到即将进行的巡更任务提醒\"，即巡更开始前的任务提醒。\n- 终端巡更相关功能还包括：查看今日巡更任务（当前任务/待巡任务/已结束任务）、NFC巡更打卡、查看历史巡更记录。\n\n**2. 平台侧：巡更提醒规则（可配置）**\n- 运营平台\"巡更管理-巡更计划\"中可\"设置提醒规则\"：企业管理员可设置巡更开始前多久给巡更用户发送提醒、提醒几次；默认设置为巡更开始前30分钟提醒1次，目的是\"避免用户忘记去巡更\"。\n\n**3. 漏巡的处理方式（结果标记，非终端提醒）**\n- 若巡更任务在规定时间内未完成所有巡更点的签到，任务自动结束并标记为漏巡。\n- 漏巡任务可在运营平台\"巡更管理-执行计划\"中筛选\"执行结果-漏巡\"查看详情；巡更任务结束后不可补录，需在任务执行时间内完成巡更点打卡。\n\n## 说明\n- 即现有资料中的\"提醒\"均指巡更**开始前**提醒巡更用户，未查到安卓终端在发生**漏打卡（漏巡）后**向终端用户推送提醒的记载。\n- 漏巡的查看与统计（漏巡次数、完成率等）均在运营平台侧完成，而非终端侧提醒。\n\n**来源：**\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（终端APP功能清单-巡更）\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx（巡更提醒规则、漏巡查看）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕问题给出了实质性的知识库检索结论和查看路径，没有空答、拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "终端可进入巡更任务查看漏打卡提醒"
+      ],
+      "supp_missed": [],
+      "score": 0.6000000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达SC580/SC780apk安装步骤",
+      "gold_answer": "使用工具BWC Manager 2.App Whitelist中添加apk包名 com.shli.interphone 3.点击Program保存 4.APP Management中安装我们的apk",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质作答内容",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "使用BWC Manager工具",
+        "App Whitelist添加包名com.shli.interphone",
+        "点击Program保存",
+        "APP Management安装apk"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "终端-安卓",
+      "query": "终端-安卓-客户咨询TN301 apk",
+      "gold_answer": "可发中瑞科T320 apk给客户",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答和切题信息",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "可发中瑞科T320 apk给客户"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "终端-安卓",
+      "query": "终端-安卓-SOS功能故障排查",
+      "gold_answer": "按下SOS提醒“发送失败”——需登录调度台处理SOS报警 2.按下SOS没有任何反应——按键适配问题",
+      "agent_answer": "根据知识库检索，安卓终端 SOS 功能的排查内容分散在两类产品的用户手册与故障规范中，知识库中**没有独立的“SOS 故障排查”专项文档**。以下按产品线整理知识库中已有的排查依据。\n\n## 一、MCSTARS 客户端（安卓，MCX 产品线）\n\n### 1. 触发方式（先核对操作是否正确）\n- 触发方式：**长按【SOS按钮】并保持 1 秒**，即可发起紧急呼叫或紧急警报（默认发起紧急呼叫并发送紧急警报）。\n- 为防止误触，**单次点击不会发起任何紧急业务**。\n\n### 2. 常见操作类问题排查\n| 现象 | 可能原因 | 检查/处理 |\n|---|---|---|\n| 按 SOS 无反应、未触发紧急业务 | 仅单击未长按（防误触设计） | 系统会提示“长按一秒发起紧急呼叫/紧急警报”，此时需重新**长按 1 秒**触发 |\n| 按压 SOS 后未发起紧急呼叫 | 紧急警报设置被关闭 | 检查“设置-紧急警报设置”：开启（默认）时按压 SOS 发起“紧急警报+紧急呼叫”；关闭时仅发起紧急警报 |\n| 紧急情况处理后状态未恢复 | 紧急状态仍为“紧急” | 紧急情况处理完成后需手动操作：点击状态按钮→打开关闭紧急状态的确认弹窗→点击【确认】，将个人紧急状态由“紧急”变更回“正常” |\n\n## 二、POCSTARS 终端 APP（安卓）\n\n### 1. 触发方式\n- 发起 SOS：在 APP 应用界面**右下角选择按钮，长按 3 秒钟**，终端会自动发出 SOS 警示给调度台和本机当前所在群组的其他在线在组成员。\n- 界面会显示 SOS 是否发送成功，并可在 SOS 记录中查看自己发出的报警。\n\n### 2. 可排查项\n| 检查项 | 说明 |\n|---|---|\n| SOS 报警提示音开关 | 菜单→设置→“SOS报警提示音”开/关，确认未被关闭（接收 SOS 时提示音+振动） |\n| SOS 记录确认 | 个人中心→SOS 菜单可查询接收和发送的所有 SOS 记录；红色为未处理，同应用字体颜色为已处理（SOS 由调度员通过调度台处理） |\n| 在线在组状态 | 终端**在线在组**时才可接收当前群组其他终端发出的 SOS 告警（发送 SOS 的对象为调度台及当前所在群组在线在组成员） |\n| 登录与网络 | 需确认已成功登录终端应用；可参考手册“常见问题-无法登录/无法对讲”中的网络与登录检查项 |\n\n## 三、平台侧故障分级参考（MCSTARS 平台故障处理规范）\n\n若 SOS 功能异常属于平台侧问题，可按故障等级定位：\n- **P2-严重问题**：视频/定位/录音/多媒体/**SOS报警/调度功能失效**；\n- **P3-一般问题**：视频/定位/录音/多媒体/**SOS报警/调度功能单用户使用异常**，或功能发生少量阻塞或变慢。\n\n按规范，故障处理遵循“先抢通业务，后处理故障”原则，由运维人员按故障上报→处理→复盘流程执行。\n\n---\n\n**提示**：以上内容中，MCSTARS 客户端部分来自《MCSTARS Client用户手册V1.1.1》的“SOS按键使用说明（常见问题）”与“紧急警报设置”；POCSTARS 终端 APP 部分来自《POCSTAR MiniServer V2.3-终端APP用户手册》的“发起和查看SOS”与“系统设置”；平台分级部分来自《MCSTARS平台故障处理管理规范V1.0》。若您的故障现象（如“长按无提示”“发送失败”等）不在上述范围内，请补充具体现象和产品版本，我再进一步检索。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓终端SOS功能排查给出了实质操作与排查内容，非拒答或答非所问",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "发送失败需登录调度台处理SOS报警",
+        "按下SOS无反应属按键适配问题"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "终端-安卓",
+      "query": "终端-安卓-app发送图片视频支持格式类型以及大小",
+      "gold_answer": "图片和视频发送，需要从相册选。 从文件选的支持的格式：\"txt\", \"doc\", \"docx\", \"pdf\", \"ppt\", \"pptx\", \"xls\", \"xlsx\", \"zip\", \"rar\",\"wav\",\"mp4\",\"jpg\" 多媒体消息大小限制调整：图片10M/视频20M",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质答案",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "图片和视频发送需从相册选",
+        "从文件选支持的格式列表",
+        "图片10M/视频20M大小限制"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "终端-安卓",
+      "query": "终端-安卓-SOS是否可以不需要登录调度台进行处理就发送第二次",
+      "gold_answer": "sos无限发送和1/3秒设置功能需要apk版本2.9.4.0 4以上",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答明确拒答，未提供任何实质内容",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "需要apk版本2.9.4.0 4以上"
+      ],
+      "supp_missed": [
+        "功能包括sos无限发送和1/3秒设置"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "终端-安卓",
+      "query": "终端-安卓-用户优先级",
+      "gold_answer": "优先级：P1 表示高级，P2 表示中级，P3 表示普通，P4 表示仅听",
+      "agent_answer": "根据知识库检索结果，关于安卓终端上的“用户优先级”，涉及 POCSTARS（POC）与 MCSTARS（MCX）两类产品，相关记载如下：\n\n## 结论\n\n知识库中与“安卓终端 + 用户优先级”直接相关的内容主要有两类：POC 产品的**话权优先级**，以及 MCX 安卓客户端的**参与者类型（通信优先级）**。\n\n---\n\n## 1. POC 产品：话权优先级\n\n**功能定义**\n- 平台可为用户设置话权优先级，用于群组对讲时的发言权控制；优先级高的用户享有优先讲话权，可以抢断/打断低优先级用户的话权（如将领班设为高优先级）。\n- 来源：《POCSTARS MNO产品白皮书V1.1》《POCSTARS PRO产品白皮书V1.1》《Miniserver产品解决方案.pptx》\n\n**优先级档位（不同资料记载略有差异）**\n\n| 资料来源 | 可选档位 |\n|---|---|\n| MNO / PRO 产品白皮书 | 高、中、低 |\n| Miniserver 产品解决方案 | 高、中、低、仅听 |\n| MiniServer V2.3 运营平台用户手册 | 普通、中级、高级、仅听（默认为普通） |\n\n**设置入口（运营平台）**\n1. 公司管理 → 公司列表 →【群组管理】→【关联用户】；\n2. 在群用户列表的“优先级”列点击下拉选项选择即可修改（选择后即保存）。\n- 派接组（跨公司群组）同样支持：派接组列表 →【关联用户】→ 优先级列下拉修改。\n- 来源：《POCSTARS运营平台用户手册V3.0-20260409》《POCSTAR MiniServer V2.3-运营平台用户手册-20260601》\n\n**相关但不同的概念——用户等级/调度员等级（影响群组排序，非话权抢占）**\n- 用户等级：可设置 1-20，等级越高用户在群组里的排序越靠前；\n- 调度员等级：可设置 1-10，等级越高用户在群组里的排序越靠前。\n- 来源：《POCSTARS MiniServer V2.3 全平台功能清单.xlsx》\n\n---\n\n## 2. MCX 产品（MCSTARS 安卓客户端）：参与者类型与通信优先级\n\n- MCSTARS 客户端是**基于安卓系统的关键任务通信终端**；\n- 群组通信中，成员具有“**参与者类型**”这一角色类别，不仅明确成员在通信中的具体职责，还**直接关联到群组通信中各成员的通信优先级**；\n- 此外，紧急单呼具有最高优先级，优先使用和抢占资源。\n- 来源：《MCSTARS Client用户手册V1.1.1》《MCSTARS产品白皮书V1.1.1》\n\n---\n\n**说明**：若您指的是某一具体产品（如 POC 或 MCX）下的“用户优先级”功能，或需要“终端 → 安卓 → 用户优先级”这一路径对应的具体操作文档，请补充说明，我可以进一步定位对应资料。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了安卓终端用户优先级的分级说明，未拒答且与主题相关。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未给出P1高级、P2中级、P3普通、P4仅听的对应关系"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "终端-安卓",
+      "query": "终端-安卓-客户咨询API文档",
+      "gold_answer": "公网版本不提供，只有独立部署提供API文档",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未进行实质作答且不切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "公网版本不提供API文档",
+        "只有独立部署提供API文档"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "终端-安卓",
+      "query": "终端-安卓-IOS版本是否支持换肤",
+      "gold_answer": "不支持换肤，由于APP STORE审核严格，源代码相似度太高会导致无法上架",
+      "agent_answer": "根据知识库检索结果，回答如下：\n\n## 结论\n\n知识库中记载的**换肤功能面向的是 Web 端产品（运营平台、调度台，以及可选的 H5 运营平台）**；在安卓/iOS 终端 APP 的功能清单中**未包含换肤功能**。\n\n## 换肤功能支持范围（知识库明确记载）\n\n| 对象 | 换肤功能说明 | 来源 |\n|---|---|---|\n| 运营平台 | 系统管理-换肤列表：管理员可添加/编辑/删除皮肤，自定义皮肤名称、平台标题、登录 logo 背景、登录背景、内页顶部背景、菜单栏背景、标签页图标、标签页标题、登录页主颜色、菜单栏主颜色；域名列表增加域名时需关联皮肤 | POCSTARS MNO 全平台功能清单 V1.0 |\n| 调度台 | 系统设置-换肤：更换调度台 LOGO 及皮肤颜色；系统管理-调度台皮肤定制：针对不同代理商域名定制皮肤颜色、导入 logo、自定义登录页面背景、标签页图标与标题 | POCSTARS MNO 全平台功能清单 V1.0 |\n| H5 运营平台（可选） | 换肤需客户提供 logo 及三个域名（运营平台、调度台、H5 运营平台），并按域名申请 SSL 证书（PEM 格式含 CSR+KEY）提供给厂商 | 换肤需客户准备资料.docx |\n\n## 关于安卓/iOS 终端 APP\n\n- POCSTARS MNO、MiniServer 等版本的全平台功能清单中，**终端 APP 功能清单部分（登录、群组、语音对讲、多媒体等）未列出换肤或皮肤设置功能**。\n- 换肤需准备的资料中列出的定制对象为运营平台、调度台、H5 运营平台三个域名入口，未提及安卓/iOS 终端 APP。\n\n## 参考来源\n\n- poc资料/换肤需客户准备资料.docx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n\n如需进一步确认安卓/iOS 终端 APP 是否支持其他形式的界面定制（如颜色、logo），建议以厂商最新版本说明为准，当前知识库中无相关记载。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出安卓/iOS终端APP未包含换肤功能。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [
+        "未提及APP STORE审核严格、源代码相似度高的原因"
+      ],
+      "score": 0.8,
+      "judge_error": null
+    },
+    {
+      "index": 30,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机/无屏机录音回放",
+      "gold_answer": "回放收听到的最后10条",
+      "agent_answer": "## 结论\n\n知识库中与\"安卓终端录音回放\"直接相关的内容，均记载于 **安卓终端 APP（大屏终端 APP）用户手册**；**未检索到\"小屏机/无屏机\"专项手册或该分类下的录音回放说明**。以下为知识库现有记载的安卓终端 APP 录音回放功能，供参考。\n\n## 录音回放功能说明（安卓终端 APP）\n\n### 1. 查询语音对讲记录（对讲录音回放）\n\n依据《POCSTAR MiniServer V2.3-终端APP用户手册》（大屏终端APP V2.15），操作如下：\n\n1. 进入菜单，打开\"消息\"界面，即可查看当前所在群组所有的**对讲录音记录**；\n2. 点击语音条，即可进行语音记录的**回放**；\n3. 通过消息记录可查看语音发送人用户名、发送时间和语音时长；\n4. 可切换到更多消息列表查看其他群组的录音记录；切换群组后，也可查看切换后群组的所有消息记录。\n\n### 2. 回放漏话记录（漏话回放）\n\n用户因离线或网络不稳定漏听的对讲语音，可通过漏话功能回放，**最多显示 10 条漏话语音**：\n\n1. 有漏话时，会提示有未读漏话消息；点击\"漏话\"菜单，进入漏话详情页，可查看漏听的对讲语音并回放；\n2. 切换群组后，漏话记录被清空；\n3. 未切换群组时，可通过消息列表第一行\"漏话提醒\"再次进入漏话详情页，查看和回放漏话。\n\n另据《POCSTARS大屏终端APP用户手册V3.0》：漏话提醒用于查看成员未登录、不在线或未及时接收时所在群组产生的对讲语音消息；漏话提醒页面按时间顺序显示漏话语音记录，每条记录包含发话成员、语音气泡、语音时长及发送时间，可逐条查看并补听。\n\n## 说明\n\n- 上述功能对应的文档为 **POCSTAR MiniServer V2.3 终端APP用户手册**（内容标题为大屏终端APP V2.15）及 **POCSTARS大屏终端APP用户手册V3.0**；\n- 知识库中未找到\"安卓-小屏机/无屏机\"的专项用户手册或录音回放说明，无法确认小屏机/无屏机上的操作是否与上述大屏终端 APP 完全一致。\n\n## 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.2.9 查询语音对讲记录、3.2.10 回放漏话记录）\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（3.19 漏话提醒）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕录音回放进行了实质说明，未拒答或跑题，虽未明确小屏/无屏，仍属切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "回放收听到的最后10条"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 31,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机操作手册/PNC380操作手册(User Manual)",
+      "gold_answer": "网盘归档路径：/知识库附件/海外/文档/app manual/User Manual of PNC380.pdf",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且未切题",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供PNC380操作手册网盘归档路径"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "终端-安卓",
+      "query": "终端-安卓-支持NFC巡更的终端有哪些",
+      "gold_answer": "NFC巡更大屏小屏都支持，无屏不支持",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质答案。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "NFC巡更大屏和小屏都支持",
+        "无屏终端不支持NFC巡更"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 34,
+      "section": "终端-安卓",
+      "query": "终端-安卓-VP760锁屏后无法用键盘解锁",
+      "gold_answer": "需要使用投屏工具先解锁屏幕锁定, 然后进入设置→安全→屏幕锁定, 选择无",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且与问题无关。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "使用投屏工具先解锁屏幕锁定",
+        "进入设置→安全→屏幕锁定，选择无"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 35,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端断网重连机制",
+      "gold_answer": "网络断开后我们会立马进行访问服务器，如果访问服务器时网络差3s没有收到服务的响应，会再次发出请求，一直循环直到登录成功",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质内容",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "网络断开后立马访问服务器",
+        "3秒未收到响应则再次请求",
+        "循环直到登录成功"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 36,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何读取NFC code",
+      "gold_answer": "使用安卓版本2.9.3.14及以上版本直接打卡后显示识别的code",
+      "agent_answer": "已在知识库中找到与\"终端读取 NFC Code\"相关的依据，以下为基于知识库的说明。\n\n## 结论\n\n在现有知识库中，安卓终端读取 NFC Code 对应的是**巡更场景下的\"NFC 巡更打卡\"功能**（POCSTARS MNO/PRO 产品的巡更模块）。NFC Code 是巡更点的标识，由管理员在运营平台录入；终端侧通过 NFC 方式对巡更点打卡，即完成对 NFC Code 的读取与签到。\n\n## 1. NFC Code 的录入（管理端，作为读取的前提）\n\n- 巡更点包含**名称、类型、NFC Code、备注**等属性。\n- 管理员在运营平台\"巡更管理 → 巡更点\"中**新增巡更点**时输入 NFC Code 并保存，即添加成功；支持编辑 NFC Code，也支持按 NFC Code 精确或模糊查找。\n- 来源：POCSTARS运营平台用户手册V3.0（巡更管理章节）\n\n## 2. 终端（安卓）侧读取 NFC Code 的方式\n\n知识库记载的终端功能为\"NFC 巡更打卡\"，流程如下：\n\n1. 用户执行**当前巡更任务**（已开始但还未到截止时间的巡更任务）。\n2. 通过 **NFC 方式对巡更点进行打卡**，任务中可以看到该任务需要完成哪些巡更点的签到。\n3. 系统**记录每个巡更点签到的时间**。\n4. 在**规定时间内完成该任务内所有巡更点的签到**，任务即完成；若规定时间内未完成，任务自动结束并标记为**漏巡**。\n- 来源：POCSTARS MNO全平台功能清单V1.0\n\n整体流程（产品白皮书）：平台录入 NFC 巡更点 → 终端收到巡更任务 → 终端进行巡更打卡 → 支持查看终端巡更结果、按用户或按计划生成并导出巡更报表。\n\n## 3. 前置条件与限制\n\n- **巡更用户必须是已充值巡更卡的账号**，未充值巡更卡的账号无法被选为巡更用户。\n- 巡更任务**结束后不可补录**，须在任务执行时间内完成巡更点打卡。\n- 巡更功能通过 NFC 智能技术实现信息自动采集，包括巡更点设备、信息采集设备以及管理软件。\n\n## 4. 知识库未覆盖的部分\n\n现有资料未记载安卓终端 APP 界面上\"读取 NFC Code\"的**逐步菜单/按钮操作**（如具体入口位置），也未说明如何从 NFC 标签读取 Code 值后用于录入巡更点。如需要这部分细节，请提供具体的产品版本或文档线索，我再进一步定位。\n\n**主要来源：**\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx\n- poc资料/MNO/【修订中】POCSTARS MNO产品白皮书V1.1.docx\n- poc资料/MNO/POCSTARS MNO产品解决方案-V1.2-202605.pptx\n- poc资料/PRO/POCSTARS PRO产品解决方案 V1.2-202605.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕NFC Code读取进行了说明，未拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提及安卓版本2.9.3.14及以上",
+        "未提及直接打卡后显示识别的code"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 37,
+      "section": "终端-安卓",
+      "query": "终端-安卓-机器变成飞行模式",
+      "gold_answer": "一些机器插入数据线后会变成飞行模式",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且未切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "一些机器插入数据线后变成飞行模式"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 39,
+      "section": "终端-安卓",
+      "query": "终端-安卓-安装不上",
+      "gold_answer": "远程给客户安装：adb安装，投屏工具安装",
+      "agent_answer": "根据知识库中的安装手册，安卓终端\"安装不上\"通常对应**安装被安全提示拦截**的场景。以下是知识库明确记载的排查与处理方法：\n\n## 现象\n\n在安卓终端上安装客户端时被拦截，无法完成安装，终端提示类似\"未检测到此应用的ICP备案信息\"或\"安装包有风险\"等安全警告。\n\n## 可能原因\n\n该安全提示**仅因应用未上架应用商店导致**，并非安装包存在问题；部分终端设备（尤其国产厂商机型）会对非应用商店来源的 APK 弹出风险拦截。\n\n## 处理方法（安装-有风险提示）\n\n1. **忽略安全提示**（该提示仅因应用未上架应用商店导致，可正常继续）；\n2. 根据页面提示找到并点击【**允许本次安装**】按钮；\n3. 根据页面提示找到并点击【**授权本次安装**】按钮；\n4. 安装完成后，桌面自动生成客户端图标。\n\n> 注：各终端设备品牌的安全提示可能存在差异，具体以实际显示为准。\n\n## 补充说明\n\n- 若设备**先前安装过 POCSTARS APP**，安装新版本时使用了**覆盖安装**方式，可能导致安装后配置不生效；建议**先卸载旧版本，再安装新 APP**。\n- 若安装过程中无任何风险提示，直接按页面提示点击安装包完成安装即可；安装包需联系运维工程师获取。\n- 首次启动后还需依次完成权限授权（电话、麦克风、位置、通知等），否则会影响后续业务功能。\n\n---\n\n**来源**\n- MCX资料/MCX V1.1.1 word/【6】MCSTARS Client安装手册V1.1.1.docx\n- poc资料/快速适配工具使用手册 V2.5.pdf\n\n如需针对具体终端品牌（如华为、小米）或具体产品（POCSTAR 大屏 APP / MCSTARS 客户端）进一步确认，请补充说明，我再进一步核实。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对安卓终端安装不上给出了实质性的排查处理方法，属于实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "远程给客户安装",
+        "adb安装",
+        "投屏工具安装"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 38,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端提示没有群组，但是运营平台显示已加入群组",
+      "gold_answer": "尝试清除缓存，设置--apps--pocstar--清除缓存",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且不切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "尝试清除缓存，路径为设置--apps--pocstar--清除缓存"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 40,
+      "section": "终端-安卓",
+      "query": "终端-安卓-安装了运行不了",
+      "gold_answer": "",
+      "agent_answer": "",
+      "cls": "clarify_missing",
+      "score": 0.0,
+      "gate": "fail",
+      "gate_reason": "系统无实质回答（拒答/需澄清未答）",
+      "key_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "judge_error": null
+    },
+    {
+      "index": 41,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号不存在（301 Account Unexist)",
+      "gold_answer": "登录客户账号测试下 2、测试可以登录，检查版本给的对不对 3、测试账号不存在，检查平台注册账号是否正确，IMEI有没有输入空格，机器的IMEI是否是客户注册的IMEI 4、检查授权账号数是否超了",
+      "agent_answer": "根据知识库检索结果，现将该问题说明如下。\n\n## 结论\n\n知识库中记录了安卓终端登录时提示“账号不存在”（对应英文提示 Account Unexist）这一登录失败现象及其可能原因和处理建议；但**未单独记载“301”这一错误码的定义**，以下内容基于知识库对“账号不存在”登录失败提示的说明。\n\n## 现象 — 可能原因 — 处理建议\n\n**现象**\n- 终端（安卓）APP 登录时提示“账号不存在 / Account Unexist”，登录失败。\n\n**可能原因（知识库记载）**\n1. 账号输入错误；\n2. 终端版本所属平台与账号所在平台不匹配（英文版手册表述为“APP 版本与平台版本不匹配”）。\n\n**处理建议**\n1. 检查账号是否正确（注意不要遗漏字符或空格），确认后重新输入；\n2. 确认终端安装的 APP 版本所属平台与账号所在平台一致；如环境配置有误，可在登录页“登录设置”中按部署要求重新配置环境参数（BRAND/DNS 等），或通过运营平台【用户列表 - APK 下载】的配置二维码扫码自动配置，修改后退出应用重新登录。\n\n## 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（“常见登录失败的提示和原因”“常见问题及解答 - 无法登录”章节）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-Large Screen Terminal APP-20260602.docx（“FAQ of Login Failures”章节）\n\n如需“301 Account Unexist”错误码的官方编号定义或更多排障条目，当前知识库中未检索到相关依据。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕“账号不存在/Account Unexist”给出原因和处理建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 6,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "登录客户账号测试",
+        "检查平台注册账号是否正确",
+        "检查IMEI是否有输入空格",
+        "检查机器IMEI是否是客户注册IMEI",
+        "检查授权账号数是否超了"
+      ],
+      "supp_missed": [],
+      "score": 0.33333333333333337,
+      "judge_error": null
+    },
+    {
+      "index": 32,
+      "section": "终端-安卓",
+      "query": "终端-安卓-对讲时延最大承受范围",
+      "gold_answer": "我们对基站的网络要求就是时延不超过100ms，，丢包不超过5%",
+      "agent_answer": "根据知识库检索结果，以下是关于\"终端-安卓-对讲时延\"的相关记载。\n\n## 结论\n\n知识库中没有直接使用\"最大承受范围\"这一术语；对讲时延以各系统软件性能指标表中的**\"标准定义指标值\"**作为标准允许的最大时延（上限）。其中，**对讲起呼时延（嘴到耳，讲到听）的标准定义上限为 300ms**，按麦接通时间标准上限为 300ms，端到端呼叫建立标准上限为 1000ms。知识库中的时延指标为系统级（端到端）指标，未单独区分\"安卓终端\"维度。\n\n## 各系统对讲时延指标明细\n\n### 1. MCX（MCSTARS）系统软件性能指标\n\n| 指标项 | 标准定义指标值 | 本系统指标值 | 说明 |\n|---|---|---|---|\n| 对讲起呼时延（Mouth-to-ear latency，讲到听） | <300ms | <300ms | 说话者发声到收听端扬声器播放 |\n| MCPTT按麦接通时间（MCPTT access time） | <300ms | <100ms | 按PTT到可以开始发言 |\n| 端到端呼叫建立（End-to-end MCPTT access time） | <1000ms | <500ms | 含呼叫建立和确认，同一网络下 |\n\n### 2. POCSTARS-MNO 平台软件性能指标\n\n| 指标项 | 指标值 | 备注 |\n|---|---|---|\n| 对讲起呼时延（讲话喊到收听播放，两个声音时间差） | 700ms | 4G/WIFI |\n| PTT抢麦时延 | 300ms | 4G/WIFI |\n| 端到端呼叫建立 | 500ms | 4G/WIFI |\n| 端到端语音传输时延（语音传输到收听端的时间差） | 100ms | 4G/WIFI |\n| 端到端视频时延 | 800ms~1200ms | - |\n\n### 3. POCSTARS-PRO 平台软件性能指标\n\n| 指标项 | 指标值 | 备注 |\n|---|---|---|\n| 对讲起呼时延（讲话喊到收听播放，两个声音时间差） | 350ms | 4G |\n| PTT抢麦时延 | 200ms | 4G |\n| 端到端呼叫建立 | 300ms | 4G |\n| 端到端语音传输时延（语音传输到收听端的时间差） | 100ms | 4G |\n| 端到端视频时延 | 800ms~1000ms | - |\n\n### 4. PRO 方案低时延说明\n\nPRO 产品解决方案记载：通过降低终端硬件音频数据采集/发送、接收/播放延时并动态调整音频封包策略，\"在4G网络下时延可达400毫秒左右，5G网络下时延可达100毫秒左右（业界同类产品时延基本在600~800毫秒左右）\"。\n\n## 来源\n\n- MCX资料：MCSTARS 产品白皮书（file_53746d、file_0340e7）——软件性能指标表\n- poc资料/MNO：POCSTARS MNO产品白皮书V1.1（file_c62b33）——软件性能指标表\n- poc资料/PRO：POCSTARS PRO产品白皮书V1.1（file_5b173a）——软件性能指标表\n- poc资料/PRO：POCSTARS PRO产品解决方案 V1.2-202605.pptx（file_aef0dd）——传输低时延说明",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕对讲时延给出了具体指标，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "对基站的网络要求时延不超过100ms",
+        "丢包不超过5%"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 42,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录超时",
+      "gold_answer": "登录相同节点的账号测试 2、若测试账号登录不上，联系运维检查 3、若测试账号登录成功，检查网络：换卡/WiFi尝试、APN是否正确、机器是否能识别到卡，联系厂家",
+      "agent_answer": "根据知识库中的《POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx》，安卓终端 APP 出现“登录超时”的处理如下：\n\n## 现象\n安卓终端 APP 登录时超时（约 30 秒），并提示“登录超时”。\n\n## 可能原因\n**当前配置的登录环境参数有误**。应用默认出厂版本为 pocstar 大公网环境；当客户使用非 pocstar 大公网环境（如独立部署、miniserver 环境）时，需要设置登录环境信息，若配置的 context（即 Brand）和 DNS 等环境参数有误，即会出现登录超时。\n\n## 处理建议\n1. 在登录界面选择“登录设置”，重新配置环境参数，有两种方式：\n   - **手动配置**：根据环境部署情况输入环境参数，其中 context（即 Brand）和 DNS 为必填项；\n   - **扫码自动配置**：点击登录设置页右上角的扫码按钮，扫描运营平台【用户列表 - APK 下载】功能生成的配置二维码，系统自动识别并填充 DNS、context 参数（注意：仅支持识别运营平台生成的标准配置二维码）。\n2. 配置完成后，**退出应用并重新运行 APP**，再进行登录。\n3. 如需恢复默认环境，可在登录设置中点击“恢复默认设置”，切换回 pocstar 大公网环境。\n\n## 补充说明\n若登录时提示的不是“登录超时”，而是其他提示，可对照常见登录失败原因处理（手册 3.1.9 节）：\n- 提示账号密码错误：密码错误，检查后重新输入；\n- 提示账号不存在：账号输入错误，或终端版本所属平台与账号所在平台不匹配；\n- 提示无网络连接：网络不正常，检查网络连接；\n- 提示当前版本不匹配：确认终端安装的 APK 版本与账号充值服务包中限制的 APK 版本一致。\n\n来源：poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.9、3.1.10 节）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓终端登录超时给出了配置排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "登录相同节点的账号测试",
+        "测试账号登录不上时联系运维检查",
+        "登录成功后检查网络并联系厂家"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 33,
+      "section": "终端-安卓",
+      "query": "终端-安卓-POCSTARS的音频编解码器、采样率",
+      "gold_answer": "amr, 8k",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "音频编解码器为amr",
+        "采样率为8k"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 43,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录无群组",
+      "gold_answer": "登录账号测试，检查平台是否添加 2. 检查网络情况，尝试切换wifi或运营商SIM卡 3、已添加的，抓日志提交开发核实具体问题，给出解决方案",
+      "agent_answer": "根据知识库检索结果，回答如下。\n\n## 现象\n安卓终端（对讲机/大屏终端）登录成功，但群组列表为空，显示无群组。\n\n## 可能原因\n- 该终端账号（IMEI/ICCID/APP 账号）在运营平台添加时**未关联任何群组**：运营平台在添加终端、APP 账号、ICCID 账号时均支持\"快捷关联群组\"，若添加时未选择群组，账号创建后即无群组关系。\n- 账号创建后**未加入群组**：运营平台用户管理中，账号与群组的关联关系需通过\"加入群组\"\"设置默认群组\"等操作建立，未操作则账号不属于任何群组。\n\n## 检查方法\n1. 登录运营平台，进入【用户管理】→【用户列表】，搜索该终端账号；\n2. 查看该账号的\"群组关系\"一列，确认是否已关联群组、是否设置了默认群组；\n3. 确认账号所属公司/组织下是否已存在群组（若无群组，需先创建群组）。\n\n## 处理建议\n在运营平台将该账号关联到群组，方式如下（任选其一）：\n1. 【用户管理】→【用户列表】→ 该账号【加入群组】（或【群组关系】→【关联】），将账号关联到目标群组；\n2. 为该账号【设置默认群组】；\n3. 关联后，终端重新登录或刷新群组列表，即可看到所属群组。\n\n补充说明：若账号登录到了错误的平台环境（终端版本所属平台与账号所在平台不匹配），也可能出现登录异常或数据不同步，可确认终端登录环境与账号所在平台一致。\n\n**依据来源**：\n- 《POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx》（添加终端/APP/ICCID 账号可快捷关联群组；用户管理支持设置默认群组、加入群组；群组关系管理关联后成为群组成员）\n- 《POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx》（账号需在运营平台注册激活后登录；登录后可在菜单中查看自己的群组列表）\n- 《POCSTARS运营平台用户手册V3.0-20260409.docx》（用户管理可设置默认群组、加入群组）\n\n注：知识库中未检索到\"登录无群组\"这一现象的直接故障处理条目，以上为基于运营平台账号-群组关联规则整理的排查与处理建议。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓终端登录无群组进行了实质性的原因分析和处理建议，切题作答，非拒答或答非所问。",
+      "key_facts": {
+        "total": 3,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查网络情况，尝试切换wifi或运营商SIM卡",
+        "已添加的，抓日志提交开发核实具体问题，给出解决方案"
+      ],
+      "supp_missed": [],
+      "score": 0.4666666666666667,
+      "judge_error": null
+    },
+    {
+      "index": 44,
+      "section": "终端-安卓",
+      "query": "终端-安卓-读取不到IMEI（提示202）",
+      "gold_answer": "检查机器安卓版本，安卓10以上（多为大屏机）的需要厂家签名apk才能读取到 2、机器有没有IMEI，客户联系厂家或者客服协助咨询厂家",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查安卓版本，10以上需厂家签名apk",
+        "确认有无IMEI，联系厂家或客服"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 46,
+      "section": "终端-安卓",
+      "query": "终端-安卓-待机收不到语音",
+      "gold_answer": "客户登录自己的代理商账号，调整心跳 2、若1无法解决，可能是版本APK问题，需提交产研",
+      "agent_answer": "## 结论\n\n知识库中与该现象直接相关的处理依据是：**安卓终端应用的后台运行设置未正确配置**，导致应用在待机（后台/熄屏）状态下运行异常、收不到语音。同时需排除终端被“遥闭”以及常见对讲问题。\n\n## 处理建议\n\n### 1. 检查并配置“应用后台运行设置”（首要处理项）\n\n依据《POCSTAR MiniServer V2.3-终端APP用户手册》，该设置的功能价值即“保证应用后台运行或熄屏状态下运行正常”，与“待机收不到语音”场景直接对应：\n\n1. 安装并登录 APP 后，终端会收到**后台运行设置指引**；\n2. 应用自动识别设备类型并弹出需要设置的项。例如华为手机提示“pocstar 需要允许自动启动”，点击【确认】后，在弹出的【自启管理】中打开 pocstar 对应的开关；\n3. 进入系统自动启动管理，找到 pocstars，将“自动管理”改为**手动管理**，并打开**自动启动**和**后台运行**；\n4. 该设置支持华为、小米、三星、vivo、oppo 等主流安卓手机；**暂不支持安卓对讲机**，安卓对讲机会提示“后台运行设置不支持此机型”。\n\n### 2. 按“无法对讲”常见问题排查\n\n若配置后台运行后仍收不到语音，按手册常见问题逐一确认：\n\n1. 确认已成功登录终端应用软件；\n2. 确认当前所在群组是否正确；\n3. 确认网络是否正常、是否连接成功；\n4. 确认终端设备按键是否失灵。\n\n### 3. 排除终端被“遥闭（摇闭）”\n\n调度员对用户执行遥闭后，用户将“无法发起话权、不能收听到语音、不能进行切组、不能发起单呼或临时组呼”；需由调度台对该用户执行**遥开**，方可恢复语音收听。\n\n## 来源\n\n- 《POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx》（poc资料/miniserver/，章节 3.6.10 应用后台运行设置、4.2 无法对讲）\n- 《POCSTARS MNO全平台功能清单V1.0-20260522.xlsx》（语音对讲-摇开摇闭功能说明）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对待机收不到语音给出了处理建议，实质作答且切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "登录代理商账号调整心跳",
+        "若未解决可能版本APK问题需提交产研"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 45,
+      "section": "终端-安卓",
+      "query": "终端-安卓-延迟大，丢音，被3S摘麦",
+      "gold_answer": "客户登录自己的代理商账号，调整心跳 2、若1无法解决，可能是版本APK问题，需提交产研",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "登录代理商账号调整心跳",
+        "调整心跳无法解决则提交产研"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 49,
+      "section": "终端-安卓",
+      "query": "终端-安卓-PTT按键不可用",
+      "gold_answer": "检查使用的版本对不对，不对的给客户正确的版本（对应的APK匹配对应的终端） 2、若版本对的，检查ROM是不是定制ROM",
+      "agent_answer": "根据知识库中 POCSTARS 终端 APP 用户手册、快速适配工具手册及常见问题章节，整理如下排查指引。\n\n## 现象\n安卓终端上 PTT 按键不可用，无法通过 PTT 按键发起/参与对讲。\n\n## 可能原因与处理建议\n\n**1. PTT 物理按键未适配（针对大屏对讲终端）**\n- 知识库说明：常规大屏对讲终端设备自带专用 PTT 物理按键，该按键一般需要适配后才能使用；普通手机无专用 PTT 物理按键，可通过界面 UI 按键进行 PTT 操作。\n- 处理建议：使用快速适配工具进行按键适配。在监听模式下选择 PTT 并点击【开始监听】，按下终端上需要适配为 PTT 的物理按键，观察日志区是否有输出：\n  - 有日志输出：说明按键已被工具识别，可继续后续打包步骤；\n  - 无任何输出：说明当前按键暂未被识别，需根据适配文档在\"按键配置\"页面补充按键配置后再打包。\n\n**2. 账号登录 / 群组 / 网络问题（无法对讲 FAQ）**\n- 请确认已成功登录终端应用；\n- 请确认当前所在群组正确；\n- 请确认网络正常且连接成功；\n- 请确认终端设备按键本身没有故障。\n\n**3. PTT 快捷键设置问题（使用音量键作为 PTT 时）**\n- PTT 快捷键需在 APP 内主动设置：进入\"设置\"→\"设置PTT快捷键\"，按提示选择音量上或音量下键，按下后自动保存退出；APP 前台运行时，按下该键可获取麦权；\n- 若未设置快捷键，物理音量键不会触发 PTT 功能；如需取消，进入\"设置PTT快捷键\"点击\"清除设置\"即可。\n\n**4. 获取麦权失败（按 PTT 后听到按麦 Tone 音后马上/3 秒内听到摘麦 Tone 音）**\n知识库记载的获取麦权失败场景包括：\n- 用户掉线；\n- 用户处于遥闭（摇闭）状态；\n- 当前话权非空时抢麦；\n- 网络不稳定导致获取麦权失败；\n- 群组话权优先级被设置为\"仅听\"；\n- 连续频繁按放 PTT 超过两次。\n\n**5. 悬浮 PTT 按钮未开启（如需使用该方式）**\n- 悬浮 PTT 按钮默认关闭；需进入\"设置\"→\"悬浮PTT\"开启，并允许应用\"在其他应用上层显示\"权限，开启后才显示悬浮 PTT 按钮，按住即可发起对讲。\n\n---\n\n**来源**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-Large Screen Terminal APP-20260602.docx\n- poc资料/快速适配工具使用手册 V2.5.pdf\n\n如您能补充具体场景（大屏对讲终端物理按键、普通手机音量键快捷键、还是 APP 内 PTT 功能），可进一步精确排查。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕PTT按键不可用给出排查指引，属实质作答且切题",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查使用的版本是否正确",
+        "版本不对时给客户正确版本，APK需匹配终端",
+        "版本正确时检查ROM是否为定制ROM"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 50,
+      "section": "终端-安卓",
+      "query": "终端-安卓-定位不准",
+      "gold_answer": "更改定位方式使用是否正确（客户修改定位方式-大屏机（2.9以上版本），小屏机需确认）",
+      "agent_answer": "已在知识库中找到安卓终端定位问题的相关排查内容（来源：POCSTAR MiniServer V2.3 终端APP用户手册\"常见问题及解答\"章节）。\n\n## 结论\n\n安卓终端定位不准/无法定位，知识库记载的排查要点如下：\n\n### 现象\n终端定位不准确，或无法查找到定位。\n\n### 可能原因与检查方法\n\n| 可能原因 | 检查方法 | 处理建议 |\n|---|---|---|\n| 终端 GPS 位置信息未打开 | 进入终端设备**系统\"设置\"菜单**（不是 APP 内的设置菜单），查看\"位置信息\"是否开启 | 在系统设置中选择开启位置信息；不同机型菜单路径不同，按实际设备界面操作 |\n| GPS 信号较弱 | 观察定位是否失败或持续不准 | 移动到信号较好的开阔环境后再定位 |\n| 定位模式精度不足 | 查看当前系统定位模式设置 | 在系统设置界面选择 **\"高精度\"定位模式** |\n| 海外版本 APP 使用 Google 定位服务，而设备不支持 | 地图展示界面是否提示\"该系统不支持 google play services\" | 设备需支持 Google 定位服务，否则所有位置相关界面（发送位置消息、查看位置消息、查看 SOS 详情）均无法访问 |\n\n### 补充说明（位置上报相关）\n- 终端定位功能开关**默认关闭**，需在运营平台或调度台开启用户定位后才会上报位置；\n- 终端位置上报频率**默认 30 秒一次**，可通过调度台设置，可设范围为 **10–120 秒**；\n- 调度台可远程关闭终端位置上报，关闭后调度台收不到终端新位置信息。\n\n---\n**来源**：POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（poc资料库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对安卓定位不准提供了具体排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "需检查/更改定位方式使用是否正确"
+      ],
+      "supp_missed": [
+        "大屏机（2.9以上版本）可修改定位方式",
+        "小屏机需确认"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 48,
+      "section": "终端-安卓",
+      "query": "终端-安卓-语音卡顿",
+      "gold_answer": "平台调整模式为流畅模式（公司管理-语音质量-高音质/流畅） 2.若1无法解决，需提交产研",
+      "agent_answer": "根据知识库内容，安卓终端出现语音卡顿属于故障排查类问题。知识库中没有\"安卓终端\"单独的专项处理章节，但有以下可直接依据的系统机制说明和排查流程。\n\n## 现象\n安卓终端（对讲终端/APP）语音对讲或通话出现卡顿、丢音、播放不连续。\n\n## 可能原因（知识库记载）\n1. **网络抖动或延迟**：音频数据在传输过程中因网络抖动可能引发语音卡顿。\n2. **性能资源不足**：卡顿、延迟高、掉线归为性能类问题，可能原因是 CPU/内存/带宽不足、并发过高。\n3. **防火墙未放行语音媒体流端口**：语音媒体流使用 UDP 30000-30002 端口。\n\n## 检查方法（按顺序排查）\n1. **确认服务运行状态**：登录服务器执行 `./check.sh`，确认语音等核心服务正常。\n2. **查看语音服务日志**：`tail -n 100 /opt/pocstar/echt/logs/echat.log`，用 `grep -i \"error|fail|exception\"` 过滤错误。\n3. **检查网络连通性**：`ping` 服务器、`telnet` 服务器端口（11055/17272）、`iptables -L -n` 检查防火墙规则。\n4. **检查系统资源**：`top`、`free -h`、`df -h`、`iostat`；CPU 持续高于 90%、内存超过 90%、磁盘超过 85% 时需处理。\n5. **确认终端侧网络**：终端 WiFi/4G/5G 正常，可访问服务器；确认 UDP 30000-30002 端口已放行。\n\n## 处理建议\n1. **系统内置抗卡顿机制**：接收端设有缓存区域，网络短暂抖动或延迟时由缓存持续供数，保证音频连续性；接收端会根据网络状况动态调整缓存大小，网络不佳时增大缓存抵抗抖动。\n2. **丢包容错能力**：音频丢包率在 10% 以内仍可保证流畅通话（MCSTARS）；POCSTARS MNO 通过冗余编码与丢包补偿（PLC）技术，在 20% 网络丢包率下仍可流畅通话。\n3. **性能参考标准**：语音延迟建议低于 200ms。\n4. **故障升级处理**：若为同一时间段、多区域或多个用户同时出现\"掉线频率高、对讲语音卡顿丢音\"，属于 P1 重大问题，应按故障处理流程上报（响应 ≤5 分钟、临时解决 ≤20 分钟），遵循\"先抢通业务，后处理故障\"原则。\n5. **问题上报模板**：仍无法解决时，按模板提交客户名称、联系人、问题描述（现象/时间/影响范围）、服务状态（check.sh 完整输出）、错误日志（error.log 最后 50 行）、已尝试的排查步骤。\n\n**来源**\n- 《Pocstar项目内网部署前置条件与运维检查指南v2》\n- 《MCSTARS产品白皮书V1.1.1》\n- 《MCSTARS平台故障处理管理规范V1.0》\n- 《MCSTARS 服务等级协议V1.0》\n- 《POCSTARS MNO产品白皮书V1.1》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对语音卡顿问题进行了实质排查说明，主题相关，非拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "平台调整模式为流畅模式",
+        "若1无法解决需提交产研"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 52,
+      "section": "终端-安卓",
+      "query": "终端-安卓-速度显示错误",
+      "gold_answer": "错误的版本使用的是哪种定位方式的 2、检查是不是存在单位转换的问题",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且不切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "确认错误版本使用的定位方式",
+        "检查是否存在单位转换问题"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 51,
+      "section": "终端-安卓",
+      "query": "终端-安卓-定位不显示",
+      "gold_answer": "是否充值定位卡 2、检查客户使用节点是否正确 3、测试同节点的账号是否可以显示 4、可以显示，检查机器使用版本是不是Google定位，是Google定位的，查机器是否支持Google 5、测试账号也不显示，提交运维排查",
+      "agent_answer": "根据知识库中《POCSTAR MiniServer V2.3-终端APP用户手册》和《POCSTARS大屏终端APP用户手册V3.0》的记载，安卓终端定位不显示可按以下顺序排查处理：\n\n## 现象\n安卓终端在地图/调度台上不显示位置或无法查找定位。\n\n## 可能原因与处理方法\n\n| 序号 | 可能原因 | 检查方法 | 处理建议 |\n|---|---|---|---|\n| 1 | 终端 GPS 位置信息未开启 | 进入终端设备的**系统\"设置\"菜单（不是 APP 内的设置菜单）**，查看\"位置信息\"是否开启 | 安卓系统一般步骤：进入\"设置\"→选择\"位置信息\"→开启。不同机型菜单位置可能不同，以实际设备为准 |\n| 2 | GPS 信号弱 | 检查终端所处环境（室内、遮挡等） | 到信号较强处尝试；若定位不准确，可在系统设置界面选择\"高精度\"定位模式 |\n| 3 | 定位功能开关未开启（默认关闭） | 在调度台查看终端定位功能开关及上报设置 | 定位功能开关默认为关闭，需通过**调度台开启**；调度台也可关闭位置上报，关闭后调度台收不到终端新位置信息 |\n| 4 | 位置权限未授权或授权不完整 | 检查 APP 的位置权限设置 | 位置权限会影响地图查看、位置发送、定位上报、电子围栏、SOS 定位等功能；如首次授权时误点\"不允许\"，可进入系统设置为 APP 手动重新开启相关权限 |\n| 5 | 位置权限未设为\"始终允许\" | 检查安卓系统权限设置 | 安卓 9.0 后系统权限新增\"仅在使用中允许\"，**定位上报必须\"始终允许\"权限，否则无法定位**；如项目对定位精度有要求，请保持\"确切位置\"开启 |\n| 6 | 海外版 APP 依赖 Google 定位服务 | 查看地图展示界面提示 | 海外版 APP 使用 Google 定位服务：设备不支持时所有位置相关界面无法访问（地图页提示\"该系统不支持 google play services\"）；在中国内地无法使用 Google 服务，位置相关界面无法访问（提示\"Google Play services are updating\"） |\n\n## 其他说明\n- 终端在线时默认按一定频率自动上报位置，上报频率默认为 **30s 一次**，可通过调度台设置，可设置范围为 **10–120s**。\n- 定位功能开关和上报频率均可通过调度台进行设置。\n\n来源：\n- 定位资料-证书/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（kb_3cm2gz6tyb）\n- POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（kb_3cm2gz6tyb）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对安卓终端定位不显示给出了详细排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未确认是否充值定位卡",
+        "未检查客户使用节点是否正确",
+        "未测试同节点的账号是否可以显示",
+        "未检查版本是否为Google定位及设备是否支持",
+        "未提交运维排查"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 47,
+      "section": "终端-安卓",
+      "query": "终端-安卓-有显示**在讲话，但是没有语音",
+      "gold_answer": "更改网络测试 2、提交客诉，需提交产研",
+      "agent_answer": "根据知识库中与“显示在讲话但没有语音”相关的机制记载，排查建议如下。\n\n## 现象\n安卓终端界面上显示了某成员正在讲话（讲话人/当前讲话状态有显示），但终端没有播放出语音。\n\n## 可能原因、检查方法与处理建议\n\n### 1. 同时有多路语音，终端只播放其中一路\n这是知识库记载的最可能场景——界面显示的是讲话状态，但声音播放有取舍规则：\n\n- **POC 系统（POCSTARS）**：终端可同时监听多个群组，当多个群组同时有人讲话时，系统按配置的优先级进行播放（优先收听到先到达/优先级高的语音），其余群组只显示讲话人但不播放声音。\n  - 检查：是否开启了多群组监听，且多个监听群组正在同时讲话。\n  - 处理：切换到正在讲话的目标群组收听；或在监听配置中调整群组优先级。\n- **MCX 系统（MCSTARS）**：用户可同时参与多个通话（多个呼叫卡片），但同一时间只能听到当前所选中的呼叫卡片的声音；非当前选中的通话即使显示有人在讲话，也不会播放声音。\n  - 检查：当前是否存在多个呼叫卡片，正在讲话的通话是否为当前所选。\n  - 处理：将正在讲话的通话切换为当前所选（如点击卡片将其置顶，或双击其他卡片空白区域切换当前所选呼叫）。\n\n### 2. 音量过低或声音输出通道不对\n- **MCSTARS Client**：通话音量默认由系统媒体音量控制，使用前需调至合适音量；通话过程中可调节音量，并可切换扬声器/听筒/耳机输出。\n  - 检查：系统媒体音量是否过低或被静音；当前输出是否为扬声器。\n  - 处理：调高媒体音量；在通话界面点击音量调节，并将输出切换为扬声器（若期望外放）。\n- **POCSTARS**：终端设置中提供“声音通道选择”，可设置听筒模式或扬声器模式，连接蓝牙耳机后还可选择蓝牙耳机通道。\n  - 检查：终端声音输出通道设置是否与当前使用方式一致。\n  - 处理：将声音通道切换为扬声器模式。\n\n### 3. 平台侧管控（附加排查）\n若终端被调度台“遥闭”，将无法发起话权且不能收听到语音（POCSTARS）。此类情况通常伴随无法正常对讲等状态，需联系调度员执行“遥开”恢复。\n\n---\n\n以上为知识库中与该现象直接相关的机制记载，建议按顺序排查；知识库未记载更深入的故障处理步骤。\n\n**来源**\n- POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（kb_3cm2gz6tyb）\n- Miniserver产品解决方案.pptx（kb_3cm2gz6tyb）\n- POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（kb_3cm2gz6tyb）\n- POCSTARS MNO产品白皮书V1.1.docx（kb_3cm2gz6tyb）\n- MCSTARS 调度台用户手册V1.1.1.docx（kb_mvng8u1201）\n- MCSTARS Dispatch Console User Manual V1.1.1.docx（kb_mvng8u1201）\n- MCSTARS Client User Manual V1.1.1.docx（kb_mvng8u1201）\n- MCSTARS Client用户手册V1.1.1.docx（kb_mvng8u1201）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了详细的排查建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "更改网络测试",
+        "提交客诉，需提交产研"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 53,
+      "section": "终端-安卓",
+      "query": "终端-安卓-巡更刷卡不显示",
+      "gold_answer": "检查使用版本是否支持巡更(2.6版本及以上支持巡更） 2、支持的话，安装客户APK版本登录客户账号测试下；不支持的，提供新版本 3、测试没问题，检查机器是否支持；测试（登录客户账号）有问题，检查安卓版本/提交客诉",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质作答。",
+      "key_facts": {
+        "total": 5,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查使用版本是否支持巡更，2.6版本及以上支持",
+        "支持则安装客户APK版本登录客户账号测试",
+        "不支持则提供新版本",
+        "测试没问题则检查机器是否支持",
+        "测试有问题则检查安卓版本或提交客诉"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 55,
+      "section": "终端-安卓",
+      "query": "终端-安卓-mandown不生效或轻放就触发 / 跌倒报警 /跌落报警",
+      "gold_answer": "查看版本是否支持mandown（mandown是发给调度台提示，APK2.5及以上版本且有屏幕的终端机器才支持此功能） 2、进入设置调灵敏度，方法有提供 High Threshold Value 值越小越灵敏 Low Threshold Value 值越大越灵敏 跌落报警咱们的APK默认是加速度触发的，默认加速度是3-35，加速度在极短时间内同时触发大于35并且小于3，然后静止3秒钟，才会触发",
+      "agent_answer": "基于知识库检索，针对\"终端-安卓-mandown（跌倒/跌落报警）不生效或轻放就触发\"的问题，回答如下。\n\n## 结论\n\n知识库中记载了跌倒报警功能的**启用、触发和解除**方式，但**未记载**\"功能不生效\"的具体原因排查，也**未记载**\"轻放就触发（误触发）\"的灵敏度调节或防误触处理方法。\n\n## 知识库明确记载的功能要点\n\n**1. 启用方式（与\"不生效\"直接相关）**\n- 跌倒报警需先在终端APP中开启：进入 **设置中心 → 开启\"跌倒报警\"**，开启后系统才启用该功能。\n- 若未开启该开关，功能不会生效。这是知识库记载的\"不生效\"检查点；除此之外，未记载其他原因及排查步骤。\n\n**2. 触发机制**\n- 当终端检测到人员跌倒等异常状态时，APP自动触发跌倒报警，并进行报警铃声提醒，同时上报相关信息，便于平台或相关人员及时处置。\n\n**3. 解除方式（误触发后的处理）**\n- 若终端跌倒但用户并无危险（如误触发），用户可以**手动取消跌倒报警**以解除报警。\n\n**4. 适用场景**\n- 人员安全保障、巡检值守、应急看护等场景。\n\n## 关于\"不生效\"与\"轻放就触发\"\n\n| 现象 | 知识库已有内容 | 知识库缺失内容 |\n|---|---|---|\n| 不生效 | 需在设置中心开启\"跌倒报警\"开关，开启后才生效 | 未记载其他原因（如传感器、版本、权限等）及对应排查步骤 |\n| 轻放就触发 | 触发条件为\"检测到跌倒等异常状态\"；误触发后可手动取消 | 未记载触发阈值、灵敏度调节或防误触设置方法 |\n\n知识库中无更多关于该故障的处理依据，以上缺失部分不作推测。\n\n## 来源\n\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（poc-资料）\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（poc-资料）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕mandown/跌倒报警给出了启用与触发说明，非空且切题，未拒答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "未说明需查看版本支持；APK2.5+且有屏幕终端才支持",
+        "未说明设置调灵敏度：High越小越灵敏、Low越大越灵敏",
+        "未说明默认加速度3~35，极短同时>35和<3并静止3秒触发"
+      ],
+      "supp_missed": [
+        "未说明mandown是发给调度台的提示"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 54,
+      "section": "终端-安卓",
+      "query": "终端-安卓-多媒体录音播放不了",
+      "gold_answer": "测试同节点的账号是否有问题（登录客户账号-调度台） 2、确认有问题，提交运维排查 3、没问题，要客户账号，不能播放的语音是那条，提交客诉",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质解答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "测试同节点账号是否有问题，登录客户账号-调度台",
+        "确认有问题，提交运维排查",
+        "没问题，要客户账号及不能播放的语音，提交客诉"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 57,
+      "section": "终端-安卓",
+      "query": "终端-安卓-个别机器灭屏收不到对讲",
+      "gold_answer": "运营平台调整心跳，调小",
+      "agent_answer": "## 结论\n\n知识库中对该问题的直接描述来自 POCSTAR MiniServer V2.3 终端 APP 用户手册：安卓终端**熄屏（灭屏）状态下收不到对讲，通常是因为应用未完成\"后台运行/自启动\"设置**，导致熄屏或退到后台后被系统挂起、清理。手册明确提供了针对主流安卓手机的后台保活设置指引，并注明**暂不支持安卓对讲机**机型。\n\n## 现象—可能原因—检查方法—处理建议\n\n**现象**\n- 安卓终端个别机器，灭屏（熄屏）后收不到对讲语音；亮屏/前台时正常。\n\n**可能原因（知识库记载）**\n1. 应用未设置后台运行/自启动，熄屏或后台状态下无法正常运行（手册 3.6.10 明确：需\"指引用户设置应用保持后台运行，保证应用后台运行或熄屏状态下运行正常\"）。\n2. 机型为**安卓对讲机**时，手册注明\"暂不支持安卓对讲机\"，会提示\"后台运行设置不支持此机型\"，此类机器可能出现该问题。\n3. 其他通用因素（手册 4.2\"无法对讲\"）：未成功登录、所在群组不正确、网络异常、终端按键失灵。\n\n**检查与处理建议**\n\n1. 完成\"应用后台运行设置\"（手册 3.6.10）：\n   - 安装 APK 并登录成功后，APP 会识别设备类型并弹出后台运行设置指引；\n   - 例如华为手机：提示\"pocstar需要允许自动启动\"，点击【确认】，在弹出的【自启管理】中将 pocstar 对应的开关打开；\n   - 进入系统自动启动管理后，找到 pocstars，将\"自动管理\"改为\"手动管理\"，并打开**自动启动**和**后台运行**；\n   - 目前该设置支持华为、小米、三星、vivo、oppo 等主流安卓手机；安卓对讲机会提示\"后台运行设置不支持此机型\"。\n\n2. 按手册 4.2\"无法对讲\"逐项排查：\n   - 确认是否已成功登录终端应用软件；\n   - 确认当前所在群组是否正确；\n   - 确认网络是否正常、连接成功；\n   - 确认终端设备按键是否失灵。\n\n3. 已漏掉的语音可通过**漏话提醒**查看和回放：当用户因离线、弱网或未及时收听漏掉语音内容时，可在漏话提醒页面查看和回放漏听语音（大屏终端 APP 手册）。\n\n## 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.6.10 应用后台运行设置；4.2 无法对讲）\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（漏话消息功能）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质性地针对灭屏收不到对讲问题给出了原因和处理建议，切题作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "运营平台调整心跳，调小"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 58,
+      "section": "终端-安卓",
+      "query": "终端-安卓-收不到对讲",
+      "gold_answer": "是否调成了静音；2、设置了仅听；3、编码不同；4、音频通道不支持",
+      "agent_answer": "根据知识库中《POCSTAR MiniServer V2.3-终端APP用户手册》的内容，安卓终端\"收不到对讲\"可按以下顺序排查：\n\n## 一、基础排查（手册\"4.2 无法对讲\"）\n\n1. 确认是否已成功登录终端应用软件；\n2. 确认自己当前所在群组是否正确；\n3. 确认网络是否正常、是否连接成功；\n4. 确认终端设备按键是否失灵。\n\n## 二、是否被调度台遥闭（手册\"3.4.1\"）\n\n- 终端用户被调度台**遥闭**时，无法发起对讲，也**无法收听对讲**；发起对讲时会提示\"摇闭状态，禁止呼叫\"。\n- 处理方式：需由调度员对该成员执行**遥开**，恢复对讲功能。\n\n## 三、收听范围是否正确（手册\"2.6 术语\"\"3.2.6 组呼\"\"3.2.8 监听群组\"）\n\n- **组呼**：只有当前所在群组的在线在组成员才能听到该成员的呼叫，需先确认自己是否在该群组内；\n- 若要收听**其他群组**的对讲，需开启\"监听群组\"功能（监听按钮变为绿色）；支持多群组监听，开启后即使终端不在该群组，也能收听到该群组有人讲话时的语音。\n\n## 四、安卓手机后台运行设置（手册\"3.6.10\"）\n\n- 应用在**后台运行或熄屏状态**下收不到对讲时，需允许应用保持后台运行：登录成功后按指引进入系统\"自启管理\"，将 POCSTAR 从自动管理改为手动管理，并打开**自动启动和后台运行**；\n- 该设置支持华为、小米、三星、vivo、oppo 等主流安卓手机；**暂不支持安卓对讲机**（使用时会提示\"后台运行设置不支持此机型\"）。\n\n## 五、漏话回放（手册\"3.2.10\"）\n\n- 因离线或网络不稳定漏听的对讲语音，可通过\"漏话提醒\"回放，最多显示最近 10 条漏话语音。\n\n---\n\n**来源**：poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（file_ee2a4f）\n\n如需更精准的定位，请补充：对讲产品类型（POCSTAR 大屏终端 APP 或其他）、收不到对讲的具体场景（组呼/单呼、前台/后台/熄屏）、终端机型。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕“收不到对讲”给出了排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "是否调成了静音",
+        "设置了仅听",
+        "编码不同",
+        "音频通道不支持"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 56,
+      "section": "终端-安卓",
+      "query": "终端-安卓-视频无画面（调度台看不到终端画面）",
+      "gold_answer": "检查版本是否正确，有新视频版本和老视频版本 2、切换网络试试 3、测试相同节点的账号有没有问题，有问题，反馈运维排查 4、调度台视频的注意节点是否使用正确 5、",
+      "agent_answer": "根据知识库中的资料，针对“终端（安卓）-视频无画面，调度台看不到终端画面”的故障，整理如下排查与处理建议。\n\n## 现象\n调度台无法看到安卓终端上传/回传的视频画面（视频无画面）。\n\n## 可能原因与处理建议\n\n### 1. 终端摄像头权限未开启或被拒绝（最常见）\n- **依据**：POCSTARS 终端 APP 首次授权说明中明确，摄像头与视频录制权限会影响拍照、视频单呼、视频组呼、视频回传等功能；如首次授权时误点“不允许”，可进入系统设置手动重新开启相关权限。\n- **检查方法**：查看终端系统设置中 POCSTARS 应用的“摄像头/相机”权限状态。\n- **处理建议**：在系统设置中为 POCSTARS 重新开启摄像头权限后重试视频业务。\n\n### 2. 视频服务未部署或状态异常\n- **依据**：运维排查指南要求先确认视频服务已部署且状态正常。\n- **检查方法**：登录服务器执行 `./check.sh`，确认视频相关服务状态正常，无异常日志。\n- **处理建议**：若服务异常，按部署文档恢复视频服务后重试。\n\n### 3. 网络带宽不足\n- **依据**：视频通话建议每路至少 512Kbps 上行带宽。\n- **检查方法**：确认终端所在网络的上行带宽满足要求。\n- **处理建议**：保障终端上行带宽，或切换至带宽更充足的网络。\n\n### 4. 视频端口未放行\n- **依据**：视频业务需放行 15062/TCP、15063/TCP、58000/UDP 端口。\n- **检查方法**：检查防火墙/安全组是否放行上述端口。\n- **处理建议**：联系网络管理员放行对应端口。\n\n### 5. 编解码格式不兼容\n- **依据**：需确认终端双方支持相同的视频编解码格式。\n- **检查方法**：核对终端与调度台/服务端支持的视频编码格式。\n- **处理建议**：使用双方均支持的编解码格式。\n\n### 6. 业务机制性提示（视频组呼场景）\n- 在视频组呼中，**按住 PTT 才会显示/传输视频画面**，松开 PTT 即结束当前视频画面传输。若调度台长时间看不到画面，需确认是否为无人按住 PTT 讲话所致，这属于产品机制而非故障。\n\n## 来源\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx（权限影响说明、视频组呼 PTT 机制）\n- poc资料/Pocstar项目内网部署前置条件与运维检查指南v2.docx（视频服务/带宽/端口/编解码排查项）\n\n若上述排查均未解决，建议按排查指南中的“问题上报信息模板”整理服务状态、错误日志等信息提交技术支持进一步定位。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对视频无画面问题给出了具体排查步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查版本是否正确",
+        "测试相同节点账号并反馈运维排查",
+        "调度台视频节点使用是否正确"
+      ],
+      "supp_missed": [],
+      "score": 0.4,
+      "judge_error": null
+    },
+    {
+      "index": 60,
+      "section": "终端-安卓",
+      "query": "终端-安卓-使用adb安装apk",
+      "gold_answer": "Use adb to install apk.zip",
+      "agent_answer": "根据知识库检索结果，与“终端-安卓-使用 adb 安装 apk”直接相关的资料为《快速适配工具使用手册 V2.5》（含中文版及英文版，内容一致）。知识库中的相关内容如下：\n\n## 结论\n\n知识库中记载了 adb 环境的**安装、验证与报错处理**流程，以及将 APK **安装到终端**的操作要求与注意事项；其中未记载“adb install”具体命令行参数的用法，以下仅列知识库明确支持的内容。\n\n## 一、安装 adb 环境\n\n1. 双击 `adb-setup-1.3.exe`。\n2. 按指引在安装界面 3 处输入 `Y`，然后按回车。\n3. 随后会弹出“设备驱动程序安装向导”，按向导操作完成 adb 环境安装。\n\n## 二、验证 adb 安装成功\n\n1. 按快捷键 `Win+R` 打开运行窗口。\n2. 输入 `cmd` 并回车，打开命令窗口。\n3. 在命令行输入 `adb` 并回车。\n4. 若显示 `Android Debug Bridge version`，说明安装成功。\n\n## 三、adb 报错处理（配置环境变量）\n\n若输入 `adb` 后提示“'adb' 不是内部或外部命令”，需配置系统环境变量：\n\n1. 找到工具路径 `AutoApkTool V2.5\\Env\\ADB\\adb\\platform-tools` 中的 `adb.exe`。\n2. 将 `platform-tools` 的完整路径复制。\n3. 通过开始菜单搜索 `path`，打开“编辑系统环境变量”（Win 7/8 入口：电脑（右击）→ 属性 → 高级系统设置 → 高级 → 环境变量）。\n4. 在“环境变量”窗口的用户变量中选中 `path` 行，点击【编辑】，在新增行内粘贴复制的地址，点击【确认】。\n5. 按第二步重新验证 adb 安装结果。\n\n## 四、连接终端并安装 APK 的前提与注意事项\n\n- 使用数据线将终端连接到电脑，并在终端上开启**开发者模式**。\n- 若已开启 USB 文件传输模式，需切换到“不用于数据传输”或“仅充电”模式。\n- 打包完成后，将生成的 APK 安装到终端，并建议先进行 APK 安装和按键验证。\n- **覆盖安装限制**：若设备先前安装过 POCSTARS APP，安装新 APP 时使用覆盖安装方式会导致配置不生效，处理建议为**先卸载再安装新 APP**。\n\n## 来源\n\n- poc资料/快速适配工具使用手册 V2.5.pdf（poc-资料库）\n- poc资料/Quick Adaptation Tool User Manual V2.5.pdf（poc-资料库，英文版，内容一致）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕adb安装APK进行了知识库内容说明，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "使用adb安装APK"
+      ],
+      "supp_missed": [
+        "安装包文件名为apk.zip"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 59,
+      "section": "终端-安卓",
+      "query": "终端-安卓-TE300K流量消耗【科威特数据】",
+      "gold_answer": "机型：TE300K APP版本：NSAPP_2.8.2.36_TeltraPTT_TE300K_1 ROM：TE300K_INT_V10P_20230306（Android系统） 测试项 流量消耗（单位KB） 关定位待机 10分钟 29.63KB 开定位待机 10分钟 87.78KB 发射对讲 10分钟 985.56KB 接收对讲 10分钟 944.92KB 语音流量消耗只和编码方式、打包帧数有关",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答，未命中问题主题。",
+      "key_facts": {
+        "total": 6,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "机型TE300K及APP/ROM版本信息",
+        "关定位待机10分钟流量29.63KB",
+        "开定位待机10分钟流量87.78KB",
+        "发射对讲10分钟流量985.56KB",
+        "接收对讲10分钟流量944.92KB",
+        "语音流量消耗只与编码方式、打包帧数有关"
+      ],
+      "supp_missed": [
+        "流量消耗单位为KB",
+        "系统为Android系统"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 61,
+      "section": "终端-安卓",
+      "query": "终端-安卓-P50提示306网络连接超时",
+      "gold_answer": "切换WiFi 2、机器是否需要写apn 3、连接机器，adb shell /ping sgdns.shanlipoc.com/usdns.shanlipoc.com",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为知识库未找到依据的拒答，未提供任何实质作答，与问题不切题",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "切换WiFi",
+        "检查机器是否需要写APN",
+        "连接机器adb shell ping sgdns/usdns"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 63,
+      "section": "终端-安卓",
+      "query": "终端-安卓-签名版本登录报错202读取不到IMEI",
+      "gold_answer": "设置里能不能显示imei；2、安卓10以上的，apk有没有签名",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且与问题无关。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "设置里能否显示imei",
+        "安卓10以上apk有无签名"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 64,
+      "section": "终端-安卓",
+      "query": "终端-安卓-调度台强拉不成功/无法强拉",
+      "gold_answer": "终端账号的当前组织及所有父级组织都没有调度员的话，就会强拉失败 本级组织和上级组织需要有调度员",
+      "agent_answer": "## 结论\n\n知识库中未记载\"强拉不成功/无法强拉\"的专门故障原因清单，但强拉功能有明确的操作前提和适用对象，可据此排查。核心限制是：**强拉只能对\"在线不在组\"状态的成员执行，且调度员必须先进入目标群组**。\n\n## 强拉功能定义（知识库记载）\n\n| 项目 | 说明 |\n|------|------|\n| 功能定义 | 调度员在某群组将\"在线不在组\"用户强制拉进该群组中 |\n| 操作前提 | 调度员需先进入目标群组 |\n| 操作步骤 | 选择该群组中\"在线不在组\"状态的单个或多个成员，点击\"强拉\"按钮 |\n| 功能效果 | 选中成员被强制拉至调度员当前所在群组；终端侧会自动进入新群组 |\n\n## 排查要点（依据操作前提）\n\n**1. 确认调度员是否已进入目标群组（操作前提）**\n- 强拉是把成员拉入**调度员当前所在群组**，调度员未进入目标群组时无法执行强拉。\n\n**2. 确认目标终端是否为\"在线不在组\"状态（适用对象限制）**\n- 调度台群组列表中成员状态：绿色＝在线且在当前组；橙色＝在线但不在当前组；灰色＝离线。\n- 只有\"在线不在组\"（橙色）成员满足强拉条件。\n- 若终端已在该组（绿色）或离线（灰色），不满足强拉条件，表现为无法强拉。\n\n**3. 终端侧确认强拉是否成功**\n- 强拉成功后，终端被强制拉入指定通信群组，用户应在终端上查看当前群组，确认已进入新的群组（例如从 SXA.Group2 被强拉到 SXA.Group1）。\n\n## 处理建议\n\n1. 调度台侧：确认已进入目标群组，再在群组列表中勾选目标成员执行强拉。\n2. 检查目标终端在调度台的显示状态是否为\"在线但不在当前组\"；若为离线，需先确认终端在线；若已在当前组，则无需强拉。\n3. 强拉执行后，在安卓终端上查看当前群组是否已切换至目标群组，确认结果。\n\n> 说明：以上内容基于用户手册中强拉功能的操作前提与适用条件整理；知识库未提供\"强拉不成功\"的其他原因（如网络、权限、版本差异等）的记录。\n\n**来源**\n- poc资料/MNO/POCSTARS调度台用户手册V3.0-20260409.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕强拉不成功给出了操作前提和排查要点，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "当前组织及所有父级组织无调度员时强拉失败",
+        "本级和上级组织需要有调度员"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 66,
+      "section": "终端-安卓",
+      "query": "终端-安卓-关于流量卡设置APN",
+      "gold_answer": "橙卡：ctm-mobile 绿卡：indosatgprs 蓝卡：gdyc.gziot 欧盟卡：data641003 在对应终端APN设置界面：APN设置为对应卡种代码即可。例如欧盟卡(APN:data641003)",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且不切题",
+      "key_facts": {
+        "total": 5,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "在终端APN设置界面将APN设置为对应卡种代码",
+        "橙卡APN为ctm-mobile",
+        "绿卡APN为indosatgprs",
+        "蓝卡APN为gdyc.gziot",
+        "欧盟卡APN为data641003"
+      ],
+      "supp_missed": [
+        "例如欧盟卡(APN:data641003)"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 65,
+      "section": "终端-安卓",
+      "query": "终端-安卓-系统使用的编译解码器和网络速度",
+      "gold_answer": "解码器AMR， 网速8K/S",
+      "agent_answer": "已在知识库中找到与“安卓终端系统使用的编解码器及网络速度”直接相关的系统级规格说明（MCSTARS 产品白皮书 V1.1.1）。MCSTARS Client 用户手册本身没有专门的编解码器/网速章节，该信息记载于系统产品规格中，整理如下。\n\n## 结论\n\nMCSTARS（MCX）系统的安卓客户端所依托的系统，媒体编解码器支持情况与网络速度相关指标如下：\n\n### 1. 系统支持的媒体编解码器\n\n| 媒体类型 | 标准要求编码 | 系统支持编码 | 备注 |\n|---|---|---|---|\n| 语音 | AMR-WB | AMR-WB、AMR-NB、EVS、OPUS | EVS 需专利许可；OPUS 免费可用（IETF RFC 6716） |\n| 视频 | H.264 | H.264、H.265 | H.265 需专利许可 |\n\n### 2. 软件性能指标（网络速度/时延相关）\n\n| 指标项 | 标准定义值 | 本系统指标值 |\n|---|---|---|\n| MCPTT 按麦接通时间 | 300 ms | 100 ms |\n| 端到端呼叫建立 | 1,000 ms | 500 ms |\n| 对讲起呼时延（讲到听） | 300 ms | 300 ms |\n| 端到端视频传输时延 | 1,000 ms | 500 ms |\n| 视频传输丢包率 | 无定义 | 2% |\n| 语音质量 MOS-LQO（AMR-WB） | 3.0 | 3.0 |\n| 语音质量 MOS-LQO（EVS） | 无定义 | 3.5 |\n| 语音质量 MOS-LQO（OPUS） | 无定义 | 4.3 |\n\n### 3. 部署网络带宽要求（最低要求及计算方式）\n\n| 用户规模 | 解决方案 | 服务器数量 | 网络带宽要求 | 容量 |\n|---|---|---|---|---|\n| 5,000 | MCPTT | 1 | ≥20M（23.85kbps×并发数/2） | 在线 3,500、群组 32,000、媒体突发 1,750 |\n| 5,000 | MCPTT + MCData | 2 | ≥40M | 同上 |\n| 5,000 | MCPTT + MCData + MCVideo | 3 | ≥80M | 同上；视频流最大 100 路（1Mbps/路） |\n| 10,000 | MCPTT | 3 | ≥40M | 在线 7,000、媒体突发 3,500 |\n| 10,000 | MCPTT + MCData | 4 | ≥40M | 同上 |\n| 10,000 | MCPTT + MCData + MCVideo | 5 | ≥100M | 同上；视频流最大 100 路（1Mbps/路） |\n| 50,000 | MCPTT + MCData + MCVideo | 15 | ≥200M | 在线 35,000、媒体突发 17,000、视频流最大 300 路 |\n| 100,000 | MCPTT + MCData + MCVideo | 35 | ≥3600M | 在线 70,000、媒体突发 35,000、视频流最大 600 路 |\n\n说明：白皮书注明上述带宽为最低要求及计算方法，其中 DATA 与 VIDEO 所需带宽按实际业务量确定。\n\n**来源**：\n- MCX资料/MCX V1.1.1 word/【2】MCSTARS产品白皮书V1.1.1.docx（表 2.6-1 软件性能指标表、表 2.6-2 支持的媒体编码）\n- MCX资料/MCX V1.1.1 word/【2】MCSTARS White Paper V1.1.1.docx（Table 2.6-1 Software KPIs、Table 2.6-2 Supported media codecs、Table 2.6-3 Deployment configuration requirements）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，提供了编解码器与网络相关指标。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "网速8K/S"
+      ],
+      "supp_missed": [],
+      "score": 0.6000000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 67,
+      "section": "终端-安卓",
+      "query": "终端-安卓-森海克斯NX-300群组内从相册选择视频发送，调度台无法查看/播放",
+      "gold_answer": "机器兼容问题，已单独修改版本",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质答案",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "机器兼容问题",
+        "已单独修改版本"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 69,
+      "section": "终端-安卓",
+      "query": "终端-安卓-RG170/rg360 后台运行/息屏时 ptt按键用不了",
+      "gold_answer": "进入CustomKey设置成PTT ——常规情况设置后就解决，如果还不行，进行步骤2再重复步骤1---视频已存网盘知识库附件 2.刷纯净ROM —— 原因：rg170 bundling with waveptx motorola here",
+      "agent_answer": "根据知识库中 POCSTARS 终端 APP 用户手册（大屏终端 APP）的记载，以下是针对该问题的排查结论。\n\n## 结论\n\n**PTT 物理快捷键仅在 APP 前台运行时有效**，应用退到后台或息屏时按下 PTT 按键无法获取麦权，属于手册明确记载的产品行为限制，而非故障。后台/息屏场景下发起对讲应使用**悬浮 PTT 按钮**。\n\n## 现象 — 可能原因\n\n| 现象 | 可能原因 |\n| --- | --- |\n| 后台运行/息屏时 PTT 物理按键无效 | 手册明确说明：设置音量键为 PTT 快捷键后，\"APP 前台运行时，按下该按键，可获取麦权\"，即快捷键只在 APP 前台生效 |\n| 后台/息屏时应用被系统限制运行 | 应用后台运行设置（保证后台或息屏状态下运行正常）目前仅支持华为、小米、三星、vivo、oppo 等主流安卓手机，**暂不支持安卓对讲机**；在安卓对讲机上使用时会提示\"后台运行设置不支持此机型\" |\n\n## 处理建议\n\n1. **后台/息屏对讲请使用悬浮 PTT 按钮**\n   - 路径：设置 → 悬浮 PTT，点击开启；\n   - 需允许本应用\"在其他应用上层显示\"权限；\n   - 开启后，在 APP 任何页面或应用退到后台运行时，按住悬浮 PTT 按钮即可发起对讲，按钮位置可随意移动。\n\n2. **按机型设置后台运行**\n   - 登录成功后如收到后台运行设置指引，进入系统自启/后台管理，将 POCSTARS 设为允许自启动并开启后台运行；\n   - 若提示\"后台运行设置不支持此机型\"（如安卓对讲机类终端），则该功能暂不可用。\n\n3. **若前台也无法对讲，按手册常见问题排查**\n   - 确认已成功登录终端应用；\n   - 确认当前群组正确；\n   - 确认网络正常且连接成功；\n   - 确认终端设备按键未故障。\n\n## 说明\n\n知识库中未检索到针对 RG170/RG360 具体型号的专用文档，以上内容依据通用终端 APP 用户手册。若需确认这两个型号是否属于\"暂不支持后台运行设置\"的安卓对讲机类型，建议结合实际设备提示或联系产品技术支持核实。\n\n**来源**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-Large Screen Terminal APP-20260602.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对后台/息屏PTT按键无效问题给出了结论、原因和处理建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "未涉及进入CustomKey设置PTT",
+        "未涉及刷纯净ROM后再重试"
+      ],
+      "supp_missed": [
+        "未提及RG170与WavePTX/Motorola捆绑原因",
+        "未提及网盘知识库操作视频"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 68,
+      "section": "终端-安卓",
+      "query": "终端-安卓-高达E720",
+      "gold_answer": "和etera的 e980 apk公用(仅限这个版本)",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且切题的内容",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "和etera的e980 apk公用(仅限这个版本)"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 70,
+      "section": "终端-安卓",
+      "query": "终端-安卓-设备息屏状态下不能调节音量",
+      "gold_answer": "息屏状态调节音量是系统行为，app不干预无法修改",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且不切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "息屏调音量是系统行为",
+        "app不干预无法修改"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 71,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端报错‘Fixed group PTT right closed, Please contact administrator.’固定群组对讲权限关闭，请联系管理员",
+      "gold_answer": "登录运营平台，开启终端账号的“群组菜单”，关闭“固定群组禁言”",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质作答和切题内容。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "登录运营平台，开启终端账号的群组菜单",
+        "关闭固定群组禁言"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 72,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号从旧的群组中移除/加入新群组/仍然显示旧群组：",
+      "gold_answer": "收集并验证问题账号： （1）问题能复现→ 询问客户做了哪些操作导致的问题，转开发排查 （2）问题复现不了： ①尝试清除终端缓存 ②抓取logcat日志，反馈适配组排查",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质性内容",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "收集并验证问题账号",
+        "问题能复现时询问客户操作并转开发排查",
+        "问题复现不了时清除终端缓存",
+        "问题复现不了时抓logcat日志并反馈适配组"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 62,
+      "section": "终端-安卓",
+      "query": "终端-安卓-没有视频图标有两个可能",
+      "gold_answer": "机器没有摄像头； 2、安卓版本是安卓7以下的",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且未切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "机器没有摄像头",
+        "安卓版本是安卓7以下"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 73,
+      "section": "终端-安卓",
+      "query": "终端-安卓-免打扰和自动应答模式",
+      "gold_answer": "APK 内设置了免打扰，单呼过去，会显示 对方已挂断 自动应答模式是单呼的一种模式，半双 全双 都支持",
+      "agent_answer": "根据知识库检索结果，您所问的\"终端-安卓-免打扰和自动应答模式\"对应 **POCSTARS 安卓终端 APP（大屏终端/终端APP，POC 产品线）** 的功能设置项，相关依据如下。\n\n## 结论\n\nPOCSTARS 安卓终端 APP 在 **个人中心 → 设置 → 功能设置** 中提供「自动应答模式」和「免打扰模式」两个并列设置项，用于管理终端的通信应答与提醒方式。\n\n## 功能定义\n\n| 设置项 | 功能说明 |\n|---|---|\n| 自动应答模式 | 用于设置终端在特定场景下是否自动接听来电或呼叫 |\n| 免打扰模式 | 用于减少来电、消息和提示音等打扰信息，适合会议、值守等场景使用 |\n\n功能设置还包含：进组首选项、设置 Tone 音、设置 PTT 快捷键、SOS 报警提示、震动、消息提示音、悬浮 PTT、视频清晰度等参数。\n\n## 两种模式对单呼的影响（POCSTAR MiniServer V2.3 终端 APP）\n\n**场景一：未开启免打扰 + 关闭自动应答**\n- 被叫收到单呼请求，可选择接受或拒绝；接受后单呼成功，双方可对讲。\n\n**场景二：未开启免打扰 + 开启自动应答**\n- 被叫处于**话权空闲、正在单呼中、正在临时群组中、被遥闭**状态时，系统自动拒绝单呼请求，并对主叫提示；\n- 不在上述状态时，系统自动接受单呼请求，单呼成功。\n\n**场景三：开启免打扰模式**\n- 被叫不会收到单呼请求，系统自动拒绝；\n- 主叫收到\"单呼失败\"提示；\n- 被叫可在呼叫列表中查看到该单呼请求记录。\n\n## 补充说明\n\n- 运营管理平台也可设置单呼应答为**手动应答或自动应答**；自动应答模式下，终端空闲时收到单呼邀请会自动接受并进入临时单呼群组。\n- 若您指的是 MCX 产品线的 **MCSTARS Client**（同样为安卓关键任务通信终端），其设置中仅有「应答方式设置」（自动应答开关：开启自动接听、关闭手动接听），知识库资料中未记载\"免打扰\"功能。\n\n## 来源\n\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n- MCX资料/MCX V1.1.1 word/【4】MCSTARS Client用户手册V1.1.1.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕免打扰和自动应答模式给出了功能定义及对单呼的影响，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "APK设免打扰后单呼显示“对方已挂断”",
+        "自动应答模式支持半双、全双"
+      ],
+      "supp_missed": [],
+      "score": 0.4666666666666667,
+      "judge_error": null
+    },
+    {
+      "index": 77,
+      "section": "终端-安卓",
+      "query": "终端-安卓-adb安装apk报错adb: error:failed to read copy response",
+      "gold_answer": "adb kill-server adb start-server adb devices 重启adb服务解决",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为未找到相关依据的拒答，未实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "使用adb kill-server、start-server、devices重启服务解决"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 74,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何查询IMEI号",
+      "gold_answer": "设备拨号键盘查询: *拨号输入#06#**‌：适用于大部分手机，输入后自动显示IMEI 2.设备设置查看‌： 路径通常为设置 > 关于本机 > IMEI",
+      "agent_answer": "根据知识库资料，安卓终端（以 F10 等对讲终端为例）查询 IMEI 号的操作如下：\n\n## 查询步骤\n\n1. 在终端主界面按【菜单】键进入菜单页（菜单项包括：群组列表、成员列表、终端设置、个人中心等）。\n2. 选择并进入【个人中心】（Personal Center）。\n3. 进入【账号】（Account）页面查看账号信息，其中即可看到本机的 IMEI 号（同时可查看账号、用户名、ICCID 等信息）。\n\n> 注：终端 APP 手册中亦说明，通过 APP 的【个人中心】→ 选择用户名称 →【账号管理】界面，可查询账号名称、账号类型等信息。\n\n## 补充说明\n\n- **IMEI 定义**：即终端设备序列号，也叫\"串号\"，官方名称是国际移动设备识别码，相当于移动设备的身份证，主要用于在网络中识别每一部独立的手机、对讲机等移动通信设备。\n- **其他可查询位置**：终端设备机身标签上印有 IMEI（如 F10 标签标注 \"IMEI:867672065344713\"）。\n- **使用场景**：IMEI 用于在运营平台注册激活终端账号；当终端有多个 IMEI 号码时，录入 IMEI 1 作为终端账号。\n\n**来源：**\n- poc资料-证书/终端认证证书/F10 证书报告正本/F10 CE NB 正本/User Manual.pdf\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx\n- poc资料-证书/终端认证证书/F10 证书报告正本/F10 CE NB 正本/label.pdf\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了查询IMEI的操作步骤，与问题相关，非拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供拨号键盘输入*#06#查询IMEI的方法",
+        "未提供设置>关于本机查看IMEI的路径"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 78,
+      "section": "终端-安卓",
+      "query": "终端-安卓-RC26 刷机后显示信号操作步骤 Settings→ Network → Restore network settings",
+      "gold_answer": "RC26 Signal.mp4",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且不切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供RC26 Signal.mp4解决方案"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 75,
+      "section": "终端-安卓",
+      "query": "终端-安卓-不同视频分辨率对应的网络带宽",
+      "gold_answer": "360P-704Kbps 480P-938Kbps 720P-1.38Mbps",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "360P对应704Kbps",
+        "480P对应938Kbps",
+        "720P对应1.38Mbps"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 76,
+      "section": "终端-安卓",
+      "query": "终端-安卓-执法记录仪进入设置密码",
+      "gold_answer": "密码0506（所有执法记录仪统一的密码）",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "密码是0506"
+      ],
+      "supp_missed": [
+        "所有执法记录仪统一的密码"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 81,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端按下PTT按键提醒“Audio disabled”",
+      "gold_answer": "终端被摇闭，登录调度台遥开",
+      "agent_answer": "## 结论\n\n安卓终端按下 PTT 按键提示 “Audio disabled”，是因为**该终端用户已被调度台“遥闭”（Remote Disable）**：调度台远程关闭了该成员的语音功能，导致终端无法发起对讲，也无法收听对讲。按下 PTT 发起呼叫时，系统即提示 “Your audio is disabled, please contact the administrator”（您的音频已被禁用，请联系管理员）。\n\n## 说明\n\n**现象**\n- 终端用户被调度台遥闭后，无法发起对讲、无法收听对讲；\n- 按下 PTT 发起呼叫时提示 “Your audio is disabled, please contact the administrator”；\n- 同时，被遥闭状态下按麦，会表现为“听到按麦 Tone 音后马上听到摘麦 Tone 音”（获取麦权失败的表现之一）。\n\n**处理建议**\n- 由调度台对该终端执行**遥开（Remote Enable）**：调度台对已被遥闭的终端执行遥开后，系统恢复终端正常业务能力，终端原有的受限提示状态解除，即可继续正常使用对讲及相关通信功能；\n- 用户侧无法自行解除，需联系调度台或管理员处理。\n\n## 来源\n\n- `poc资料/miniserver/POCSTAR MiniServer V2.3-Large Screen Terminal APP-20260602.docx`（3.4.1 Remotely Disabled by Dispatch Console；3.2.1 获取麦权失败场景）\n- `poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx`（3.4.1 获取提示——被调度台遥闭；遥开/遥闭术语解释）\n- `poc资料/MNO/POCSTAR大屏终端APP用户手册V3.0-20260409.pptx`（遥开、遥闭功能说明）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质说明了问题原因为调度台遥闭，并给出了遥开的处理建议，切题且有效作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 80,
+      "section": "终端-安卓",
+      "query": "终端-安卓-从主线版本开始 RSAPP_2.9.4.9_POCSTARS_CP680_HW_7 多媒体和执法仪视频/音频对应保存路径",
+      "gold_answer": "#多媒体 /storage/emulated/0/LocalRecords/videos #执法记录仪 /storage/emulated/0/LocalRecords/audios",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且未提供任何路径信息",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "多媒体保存路径为/storage/emulated/0/LocalRecords/videos"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 82,
+      "section": "终端-安卓",
+      "query": "终端-安卓-文件管理支持的发送文件格式（图片，视频，音频，文档等）",
+      "gold_answer": "[\"txt\", \"doc\", \"docx\", \"pdf\", \"ppt\", \"pptx\", \"xls\", \"xlsx\", \"zip\", \"rar\",\"wav\",\"mp4\",\"jpg\"]",
+      "agent_answer": "基于知识库检索结果，回答如下：\n\n## 结论\n\n知识库中**未检索到\"终端-安卓-文件管理\"所支持发送文件的格式扩展名清单**（如 jpg/png、mp4、mp3、doc/pdf 等具体格式列表）。现有资料只明确记载了终端消息与会话支持发送的**内容类型**，具体如下。\n\n## 知识库明确记载的内容\n\n**1. 大屏终端 APP（安卓）消息与会话可发送的内容类型**（来源：POCSTARS大屏终端APP用户手册V3.0）\n- 多媒体消息支持发送：**文字、图片、视频、定位、文件**；\n- 会话在以上基础上**额外支持发送录音**（即语音）；\n- 发送图片/视频时支持切换来源、预览及备注；单次点击拍照、长按拍摄视频。\n\n**2. 终端上报调度台可发送的信息类型**（来源：POCSTARS大屏终端APP用户手册V3.0）\n- 支持向调度台发送**文字、图片、拍照内容、位置、文件**等信息。\n\n**3. 会话消息类型**（来源：POCSTARS MNO全平台功能清单V1.0）\n- 可发送消息类型：**文本、语音、图片、短视频**；\n- 终端向调度员可发送：**文字消息、图片、短视频、位置消息**。\n\n**4. 需要区分：MDM 平台\"文件管理\"模块**（来源：POCSTARS MDM平台操作说明书V1.0）\n- 该模块属于平台**策略配置**功能，用于**向终端下发**文件，适合下发资料、图片、安装文件或业务文档，与终端侧\"发送文件\"是不同方向的能力，未记载终端侧可发送的文件格式限制。\n\n## 说明\n\n- 知识库现有资料按**内容类型**（图片、视频、语音/录音、文件、定位、文字等）描述发送能力，**没有**列出各类型对应的具体文件格式扩展名或大小限制。\n- 如需精确的格式清单（如支持哪些图片/视频/音频/文档扩展名），建议查阅终端产品规格文档或咨询产品团队确认。\n\n**来源**：\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/MDM/POCSTARS MDM平台操作说明书V1.0-20260415.docx",
+      "cls": "answered",
+      "gate": "fail",
+      "gate_reason": "系统回答表示知识库中未检索到具体格式清单，仅给出内容类型，未实质回答所问格式列表，构成拒答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未列出支持发送的文件格式扩展名清单（如txt/doc/pdf等）"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 79,
+      "section": "终端-安卓",
+      "query": "终端-安卓-登录提示“Check for Updates.” 卡在这个界面不动",
+      "gold_answer": "每个apk都会检测升级，检查不到就正常登录了，检查到了就提示升级， 一直卡着不动就有问题，需要反馈适配",
+      "agent_answer": "## 现象\n\n安卓终端在登录（开机自动登录对讲应用）时，界面停留在“Check for Updates.”提示处，无法继续进入应用。\n\n## 该提示的说明（知识库依据）\n\n“Check for Updates”这一提示在知识库中记载于 **F10 对讲终端用户手册**：\n\n- “Check for Updates”（检查更新）位于【菜单 → 终端设置 → 关于版本】中，选择后设备会检查当前软件版本是否已是最新；\n- 若检测到新版本，选择“Yes”后设备会自动下载并安装，**安装完成后设备才会登录**；\n- 即该提示是登录前的版本检查/升级环节，升级未完成前不会进入登录成功后的主界面。\n\n## 可能原因与检查方法（仅列知识库已记载内容）\n\n1. **网络未连通**：手册要求使用前确保设备正常工作、网络畅通，SIM 卡需按卡槽标识正确插入；\n2. **终端账号未正确注册**：手册记载“若设备开机后无法登录，请检查账号是否已在管理平台正确注册；若未注册，请在管理平台使用终端的 IMEI/ICCID 号码注册终端账号”；\n3. **使用了非厂商提供的升级包**：该产品仅支持厂商提供的系统软件升级，使用非厂商提供的系统升级造成的问题，厂商不承担相应责任。\n\n## 处理建议\n\n1. 确认终端已正确插入 SIM 卡、网络连接正常，重新开机后再次尝试登录；\n2. 在管理平台核实终端账号（IMEI/ICCID）已正确注册，未注册则先完成注册再登录；\n3. 仅使用厂商提供的软件升级方式，不随意使用非厂商升级包；\n4. 说明：知识库未记载“卡在 Check for Updates 界面不动”这一具体现象的专项故障原因与处理步骤；若按上述检查后仍无法解决，可联系厂商售后处理（F10 手册提供售后服务热线：400-8890-921）。\n\n## 来源\n\n- poc资料-证书/终端认证证书/F10 证书报告正本/F10 CE NB 正本/User Manual.pdf（POC-证书/认证知识库）\n- 定位资料-证书/F10 防爆正本（防爆出证，其他暂停）/F10 防爆正本（防爆出证，其他暂停）/F10 CE NB、RoHS、适配器、电池IEC62133 正本/F10 CE NB 正本/User Manual.pdf（定位资料-证书知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质描述了卡在Check for Updates界面的现象、原因及处理建议，切题作答。",
+      "key_facts": {
+        "total": 5,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "每个apk都会检测升级"
+      ],
+      "supp_missed": [],
+      "score": 0.8400000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 86,
+      "section": "终端-安卓",
+      "query": "终端-安卓-谷歌商店版本从ASAPP_2.9.5.2_POCSTARS 1.apk及其以上的版本支持短号功能",
+      "gold_answer": "短号功能演示视频.mp4",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒绝作答，未提供实质性答案。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "短号功能演示视频.mp4"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 84,
+      "section": "终端-安卓",
+      "query": "终端-安卓-apk是否支持显示账号有效期",
+      "gold_answer": "小屏机支持显示，大屏机不支持",
+      "agent_answer": "**结论：** 根据现有知识库资料，未找到终端安卓 APK 支持显示账号有效期的记载。终端 APK 的账号信息界面仅展示账号名称、账号类型、角色等基础信息；账号状态及有效期可在运营平台（Web 端）查看。\n\n**依据说明：**\n\n1. **终端 APK 账号信息界面（不含有效期）**\n   - POCSTAR MiniServer 终端 APP 用户手册：进入\"个人中心 → 账号管理\"界面，可查询账号名称、账号类型等信息，未包含账号有效期。\n   - POCSTARS 大屏终端 APP 用户手册（个人中心）：可查看当前账号信息与角色信息，并支持修改用户名、修改密码、切换登录账号、退出登录等，未包含有效期显示。\n   - POCSTARS MiniServer 全平台功能清单（终端 APP 功能清单-个人中心）：个人资料展示登录账号、联系电话、联系人，未包含有效期字段。\n\n2. **账号有效期的查看位置（运营平台，非 APK）**\n   - POCSTARS 运营平台用户手册（用户管理）：支持\"查看账号状态及有效期\"，可在账号列表中查看某账号的有效期及状态——该功能位于运营平台（Web 端），而非终端 APK。\n\n**来源：**\n- POC资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx\n- POC资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx\n- POC资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx\n- POC资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，未拒答或跑题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "小屏机支持显示账号有效期"
+      ],
+      "supp_missed": [],
+      "score": 0.6000000000000001,
+      "judge_error": null
+    },
+    {
+      "index": 87,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APP写了环境后仍提示登录超时",
+      "gold_answer": "写完以后 杀掉APP 重新登录",
+      "agent_answer": "根据知识库资料，安卓 APP 在配置登录环境后仍提示\"登录超时\"，说明**当前配置的环境参数有误**，并非网络或账号问题。\n\n**现象**\n- APP 登录时等待约 30 秒后提示\"登录超时\"。\n\n**可能原因（知识库明确记载）**\n1. 手动配置的登录环境参数不正确。其中 `context`（即 Brand）和 `DNS` 为必填项，填写错误或遗漏会导致无法连接目标环境。\n2. 配置完成后未按要求重新启动 APP，新环境参数未生效。\n3. 若使用扫码配置，所扫二维码不是运营平台【用户列表 - APK 下载】功能生成的标准配置二维码，无法解析配置信息。\n\n**检查与处理建议**\n1. 核对环境参数：进入登录界面 → \"登录设置\"，确认 `context`（Brand）和 `DNS` 均填写正确且完整（这两项为必填）。\n2. 建议改用扫码自动配置：点击登录设置页右上角的扫码按钮，扫描运营平台【用户列表 - APK 下载】生成的配置二维码，系统会自动识别并填充 DNS、context 参数，避免手动输入错误。\n3. 配置提交后，**需退出应用并重新运行 APP**，再执行登录。\n4. 若需要切回默认环境，可在登录设置中使用\"恢复默认设置\"，切换回 pocstar 大公网环境后重新登录。\n\n**来源**\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.10 用户可以设置登录的环境）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对登录超时问题给出了实质性的原因和处理建议，未拒答或跑题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 88,
+      "section": "终端-安卓",
+      "query": "终端-安卓-Estalky E120如何抓取MTK LOG",
+      "gold_answer": "/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且与问题无关",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提及知识库附件路径：02售后类/产品功能操作/海外/视频/日常操作视频"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 85,
+      "section": "终端-安卓",
+      "query": "终端-安卓-执法记录仪如何发送音频.图片.视频到调度台以及如何设置launcher",
+      "gold_answer": "具体操作见知识库--/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/执法记录仪如何发送音频.图片.视频到调度台以及如何设置launcher",
+      "agent_answer": "根据知识库资料（POCSTARS 安卓终端 APP 用户手册及 MDM 平台操作说明书），安卓执法记录仪通过 POCSTARS 终端 APP 与调度台通信，媒体发送和 launcher 设置分别如下。\n\n## 一、发送音频 / 图片 / 视频到调度台\n\n### 1. 音频（语音）\n\n| 方式 | 操作说明 |\n|------|---------|\n| 语音对讲（PTT） | 按住 PTT 键对当前群组讲话，松开结束，半双工对讲 |\n| 语音通话 | 在成员/好友列表勾选调度员，发起一对一全双工语音通话，可静音、免提 |\n| 语音消息（录音） | 在群组或会话聊天页发送语音消息，多媒体消息支持发送录音 |\n\n### 2. 图片 / 短视频\n\n- **方式一：终端上报调度台（专用上报通道）**\n  1. 首页快捷功能区点击\"终端上报调度台\"入口，与调度台建立专用消息会话；\n  2. 在页面中可选择发送文字、图片、相机拍照/拍摄、位置、文件等；\n  3. 发送成功后，消息显示在当前调度台会话中，调度台可查看、下载。\n\n- **方式二：群组 / 会话多媒体消息**\n  1. 进入群组聊天页或临时会话；\n  2. 点击图片发送图片给群组或会话（可切换图片来源并预览）；\n  3. 单次点击拍照按钮为拍照，长按为拍摄视频；\n  4. 发送前可对图片/视频添加备注，其他成员可查看备注及发送时间；\n  5. 群组多媒体消息支持文字、图片、短视频、位置，调度台可实时收到群组消息记录并查询、追溯。\n\n### 3. 视频（实时视频）\n\n| 方式 | 操作说明 |\n|------|---------|\n| 视频回传 | 首页视频入口进入视频页面，点击\"视频回传\"按钮，系统调用终端摄像头持续上传现场实时画面，调度台可查看；回传中可拍摄、挂断 |\n| 视频单呼 | 与调度员/终端一对一发起实时视频呼叫，对方接听后进入视频界面 |\n| 视频组呼 | 对当前群组在线成员发起一对多视频呼叫，按住 PTT 时本人画面与声音同时传给群组成员 |\n| 视频调用（被动） | 调度员发起视频调用时，终端收到邀请，点击接听后调度员可查看现场画面和声音 |\n\n> 说明：首次使用需在 APP 授权摄像头、麦克风、位置、通知等权限；摄像头权限影响拍照、视频单呼、视频组呼、视频回传，麦克风权限影响 PTT 对讲、语音消息、语音通话等。\n\n## 二、如何设置 launcher（终端桌面 / 主页管控）\n\n知识库中 launcher 相关设置通过 **POCSTARS MDM 平台的\"策略配置\"** 完成（MDM 明确支持对\"执法仪\"等安卓终端管控）：\n\n1. **MDM 设置（Kiosk / 单一应用模式）**\n   - MDM 管理模式：支持普通模式和 Kiosk 模式，单一应用模式启用后，终端只能打开 MDM 系统配置的应用；\n   - MDM 应用程序：选择单一应用或 Kiosk 模式时，在此关联对应应用；\n   - Kiosk 模式权限：可控制主页启动、最近应用、通知、状态栏信息、屏幕转向、锁屏、退出 Kiosk 模式等权限。\n\n2. **基础设置**\n   - 前台应用：控制设备启动后前台常显的应用行为（相当于设置开机后的默认主界面应用）。\n\n3. **应用程序（策略下应用布局）**\n   - 白名单 / 黑名单管理应用的安装与禁用；\n   - 底部显示：控制应用是否在终端底部区域展示；\n   - 排序：控制应用在终端展示顺序；\n   - 启用 / 禁用：控制终端是否可使用该应用。\n\n4. **视觉设计（桌面样式）**\n   - 配置屏保图片、背景颜色、应用名称颜色、壁纸、图标大小、桌面标题，使终端桌面符合企业风格。\n\n5. **应用库（开机自启）**\n   - 新增应用时可勾选\"启动时运行\"（设备开机后自动运行该应用）、\"安装后运行\"、\"专属应用\"等属性。\n\n**MDM 前提条件**：终端需搭载谷歌认证的原生 Android 系统（GMS）、Android 9 及以上；不支持深度定制或非 GMS 认证系统；设备需支持开机引导阶段二维码扫描注册（Zero-touch / Enrollment）；设备不得预装其他第三方 MDM 软件。\n\n---\n\n**来源**：\n- poc资料/MNO/POCSTARS大屏终端APP用户手册V3.0-20260409.pptx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/MDM/POCSTARS MDM平台操作说明书V1.0-20260415.docx\n- poc资料/MDM/MDM平台对终端设备的要求及前提条件说明-20260424.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了发送媒体及launcher设置的具体操作说明，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供知识库附件路径及视频指引"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 89,
+      "section": "终端-安卓",
+      "query": "终端-安卓-账号增加定位功能",
+      "gold_answer": "公司账号下用户管理，定位设置",
+      "agent_answer": "## 结论\n\n安卓终端账号的定位功能**默认关闭**，需要同时满足两个条件才能实现定位上报：① 在运营平台/调度台为终端账号开启定位；② 终端设备系统侧开启 GPS。\n\n## 操作步骤\n\n### 第一步：平台侧为账号开启定位\n\n公司管理员在运营平台操作为终端账号开启/关闭定位，账号定位默认关闭：\n\n1. 进入「**用户管理 - 用户列表**」；\n2. 找到目标用户，通过「**定位设置**」开启（或关闭）该账号的定位；\n3. 完成后，终端上线即可自动上报位置给平台。\n\n> 平台功能清单中对应项为「用户管理 - 用户列表 - 用户定位设置：支持终端账号进行定位开启和关闭」。\n\n### 第二步：终端设备开启 GPS（安卓系统设置）\n\n要上报位置，需确保终端设备的 GPS 功能打开。操作为进入**终端系统\"设置\"菜单（不是 APP 内的设置菜单）**：\n\n1. 进入「设置」菜单；\n2. 选择「位置信息」；\n3. 选择开启。\n\n不同终端设备菜单路径略有差异，请按实际设备界面操作。\n\n### 第三步（可选）：调度台调整上报频率等\n\n- 终端在线时默认按一定频率自动上报位置，默认 **30 秒**上报一次；\n- 可通过调度台设置上报频率并远程控制终端 GPS 的开启/关闭；\n- 关闭上报后，调度台将收不到终端新位置信息。\n\n## 参数说明\n\n| 项目 | 说明 | 来源文档 |\n|---|---|---|\n| 账号定位开关 | 默认关闭，管理员可在用户列表开启/关闭 | MiniServer V2.3 运营平台用户手册、全平台功能清单、运营平台用户手册 V3.0 |\n| 上报频率默认值 | 30 秒一次 | MiniServer V2.3 终端 APP 用户手册 |\n| 上报频率可设置范围 | 10–120 秒（终端 APP 用户手册）；10–300 秒（调度台用户手册）；功能清单另有 10–3000 秒的表述 | 对应各文档 |\n| 查看位置前提 | 终端已开启 GPS，且账号已在运营平台或调度台开启用户定位 | MiniServer V2.3 调度台用户手册 |\n\n> 说明：不同手册中上报频率的可设置范围表述不一致（10–120s / 10–300s / 10–3000s），如需精确范围建议以所部署版本对应手册为准。\n\n## 来源\n\n- 定位资料：poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx（3.6.6 定位设置）\n- poc资料/miniserver/POCSTAR MiniServer V2.3 全平台功能清单.xlsx（用户定位设置）\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx（5.6.3 终端定位功能如何开启）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.3 上报本机位置）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx（2.3.6 设置 GPS / 2.3.7 GPS 定位）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，围绕账号定位功能的开启位置和操作展开，与问题切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 90,
+      "section": "终端-安卓",
+      "query": "终端-安卓-天龙世纪设备安装APK密码",
+      "gold_answer": "通用密码“TL0066\"",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "通用密码TL0066"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 92,
+      "section": "终端-安卓",
+      "query": "终端-安卓-临时群组解散逻辑",
+      "gold_answer": "调度员跟用户创建的临时群组超过三个人只要创建者不退出就不会解散。",
+      "agent_answer": "已找到明确依据，以下为基于知识库的结论。\n\n## 终端（安卓）临时群组解散逻辑\n\n### 一、临时群组（多人临时组呼）的解散条件\n\n根据《POCSTAR MiniServer V2.3-终端APP用户手册》，临时群组在以下三种情况下自动解散：\n\n1. **创建者（主呼方）离开该群组**：创建者切换群组或退出后，临时群组自动解散；\n2. **其他成员全部退出**：当除创建者外的其他成员都退出该群组时，临时群组自动解散；\n3. **全员静默超时**：群组内所有成员静默超过设定时长（默认 60 秒）时，临时群组自动解散。\n\n其他资料印证了第 1 点：终端选择多个在线成员建立临时群组对讲后，\"终端的主呼叫方切换群组，则临时群组解散\"（《POCSTARS MNO全平台功能清单》）；产品白皮书中也表述为\"主呼人退出解散\"。\n\n### 二、临时单呼群组（一对一对讲）的解散条件\n\n- **任意一方切换群组**：被呼方（乙方）切换群组后，临时单呼群组自动解散，对方终端会收到\"群组解散\"提示；\n- **主呼终端挂断**：主呼方挂断后，临时单呼群组自动解散（调度台侧手册表述：\"主呼终端挂断或任意一方切换群组，临时单呼群组自动解散\"）；\n- **全员静默超时**：群组内所有成员静默超过设定时长（默认 60 秒）时自动解散。\n\n### 三、超时解散参数\n\n\"临时组超时解散时长\"由运营管理平台按公司配置，**默认值为 60 秒**，用于控制单呼及临时群组在话权空闲多久后自动解散（《POCSTARS运营平台用户手册V3.0》）。\n\n### 小结\n\n| 场景 | 解散触发条件 |\n|------|------|\n| 临时群组（多人） | ① 创建者离开/切换群组；② 其他成员全部退出；③ 全员静默超时（默认60s，可配置） |\n| 临时单呼（一对一组呼） | ① 主呼终端挂断；② 任意一方切换群组；③ 全员静默超时（默认60s，可配置） |\n\n**来源文档**：\n- 《POCSTAR MiniServer V2.3-终端APP用户手册-20260601》\n- 《POCSTAR MiniServer V2.3-调度台用户手册-20260601》\n- 《POCSTARS运营平台用户手册V3.0-20260409》\n- 《POCSTARS MNO全平台功能清单V1.0-20260522》\n- 《【修订中】POCSTARS MNO产品白皮书V1.1》\n\n如需进一步确认某一具体版本（如大屏终端或旧版 APP）的差异，可告知具体终端型号或产品版本，我再针对性查证。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕临时群组解散条件展开，提供了具体逻辑与来源，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "调度员与用户创建的临时群组人数超过三个人",
+        "只要创建者不退出，临时群组就不会解散"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 93,
+      "section": "终端-安卓",
+      "query": "终端-安卓-收到的语音串音排查步骤",
+      "gold_answer": "谁的语音串到了哪个群组中 2、登录账号是否设置了对该用户所在群组的监听 3、串音的时间点，串音视频",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质作答内容。",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "谁的语音串到了哪个群组中",
+        "登录账号是否设置了对该用户所在群组的监听",
+        "串音的时间点",
+        "串音视频"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 91,
+      "section": "终端-安卓",
+      "query": "终端-安卓-APK安装/卸载/抓日志",
+      "gold_answer": "安装命令：adb install apk 卸载命令：adb uninstall 包名 adb抓日志：adb logcat -v time >>存储文本文档-回车 2.复现问题 3.记录时间多少秒，Ctrl+c 结束抓日志 adb logcat -v time >>",
+      "agent_answer": "根据知识库检索结果，针对“终端-安卓-APK 安装/卸载/抓日志”，整理如下（均为知识库明确记载的内容）：\n\n## 一、APK 安装\n\n**获取安装包的途径（知识库记载）：**\n1. 大屏安卓终端：在“谷歌 Play Store”搜索“POCSTAR”下载后安装（对应 POCSTARS 大屏终端 APP）。\n2. 运营平台：用户管理 → 用户列表 →“APK 下载”入口，提供安装包下载链接和二维码（二维码可自动写入环境配置信息，简化安装配置）。\n3. MCSTARS 客户端：联系运营工程师获取客户端安装包，再下载到终端设备安装。\n\n**终端安装步骤（以 MCSTARS Client 为例）：**\n1. 下载后，在浏览器的下载列表或本地存储（如 Downloads 文件夹）中找到安装包。\n2. 点击安装包，按屏幕提示完成安装。\n3. 安装成功后自动生成桌面图标。\n\n**安装出现安全风险提示时（如“未检测到该应用的 ICP 备案信息”“安装包可能存在风险”）：**\n1. 忽略安全警告（仅因应用未上架应用商店导致）。\n2. 按提示点击“允许本次安装”。\n3. 再按屏幕提示点击“授权本次安装”。\n4. 安装完成后自动生成桌面图标。\n- 注：不同品牌终端的安全提示文案可能不同，以设备实际显示为准。\n\n**安装前环境准备：** 插入 SIM 卡、确认网络畅通（移动数据或 WiFi）、开启 GPS、调整音量。\n\n## 二、APK 卸载\n\n知识库中明确记载的卸载场景如下：\n1. **覆盖安装导致配置不生效时**：若设备已安装旧版 POCSTARS APP，安装新版时若采用覆盖安装方式可能导致配置不生效，建议**先卸载旧应用，再安装新应用**（快速适配工具 FAQ）。\n2. **通过 MDM 平台管理**（策略配置 → 应用程序）：\n   - 将应用配置为**黑名单**并保存后，应用会从该策略关联的终端上**强制卸载或禁止使用**；\n   - 对单个应用可执行“安装、启用、禁用、从终端删除、从列表删除”等操作。\n\n## 三、抓日志\n\n1. **快速适配工具（AutoApkTool）监听按键日志**：\n   - 前提：终端开启开发者模式，通过数据线连接电脑，ADB 环境正常；若开启 USB 文件传输模式，需切换为“不传输数据/仅充电”模式。\n   - 步骤：选择 APK 类型并解包 → 在监听（Listen）模式选择 PTT → 点击“开始监听”→ 按下终端上待配置的物理按键 → 观察日志区域是否有日志输出。\n   - 判断标准：日志区域有输出说明按键已被工具识别；无输出则需在“按键配置（Key Config）”页面手动填写按键配置，或反馈适配人员处理。\n   - 注意事项：日志监听是终端适配成功的关键步骤，务必确认日志区域有反馈后再继续打包。\n2. **MDM 平台设备日志**：设备管理 → 设备日志，用于查询设备产生的操作日志和异常日志，可按操作时间、严重程度（普通/警告/错误）、应用名称筛选，支持导出。\n\n**说明：** 知识库中未检索到专门的“adb logcat 抓取应用运行日志”操作指南，上述抓日志内容仅覆盖快速适配工具的按键监听日志与 MDM 平台的设备日志查询。\n\n**来源：**\n- 《Quick Adaptation Tool User Manual V2.5》（poc资料）\n- 《MCSTARS Client Installation Manual V1.1.1》（MCX资料）\n- 《POCSTARS MDM平台操作说明书V1.0-20260415》（poc资料/MDM）\n- 《大屏终端APP应用用户手册 V2.15》（poc资料/miniserver）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕安卓APK安装/卸载/抓日志给出了具体操作说明，非空、非拒答、非答非所问，属于实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "安装命令为 adb install apk",
+        "卸载命令为 adb uninstall 包名",
+        "抓日志命令为 adb logcat -v time >>存储文本文档-回车",
+        "启动日志后复现问题并记录时间多少秒",
+        "使用 Ctrl+C 结束抓日志"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 95,
+      "section": "终端-安卓",
+      "query": "终端-安卓-T710A切换wifi的时候会出现断连的现象，需要重启apk解决",
+      "gold_answer": "apk域名解析问题，DNS由写入域名改为直接写入IP后解决",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "apk域名解析问题，DNS由写入域名改为直接写入IP后解决"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 94,
+      "section": "终端-安卓",
+      "query": "终端-安卓-如何查看设备ICCID",
+      "gold_answer": "设置里或拨号界面输入 *#*#4636#*#* 用这两个方法看下设备显示的iccid号",
+      "agent_answer": "已在知识库中找到终端查看 ICCID 的相关依据。\n\n## 结论\n\n知识库中记载了在终端上查看 ICCID 的两种方式，均通过终端“个人中心”入口实现：\n\n**方式一：F10 对讲终端（EasyTaLK 系列）**\n1. 在终端菜单列表中，选择【个人中心】（Personal Center）；\n2. 按确认键（OK）进入个人中心页面；\n3. 在“账号”（Account）页面中即可查看：账号号码（Account number）、用户名（Username）、IMEI、**ICCID**。\n\n**方式二：大屏安卓终端 POCSTAR 对讲 APP**\n1. 在 APP 应用界面，进入右上角【个人中心】菜单；\n2. 点击用户名称，进入【账号管理】界面；\n3. 即可查询账号名称、账号类型等信息。\n（注：该 APP 手册中“查看账户信息”一节未明确列出 ICCID 显示项，仅记载可查看账号名称、账号类型等信息。）\n\n## 补充说明\n\n- ICCID 是存储在 SIM 卡内的 20 位唯一识别号码；当终端插入多张 SIM 卡时，以卡槽 1 中 SIM 卡的 ICCID 作为账号。\n- 在运营平台侧，ICCID 账号开户/添加时需要录入 SIM 卡的 ICCID 号码，该号码即来自终端 SIM 卡。\n\n## 来源\n\n- poc资料-证书/终端认证证书/F10 证书报告正本/F10 CE NB 正本/User Manual.pdf（Personal Center → Account：Account number/Username/IMEI/ICCID）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.8 查看账户信息；2.6 常用专业术语解释）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx（添加 ICCID 账号）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了查看ICCID的两种途径，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "设置里查看ICCID",
+        "拨号界面输入*#*#4636#*#*查看ICCID"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 98,
+      "section": "终端-安卓",
+      "query": "终端-安卓-T68为安卓设备，内置了apk无需安装，只需切平台就可以",
+      "gold_answer": "切平台操作视频：/知识库附件/02售后类/产品功能操作/海外/视频/日常操作视频/T68切换pocstar平台操作视频",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质内容",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供T68切换pocstar平台操作视频路径"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 83,
+      "section": "终端-安卓",
+      "query": "终端-安卓-终端功耗和流量数据汇总",
+      "gold_answer": "包含TE300K和PNC550的数据",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答内容。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "包含TE300K的数据",
+        "包含PNC550的数据"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 96,
+      "section": "终端-安卓",
+      "query": "终端-安卓-海能达P50和P50pro是否支持mandown",
+      "gold_answer": "P50不支持，P50pro支持",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "P50不支持mandown",
+        "P50pro支持mandown"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 99,
+      "section": "终端-安卓",
+      "query": "终端-安卓-开启定位，终端电池功耗会增加多少毫安",
+      "gold_answer": "30毫安左右",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "开启定位后电池功耗增加30毫安左右"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 101,
+      "section": "终端-安卓",
+      "query": "终端-安卓-按返回键无法返回到主页面",
+      "gold_answer": "尝试长按ok键和返回键 2.或者用adb命令进入：adb shell am start -a android.settings.HOME_SETTINGS",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质操作步骤",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "长按ok键和返回键",
+        "使用adb命令进入HOME_SETTINGS"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 102,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏优惠卡逻辑",
+      "gold_answer": "优惠卡： 1. 旧版本终端---优惠卡---不支持使用（旧版本终端没有上报版本信息的能力） 2. 旧版本终端--普通卡--支持使用（现有逻辑） 3. 新版本终端---优惠卡--符合版本要求支持使用（新版本终端可上报版本信息） 4. 新版本终端--普通卡--支持使用（沿用现有逻辑） 5. 最低版本2.9.5.1 先看是否优惠卡，是的话判断版本号，版本号高于配置，登录，小于或者没有，不登录；不是优惠卡的话，直接登录",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答且不切题",
+      "key_facts": {
+        "total": 6,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "旧版本终端优惠卡不支持使用",
+        "旧版本终端普通卡支持使用",
+        "新版本终端优惠卡符合版本要求支持使用",
+        "新版本终端普通卡支持使用",
+        "最低版本2.9.5.1",
+        "先判断是否优惠卡再判断版本号决定是否登录"
+      ],
+      "supp_missed": [
+        "旧版本终端无上报版本信息能力",
+        "新版本终端可上报版本信息"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 97,
+      "section": "终端-安卓",
+      "query": "终端-安卓-小屏机版本不显示录音菜单",
+      "gold_answer": "检查服务包是否有多媒体功能",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且与问题无关",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查服务包是否有多媒体功能"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 100,
+      "section": "终端-安卓",
+      "query": "终端-安卓-在线的终端在调度台显示为离线且只在用户列表显示",
+      "gold_answer": "关闭大群组功能",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质解决方案",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "关闭大群组功能"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    }
+  ]
+}

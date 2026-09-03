@@ -420,6 +420,149 @@ def test_chunk_thread_id_uses_fallback_for_unstable_nested_metadata():
 
 
 @pytest.mark.asyncio
+async def test_process_agent_run_chat_run_with_curated_qa_id_forks_curated_generator(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """带 curated_qa_id 的 chat run 走 stream_curated_qa_answer，且 meta 补全命中标记。"""
+    run_obj = _build_run()
+    run_obj.input_payload = {
+        "model_spec": "provider:model",
+        "answer_source": "curated_qa_semantic",
+        "curated_qa_id": 9,
+    }
+    _patch_common(monkeypatch, run_obj)
+
+    captured: dict[str, object] = {}
+    terminal_statuses: list[str] = []
+
+    async def fake_append_event(run_id: str, event_type: str, payload: dict, **kwargs):
+        del run_id, event_type, payload, kwargs
+
+    async def fake_mark_terminal(run_id: str, status: str, error_type=None, error_message=None):
+        del run_id, error_type, error_message
+        terminal_statuses.append(status)
+
+    def fake_curated_stream(**kwargs):
+        captured.update(kwargs)
+        return _BytesAsyncIter([b'{"status":"finished","request_id":"req-1","thread_id":"thread-1"}\n'])
+
+    def fail_agent_chat(**kwargs):
+        del kwargs
+        raise AssertionError("curated_qa run must not enter stream_agent_chat")
+
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "stream_curated_qa_answer", fake_curated_stream)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fail_agent_chat)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert captured["agent_slug"] == "ChatbotAgent"
+    assert captured["thread_id"] == "thread-1"
+    assert captured["input_message"].content == "hello"
+    assert captured["current_user"].uid == "user-1"
+    meta = captured["meta"]
+    assert meta["curated_qa_id"] == 9
+    assert meta["answer_source"] == "curated_qa_semantic"
+    assert meta["model_spec"] == "provider:model"
+    assert terminal_statuses == ["completed"]
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_chat_run_with_version_ask_forks_document_version_generator(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """带 version_ask 的 chat run 走 stream_document_version_answer，不进入 QA/普通 agent 流。"""
+    version_ask = {
+        "kb_id": "kb-1",
+        "action": "read",
+        "file_ids": ["f-1"],
+        "title": "运营手册",
+        "versions": [
+            {"file_id": "f-1", "document_version": 1.1, "filename": "运营手册_V1.1.docx", "is_current": False}
+        ],
+    }
+    run_obj = _build_run()
+    run_obj.input_payload = {"model_spec": "provider:model", "version_ask": version_ask}
+    _patch_common(monkeypatch, run_obj)
+
+    captured: dict[str, object] = {}
+    terminal_statuses: list[str] = []
+
+    async def fake_append_event(run_id: str, event_type: str, payload: dict, **kwargs):
+        del run_id, event_type, payload, kwargs
+
+    async def fake_mark_terminal(run_id: str, status: str, error_type=None, error_message=None):
+        del run_id, error_type, error_message
+        terminal_statuses.append(status)
+
+    def fake_version_stream(**kwargs):
+        captured.update(kwargs)
+        return _BytesAsyncIter([b'{"status":"finished","request_id":"req-1","thread_id":"thread-1"}\n'])
+
+    def fail_agent_chat(**kwargs):
+        del kwargs
+        raise AssertionError("version_ask run must not enter stream_agent_chat")
+
+    def fail_curated_stream(**kwargs):
+        del kwargs
+        raise AssertionError("version_ask run must not enter stream_curated_qa_answer")
+
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "stream_document_version_answer", fake_version_stream)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fail_agent_chat)
+    monkeypatch.setattr(run_worker, "stream_curated_qa_answer", fail_curated_stream)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert captured["agent_slug"] == "ChatbotAgent"
+    assert captured["thread_id"] == "thread-1"
+    assert captured["input_message"].content == "hello"
+    assert captured["current_user"].uid == "user-1"
+    assert captured["meta"]["version_ask"] == version_ask
+    assert captured["meta"]["model_spec"] == "provider:model"
+    assert terminal_statuses == ["completed"]
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_plain_chat_run_keeps_normal_stream(monkeypatch: pytest.MonkeyPatch):
+    """无 curated_qa_id 的 chat run 仍走原 stream_agent_chat，不进入 QA 生成器。"""
+    run_obj = _build_run()
+    run_obj.input_payload = {"model_spec": "provider:model"}
+    _patch_common(monkeypatch, run_obj)
+
+    captured: dict[str, object] = {}
+    terminal_statuses: list[str] = []
+
+    async def fake_append_event(run_id: str, event_type: str, payload: dict, **kwargs):
+        del run_id, event_type, payload, kwargs
+
+    async def fake_mark_terminal(run_id: str, status: str, error_type=None, error_message=None):
+        del run_id, error_type, error_message
+        terminal_statuses.append(status)
+
+    def fake_agent_chat(**kwargs):
+        captured.update(kwargs)
+        return _BytesAsyncIter([b'{"status":"finished","request_id":"req-1","thread_id":"thread-1"}\n'])
+
+    def fail_curated_stream(**kwargs):
+        del kwargs
+        raise AssertionError("plain chat run must not enter stream_curated_qa_answer")
+
+    monkeypatch.setattr(run_worker, "append_run_event", fake_append_event)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "stream_curated_qa_answer", fail_curated_stream)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fake_agent_chat)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert captured["agent_slug"] == "ChatbotAgent"
+    assert "curated_qa_id" not in captured["meta"]
+    assert terminal_statuses == ["completed"]
+
+
+@pytest.mark.asyncio
 async def test_worker_startup_ensures_builtin_mcp_servers(monkeypatch: pytest.MonkeyPatch):
     calls: list[str] = []
 

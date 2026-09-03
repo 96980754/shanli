@@ -1,0 +1,742 @@
+{
+  "run_name": "cat1_all_20260820_v2",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 1.0,
+    "scored": 33,
+    "answered": 33,
+    "refusal_gap": 0,
+    "clarify_missing": 0,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 3,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600流量消耗",
+      "gold_answer": "机型：E600东南亚 ROM版本：BQ_F1_E600_WORX_YY_EC600MCN_LE_SL_HW2in1_v1.01.16_250410（RTOS系统） 测试项 流量消耗（单位KB） 关定位待机 10分钟 12.58KB 开定位待机 10分钟 17.77KB 发射对讲 10分钟 518.05KB 接收对讲 10分钟 542.5KB",
+      "agent_answer": "根据知识库记录，E600（Cat.1 终端）流量消耗测试数据如下：\n\n**测试条件**\n- 机型：E600 东南亚版\n- ROM 版本：BQ_F1_E600_WORX_YY_EC600MCN_LE_SL_HW2in1_v1.01.16_250410（RTOS 系统）\n\n**流量消耗（单位：KB）**\n\n| 测试项 | 时长 | 流量消耗 |\n|---|---|---|\n| 关定位待机 | 10 分钟 | 12.58 KB |\n| 开定位待机 | 10 分钟 | 17.77 KB |\n| 发射对讲 | 10 分钟 | 518.05 KB |\n| 接收对讲 | 10 分钟 | 542.5 KB |\n\n说明：\n- 该数据来自上述指定 ROM 版本的实测结果，其他版本或机型可能有所差异。\n- 对讲收发（发射/接收）的流量消耗远高于待机状态，待机时开启定位比关闭定位流量略高（约多 5 KB/10 分钟）。\n\n来源：客服知识库（客服知识库.md，file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质提供了E600流量消耗测试数据，与问题直接相关",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 1,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600如何查看版本",
+      "gold_answer": "长按 音量“-” （下）键. 出现user后 再继续按下就会出现版本",
+      "agent_answer": "根据知识库记载，**E600 查看版本的方法如下**：\n\n1. 长按音量\"-\"（下）键；\n2. 屏幕出现 \"user\" 后，继续按下音量\"-\"键，即可显示版本信息。\n\n来源：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了查看版本的具体操作步骤，与问题切题且实质作答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 2,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600如何切换平台",
+      "gold_answer": "长按侧边“+”键 进入切换平台页面，POC change Global 和Stars",
+      "agent_answer": "**结论**：E600 终端切换平台的方法为——长按侧边\"+\"键，进入切换平台页面，选择 POC、Global 或 Stars 平台即可。\n\n**操作步骤**：\n1. 长按终端侧边\"+\"键，进入切换平台页面。\n2. 在页面中选择目标平台（POC、Global 或 Stars）。\n\n**说明**：\n- 该操作方式适用于 cat1 系列 E600 终端。\n- 知识库中未记载切换平台后的登录方式、切换限制或各平台差异等更多细节，如需进一步信息可补充查询。\n\n**来源**：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了切换平台的具体方法。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器调度台不显示定位",
+      "gold_answer": "确认有正常定位点：检查终端是否在能够获取GPS信号的位置（如在室外开阔地带）产生过有效的定位点。 2、第一次定位在室内开阔位置多停留一段时间",
+      "agent_answer": "**结论**：知识库中针对\"cat1机器调度台不显示定位\"明确记载了两条处理步骤：\n\n1. **确认有正常定位点**：检查终端是否在能够获取 GPS 信号的位置（如室外开阔地带）产生过有效的定位点。\n2. **首次定位处理**：若为第一次定位，在室内开阔位置多停留一段时间。\n\n**补充说明**：知识库中另有通用的\"定位不显示\"排查路径（适用于其他定位异常场景），可按以下顺序检查：\n\n- 检查客户使用的节点是否正确；用同节点的账号测试是否可以显示；\n- 可以显示时，检查机器使用版本是否为 Google 定位，若是则确认机器是否支持 Google；\n- 测试账号也不显示时，提交运维排查。\n\n**来源**：客服知识库.md（客服知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，针对问题给出了具体处理步骤。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器调度台定位飘",
+      "gold_answer": "在室内飘？室外如何 2、运动过程中轨迹是否正确，静止状态可能有飘的情况",
+      "agent_answer": "根据知识库记载，关于 CAT1 机器调度台定位飘的问题，内容如下：\n\n## CAT1 机器调度台定位飘\n\n知识库中的排查要点：\n\n1. **区分室内/室外场景**：先确认是在室内飘，还是室外也飘（对比室外定位表现）。\n2. **核对运动轨迹**：检查运动过程中轨迹是否正确；**静止状态下可能存在飘的情况**。\n\n说明：知识库仅记录了上述排查方向，未记载针对\"定位飘\"的进一步处理措施或根因说明；如需继续排查，可结合\"终端定位不准确\"的验证方式（确认机型、APK 版本、ROM 版本，以及问题账号——终端账号、调度台账号）进行定位验证。\n\n来源：客服知识库《客服知识库.md》（file_id: file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了定位飘问题的排查要点。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D11 D22 EH01是否支持SOS",
+      "gold_answer": "D11 D22 EH01不支持SOS，（D系列都不支持SOS） 接受和发送都不支持 所以e600发了SOS,这几款都收不到",
+      "agent_answer": "**结论：D11、D22、EH01 均不支持 SOS，D 系列终端都不支持 SOS。**\n\n具体说明（依据客服知识库）：\n- D11、D22、EH01 不支持 SOS，接受和发送都不支持。\n- 因此 E600 发送 SOS 时，这几款终端都收不到。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，直接回应了D11、D22、EH01是否支持SOS的问题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "终端-cat1",
+      "query": "终端-cat1-JT8988如何关闭TTS",
+      "gold_answer": "非安卓机界面显示和播报都由方案控制",
+      "agent_answer": "根据客服知识库中的记录，JT8988 关闭 TTS 的结论如下：\n\n**结论：JT8988 属于 CAT1 非安卓机，其界面显示和语音播报（TTS）均由方案（方案商/厂家）控制，无法在终端上直接自行关闭，需要联系方案厂家处理。**\n\n知识库原文记载：\n\n> **JT8988如何关闭TTS**：非安卓机界面显示和播报都由方案控制\n\n即 JT8988 不是安卓机，界面显示和 TTS 播报都由方案厂商控制，客户侧没有可操作的关闭入口。\n\n来源：客服知识库（kb_2ak3wcz9wx），文档《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确说明了JT8988关闭TTS的结论。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Cat1机器是否支持修改心跳",
+      "gold_answer": "cat1机器不支持平台修改心跳",
+      "agent_answer": "**结论：Cat1 机器不支持通过平台（运营平台）修改心跳。**\n\n知识库明确记载：\"cat1 机器不支持平台修改心跳\"。\n\n**补充说明（知识库相关记载）：**\n- 心跳可以在终端**本地**修改。例如\"3s被摘麦\"处理条目记载：修改心跳，本地修改，涉及 D22、E600 机型。\n- 平台侧可设置的是公司级的\"对讲机心跳上报时长\"（登录代理商账号 → 公司管理 → 设置，可输入 1–60 秒），并配有\"运营平台修改心跳所使用的功耗\"说明，该设置不等同于对 Cat1 终端心跳的远程修改。\n\n**来源：** 客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回应该问题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600 电池充电问题",
+      "gold_answer": "是否可以有座充?——不支持。 2、是否可以通过增加电池容量?——不支持 3、是否可以支持电池单充?——目前不支持。可以做给单电池的充电器,条件是：开模费2W元+订单2K起，定金先付一半，成品单价15/台。 4、其它方案：双电池使用，即额外多购买一块电池，延长使用时间。",
+      "agent_answer": "根据客服知识库中的记载，**E600（Cat.1 终端）电池充电相关结论如下**：\n\n## E600 电池充电问题\n\n| 问题 | 结论 |\n|------|------|\n| 是否支持座充？ | 不支持 |\n| 是否可以通过增加电池容量？ | 不支持 |\n| 是否支持电池单充？ | 目前不支持。可定制单电池充电器，条件：开模费 2 万元 + 订单 2000 台起，定金先付一半，成品单价 15 元/台 |\n| 其他方案 | 双电池使用：额外多购买一块电池，延长使用时间 |\n\n**说明**：\n- 座充、增加电池容量均不在支持范围内。\n- 电池单充目前不支持，仅可通过定制充电器方式实现（有开模费和起订量要求）。\n- 延长续航的现有可行方案是购买第二块电池双电池轮换使用。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕E600电池充电问题给出了具体结论。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600欧版电量管理模式 （延迟大，丢音，被3S摘麦。收不到语音消息 ：调整心跳）",
+      "gold_answer": "high---高耗电 心跳15秒 发心跳14秒左右休眠 standard--标准耗电 心跳30秒 发心跳14秒左右休眠 power---省电 心跳42秒 发心跳14秒左右秒休眠 super power-saving 1 心跳42秒深度睡眠 发心跳7秒休眠 需开启休眠模式 supre power-saving 2 心跳42秒 深度睡眠 发心跳3秒休眠 需开启休眠模式 刷机默认省电模式是supre power-saving 2 休眠模式是Sleep 默认是开的",
+      "agent_answer": "## 结论\n\nE600 欧版终端出现**延迟大、丢音、被3S摘麦、收不到语音消息**时，知识库明确记载的处理方式是**调整心跳**；心跳间隔由电量管理模式决定。\n\n## E600 欧版电量管理模式与心跳对照\n\n| 电量管理模式 | 心跳间隔 | 休眠行为 | 备注 |\n|---|---|---|---|\n| high（高耗电） | 15秒 | 发心跳后约14秒休眠 | — |\n| standard（标准耗电） | 30秒 | 发心跳后约14秒休眠 | — |\n| power（省电） | 42秒 | 发心跳后约14秒休眠 | — |\n| super power-saving 1 | 42秒 | 深度睡眠，发心跳后7秒休眠 | 需开启休眠模式 |\n| super power-saving 2 | 42秒 | 深度睡眠，发心跳后3秒休眠 | 需开启休眠模式 |\n\n刷机默认省电模式为 **super power-saving 2**，休眠模式为 **Sleep，默认开启**。\n\n## 处理建议\n\n1. **延迟大、丢音、被3S摘麦**：由客户登录自己的代理商账号调整心跳；若调整后仍无法解决，可能是版本/APK问题，需提交产研。\n2. **待机收不到语音**：同样先由客户登录代理商账号调整心跳；无法解决时按版本/APK问题提交产研。\n3. **被3S摘麦**：知识库记载需**本地修改**心跳（标注机型为 D22、E600），但未给出具体本地操作路径。\n4. 另据知识库记载，**Cat1 机器不支持通过平台修改心跳**，需注意调整方式的选择。\n\n## 来源\n\n- 客服知识库（kb_2ak3wcz9wx）《客服知识库.md》：\"E600欧版电量管理模式（延迟大，丢音，被3S摘麦。收不到语音消息：调整心跳）\"、\"3s被摘麦\"、\"延迟大，丢音，被3S摘麦\"、\"待机收不到语音\"、\"Cat1机器是否支持修改心跳\"条目。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接针对E600欧版电量管理模式与心跳调整给出完整对照和处理建议，实质作答且切题。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "终端-cat1",
+      "query": "终端-cat1-LT-V10PLUS 属于ROTS机器 飞捷厂家，跟Spender 的机器一样",
+      "gold_answer": "飞捷厂家不提供版本，需要客户推动联系厂家 这个厂家只有出厂固定版本，中间不刷",
+      "agent_answer": "您的说法与知识库记录一致，知识库中有明确记载：\n\n**LT-V10PLUS 属于 ROTS（RTOS）机器，飞捷厂家，跟 Spender 的机器一样。**\n\n此外，知识库还补充了该机器的版本相关说明：\n\n- **飞捷厂家不提供版本**，需要客户推动联系厂家；\n- 该厂家**只有出厂固定版本，中间不刷**（即不支持中间过程刷机/升级）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，确认知识库记录并补充版本相关说明。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600设置群组监听",
+      "gold_answer": "不支持终端设置群组监听的CAT1机器，平台设置群组监听和取消监听群组后，都需要重启终端，才会生效",
+      "agent_answer": "根据客服知识库中的记录，E600（CAT1 机器）设置群组监听的结论如下：\n\n**E600 不支持在终端上设置群组监听。**\n\n具体说明：\n\n- CAT1 机器不支持终端端设置群组监听。\n- 群组监听需要在平台上设置。\n- 平台设置群组监听或取消监听群组后，**都需要重启终端**，操作才会生效。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，切题说明E600不支持终端设置群组监听及平台操作重启生效。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "终端-cat1",
+      "query": "终端-cat1-RTOS是否支持自建组",
+      "gold_answer": "我们的库支持，但是目前E600和D系列还未实现",
+      "agent_answer": "**结论：RTOS 底层库支持自建组功能，但当前 E600 和 D 系列终端尚未实现该功能。**\n\n知识库原文记载（客服知识库）：\n\n> RTOS是否支持自建组：我们的库支持，但是目前E600和D系列还未实现。\n\n即在平台/库层面具备自建组能力，但现有 CAT1 RTOS 终端（E600、D 系列）暂未落地，实际使用中需以终端是否支持为准。\n\n**来源**：客服知识库（客服知识库.md，片段 file_d72ba9_chunk_25）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回应了RTOS是否支持自建组的问题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D22如何查看版本号",
+      "gold_answer": "Steps to check version of D22: menu→arrow button→Device Info.→menu→POC uer→menu",
+      "agent_answer": "根据客服知识库中的记录，D22 查看版本号的操作步骤如下：\n\n1. 按 **menu** 键；\n2. 使用**方向键**（arrow button）选择 **Device Info.**（设备信息）；\n3. 按 **menu** 键进入；\n4. 选择 **POC uer**（POC 用户信息）；\n5. 按 **menu** 键查看版本信息。\n\n来源：客服知识库（客服知识库.md，file_d72ba9，chunk 26）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体的查看版本号的操作步骤，实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Wor X 就是E600",
+      "gold_answer": "E600加入的群组数量没有上限，和设备内存相关 测试加入100个群组没有问题",
+      "agent_answer": "根据知识库记录，\"终端-cat1-Wor X\"就是 E600。\n\n知识库原文明确记载：**\"Wor X 就是E600\"**。\n\n补充信息（同一条目下）：\n- E600 加入的群组数量没有上限，与设备内存相关；测试加入 100 个群组没有问题。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，确认了问题中的对应关系并补充了相关事实。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "终端-cat1",
+      "query": "终端-cat1-P67双模机写频工具和驱动以及操作步骤",
+      "gold_answer": "已归档网盘",
+      "agent_answer": "根据知识库检索结果，答复如下：\n\n**结论：P67 双模机的写频工具、驱动及操作步骤资料已归档至网盘，知识库中未提供具体的工具名称、下载链接或操作步骤。**\n\n知识库（客服知识库）中关于此问题的原文记载为：\n\n> P67双模机写频工具和驱动以及操作步骤 —— 已归档网盘\n\n即该资料当前已归档存放于网盘，知识库内没有可用的具体下载地址和操作说明。\n\n**相关参考信息**（同一知识库记载）：\n- P67 支持修改频点；不支持 SOS 功能，也不支持接收调度台消息。\n\n**来源**：客服知识库（客服知识库.md，file_id: file_d72ba9）\n\n如需获取已归档网盘中的具体资料（工具、驱动、操作步骤），建议联系资料归档管理方提供网盘访问路径。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确回复资料已归档网盘，与问题相关，属于实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600 按下menu键机器会重启",
+      "gold_answer": "群组名称太长了，需要改短名称.E600群组名称最多支持22个字符",
+      "agent_answer": "根据客服知识库中的记录，该问题已有明确答案：\n\n**现象**：终端 CAT1-E600 按下 menu 键时机器会重启。\n\n**可能原因**：当前所在群组的名称过长。\n\n**处理建议**：\n1. 将群组名称改为短名称；\n2. E600 群组名称最多支持 **22 个字符**，将群组名称控制在 22 个字符以内即可。\n\n相关补充：知识库中另有记录，E600 接收 SOS 出现白屏同样与群组名称过长有关，也需将群组名称控制在 22 个字符以内。\n\n**来源**：客服知识库（客服知识库.md，第 26 段片段）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了问题原因和处理建议。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Q85 debug版本刷机步骤及固件+ 如何开启usb debugging操作视频",
+      "gold_answer": "/硬件产品归档/宏博智能/Q85 debug版本+刷机工具",
+      "agent_answer": "根据客服知识库中的记录，关于 **Q85 debug版本刷机步骤及固件 + 如何开启 USB debugging 操作视频**，知识库中有如下记载：\n\n**资料位置**\n\n该资料已归档至网盘，路径为：\n\n> /硬件产品归档/宏博智能/Q85 debug版本+刷机工具\n\n该条目即对应\"Q85 debug版本刷机步骤及固件 + 如何开启 usb debugging 操作视频\"的完整资料（与 P67 双模机写频工具类似，属于已归档网盘资料）。\n\n**需要说明的是**\n\n知识库中仅记录了上述归档路径，未包含刷机步骤的具体文字说明、固件文件本身或操作视频内容。如需获取具体步骤和固件，请从上述网盘归档路径下载对应资料。\n\n**来源**\n- 客服知识库.md（客服知识库，条目：\"Q85 debug版本刷机步骤及固件+ 如何开启usb debugging操作视频\"）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了资料归档路径，实质作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600接收SOS会白屏",
+      "gold_answer": "群组名称过长，需要在22个字符以内",
+      "agent_answer": "根据客服知识库中的记载，结论如下：\n\n**现象**：E600 终端接收 SOS 时出现白屏。\n\n**原因**：群组名称过长。\n\n**处理建议**：将群组名称改短，控制在 **22 个字符以内**（E600 群组名称最多支持 22 个字符）。同库中另一条相关记录也印证了这一点：E600 按下 menu 键机器重启同样是群组名称太长所致，需改为短名称。\n\n来源：客服知识库《客服知识库.md》（\"E600接收SOS会白屏：群组名称过长，需要在22个字符以内\"）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，直接给出原因和处理建议，与问题切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D21 登录白屏提示服务连接中，或者自动重启的问题",
+      "gold_answer": "使用D21写号工具写入APN",
+      "agent_answer": "根据客服知识库中的记录，该问题有明确的处理方案：\n\n## 结论\n\n**D21 登录白屏提示\"服务连接中\"，或者自动重启的问题**：使用 D21 写号工具写入 APN 即可解决。\n\n知识库中该条目记载的处理方式即为此一项：通过 D21 写号工具将 APN 写入终端。知识库未提供写号工具的具体操作步骤或 APN 参数细节，如需要可进一步查阅工具使用说明或联系厂家获取。\n\n**来源**：客服知识库（客服知识库.md，file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了与问题匹配的处理方案，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D21 .D22是否支持远程麦克风",
+      "gold_answer": "D系列不支持e600有一个版本开始支持了",
+      "agent_answer": "**结论：D21、D22 不支持远程麦克风。**\n\n根据知识库记载：\n\n- D21、D22 属于 D 系列终端，**不支持远程麦克风**功能。\n- 知识库原文明确说明：\"D系列不支持，e600有一个版本开始支持了。\"即远程麦克风功能仅从 E600 的某一个版本开始才支持，D 系列（含 D21、D22）均不支持。\n\n补充说明：远程麦克风指调度员选中在线成员后点击\"远程麦克风\"按钮，终端麦克风自动开启、调度台可收听终端环境音的功能。该功能依赖终端侧支持，D21、D22 不具备此能力。\n\n**来源**：客服知识库（《客服知识库.md》）——\"D21 .D22是否支持远程麦克风\"条目（kb_2ak3wcz9wx / file_d72ba9）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回答了D21、D22不支持远程麦克风。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器不响应应答模式",
+      "gold_answer": "只支持立即接通模式，不支持应答模式",
+      "agent_answer": "**结论**：CAT1 机器不响应应答模式属于正常现象——CAT1 终端只支持“立即接通模式”，不支持“应答模式”。\n\n**说明**：\n- 单呼接通方式（立即接通/应答模式）是在运营平台侧配置的：登录代理商账号 → 公司管理 → 设置 → 立即接通/应答模式。\n- 若平台将单呼模式配置为“应答模式”，CAT1 机器不会响应；该类终端仅支持“立即接通模式”，应使用该模式。\n\n来源：客服知识库（文件：客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出结论，切题且实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "终端-cat1",
+      "query": "终端-cat1-e600 提示“out of service” 或者 log out",
+      "gold_answer": "三种原因: 1.首先验证账号是否过期/账号状态(expired,unexist etc..) 2.确认网络是否正常 3.在其他地方登录",
+      "agent_answer": "## E600 提示 \"out of service\" 或 \"log out\"\n\n根据客服知识库记载，E600（即 Wor X）出现该提示的可能原因及处理建议如下：\n\n**可能原因与处理建议**\n\n1. **账号异常**\n   - 首先验证账号是否过期、账号状态是否正常（如 expired、unexist 等）。\n\n2. **网络异常**\n   - 确认网络是否正常。\n\n3. **账号在其他地方登录**\n   - 检查是否在其他设备/位置登录了同一账号，导致当前终端被踢下线。\n\n---\n\n**来源**：客服知识库（kb_2ak3wcz9wx）—《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质列出了三种原因及处理建议，切题且非拒答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "终端-cat1",
+      "query": "终端-cat1-e600 提示“Network time out”",
+      "gold_answer": "RTOS设备是4G网络，只有4G下能用 安卓是全网通，所以3G能使用",
+      "agent_answer": "根据知识库检索结果，答复如下：\n\n## 现象\nE600 终端提示 \"Network time out\"。\n\n## 可能原因\nE600 属于 **RTOS（Cat1）设备，仅支持 4G 网络，只有 4G 网络下才能正常使用**；若终端所在网络不是 4G（例如仅有 3G 覆盖），则会出现 \"Network time out\" 提示。作为对比，安卓设备为全网通，3G 网络也能使用。\n\n## 处理建议\n- 确认终端当前所处的网络环境是否为 4G 网络（SIM 卡是否支持 4G、当前区域是否有 4G 信号覆盖）。\n\n## 来源\n- 客服知识库（`kb_2ak3wcz9wx`）—《客服知识库.md》：条目\"e600 提示\"Network time out\"：RTOS设备是4G网络，只有4G下能用 安卓是全网通，所以3G能使用\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对E600提示Network time out给出了原因和处理建议，实质作答且切题",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "终端-cat1",
+      "query": "终端-cat1-P67是否支持SOS",
+      "gold_answer": "不支持，但支持修改频点，也不支持接收调度台消息",
+      "agent_answer": "根据知识库记载，**终端 P67 不支持 SOS**。\n\n具体说明：\n\n- P67 **不支持 SOS**（发送和接收均不支持）。\n- 但 P67 支持**修改频点**。\n- P67 也**不支持接收调度台消息**。\n\n来源：客服知识库（《客服知识库.md》）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确说明终端P67不支持SOS。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "终端-cat1",
+      "query": "终端-cat1-3s被摘麦",
+      "gold_answer": "修改心跳，本地修改 D22： E600：",
+      "agent_answer": "## 结论\n\n**cat1 终端被 3S 摘麦**属于心跳类问题，知识库记载的处理方向是**调整心跳**；但需注意 **cat1 机器不支持平台侧修改心跳，需本地修改**。若调整心跳后仍无法解决，可能是版本 APK 问题，需提交产研。\n\n## 处理建议\n\n1. **调整心跳**：客户登录自己的代理商账号，在平台调整心跳上报时长。平台侧修改路径为：代理商账号 → 公司管理 → 设置 → 对讲机心跳上报时长，输入 1–60 秒后保存。\n2. **cat1 机器需本地修改**：cat1 机器不支持平台修改心跳，需在终端本地修改（知识库记载 D22、E600 等机型有本地修改心跳的方式，但未给出具体操作步骤）。\n3. **若以上无法解决**：可能是版本 APK 问题，需提交产研处理。\n\n## 补充说明\n\n- 知识库将\"延迟大、丢音、被 3S 摘麦\"归为同一类现象，处理方式一致（调整心跳）。\n- E600 欧版电量管理模式与心跳相关，可作为参考：高耗电（心跳 15 秒）、标准（心跳 30 秒）、省电（心跳 42 秒）等模式，刷机默认省电模式为 super power-saving 2（心跳 42 秒深度睡眠）。\n\n## 来源\n\n- 客服知识库（kb_id: kb_2ak3wcz9wx）—《客服知识库.md》（file_id: file_d72ba9）\n  - \"延迟大，丢音，被3S摘麦\"：客户登录自己的代理商账号，调整心跳；若 1 无法解决，可能是版本 APK 问题，需提交产研\n  - \"3s被摘麦\"：修改心跳，本地修改\n  - \"Cat1机器是否支持修改心跳\"：cat1 机器不支持平台修改心跳",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接针对cat1终端3S摘麦问题，给出修改心跳和本地修改的处理建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D22 修改开机页面图片的工具",
+      "gold_answer": "界面配置工具 V1.01.0010(1).zip",
+      "agent_answer": "根据客服知识库中的记录，D22 修改开机页面图片的工具为：\n\n**界面配置工具 V1.01.0010(1).zip**\n\n来源：客服知识库（客服知识库.md）中\"终端-cat1\"相关问答记录，条目为\"D22 修改开机页面图片的工具\"。\n\n知识库中未记载该工具的下载路径或具体操作步骤，如需进一步信息可补充说明。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出了修改开机页面图片的工具名称，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1的库有哪几种",
+      "gold_answer": "移远的不都是一个库。EC600M和EC800M是一个库 EC600U EC200U是一个库",
+      "agent_answer": "根据客服知识库中的记载，CAT1 终端的\"库\"（移远模组库）不是统一的，分为两种：\n\n| 库 | 包含模组 |\n|---|---|\n| 库一 | EC600M、EC800M |\n| 库二 | EC600U、EC200U |\n\n即：EC600M 和 EC800M 属于同一个库，EC600U 和 EC200U 属于另一个库。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接针对问题给出了库的种类和包含模组，属于实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 30,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Linux和CAT1机器是否支持OPUS语音编码",
+      "gold_answer": "都不支持",
+      "agent_answer": "**结论：都不支持。**\n\n根据知识库记载，Linux 终端和 CAT1 机器均不支持 OPUS 语音编码。\n\n出处：客服知识库（`客服知识库.md`）中\"Linux和CAT1机器是否支持OPUS语音编码\"条目明确记载：**都不支持**。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出“都不支持”的结论，且围绕问题展开，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 31,
+      "section": "终端-cat1",
+      "query": "终端-cat1-国内miniserver，卡商需要开放的白名单",
+      "gold_answer": "*.shanliptt.com 47.93.34.158",
+      "agent_answer": "**国内 miniserver 场景下，卡商需开放以下白名单：**\n\n- 域名：`*.shanliptt.com`\n- IP 地址：`47.93.34.158`\n\n**说明：**\n- 该白名单适用于 Cat1 终端连接国内 miniserver 的场景，需由卡商（SIM 卡运营商）在网络上放行上述域名和 IP，否则终端可能无法正常注册/登录平台。\n- 来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了所需白名单域名和IP，实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "终端-cat1",
+      "query": "终端-cat1-终端功耗和流量数据汇总",
+      "gold_answer": "包含E600和F10的数据",
+      "agent_answer": "根据客服知识库（客服知识库.md）中的检索结果，回答如下：\n\n## 结论\n\n知识库中“终端功耗和流量数据汇总”条目仅标注了所包含的机型（一处标注“包含E600和F10的数据”，另一处标注“包含TE300K和PNC550的数据”），**未在正文中录入具体汇总数据**。知识库中实际可查的 CAT1 终端（E600）流量消耗数据和功耗相关数据如下。\n\n## 一、E600 流量消耗（CAT1 终端，RTOS 系统）\n\n- 机型：E600 东南亚\n- ROM 版本：BQ_F1_E600_WORX_YY_EC600MCN_LE_SL_HW2in1_v1.01.16_250410（RTOS 系统）\n\n| 测试项 | 流量消耗（单位 KB） |\n|---|---|\n| 关定位待机 10 分钟 | 12.58 KB |\n| 开定位待机 10 分钟 | 17.77 KB |\n| 发射对讲 10 分钟 | 518.05 KB |\n| 接收对讲 10 分钟 | 542.5 KB |\n\n## 二、终端功耗相关数据\n\n- 开启定位后，终端电池功耗会增加约 **30 毫安**。\n\n## 三、其他机型流量数据（供参考）\n\n知识库另载有 TE300K 流量消耗数据（Android 系统，科威特数据），非 CAT1 机型：\n\n| 测试项 | 流量消耗（单位 KB） |\n|---|---|\n| 关定位待机 10 分钟 | 29.63 KB |\n| 开定位待机 10 分钟 | 87.78 KB |\n| 发射对讲 10 分钟 | 985.56 KB |\n| 接收对讲 10 分钟 | 944.92 KB |\n\n注：知识库注明“语音流量消耗只和编码方式、打包帧数有关”。F10、PNC550 机型的具体功耗/流量数据在知识库中未检索到正文内容。\n\n**来源**：客服知识库（客服知识库.md，文件 ID：file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 33,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600的认证报告中的频段和产品规格中的频段不一致，规格中有B5，认证报告中不包含B5，确认设备是否支持B5？",
+      "gold_answer": "设备是支持B5频段的。测试报告中没有B5的原因是，咱们的测试报告是CE认证的测试报告，CE是欧盟认证，B5不是欧盟的频段，所以不会测B5，在测试报告中也不会体现。",
+      "agent_answer": "**结论：设备支持B5频段。**\n\n根据客服知识库中的说明：\n\n- E600设备本身是支持B5频段的；\n- 认证报告（测试报告）中没有B5，是因为该测试报告为**CE认证测试报告**，CE属于欧盟认证，而B5不是欧盟的频段，因此不会测试B5，在测试报告中也不会体现。\n\n即：**产品规格列出B5（设备硬件能力支持），认证报告未包含B5（认证范围不含该频段），二者并不矛盾。**\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出设备支持B5并解释了认证报告未包含B5的原因。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 32,
+      "section": "终端-cat1",
+      "query": "终端-cat1-海外miniserver，卡商需要开放的白名单",
+      "gold_answer": "*.shanlipoc.com 调度器 47.245.104.125 新加坡代理 47.87.12.48 墨西哥代理",
+      "agent_answer": "根据知识库记载，海外 miniserver 场景下卡商需要开放的白名单如下：\n\n| 项目 | 内容 |\n|------|------|\n| 域名 | `*.shanlipoc.com` |\n| 调度器 | `47.245.104.125` |\n| 新加坡代理 | `47.87.12.48` |\n| 墨西哥代理 | 来源中未给出对应 IP |\n\n补充说明：\n- 知识库原文为「海外miniserver，卡商需要开放的白名单：*.shanlipoc.com 调度器 47.245.104.125 新加坡代理 47.87.12.48 墨西哥代理」，其中墨西哥代理未记录具体 IP，如需该地址建议进一步确认。\n- 该条目未区分终端类型（Cat1 等），海外 miniserver 白名单适用上述配置。\n\n来源：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了具体白名单配置，属于实质作答且切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 4
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    }
+  ]
+}

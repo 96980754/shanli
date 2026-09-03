@@ -52,6 +52,12 @@
         </a-collapse>
       </div>
 
+      <!-- ② 无依据不输出：模型零 KB 证据硬答被改写为拒答时的提示横幅 -->
+      <div v-if="noEvidenceNotice" class="no-evidence-banner">
+        <Info size="14" />
+        <span>{{ $t('chat.noEvidenceOutputNotice') }}</span>
+      </div>
+
       <!-- 消息内容 -->
       <MarkdownPreview
         v-if="parsedData.content"
@@ -160,7 +166,7 @@ import { message as notification } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { CaretRightOutlined } from '@ant-design/icons-vue'
 import RefsComponent from '@/components/RefsComponent.vue'
-import { Copy, Check, X } from 'lucide-vue-next'
+import { Copy, Check, X, Info } from 'lucide-vue-next'
 import ToolCallsGroupComponent from '@/components/ToolCallsGroupComponent.vue'
 import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import MentionTextRenderer from '@/components/common/MentionTextRenderer.vue'
@@ -221,6 +227,13 @@ const handoffSending = ref(false)
 const handoffStatus = ref('')
 const handoffAvailable = computed(
   () => props.message.extra_metadata?.handoff_available === true && !handoffStatus.value
+)
+// ② 无依据不输出：消息被改写为 knowledge_refusal/no_evidence_output 且正文保留时，
+// 在正文上方提示该回答未被采纳为正式依据（转人工按钮随 handoff_available 一并出现）。
+const noEvidenceNotice = computed(
+  () =>
+    props.message.extra_metadata?.knowledge_no_evidence === true &&
+    props.message.extra_metadata?.knowledge_disposition?.type === 'knowledge_refusal'
 )
 const handoffQuery = computed(
   () => props.message.extra_metadata?.handoff_query || props.message.content || ''
@@ -570,6 +583,21 @@ watch(isReasoning, (active) => {
     gap: 8px;
     background-color: var(--color-error-50);
     color: var(--color-error-500);
+    span {
+      line-height: 1.5;
+    }
+  }
+
+  .no-evidence-banner {
+    margin: 10px 0 0;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--color-warning-50);
+    color: var(--color-warning-700);
     span {
       line-height: 1.5;
     }

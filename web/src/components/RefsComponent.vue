@@ -5,6 +5,8 @@
       v-if="showAnswerNotes"
       :chunks="knowledgeChunks"
       :query-text="queryText"
+      :allow-ask="allowVersionAsk"
+      @version-ask-run="onVersionAskRun"
     />
     <div class="tags">
       <!-- 反馈 -->
@@ -13,7 +15,11 @@
         :class="{ disabled: feedbackState.hasSubmitted }"
         @click="likeThisResponse(msg)"
         :title="
-          t(feedbackState.hasSubmitted && feedbackState.rating === 'like' ? 'refs.liked' : 'refs.like')
+          t(
+            feedbackState.hasSubmitted && feedbackState.rating === 'like'
+              ? 'refs.liked'
+              : 'refs.like'
+          )
         "
       >
         <ThumbsUp size="12" :fill="feedbackState.rating === 'like' ? 'currentColor' : 'none'" />
@@ -24,7 +30,9 @@
         @click="dislikeThisResponse(msg)"
         :title="
           t(
-            feedbackState.hasSubmitted && feedbackState.rating === 'dislike' ? 'refs.disliked' : 'refs.dislike'
+            feedbackState.hasSubmitted && feedbackState.rating === 'dislike'
+              ? 'refs.disliked'
+              : 'refs.dislike'
           )
         "
       >
@@ -38,7 +46,12 @@
         <Bot size="12" /> {{ getModelName(msg) }}
       </span>
       <!-- 复制 -->
-      <span v-if="showKey('copy')" class="item btn" @click="copyText(msg.content)" :title="t('refs.copy')">
+      <span
+        v-if="showKey('copy')"
+        class="item btn"
+        @click="copyText(msg.content)"
+        :title="t('refs.copy')"
+      >
         <Check v-if="isCopied" size="12" />
         <Copy v-else size="12" />
       </span>
@@ -131,7 +144,7 @@ import KnowledgeSourceSection from '@/components/KnowledgeSourceSection.vue'
 import WebSearchSourceSection from '@/components/WebSearchSourceSection.vue'
 import AnswerVersionNotes from '@/components/AnswerVersionNotes.vue'
 
-const emit = defineEmits(['retry', 'openRefs'])
+const emit = defineEmits(['retry', 'openRefs', 'version-ask-run'])
 const { t } = useI18n()
 const props = defineProps({
   message: Object,
@@ -155,8 +168,17 @@ const props = defineProps({
   queryText: {
     type: String,
     default: ''
+  },
+  // 本行注记是否开放「查看/对比历史版本」主动询问（仅最后一个已收尾会话由对话组件下传 true）
+  allowVersionAsk: {
+    type: Boolean,
+    default: false
   }
 })
+
+const onVersionAskRun = (event) => {
+  emit('version-ask-run', event)
+}
 
 const msg = ref(props.message)
 
@@ -230,20 +252,16 @@ const dislikeReasonOptions = [
   { value: 'other', label: 'refs.reasonOther' }
 ]
 
-const selectedReasonLabel = computed(() => {
-  const key = dislikeReasonOptions.find((item) => item.value === dislikeReasonCode.value)?.label
-  return key ? t(key) : ''
-})
-
 const resetDislikeForm = () => {
   dislikeReasonCode.value = null
   dislikeReasonDetail.value = ''
 }
 
 const buildDislikeReason = () => {
-  const label = selectedReasonLabel.value
+  // 存稳定 code（+可选 detail），读时按当前语言本地化，保证中英文统计一致
+  const code = dislikeReasonCode.value
   const detail = dislikeReasonDetail.value.trim()
-  return detail ? `${label}\n${detail}` : label
+  return detail ? `${code}\n${detail}` : code
 }
 
 // 使用 useClipboard 实现复制功能

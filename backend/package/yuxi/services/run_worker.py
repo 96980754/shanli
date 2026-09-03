@@ -16,6 +16,8 @@ from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import config as sys_config
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
 from yuxi.services.chat_service import stream_agent_chat, stream_agent_resume
+from yuxi.services.curated_qa_run_service import stream_curated_qa_answer
+from yuxi.services.document_version_run_service import stream_document_version_answer
 from yuxi.services.graph_build_worker import process_knowledge_graph_index
 from yuxi.services.input_message_service import restore_chat_input_message
 from yuxi.services.document_ingestion_service import (
@@ -346,6 +348,8 @@ async def process_agent_run(ctx, run_id: str):
         "model_spec": payload.get("model_spec"),
         "run_type": run_type,
         "created_by_run_id": run.created_by_run_id,
+        # 行业方案显式门禁：结构化 industry_solution 请求才放开 industry-solution 技能。
+        "industry_solution": bool(payload.get("industry_solution")),
     }
     if run_type == "subagent":
         # 三个线程 ID 在 subagent_run_service 创建 run 时已写入 runtime，此处不再二次兜底；
@@ -398,15 +402,41 @@ async def process_agent_run(ctx, run_id: str):
                     db=db,
                 )
             elif run_type in {"chat", "subagent"}:
-                stream = stream_agent_chat(
-                    agent_slug=agent_slug,
-                    thread_id=thread_id,
-                    meta=meta,
-                    input_message=normalized_input_message,
-                    current_user=user,
-                    db=db,
-                    save_user_message=False,
-                )
+                if run_type == "chat" and payload.get("version_ask"):
+                    # 历史版本阅读/对比 run：封闭生成器按 file_id 读取归档版本正文并组织回答，
+                    # 不经 agent 图与技能（归档内容不进普通工具集）。
+                    meta["version_ask"] = payload.get("version_ask")
+                    stream = stream_document_version_answer(
+                        agent_slug=agent_slug,
+                        thread_id=thread_id,
+                        meta=meta,
+                        input_message=normalized_input_message,
+                        current_user=user,
+                        db=db,
+                    )
+                elif run_type == "chat" and payload.get("curated_qa_id"):
+                    # 人工 QA 命中 run：流式组装基础答案 + 补充检索（胶囊感知检索过程），
+                    # 模型调用与知识库检索因此落在 worker，POST 只负责检测与持久化。
+                    meta["curated_qa_id"] = payload.get("curated_qa_id")
+                    meta["answer_source"] = payload.get("answer_source")
+                    stream = stream_curated_qa_answer(
+                        agent_slug=agent_slug,
+                        thread_id=thread_id,
+                        meta=meta,
+                        input_message=normalized_input_message,
+                        current_user=user,
+                        db=db,
+                    )
+                else:
+                    stream = stream_agent_chat(
+                        agent_slug=agent_slug,
+                        thread_id=thread_id,
+                        meta=meta,
+                        input_message=normalized_input_message,
+                        current_user=user,
+                        db=db,
+                        save_user_message=False,
+                    )
             else:
                 raise RuntimeError(f"unsupported run_type after validation: {run_type}")
 

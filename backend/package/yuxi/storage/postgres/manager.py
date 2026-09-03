@@ -1311,6 +1311,12 @@ class PostgresManager(metaclass=SingletonMeta):
                 END IF;
             END $$
             """,
+            # 反馈列表管理：消息反馈加处理状态列（默认 pending），存量行自动回填
+            (
+                "ALTER TABLE IF EXISTS message_feedbacks ADD COLUMN IF NOT EXISTS "
+                "status VARCHAR(20) NOT NULL DEFAULT 'pending'"
+            ),
+            "CREATE INDEX IF NOT EXISTS ix_message_feedbacks_status ON message_feedbacks(status)",
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警

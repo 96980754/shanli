@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.services.curated_qa_service import CuratedQAService
-from yuxi.storage.postgres.models_business import User
+from yuxi.storage.postgres.models_business import MessageFeedback, User
 
 
 curated_qa_dashboard = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -50,4 +51,9 @@ async def save_feedback_qa_pair(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if item is None:
         raise HTTPException(status_code=404, detail="反馈记录不存在")
+    # 从反馈调优落库即视为已处理，幂等；行内手动标记走 PATCH status 单独管理
+    await db.execute(
+        update(MessageFeedback).where(MessageFeedback.id == feedback_id).values(status="processed")
+    )
+    await db.commit()
     return {"item": item}

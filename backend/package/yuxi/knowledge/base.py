@@ -1065,36 +1065,14 @@ class KnowledgeBase(ABC):
             操作结果
         """
         if kb_id in self.databases_meta:
-            from yuxi.knowledge.utils.kb_utils import is_minio_url, parse_minio_url
             from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
             from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
             from yuxi.storage.minio import get_minio_client
 
+            # 1. 前缀级联清理：本库原始文档 / 解析 markdown / 清洗草稿 / 图片都存放在
+            #    {kb_id}/ 前缀下（documents 与 parsed 同桶 knowledgebases，images 桶 public），
+            #    一次按前缀列删即可覆盖，无需再逐文件记录串行删除，避免每个对象删两遍。
             minio_client = get_minio_client()
-            file_repo = KnowledgeFileRepository()
-
-            # 1. 删除文件元数据中记录的 MinIO 文件
-            after_file_id = None
-            while True:
-                records = await file_repo.list_by_kb_id_after(kb_id, after_file_id=after_file_id, limit=500)
-                if not records:
-                    break
-                after_file_id = records[-1].file_id
-                for record in records:
-                    file_id = record.file_id
-                    file_path = record.minio_url or record.path
-                    if file_path and is_minio_url(file_path):
-                        try:
-                            bucket_name, object_name = parse_minio_url(file_path)
-                            await minio_client.adelete_file(bucket_name, object_name)
-                        except Exception as e:
-                            logger.warning(f"Failed to delete MinIO file {file_path}: {e}")
-
-                    # 删除解析后的 markdown 文件
-                    parsed_object = f"{kb_id}/parsed/{file_id}.md"
-                    await minio_client.adelete_file(minio_client.KB_BUCKETS["parsed"], parsed_object)
-
-            # 2. 并行删除所有知识库 bucket 中该 kb_id 下的文件
             prefix = f"{kb_id}/"
             cleanup_buckets = {
                 minio_client.KB_BUCKETS["parsed"],
@@ -1106,8 +1084,9 @@ class KnowledgeBase(ABC):
             ]
             await asyncio.gather(*cleanup_tasks)
 
-            # 3. 删除数据库记录
+            # 2. 删除数据库记录（单条批量 DELETE，子表依赖 DB 级级联）
             del self.databases_meta[kb_id]
+            file_repo = KnowledgeFileRepository()
             await file_repo.delete_by_kb_id(kb_id)
             kb_repo = KnowledgeBaseRepository()
             await kb_repo.delete(kb_id)
@@ -1658,13 +1637,14 @@ class KnowledgeBase(ABC):
         return {"filename": new_prefix.rstrip("/")}
 
     @abstractmethod
-    async def delete_file(self, kb_id: str, file_id: str) -> None:
+    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = True) -> None:
         """
         删除文件
 
         Args:
             kb_id: 数据库ID
             file_id: 文件ID
+            family: 是否连同同一 logical_document_id 的版本链一并删除（默认 True）
         """
         pass
 

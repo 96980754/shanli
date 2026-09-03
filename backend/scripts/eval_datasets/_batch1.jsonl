@@ -1,0 +1,10 @@
+{"index": 47, "section": "调度台", "query": "调度台-终端定位不准确", "gold_answer": "确认机型、apk版本、rom版本，问题账号（终端账号、调度台账号）进行验证"}
+{"index": 48, "section": "调度台", "query": "调度台-切换为阿拉伯语无法使用", "gold_answer": "验证问题 2.问题复现3.开发替换语言包"}
+{"index": 49, "section": "调度台", "query": "调度台-轨迹回放选择时间页面显示中文", "gold_answer": "验证问题-问题复现-开发优化"}
+{"index": 50, "section": "调度台", "query": "调度台-馈轨迹回放导出时间错误", "gold_answer": "验证问题-问题复现-开发优化"}
+{"index": 51, "section": "调度台", "query": "调度台-词条翻译不准确", "gold_answer": "验证问题-问题复现-开发优化"}
+{"index": 52, "section": "调度台", "query": "调度台-调度台证码不更新问题", "gold_answer": "关闭ipv6服务"}
+{"index": 53, "section": "调度台", "query": "调度台-e600在调度台上的定位时间快7个小时", "gold_answer": "验证问题-问题复现-开发优化"}
+{"index": 54, "section": "调度台", "query": "调度台-调度台报错", "gold_answer": "关联查看报错日志方法"}
+{"index": 55, "section": "调度台", "query": "调度台-不显示背景图", "gold_answer": "验证问题-问题复现-交付解决"}
+{"index": 56, "section": "调度台", "query": "调度台-轨迹回放不显示", "gold_answer": "检查绑路模式是否开启 2、定位点是否更新 3、缩短时间范围查询是否显示"}

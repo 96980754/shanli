@@ -14,9 +14,14 @@
 
     <template v-else>
       <div class="metric-grid">
+        <div class="metric-card satisfaction">
+          <div class="metric-label">{{ $t('feedback.satisfactionInclSilentLabel') }}</div>
+          <div class="metric-value">{{ formatRate(summary?.satisfaction_rate) }}</div>
+          <div class="metric-sub">{{ $t('feedback.participationLabel') }} {{ formatRate(summary?.participation_rate) }}</div>
+        </div>
         <div class="metric-card">
-          <div class="metric-label">{{ $t('feedback.totalFeedbackLabel') }}</div>
-          <div class="metric-value">{{ summary?.total_feedbacks || 0 }}</div>
+          <div class="metric-label" :title="$t('feedback.evaluableTooltip')">{{ $t('feedback.evaluableLabel') }}</div>
+          <div class="metric-value">{{ summary?.evaluable_count || 0 }}</div>
         </div>
         <div class="metric-card positive">
           <div class="metric-label">{{ $t('feedback.likeLabel') }}</div>
@@ -26,9 +31,13 @@
           <div class="metric-label">{{ $t('feedback.dislikeLabel') }}</div>
           <div class="metric-value">{{ summary?.dislike_count || 0 }}</div>
         </div>
-        <div class="metric-card satisfaction">
-          <div class="metric-label">{{ $t('dash.satisfactionRate') }}</div>
-          <div class="metric-value">{{ formatRate(summary?.satisfaction_rate) }}</div>
+        <div class="metric-card">
+          <div class="metric-label">{{ $t('feedback.silentLabel') }}</div>
+          <div class="metric-value">{{ summary?.silent_count || 0 }}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">{{ $t('feedback.totalFeedbackLabel') }}</div>
+          <div class="metric-value">{{ summary?.total_feedbacks || 0 }}</div>
         </div>
       </div>
 
@@ -61,6 +70,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Empty, message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
+import { feedbackReasonKey } from '@/utils/feedbackReason'
 
 const { t } = useI18n()
 
@@ -76,7 +86,13 @@ const loading = ref(false)
 const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
 
 const reasonRows = computed(() => {
-  const rows = Array.isArray(summary.value?.reason_stats) ? [...summary.value.reason_stats] : []
+  const rows = (Array.isArray(summary.value?.reason_stats) ? [...summary.value.reason_stats] : []).map(
+    (item) => {
+      // reason_stats 的 label 是后端中文规范值；按 code 本地化为当前界面语言
+      const key = feedbackReasonKey(item.code)
+      return key ? { ...item, label: t(key) } : item
+    }
+  )
   const legacyCount = Number(summary.value?.legacy_unclassified_count || 0)
   if (legacyCount > 0) {
     rows.push({ code: 'legacy_unclassified', label: t('feedback.legacyUnclassifiedLabel'), count: legacyCount })
@@ -158,7 +174,7 @@ defineExpose({ refresh: loadSummary })
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -193,6 +209,12 @@ defineExpose({ refresh: loadSummary })
   font-size: 24px;
   font-weight: 700;
   line-height: 1.1;
+}
+
+.metric-sub {
+  margin-top: 4px;
+  color: var(--gray-500);
+  font-size: 12px;
 }
 
 .reason-panel {

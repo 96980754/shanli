@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -37,45 +37,33 @@ def _is_https_url(value: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc)
 
 
-def _parse_wecom_customer_service_urls(raw: str) -> dict[str, str]:
-    """解析 WECOM_CUSTOMER_SERVICE_URLS 环境变量（JSON：{业务域: URL}）。"""
-    if not raw.strip():
-        return {}
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning("企微客服域名 URL 配置不是合法 JSON，已忽略: {}", raw[:120])
-        return {}
-    if not isinstance(payload, dict):
-        logger.warning("企微客服域名 URL 配置应为 JSON 对象，已忽略")
-        return {}
-    return {str(key).strip(): str(value).strip() for key, value in payload.items() if str(value).strip()}
+def _normalize_wecom_customer_service_urls(value: Any) -> list[str]:
+    """把客服入口配置归一为 URL 列表。
 
-
-def _normalize_wecom_customer_service_url(value: Any) -> str:
-    url = str(value or "").strip()
-    if url and not _is_https_url(url):
-        raise ValueError(f"企微客服 URL 必须是 https 地址: {url[:80]}")
-    return url
-
-
-def _normalize_wecom_customer_service_urls(value: Any) -> dict[str, str]:
+    接受：字符串（单条；逗号/换行分隔多条）、URL 字符串列表。历史「按业务域 URL
+    映射」（dict）在拆域路由后残留，一律忽略返回空列表，不作为客服池。
+    """
     if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ValueError("企微客服域名 URL 配置必须是 {业务域: https地址} 的映射")
-    normalized = {}
-    for key, url in value.items():
-        domain = str(key).strip()
-        if not domain:
+        return []
+    if isinstance(value, dict):
+        # 拆域路由前的域映射残留：忽略（决策③ 后不再有该语义）。
+        return []
+    if isinstance(value, str):
+        parts = re.split(r"[\n,]", value)
+    elif isinstance(value, (list, tuple)):
+        parts = value
+    else:
+        raise ValueError("客服入口配置必须为 URL 字符串或 URL 列表")
+
+    urls: list[str] = []
+    for raw in parts:
+        url = str(raw or "").strip()
+        if not url:
             continue
-        clean_url = str(url or "").strip()
-        if not clean_url:
-            continue
-        if not _is_https_url(clean_url):
-            raise ValueError(f"企微客服域名 {domain} 的 URL 必须是 https 地址: {clean_url[:80]}")
-        normalized[domain] = clean_url
-    return normalized
+        if not _is_https_url(url):
+            raise ValueError(f"企微客服 URL 必须是 https 地址: {url[:80]}")
+        urls.append(url)
+    return urls
 
 
 class Config(BaseModel):
@@ -153,15 +141,12 @@ class Config(BaseModel):
     sandbox_max_output_bytes: int = Field(default=262144, description="沙箱最大输出字节数")
     sandbox_keepalive_interval_seconds: int = Field(default=30, description="沙箱保活间隔")
 
-    # 拒答转人工：企微客服入口（管理界面可配，保存后立即生效并同步到各进程）。
-    # 环境变量 WECOM_CUSTOMER_SERVICE_URL / WECOM_CUSTOMER_SERVICE_URLS 仅作为首次启动的默认值。
-    wecom_customer_service_url: str = Field(
-        default="",
-        description="企微客服（微信客服）入口 URL；未配置或非 https 时转人工不可用",
-    )
-    wecom_customer_service_urls: dict[str, str] = Field(
-        default_factory=dict,
-        description="按业务域配置企微客服入口 URL，如 {\"diaodutai\": \"https://...\"}；未配置的域回退全局 URL",
+    # 拒答转人工：企微客服入口池（管理界面可配，保存后立即生效并同步到各进程）。
+    # 支持配置 1..N 个客服 URL；转人工时在有效列表内轮替转接。
+    # 环境变量 WECOM_CUSTOMER_SERVICE_URL 仅作为首次启动默认（多条用逗号/换行分隔）。
+    wecom_customer_service_urls: list[str] = Field(
+        default_factory=list,
+        description="企微客服（微信客服）入口 URL 列表；转人工轮替转接；留空或非 https 时转人工不可用",
     )
 
     _config_file: Path | None = PrivateAttr(default=None)
@@ -192,6 +177,9 @@ class Config(BaseModel):
             for key, value in user_config.items():
                 if key in READONLY_CONFIG_FIELDS:
                     logger.warning(f"Readonly config key ignored: {key}")
+                elif key == "wecom_customer_service_url":
+                    # 旧单值客服入口：迁移到列表字段，下面统一处理。
+                    continue
                 elif key in type(self).model_fields:
                     try:
                         setattr(self, key, self._normalize_config_value(key, value))
@@ -199,6 +187,14 @@ class Config(BaseModel):
                         logger.warning(f"Invalid config key ignored: {key} ({exc})")
                 else:
                     logger.warning(f"Unknown config key: {key}")
+
+            # 旧单值 wecom_customer_service_url 迁移为列表首条（新列表为空时）。
+            legacy_wecom_url = user_config.get("wecom_customer_service_url")
+            if legacy_wecom_url and not self.wecom_customer_service_urls:
+                try:
+                    self.wecom_customer_service_urls = _normalize_wecom_customer_service_urls(legacy_wecom_url)
+                except ValueError as exc:
+                    logger.warning(f"Invalid legacy wecom URL ignored: {exc}")
 
         except Exception as e:
             logger.error(f"Failed to load config from {self._config_file}: {e}")
@@ -222,12 +218,10 @@ class Config(BaseModel):
         )
 
         # 企微客服入口：环境变量仅作首次启动默认；管理界面保存过（base.toml 已持久化）后以此为准。
-        if not self.wecom_customer_service_url:
-            self.wecom_customer_service_url = (os.getenv("WECOM_CUSTOMER_SERVICE_URL") or "").strip()
         if not self.wecom_customer_service_urls:
-            self.wecom_customer_service_urls = _parse_wecom_customer_service_urls(
-                os.getenv("WECOM_CUSTOMER_SERVICE_URLS", "")
-            )
+            env_wecom = (os.getenv("WECOM_CUSTOMER_SERVICE_URL") or "").strip()
+            if env_wecom:
+                self.wecom_customer_service_urls = _normalize_wecom_customer_service_urls(env_wecom)
 
         if self.sandbox_provider.lower() != "provisioner":
             raise ValueError("Only sandbox_provider=provisioner is supported.")
@@ -311,8 +305,6 @@ class Config(BaseModel):
     def _normalize_config_value(self, key: str, value: Any) -> Any:
         if key == "default_ocr_engine":
             return _normalize_default_ocr_engine(value)
-        if key == "wecom_customer_service_url":
-            return _normalize_wecom_customer_service_url(value)
         if key == "wecom_customer_service_urls":
             return _normalize_wecom_customer_service_urls(value)
         return value

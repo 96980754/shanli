@@ -407,3 +407,37 @@ async def test_list_version_chains_batches_replacement_history(monkeypatch):
 
     assert [record.file_id for record in chains["file-v2"]] == ["file-v2", "file-v1"]
     assert session.execute.await_count == 2
+
+
+async def test_list_version_chains_logical_query_keeps_superseded_original(monkeypatch):
+    """bug2（验收③）：被 supersede 归档的原首版没有 activated_at（原始上传不经
+    activate_candidate），家族查询须按「激活过或已被替换归档」纳入，问答侧版本提示才可见。"""
+    current = SimpleNamespace(
+        file_id="file-v2",
+        kb_id="kb-1",
+        logical_document_id="logical-1",
+        previous_version_id=None,
+    )
+    session = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                ScalarResult(scalars=[current]),
+                ScalarResult(scalars=[current]),
+            ]
+        )
+    )
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    await KnowledgeFileRepository().list_version_chains_for_current_files(
+        kb_id="kb-1",
+        file_ids=["file-v2"],
+    )
+
+    logical_query = str(session.execute.call_args_list[1].args[0])
+    assert "activated_at IS NOT NULL" in logical_query
+    assert "superseded_at IS NOT NULL" in logical_query

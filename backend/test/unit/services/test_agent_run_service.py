@@ -1482,3 +1482,151 @@ def test_compact_stream_chunk_retains_compression_field():
 
     assert compact["status"] == "context_compression"
     assert compact["compression"] == {"type": "yuxi.context_compression", "status": "started"}
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_with_industry_solution_marks_payload_flag(monkeypatch: pytest.MonkeyPatch):
+    # 行业方案结构化请求（industry_solution 命中 extra_metadata）→ run payload 打标，
+    # worker/chat_service 据此放开 industry-solution 技能门禁。
+    db = _patch_agent_run_creation(monkeypatch)
+    industry_input = build_chat_input_message(
+        "为园区输出通信行业方案",
+        None,
+        industry_solution={"industry": "智慧园区", "requirement": "输出方案文档", "products": []},
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=industry_input,
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-ind"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    assert db.created_run_kwargs["input_payload"]["model_spec"] == "agent-default-model"
+    assert db.created_run_kwargs["input_payload"]["industry_solution"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_plain_has_no_industry_solution_flag(monkeypatch: pytest.MonkeyPatch):
+    # 普通主对话不带结构化标记 → payload 不含 industry_solution，门禁摘除技能。
+    db = _patch_agent_run_creation(monkeypatch)
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("再去寻找一些内容"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-plain"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    assert db.created_run_kwargs["input_payload"] == {"model_spec": "agent-default-model"}
+    assert "industry_solution" not in db.created_run_kwargs["input_payload"]
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_with_version_ask_marks_payload_flag(monkeypatch: pytest.MonkeyPatch):
+    # 历史版本阅读/对比结构化请求（version_ask 作为 kwarg 传入）→ chat run payload
+    # 打标，worker 据此分派到封闭的 document_version 生成器。
+    db = _patch_agent_run_creation(monkeypatch)
+    version_ask = {
+        "kb_id": "kb-1",
+        "action": "compare",
+        "file_ids": ["f-1", "f-2"],
+        "title": "运营手册",
+        "versions": [
+            {"file_id": "f-1", "document_version": 1.1, "filename": "运营手册_V1.1.docx", "is_current": False},
+            {"file_id": "f-2", "document_version": 1.2, "filename": "运营手册_V1.2.docx", "is_current": True},
+        ],
+    }
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("对比《运营手册》V1.1 与 V1.2"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-ver"},
+        current_uid="user-1",
+        db=db,
+        version_ask=version_ask,
+    )
+
+    assert db.created_run_kwargs["input_payload"]["model_spec"] == "agent-default-model"
+    assert db.created_run_kwargs["input_payload"]["version_ask"] == version_ask
+    assert "industry_solution" not in db.created_run_kwargs["input_payload"]
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_plain_has_no_version_ask_flag(monkeypatch: pytest.MonkeyPatch):
+    # 普通主对话不传 version_ask → payload 不含该键，worker 走原分派。
+    db = _patch_agent_run_creation(monkeypatch)
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("再去寻找一些内容"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-plain-ver"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    assert "version_ask" not in db.created_run_kwargs["input_payload"]
+
+
+@pytest.mark.asyncio
+async def test_create_resume_run_inherits_parent_industry_solution_flag(monkeypatch: pytest.MonkeyPatch):
+    # 中断续答不重发结构化标记：resume 继承父 run payload 的 industry_solution，
+    # 保证行业方案流程中断续答期间技能不被门禁摘除。
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        parent_run=SimpleNamespace(
+            id="parent-run",
+            conversation_thread_id="thread-1",
+            status="interrupted",
+            input_payload={"model_spec": "parent-model", "industry_solution": True},
+        ),
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=None,
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "resume-ind"},
+        current_uid="user-1",
+        db=db,
+        model_spec="ignored-model",
+        resume={"q1": ["continue"]},
+        created_by_run_id="parent-run",
+    )
+
+    assert db.created_run_kwargs["input_payload"]["model_spec"] == "parent-model"
+    assert db.created_run_kwargs["input_payload"]["industry_solution"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_resume_run_plain_parent_has_no_industry_solution_flag(monkeypatch: pytest.MonkeyPatch):
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        parent_run=SimpleNamespace(
+            id="parent-run",
+            conversation_thread_id="thread-1",
+            status="interrupted",
+            input_payload={"model_spec": "parent-model"},
+        ),
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=None,
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "resume-plain"},
+        current_uid="user-1",
+        db=db,
+        model_spec="ignored-model",
+        resume={"language": "python"},
+        created_by_run_id="parent-run",
+    )
+
+    assert db.created_run_kwargs["input_payload"]["model_spec"] == "parent-model"
+    assert "industry_solution" not in db.created_run_kwargs["input_payload"]

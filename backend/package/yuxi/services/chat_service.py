@@ -24,6 +24,7 @@ from langchain.messages import AIMessage, AIMessageChunk
 from langgraph.types import Command
 from yuxi import config as conf
 from yuxi.agents.buildin import agent_manager
+from yuxi.agents.buildin.chatbot.prompt import SCOPE_REFUSAL_REPLY
 from yuxi.agents.context import build_agent_input_context, normalize_agent_context_config
 from yuxi.agents.state import AgentStatePayload
 from yuxi.repositories.agent_repository import AgentRepository
@@ -33,14 +34,19 @@ from yuxi.repositories.subagent_thread_repository import SubagentThreadRepositor
 from yuxi.services.conversation_service import serialize_attachment
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.knowledge_answer_disposition import (
+    DISPOSITION_SCHEMA_VERSION,
     HANDOFF_REFUSAL_TYPES,
     apply_knowledge_disposition,
     apply_refusal_judgment,
     build_knowledge_evidence,
+    collect_turn_tool_names,
     is_final_assistant_message,
+    is_handoff_disposition,
     judge_refusal,
+    no_evidence_disposition,
 )
 from yuxi.services.knowledge_gap_service import record_knowledge_gap
+from yuxi.services.knowledge_scope_gate import build_scope_corpus, evaluate_scope
 from yuxi.services.langfuse_service import (
     LangfuseRunContext,
     build_run_context,
@@ -52,10 +58,35 @@ from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Agent, User
 from yuxi.utils.guard import content_guard
 from yuxi.utils.logging_config import logger
+from yuxi.utils.paths import VIRTUAL_PATH_OUTPUTS, VIRTUAL_PATH_UPLOADS, VIRTUAL_SKILLS_PATH
 from yuxi.utils.question_utils import (
     normalize_questions as _normalize_interrupt_questions,
 )
 from yuxi.utils.thread_utils import extract_thread_id as _metadata_thread_id
+
+# 顶层主对话（含 resume，非 subagent）的沙箱只读范围：本线程 uploads/outputs + skills，
+# 排除跨会话共享的 workspace——其内容不作为回答依据。subagent/生成类子流保持全量。
+_MAIN_CHAT_READ_ROOTS = (VIRTUAL_PATH_UPLOADS, VIRTUAL_PATH_OUTPUTS, VIRTUAL_SKILLS_PATH)
+
+
+def _apply_main_chat_read_scope(context, *, run_type: str | None) -> None:
+    """给主对话上下文注入受限读根：沙箱后端据此只读本会话 uploads/outputs + skills。"""
+    if run_type != "subagent":
+        setattr(context, "fs_read_roots", _MAIN_CHAT_READ_ROOTS)
+
+
+def _apply_industry_solution_skill_gate(context, *, run_type: str | None, industry_enabled: bool) -> None:
+    """行业方案（Word 交付）技能改显式门禁：仅结构化 industry_solution 请求放开。
+
+    普通主对话（chat/resume）不再广告/自激活 industry-solution，避免模型因一句
+    泛化指令（如「再去寻找一些内容」）擅自进入行业方案流程；subagent 等内层流
+    不受影响（由上层门禁决定是否进入）。
+    """
+    if run_type not in ("chat", "resume") or industry_enabled:
+        return
+    skills = list(getattr(context, "skills", None) or [])
+    if "industry-solution" in skills:
+        context.skills = [slug for slug in skills if slug != "industry-solution"]
 
 
 def _build_state_files(attachments: list[dict]) -> dict:
@@ -361,6 +392,8 @@ def _tool_output_as_dict(output: Any) -> dict[str, Any] | None:
 
 
 def _requires_knowledge_preflight(agent_backend_id: str, query: str) -> bool:
+    # 问候/寒暄、自我介绍类（你是谁/能做什么）等非业务提问不走知识库预检与入口门，
+    # 直接交主模型应答（身份类由提示词约束回复 IDENTITY_REPLY）。
     return agent_backend_id == "ChatbotAgent" and query.strip().lower().strip("，。！？!?、 ") not in {
         "你好",
         "您好",
@@ -369,7 +402,68 @@ def _requires_knowledge_preflight(agent_backend_id: str, query: str) -> bool:
         "hello",
         "在吗",
         "在么",
+        "你是谁",
+        "你是谁呀",
+        "你是什么",
+        "你是做什么的",
+        "你们是谁",
+        "你们是做什么的",
+        "你能做什么",
+        "你能干什么",
+        "能做什么",
+        "介绍一下你自己",
+        "介绍下你自己",
+        "介绍一下你",
+        "who are you",
+        "what are you",
+        "what can you do",
     }
+
+
+async def _get_last_assistant_message(conv_repo: ConversationRepository, thread_id: str):
+    """返回 thread 内最新一条已落库 assistant 消息；无则 None（仅在首答轮之前调用，开销低）。"""
+    try:
+        messages = await conv_repo.get_messages_by_thread_id(thread_id, limit=50)
+    except Exception as exc:  # noqa: BLE001 — 查询失败按“无前文”处理，不阻断问答
+        logger.warning("读取会话前文失败: {}", exc)
+        return None
+    for message in reversed(messages):
+        if getattr(message, "role", "") == "assistant":
+            return message
+    return None
+
+
+def _assistant_meta_is_answer(extra_metadata: dict | None) -> bool:
+    """一条已落库 assistant 消息是否属“正常回答”。
+
+    预检拒绝/跑题拒绝/报错消息都带 handoff 或 error 标记、或 disposition 为拒答类型，
+    视为未作答；引入 disposition 前的旧消息按正常回答处理。
+    """
+    meta = dict(extra_metadata or {})
+    if meta.get("handoff_available") or meta.get("is_error") or meta.get("error_type"):
+        return False
+    disposition = meta.get("knowledge_disposition") or {}
+    if disposition.get("type"):
+        return disposition.get("type") == "answered"
+    return True
+
+
+async def _thread_has_answered_turn(conv_repo: ConversationRepository, thread_id: str) -> bool:
+    """thread 是否已进入正常问答（上一条 assistant 是正常回答）。
+
+    入口门与零命中预检只对「尚无正常作答的首答轮」触发；续答轮放行主模型结合上下文作答。
+    """
+    message = await _get_last_assistant_message(conv_repo, thread_id)
+    return bool(message) and _assistant_meta_is_answer(getattr(message, "extra_metadata", None))
+
+
+async def _last_assistant_has_kb_evidence(conv_repo: ConversationRepository, thread_id: str) -> bool:
+    """紧邻上一条 assistant 消息是否带 ok 检索证据（决策② 续答轮豁免判定）。"""
+    message = await _get_last_assistant_message(conv_repo, thread_id)
+    if message is None:
+        return False
+    evidence = (getattr(message, "extra_metadata", None) or {}).get("knowledge_evidence") or {}
+    return bool(evidence) and any(query.get("status") == "ok" for query in (evidence.get("queries") or []))
 
 
 @dataclass
@@ -631,27 +725,6 @@ async def save_partial_message(
         return None
 
 
-async def _resolve_agent_domain(conv_repo: ConversationRepository, thread_id: str) -> str | None:
-    """从会话对应 Agent 的配置解析业务域（Agent.config_json.escalation.domain）。
-
-    仅拒答时调用；解析失败或未配置返回 None，由调用方落 unknown。
-    """
-    try:
-        conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
-        agent_slug = str(getattr(conversation, "agent_id", "") or "")
-        if not agent_slug:
-            return None
-        async with pg_manager.get_async_session_context() as session:
-            agent = await AgentRepository(session).get_by_slug(agent_slug)
-        if agent is None:
-            return None
-        domain = (agent.config_json or {}).get("escalation", {}).get("domain")
-        return str(domain).strip() or None
-    except Exception as exc:  # noqa: BLE001 — 域解析失败不影响消息保存
-        logger.warning("解析 agent 业务域失败，按 unknown 处理: {}", exc)
-        return None
-
-
 async def save_messages_from_langgraph_state(
     agent_instance,
     thread_id: str,
@@ -668,6 +741,9 @@ async def save_messages_from_langgraph_state(
 
     existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
     knowledge_question, knowledge_evidence = build_knowledge_evidence(messages)
+    # 决策② 依据：本轮实际调用的工具名集合 + 上一条已落库回答是否带 ok 检索证据（续答豁免）。
+    turn_tool_names = collect_turn_tool_names(messages)
+    prev_answer_has_evidence = await _last_assistant_has_kb_evidence(conv_repo, thread_id)
 
     last_ai_message = None
     final_ai_message = None
@@ -708,15 +784,25 @@ async def save_messages_from_langgraph_state(
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
                 msg_dict["knowledge_disposition"] = disposition
+            # 决策② 无依据不输出兜底：模型对业务内问题零检索硬答（守规失败）→ 按知识缺口拒答并转人工。
+            # 豁免：身份/寒暄正文、本轮用了合法来源工具（文件/图片/联网/文档等）、紧邻带 ok 证据回答的续答轮。
+            if disposition.get("type") == "answered":
+                no_evidence = no_evidence_disposition(
+                    msg_dict,
+                    evidence=knowledge_evidence,
+                    tool_names=turn_tool_names,
+                    continuation_with_evidence=prev_answer_has_evidence,
+                )
+                if no_evidence is not None:
+                    disposition = no_evidence
+                    msg_dict["knowledge_disposition"] = disposition
+                    msg_dict["knowledge_no_evidence"] = True
             if disposition.get("type") in HANDOFF_REFUSAL_TYPES or disposition.get("type") == "policy_refusal":
-                # 业务域：agent 绑域优先（零调用、可靠），judge 猜测仅在未绑定时兜底。
-                agent_domain = await _resolve_agent_domain(conv_repo, thread_id)
-                if agent_domain:
-                    disposition["domain"] = agent_domain
-                else:
-                    disposition.setdefault("domain", "unknown")
+                # 业务域仅作统计标签且不再有 agent 级配置来源：无检索证据拒答经 judge 细分时
+                # 域已由 apply_refusal_judgment 写入，其余（如 insufficient_evidence）落 unknown。
+                disposition.setdefault("domain", "unknown")
                 msg_dict["knowledge_disposition"] = disposition
-                if disposition.get("type") in HANDOFF_REFUSAL_TYPES:
+                if is_handoff_disposition(disposition):
                     msg_dict["handoff_available"] = True
                     msg_dict["handoff_query"] = knowledge_question or ""
             last_ai_message = await _save_ai_message(
@@ -1042,6 +1128,12 @@ async def stream_agent_chat(
     _apply_model_override(input_context, meta)
     _apply_subagent_runtime_context(input_context, meta)
     context = _build_agent_context(agent, input_context)
+    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
+    _apply_industry_solution_skill_gate(
+        context,
+        run_type=meta.get("run_type"),
+        industry_enabled=bool(meta.get("industry_solution")),
+    )
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,
@@ -1109,8 +1201,50 @@ async def stream_agent_chat(
         await db.commit()
 
         # 先构建 langgraph_config
-        if not image_content and _requires_knowledge_preflight(agent_item.backend_id, query):
+        # 决策①：入口门与 0 命中预检只对「尚无正常作答的首答轮」触发；续答轮放行主模型结合上下文作答。
+        first_substantive = not await _thread_has_answered_turn(conv_repo, thread_id)
+        if first_substantive and not image_content and _requires_knowledge_preflight(agent_item.backend_id, query):
             try:
+                # 决策① 跑题入口门：明显业务外/闲聊问题在进主模型前拦截 → scope_refusal/off_topic（不转人工）。
+                # 语料构建或判定失败一律按业务内放行主模型（宁可放过不可误拦），由 ② 无证据兜底再兜一层。
+                corpus = await build_scope_corpus(
+                    uid=uid,
+                    system_prompt=context.system_prompt,
+                    enabled_kb_ids=context.knowledges,
+                )
+                scope_verdict = await evaluate_scope(query, corpus)
+                if scope_verdict == "off_topic":
+                    refusal, message_id = SCOPE_REFUSAL_REPLY, f"scope-{meta['request_id']}"
+                    await conv_repo.add_message_by_thread_id(
+                        thread_id=thread_id,
+                        role="assistant",
+                        content=refusal,
+                        message_type="text",
+                        extra_metadata={
+                            "id": message_id,
+                            "knowledge_disposition": {
+                                "schema_version": DISPOSITION_SCHEMA_VERSION,
+                                "type": "scope_refusal",
+                                "reason": "off_topic",
+                            },
+                        },
+                        run_id=meta.get("run_id"),
+                        request_id=meta.get("request_id"),
+                    )
+                    await db.commit()
+                    yield make_chunk(
+                        content=refusal,
+                        status="loading",
+                        stream_event={
+                            "type": "message_delta",
+                            "message_id": message_id,
+                            "content": refusal,
+                        },
+                        meta=meta,
+                    )
+                    yield make_chunk(status="finished", meta=meta)
+                    return
+
                 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 
                 results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
@@ -1410,6 +1544,12 @@ async def stream_agent_resume(
     )
     _apply_model_override(input_context, meta)
     context = _build_agent_context(agent, input_context)
+    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
+    _apply_industry_solution_skill_gate(
+        context,
+        run_type=meta.get("run_type"),
+        industry_enabled=bool(meta.get("industry_solution")),
+    )
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,

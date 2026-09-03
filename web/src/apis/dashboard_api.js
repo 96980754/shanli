@@ -51,19 +51,38 @@ export const dashboardApi = {
   },
 
   /**
-   * 获取用户反馈列表
+   * 获取用户反馈列表（分页）
    * @param {Object} params - 查询参数
-   * @param {string} params.rating - 反馈类型过滤 (like/dislike/all)
+   * @param {string} params.rating - 反馈类型过滤 (like/dislike)
+   * @param {string} params.status - 处理状态过滤 (pending/processed/ignored)
+   * @param {string} params.keyword - 关键词（匹配消息原文/会话标题/用户）
    * @param {string} params.agent_id - 智能体ID过滤
-   * @returns {Promise<Array>} - 反馈列表
+   * @param {number} params.limit - 每页条数
+   * @param {number} params.offset - 偏移量
+   * @param {string} params.order_by - 排序 (created_desc/created_asc)
+   * @returns {Promise<Object>} - { total, items } 反馈列表
    */
   getFeedbacks: (params = {}) => {
     const queryParams = new URLSearchParams()
     if (params.rating && params.rating !== 'all') queryParams.append('rating', params.rating)
+    if (params.status && params.status !== 'all') queryParams.append('status', params.status)
+    if (params.keyword) queryParams.append('keyword', params.keyword)
     if (params.agent_id) queryParams.append('agent_id', params.agent_id)
+    if (params.limit) queryParams.append('limit', String(params.limit))
+    if (params.offset) queryParams.append('offset', String(params.offset))
+    if (params.order_by) queryParams.append('order_by', params.order_by)
 
     return apiAdminGet(`/api/dashboard/feedbacks?${queryParams.toString()}`)
   },
+
+  /**
+   * 更新反馈处理状态
+   * @param {number} feedbackId - 反馈ID
+   * @param {string} status - pending/processed/ignored
+   * @returns {Promise<Object>} - { id, status }
+   */
+  updateFeedbackStatus: (feedbackId, status) =>
+    apiSuperAdminPatch(`/api/dashboard/feedbacks/${feedbackId}/status`, { status }),
 
   getFeedbackTuningContext: (feedbackId) =>
     apiSuperAdminGet(`/api/dashboard/feedbacks/${feedbackId}/tuning-context`),

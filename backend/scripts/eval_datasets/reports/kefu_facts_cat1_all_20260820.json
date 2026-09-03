@@ -1,0 +1,857 @@
+{
+  "run_name": "cat1_all_20260820",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 0.08484848484848485,
+    "scored": 33,
+    "answered": 12,
+    "refusal_gap": 21,
+    "clarify_missing": 0,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 1,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600如何查看版本",
+      "gold_answer": "长按 音量“-” （下）键. 出现user后 再继续按下就会出现版本",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且与问题无关",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "长按音量“-”（下）键",
+        "出现user后再继续按下出现版本"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 2,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600如何切换平台",
+      "gold_answer": "长按侧边“+”键 进入切换平台页面，POC change Global 和Stars",
+      "agent_answer": "根据知识库检索结果，回答如下。\n\n## 结论\n\n知识库中没有 E600 机型专属的\"平台切换\"操作说明，但有 POCSTARS 终端/APP 切换登录环境（即切换平台）的通用记载，共两种方式：**终端 APP 内\"登录设置\"切换**（运行时）和**快速适配工具打包时配置环境**（打包时）。\n\n## 方式一：终端 APP 内\"登录设置\"切换平台\n\n依据《POCSTAR MiniServer V2.3-终端APP用户手册-20260601》3.1.10 节\"用户可以设置登录的环境\"：\n\n1. 在 APP 登录界面，选择\"登录设置\"；\n2. 配置环境参数，有两种方式：\n   - **方式一（手动配置）**：根据环境部署情况输入环境参数，其中 context（即 Brand）和 DNS 为必填项，提交；\n   - **方式二（扫码自动配置）**：点击登录设置页右上角的扫码按钮，扫描运营平台【用户列表 - APK 下载】功能生成的配置二维码，系统自动识别并填充 DNS、context 参数，无需手动输入；\n3. 退出应用，重新运行 APP 进行登录；\n4. 如需切回 POCSTARS 大公网环境，在登录设置中点击\"恢复默认设置\"即可。\n\n注意事项（同一手册记载）：\n- 登录超时 30s 并提示\"登录超时\"，表示当前配置的环境参数有误；\n- 扫码配置功能仅支持识别运营平台生成的标准配置二维码，其他二维码无法解析。\n\n说明：该手册为**大屏终端 APP** 用户手册；E600 为 1.77 英寸屏的 RTOS 终端，按《快速适配工具使用手册》的屏幕划分（<2.0 英寸为小屏类型）不属于大屏终端，该方式是否适用于 E600 知识库未明确记载。\n\n## 方式二：快速适配工具打包时配置环境（切换平台）\n\n依据《快速适配工具使用手册 V2.5》4.5 节\"根据场景修改终端适配配置\"：\n\n1. 启动快速适配工具，点击顶部\"APK 配置\"进入 APK 属性配置页面；\n2. 在\"环境配置\"中，环境信息预设了\"国内2.0大公网\"和\"海外大公网\"，根据需要切换对应的信息，点击【保存】；\n3. 若需配置其他环境，直接在下方的输入框中输入环境信息，点击【保存】；\n4. 按流程完成 APK 打包，将生成的 APK 安装到终端。\n\n注意事项（同一手册记载）：若设备此前安装过 POCSTARS APP，安装新 APP 时使用覆盖安装会导致配置不生效，需先卸载再安装新 APP。\n\n## 关于 E600 的说明\n\n- 知识库中 E600 资料（《E600 Brochure.pdf》《主推终端产品规格书20260118.xlsx》）确认：E600 为 POCSTARS 平台的 4G 公网对讲终端（RTOS 系统、1.77 英寸屏、支持 GPS/SOS），但均未记载平台切换操作；\n- 知识库未收录 E600 机型专属的用户手册或平台切换说明，以上两种方式为知识库中 POCSTARS 终端/APP 切换登录环境的通用记载，请结合实际情况确认适用性。\n\n## 来源\n\n- 知识库：poc-资料\n  - 《POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx》（3.1.10 节）\n  - 《快速适配工具使用手册 V2.5.pdf》（4.5 节、5.4 节）\n  - 《E600 Brochure.pdf》\n  - 《主推终端产品规格书20260118.xlsx》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了平台切换的相关操作说明，属于实质作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "长按侧边“+”键",
+        "进入切换平台页面",
+        "POC change Global 和Stars"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 3,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600流量消耗",
+      "gold_answer": "机型：E600东南亚 ROM版本：BQ_F1_E600_WORX_YY_EC600MCN_LE_SL_HW2in1_v1.01.16_250410（RTOS系统） 测试项 流量消耗（单位KB） 关定位待机 10分钟 12.58KB 开定位待机 10分钟 17.77KB 发射对讲 10分钟 518.05KB 接收对讲 10分钟 542.5KB",
+      "agent_answer": "根据知识库检索结果，E600 终端本身的产品规格（E600 Brochure、主推终端产品规格书）中没有标注流量消耗数据，但 E600 为 POCSTARS 平台 4G 公网对讲机，其流量消耗可参考 POCSTARS 平台产品白皮书中的软件性能指标（POC 终端流量参考值）。\n\n## POC 终端流量消耗参考值\n\n| 场景 | POCSTARS-MNO（AMR 编码） | POCSTARS-PRO（OPUS 编码） |\n|---|---|---|\n| GPS 开启待机流量 | 0.97M/24h（定位上报频率 40s） | 0.97M/24h（定位上报频率 40s） |\n| GPS 关闭待机流量 | 0.67M/24h（定位上报频率 40s） | 0.67M/24h（定位上报频率 40s） |\n| 语音呼叫流量 | 6.7M/h | 17.9M/h |\n\n## 说明\n\n1. 两个产品线的待机流量指标一致；语音呼叫流量不同，是因为编码方式不同：MNO 采用 AMR（自适应多速率）编码（语音质量评价 3.7），PRO 采用 OPUS 编码（语音质量评价 4.3）。\n2. E600 规格为 RTOS 系统、双 Micro SIM 卡、POCSTARS 平台（E600 Brochure），具体接入 MNO 还是 PRO 产品线，知识库中未明确说明。\n3. 知识库中未找到专门针对\"E600\"型号的流量实测数据，以上为 POCSTARS 平台软件性能指标中的终端流量参考值；实际消耗还与对讲时长、定位上报频率等因素相关。\n\n**来源：**\n- 《【修订中】POCSTARS MNO产品白皮书V1.1》（poc-资料，软件性能指标表）\n- 《POCSTARS PRO产品白皮书V1.1》（poc-资料，软件性能指标表）\n- 《E600 Brochure》（poc-资料）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕E600流量消耗给出了POCSTARS平台参考值，属于实质作答且切题。",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "关定位待机10分钟流量：12.58KB",
+        "开定位待机10分钟流量：17.77KB",
+        "发射对讲10分钟流量：518.05KB",
+        "接收对讲10分钟流量：542.5KB"
+      ],
+      "supp_missed": [
+        "测试机型为E600东南亚版本",
+        "ROM版本BQ_F1_E600...（RTOS系统）"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器调度台不显示定位",
+      "gold_answer": "确认有正常定位点：检查终端是否在能够获取GPS信号的位置（如在室外开阔地带）产生过有效的定位点。 2、第一次定位在室内开阔位置多停留一段时间",
+      "agent_answer": "基于知识库检索，未找到专门针对“CAT1 机型”的专项故障说明；但知识库中对“调度台显示定位”的机制和前提条件有明确记载。调度台不显示定位，通常是以下定位链路环节未满足所致，可按下列检查点排查。\n\n## 结论\n\n调度台要显示终端定位，需同时满足：终端支持定位且 GPS 功能已开启、平台/调度台已开启用户定位、终端在线并按频率上报。任一环节不满足，调度台即不显示定位。\n\n## 检查清单（现象—可能原因—检查方法—处理建议）\n\n| 检查项 | 可能原因 | 检查/处理方法 | 依据 |\n|---|---|---|---|\n| 1. 终端是否支持定位 | 终端无定位模块，无法上报位置 | 确认终端硬件是否带 GPS/GNSS。知识库记载：D11、D12 规格为 GNSS=None（无定位模块）；D21、D22 为 GNSS=Optional（选配）；E600 为 GPS；F10-U 支持北斗/GPS、UWB、蓝牙 | 主推终端产品规格书20260118；F10-U规格书 |\n| 2. 终端 GPS 功能是否开启 | 终端系统级 GPS 未开启，无法获取位置 | 在终端设备系统“设置”菜单（非 APP 内设置）中开启“位置信息/GPS”，安卓设备可在系统设置选择“高精度”定位模式 | POCSTAR MiniServer V2.3-终端APP用户手册 3.3.1、4.3 |\n| 3. 平台/调度台是否开启用户定位 | 用户定位默认关闭，未开启则不显示 | 在运营平台或调度台开启用户定位；调度台“设置定位”可远程开启/关闭终端 GPS | POCSTAR MiniServer V2.3-调度台用户手册 2.3.6、2.3.7 |\n| 4. 定位上报频率与开关 | 上报被调度台关闭，或频率设置过低 | 调度台“设置定位”中确认上报频率（范围 10S~300S）；关闭上报后调度台收不到新位置；终端侧默认 30s 上报一次（可设 10–120s） | 调度台用户手册 2.3.6；终端APP用户手册 3.3.2 |\n| 5. 定位显示操作 | 未触发定位查看，地图未刷新 | 在群组列表找到目标成员，点击其“定位”图标查看最新位置；使用地图“刷新”功能 | 调度台用户手册 2.3.7、2.3.2 |\n| 6. 信号与权限环境 | GPS 信号弱、定位服务不可用 | 到室外开阔处测试；海外版 APP 依赖 Google 定位服务，设备不支持或内地使用时位置相关界面不可用（提示“不支持 google play services”）；安卓 9.0 以上定位权限需设为“始终允许” | 终端APP用户手册 4.3、4.4 |\n\n## 补充说明\n\n- 知识库记载“GPS定位：个别终端无法定位、定位不更新或更新慢、定位偏差大”属于平台 P3-一般问题等级，可按故障处理流程上报处理。\n- 知识库中未检索到与“CAT1”机型相关的专项排查步骤；如上述检查均正常仍不显示定位，且需针对具体 CAT1 机型进一步确认，请补充说明具体终端型号和平台版本，以便继续核实。\n\n**依据来源**：POCSTAR MiniServer V2.3-调度台用户手册-20260601、POCSTAR MiniServer V2.3-终端APP用户手册-20260601（poc-资料）；主推终端产品规格书20260118、F10-U规格书（poc-资料）；MCSTARS Client用户手册V1.1.1、MCSTARS平台故障处理规范V1.0（MCX-资料）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了调度台不显示定位的排查清单和操作建议，实质作答且切题，因此通过硬门槛。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "确认有正常定位点：检查是否在GPS信号位置产生有效定位点",
+        "第一次定位在室内开阔位置需多停留一段时间"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器调度台定位飘",
+      "gold_answer": "在室内飘？室外如何 2、运动过程中轨迹是否正确，静止状态可能有飘的情况",
+      "agent_answer": "根据知识库检索结果，您的问题属于终端定位偏差类故障。知识库中没有针对“Cat.1 终端定位飘”的专项处理文档，但有以下可直接依据的内容，按故障排查结构整理如下：\n\n## 现象\n\nCat.1 终端在调度台 GIS 地图上显示的位置出现漂移/跳动（即“定位飘”），属于“GPS 定位偏差大”一类问题。\n\n## 可能原因（知识库明确记载）\n\n1. **GPS 定位本身存在米级精度波动**：知识库记载 GPS/北斗定位精度范围为 **5–10 米**（蓝牙 3–5 米，UWB 0.3–0.5 米），地图上位置在小范围内跳动可能属正常波动。\n2. **现场环境遮挡影响定位效果**：钢结构、厚墙、设备遮挡、楼层分隔、地下空间、4G 信号等都会影响定位效果；GPS 适合室外开阔区域，遮挡严重时精度会明显下降。\n3. **定位功能未正确开启**：终端用户定位**默认为关闭状态**，需由管理员开启后才能在地图上显示位置。\n4. **上报频率设置**：终端位置上报间隔可在 **10 秒～300 秒**范围内设置，上报间隔较长时位置刷新表现也会受影响。\n\n## 检查方法\n\n1. 确认运营平台中该终端定位已开启：进入“用户管理 → 定位设置”，给终端用户开启定位（默认关闭）。\n2. 确认终端 GPS 功能已开启：调度台“设置定位”页面可远程控制终端 GPS 的启用/禁用。\n3. 确认上报频率设置是否合理：调度台“设置定位”页面可设置 10S~300S 的位置上报间隔。\n4. 对照现场环境：确认终端使用位置是否位于室内、地下或遮挡严重区域。\n\n## 处理建议\n\n- 若位置波动在 **GPS 5–10 米精度范围**内，属正常现象；若现场遮挡严重，需结合现场勘查、地图规则、网络覆盖和业务需求进行优化。\n- 若为个别终端出现“无法定位、定位不更新或更新慢、定位偏差大”，按 MCSTARS 平台故障处理规范，此类问题归为 **P3 一般问题等级**，应按“故障上报 → 故障处理 → 故障复盘”流程处理（创建故障工单、定位原因、修复后验证）。\n\n## 来源\n\n- 《POCSTARS定位产品FAQ海外版》（定位资料）\n- 《POCSTARS 定位产品核心卖点与功能介绍V1.0》（定位资料）\n- 《POCSTAR MiniServer V2.3-调度台用户手册-20260601》（poc-资料）\n- 《POCSTAR MiniServer V2.3-运营平台用户手册-20260601》（poc-资料）\n- 《MCSTARS平台故障处理规范V1.0-20260625》（MCX-资料）\n\n需要说明：知识库未记载“Cat.1”机型专属的定位处理内容，以上依据为通用定位功能与故障等级说明。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对Cat.1终端调度台定位飘问题给出了定位偏差原因、检查方法和处理建议，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "未检查运动过程中轨迹是否正确"
+      ],
+      "supp_missed": [
+        "未说明静止状态可能有飘的情况"
+      ],
+      "score": 0.4,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Cat1机器是否支持修改心跳",
+      "gold_answer": "cat1机器不支持平台修改心跳",
+      "agent_answer": "**结论：支持。** POCSTARS 平台可在运营平台的\"设置公司服务\"中修改心跳（即终端与服务器的通讯周期），该设置为公司级服务参数，适用于公司名下的终端；知识库中未发现 CAT1 终端在修改心跳方面有特殊限制。\n\n**设置方式与参数**\n\n- 入口：运营平台 → 公司列表 →【设置】→ 服务设置界面，可开启/关闭功能并设置服务参数。\n- 心跳参数：**心跳（终端与服务器的通讯周期）**\n  - 设置范围：1s~60s\n  - 默认值：40s\n  - 建议值：2G/3G 网络建议设为 5s，4G 网络建议设为 40s\n  - 调整指引：出现规律性被呼不通的情况时，可减小该值调整；该值越小，流量和功耗消耗越大。\n\n**关于 CAT1 终端**\n\n- CAT1 终端是平台支持的终端类型之一，具备低功耗、广覆盖特性（MNO 产品白皮书、PRO 产品白皮书均有记载）。\n- 运营平台手册中\"大群组\"功能明确适用于使用 CAT1 终端的用户群体；心跳作为公司服务参数统一设置，未记载 CAT1 终端有例外或不可修改的说明。\n\n**来源**\n\n- POCSTARS运营平台用户手册V3.0-20260409.docx（poc-资料）\n- POCSTARS MNO产品白皮书V1.1.docx（poc-资料）\n- POCSTARS PRO产品白皮书V1.1.docx（poc-资料）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了明确结论和操作说明，属于实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "cat1机器不支持平台修改心跳"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D11 D22 EH01是否支持SOS",
+      "gold_answer": "D11 D22 EH01不支持SOS，（D系列都不支持SOS） 接受和发送都不支持 所以e600发了SOS,这几款都收不到",
+      "agent_answer": "## 结论\n\n根据现有知识库资料，**D11、D22、EH01 三款机型的规格书中均未记载 SOS 功能**；知识库中明确标注支持 SOS 的机型为 **E600** 和 **RC-26**。\n\n## 依据说明\n\n**1. 主推终端产品规格书（20260118）** 中逐机型列出的功能字段如下：\n\n| 机型 | SOS 字段 | 规格书记载情况 |\n|---|---|---|\n| D11 | 未列出 | 规格含 OS、网络频段、屏幕、摄像头（无）、电池、WiFi/蓝牙（无）、GNSS（无）、接口、SIM、尺寸、重量、配件等，**无 SOS 项** |\n| D22 | 未列出 | 规格含 OS、网络频段、屏幕、摄像头（无）、电池、WiFi/蓝牙（无）、GNSS（可选）、接口、SIM、尺寸、重量、配件等，**无 SOS 项** |\n| EH01 | 未列出 | 规格含网络频段、技术规格（频率容限、发射功率、灵敏度等）、基本参数（SIM 卡、尺寸、重量、电池、待机时间）、配件等，**无 SOS 项** |\n| E600 | Supported | 明确标注 **SOS: Supported**，且侧面按键为 4 个（PTT 键、音量+/-键、SOS 键） |\n| RC-26 | Supported | 明确标注 **SOS: Supported** |\n\n**2. 产品彩页/手册佐证**：D11 Brochure V1.4、D22 彩页 V1.4、EH01 Brochure 以及 D11、D22 的 User Manual 中均未检索到 SOS、紧急报警（Emergency）相关内容。\n\n综上，在现有知识库范围内，D11、D22、EH01 不支持 SOS（无记载）；如需确认硬件是否预留相关能力，建议以厂家最新确认或后续补充资料为准。\n\n**来源**：\n- poc-资料：《主推终端产品规格书20260118.xlsx》《D11 Brochure V1.4.pdf》《D22 彩页 V1.4.pdf》《EH01 Brochure.pdf》\n- POC-证书/认证：《D11 CE NB 正本/User manual.pdf》《D22 CE NB 正本/User Manual.pdf》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了D11/D22/EH01不支持SOS的结论。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [
+        "D系列都不支持SOS",
+        "接受和发送都不支持",
+        "e600发了SOS这几款收不到"
+      ],
+      "score": 0.8,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "终端-cat1",
+      "query": "终端-cat1-JT8988如何关闭TTS",
+      "gold_answer": "非安卓机界面显示和播报都由方案控制",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "非安卓机界面显示和播报都由方案控制"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600欧版电量管理模式 （延迟大，丢音，被3S摘麦。收不到语音消息 ：调整心跳）",
+      "gold_answer": "high---高耗电 心跳15秒 发心跳14秒左右休眠 standard--标准耗电 心跳30秒 发心跳14秒左右休眠 power---省电 心跳42秒 发心跳14秒左右秒休眠 super power-saving 1 心跳42秒深度睡眠 发心跳7秒休眠 需开启休眠模式 supre power-saving 2 心跳42秒 深度睡眠 发心跳3秒休眠 需开启休眠模式 刷机默认省电模式是supre power-saving 2 休眠模式是Sleep 默认是开的",
+      "agent_answer": "根据知识库检索，针对您提出的“终端-cat1-E600欧版 延迟大、丢音、被3s摘麦、收不到语音消息”问题，知识库中对应的处理方式为**调整运营平台的“心跳（终端与服务器的通讯周期）”参数**。\n\n## 结论\n\n知识库明确记载：当出现**规律性被呼不通**的情况时，可通过减小“心跳（终端与服务器的通讯周期）”参数来调整。该参数在**运营平台 → 公司管理 → 公司列表 →【设置】→ 设置公司服务**中配置。\n\n## 心跳参数详情\n\n| 项目 | 说明 |\n|---|---|\n| 参数名称 | 心跳（终端与服务器的通讯周期） |\n| 设置范围 | 1s ~ 60s |\n| 默认值 | 40s |\n| 建议值 | 2G/3G 网络建议 5s；4G 网络建议 40s |\n| 调整场景 | 出现规律性被呼不通、收不到语音等情况时，可减小该值 |\n| 副作用 | 该值越小，流量和功耗消耗越大 |\n\n## 各现象在知识库中的对应说明\n\n- **延迟大**：语音质量默认为“高音质模式”（语音质量好、时延低、对网络环境要求高），可切换为“流畅模式”；同时心跳周期过长也会导致终端与服务器链路感知滞后。\n- **丢音 / 被3s摘麦**：知识库记载“由于网络不稳定，获取麦权失败，听到按麦 Tone 音后，**3s 内听到摘麦 Tone 音**”；另一场景为“用户掉线，听到按麦 Tone 音后马上听到摘麦 Tone 音”。“被3S摘麦”对应的即是这类因网络不稳定/掉线导致的摘麦提示。\n- **收不到语音消息**：对应“漏话”——用户因**离线或网络不稳定**漏听对讲语音。知识库同时说明心跳机制的作用：终端按一定时间间隔向基站和 POC 服务发送心跳包表明在线状态，防止基站/路由器因长时间未收到终端信息而**丢弃链路、导致通信中断**。\n\n## 关于“电量管理模式”\n\n知识库中未检索到“E600 欧版电量管理模式”作为独立功能或档位的具体定义。可佐证的相关记载包括：CAT1 终端具备**低功耗、广覆盖**特性（E600 欧版为 CAT1 类 4G 公网对讲机，RTOS 系统、POCSTARS 平台，欧版频段为 LTE-FDD B1/B3/B5/B7/B8/B20/B28、LTE-TDD B38/B40/B41）；且心跳值越小，流量和功耗消耗越大——即“调小心跳保连接”与“终端省电”之间存在权衡，需结合实际网络环境选择。\n\n## 来源\n\n- POCSTARS运营平台用户手册V3.0-20260409.docx（poc-资料）\n- POCSTARS MNO产品白皮书V1.1（poc-资料）\n- POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（poc-资料）\n- 主推终端产品规格书20260118.xlsx、E600 Brochure.pdf（poc-资料）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了调整心跳的实质内容，非拒答或答非所问。",
+      "key_facts": {
+        "total": 7,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "high：心跳15秒，发心跳14秒左右休眠",
+        "standard：心跳30秒，发心跳14秒左右休眠",
+        "power：心跳42秒，发心跳14秒左右休眠",
+        "super1：42秒深睡，发7秒休眠，需开休眠",
+        "super2：42秒深睡，发3秒休眠，需开休眠",
+        "默认省电模式为super power-saving 2",
+        "休眠模式Sleep默认开启"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600 电池充电问题",
+      "gold_answer": "是否可以有座充?——不支持。 2、是否可以通过增加电池容量?——不支持 3、是否可以支持电池单充?——目前不支持。可以做给单电池的充电器,条件是：开模费2W元+订单2K起，定金先付一半，成品单价15/台。 4、其它方案：双电池使用，即额外多购买一块电池，延长使用时间。",
+      "agent_answer": "根据知识库检索，E600（4G 公网对讲终端，POCSTARS 平台）的电池充电相关信息如下：\n\n## E600 充电规格\n\n| 项目 | 参数 | 来源 |\n|---|---|---|\n| 电池容量 | 3000mAh（可拆卸） | E600 Brochure、主推终端产品规格书 |\n| 充电方式 | TYPE-C，5V/2A | E600 Brochure、主推终端产品规格书 |\n| 线充 | 支持（Cable Charging: Supported） | 主推终端产品规格书 |\n| 充电接口 | Type-C | E600 Brochure |\n| 标配配件 | 充电适配器（Charging Adapter）、Type-C 充电线 | E600 Brochure |\n\n## 电池本体参数（IEC62133-2 检测报告）\n\n来源：E600 对讲机锂电池 IEC62133-2 检测报告（报告编号 UNIB24061149FR-01）\n\n| 项目 | 参数 |\n|---|---|\n| 电池型号 | E600（电芯 YT103665P，1S1P 单电芯） |\n| 标称电压 | 3.7V |\n| 额定容量 | 3000mAh |\n| 推荐充电电流 | 600mA |\n| 最大充电电流 | 1500mA |\n| 限制充电电压 | 4.2V |\n| 充电截止电流 | 60mA |\n| 放电截止电压 | 2.75V |\n| 电池制造商 | 泉州银泰电池有限公司 |\n\n该电池已通过 IEC 62133-2:2017/AMD1:2021 检测，包括过充电测试（Over-charging of battery）等项目，结果为通过。\n\n---\n\n您提到的\"充电问题\"具体是指哪种情况？例如充不进电、充电慢、充电指示灯异常、电池鼓包或其他现象？如果是故障排查，知识库中暂未找到 E600 充电故障的处理文档，请补充具体现象，我再帮您进一步核对。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了E600充电规格和电池参数，围绕电池充电问题实质作答且切题，虽有澄清反问但不构成拒答",
+      "key_facts": {
+        "total": 4,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "不支持座充",
+        "不支持增加电池容量",
+        "不支持电池单充，可定制充电器有条件",
+        "双电池使用，额外购电池延长使用时间"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "终端-cat1",
+      "query": "终端-cat1-LT-V10PLUS 属于ROTS机器 飞捷厂家，跟Spender 的机器一样",
+      "gold_answer": "飞捷厂家不提供版本，需要客户推动联系厂家 这个厂家只有出厂固定版本，中间不刷",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答，硬门槛判定为fail",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "飞捷厂家不提供版本",
+        "需要客户推动联系厂家",
+        "厂家只有出厂固定版本，中间不刷"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600设置群组监听",
+      "gold_answer": "不支持终端设置群组监听的CAT1机器，平台设置群组监听和取消监听群组后，都需要重启终端，才会生效",
+      "agent_answer": "已在知识库中检索\"E600 群组监听\"相关内容。先说结论：\n\n**知识库中没有 E600 终端本机（RTOS 按键界面）的\"群组监听\"操作说明**，无法提供终端上的按键操作步骤；可查证的\"为 E600 这类终端账号设置群组监听\"操作，是在 **POCSTARS 运营平台（Web 端）** 中完成的。\n\n## 运营平台设置监听群组步骤\n\n依据《POCSTARS运营平台用户手册V3.0》\"4.5.2 监听群组管理\"及\"2.3.4.7 设置和取消群组监听\"：\n\n1. 登录运营平台，进入 **用户管理 → 用户列表**；\n2. 找到要设置监听的终端账号（E600 以 IMEI/ICCID 账号形式存在），点击 **关联用户**；\n3. 在关联的群组列表中，选择要监听的目标群组；\n4. 点击该群组列表最后一列的 **关联/监听**，即可完成该终端用户对该群组的监听；\n5. 取消监听：在群组列表中点击该群组的 **取消监听**。\n\n也支持批量操作：\n\n- 勾选多个群组（或用户），点击 **批量操作 → 批量设置监听**，统一配置；\n- 勾选后点击 **批量操作 → 批量取消监听**，统一取消。\n\n另外，从\"群组管理\"入口也可设置：进入 **群组管理 → 关联用户**，找到目标用户点击 **监听**，按钮切换为\"取消监听\"即设置成功。\n\n## 需要说明的适用范围\n\n- E600 为 4G 公网对讲机（RTOS 系统、1.77 英寸屏、按键操作），知识库中仅有其产品规格资料，无终端本机操作手册，因此本机按键路径无法提供。\n- 知识库中另有\"监听群组\"的**终端 APP 侧**操作（主界面 → 菜单 → 群组列表监听按钮变绿），但该说明针对**安卓大屏终端**安装的 POCSTAR APP，不适用于 E600（RTOS 小屏终端）。\n\n如需 E600 终端本机的具体按键操作路径，请补充相应终端操作手册或确认所需的操作渠道（终端本机还是平台配置）。\n\n**出处：**\n- poc-资料《POCSTARS运营平台用户手册V3.0-20260409.docx》（4.5.2 监听群组管理、2.3.4.7 设置和取消群组监听、5.4.4 如何设置用户在群组中的监听权限）\n- poc-资料《主推终端产品规格书20260118.xlsx》（E600 产品规格：4G 公网对讲机、RTOS 系统）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕E600群组监听给出了平台端操作步骤，未空答或拒答，故为pass。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "CAT1机器不支持终端设置群组监听",
+        "平台设置/取消监听群组后需重启终端生效"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "终端-cat1",
+      "query": "终端-cat1-RTOS是否支持自建组",
+      "gold_answer": "我们的库支持，但是目前E600和D系列还未实现",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且未切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "库支持自建组",
+        "E600和D系列尚未实现"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D22如何查看版本号",
+      "gold_answer": "Steps to check version of D22: menu→arrow button→Device Info.→menu→POC uer→menu",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何查看版本号的操作步骤，未实质作答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "需从menu经箭头按钮进入Device Info",
+        "进入Device Info后按menu到POC uer",
+        "再按menu查看版本号"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "终端-cat1",
+      "query": "终端-cat1-P67双模机写频工具和驱动以及操作步骤",
+      "gold_answer": "已归档网盘",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且切题内容",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "已归档网盘"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Wor X 就是E600",
+      "gold_answer": "E600加入的群组数量没有上限，和设备内存相关 测试加入100个群组没有问题",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未找到依据，未实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "E600加入群组数量没有上限"
+      ],
+      "supp_missed": [
+        "与设备内存相关",
+        "测试加入100个群组没有问题"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Q85 debug版本刷机步骤及固件+ 如何开启usb debugging操作视频",
+      "gold_answer": "/硬件产品归档/宏博智能/Q85 debug版本+刷机工具",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质信息",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "硬件产品归档/宏博智能/Q85 debug版本+刷机工具"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600 按下menu键机器会重启",
+      "gold_answer": "群组名称太长了，需要改短名称.E600群组名称最多支持22个字符",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "群组名称太长，需要改短名称",
+        "E600群组名称最多支持22个字符"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600接收SOS会白屏",
+      "gold_answer": "群组名称过长，需要在22个字符以内",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "群组名称过长，需在22个字符以内"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D21 登录白屏提示服务连接中，或者自动重启的问题",
+      "gold_answer": "使用D21写号工具写入APN",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "使用D21写号工具写入APN"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D21 .D22是否支持远程麦克风",
+      "gold_answer": "D系列不支持e600有一个版本开始支持了",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供任何实质信息。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "D系列不支持远程麦克风"
+      ],
+      "supp_missed": [
+        "e600有一个版本开始支持"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1机器不响应应答模式",
+      "gold_answer": "只支持立即接通模式，不支持应答模式",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答且不切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "只支持立即接通模式",
+        "不支持应答模式"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "终端-cat1",
+      "query": "终端-cat1-3s被摘麦",
+      "gold_answer": "修改心跳，本地修改 D22： E600：",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为“未找到相关依据”的拒答，未实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "修改心跳",
+        "本地修改D22：E600"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "终端-cat1",
+      "query": "终端-cat1-e600 提示“out of service” 或者 log out",
+      "gold_answer": "三种原因: 1.首先验证账号是否过期/账号状态(expired,unexist etc..) 2.确认网络是否正常 3.在其他地方登录",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "验证账号是否过期/状态",
+        "确认网络是否正常",
+        "检查是否在其他地方登录"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "终端-cat1",
+      "query": "终端-cat1-e600 提示“Network time out”",
+      "gold_answer": "RTOS设备是4G网络，只有4G下能用 安卓是全网通，所以3G能使用",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "RTOS设备只有4G下能用",
+        "安卓是全网通，3G能使用"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "终端-cat1",
+      "query": "终端-cat1-P67是否支持SOS",
+      "gold_answer": "不支持，但支持修改频点，也不支持接收调度台消息",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "不支持SOS"
+      ],
+      "supp_missed": [
+        "支持修改频点",
+        "不支持接收调度台消息"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "终端-cat1",
+      "query": "终端-cat1-终端功耗和流量数据汇总",
+      "gold_answer": "包含E600和F10的数据",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "包含E600和F10的数据"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "终端-cat1",
+      "query": "终端-cat1-D22 修改开机页面图片的工具",
+      "gold_answer": "界面配置工具 V1.01.0010(1).zip",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未实质作答",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "界面配置工具 V1.01.0010(1).zip"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "终端-cat1",
+      "query": "终端-cat1-cat1的库有哪几种",
+      "gold_answer": "移远的不都是一个库。EC600M和EC800M是一个库 EC600U EC200U是一个库",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质答案",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "移远的不都是一个库",
+        "EC600M和EC800M是一个库",
+        "EC600U和EC200U是一个库"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 30,
+      "section": "终端-cat1",
+      "query": "终端-cat1-Linux和CAT1机器是否支持OPUS语音编码",
+      "gold_answer": "都不支持",
+      "agent_answer": "根据知识库检索结果，回答如下：\n\n## 结论\n\n**知识库中可确认的是 MCSTARS 系统（平台层面）支持 OPUS 语音编码**，但**未找到“终端-cat1-Linux”和“CAT1 机器”这两类终端是否支持 OPUS 的记载**，无法确认其终端侧支持情况。\n\n## 知识库已有依据\n\n来源：MCX-资料库《MCSTARS 产品白皮书 V1.1.1》\n\n1. **媒体编码能力**（表 2.6-2 支持的媒体编码）\n   - 语音编码方式：AMR-WB、AMR-NB、EVS、OPUS（其中 EVS 需专利许可，OPUS 已注明专利披露许可）。\n\n2. **语音质量评估**（表 2.6-1 软件性能指标）\n   - OPUS 语音质量评估（MOS，相同码率下对比）：本系统指标值 **4.3**。\n\n3. **音视频引擎说明**\n   - 系统支持多种音频压缩格式，如 AMR、OPUS、EVS（EVS 需专利许可）。\n\n## 说明\n\n上述内容记载的是 MCSTARS 系统的媒体编码支持能力，属于平台侧指标。知识库中未检索到“终端-cat1-Linux”及“CAT1 机器”对应的终端规格、参数或功能说明文档，因此**这两类终端是否支持 OPUS 语音编码，在现有知识库中找不到相关依据**，不能据此确认。如需确认，建议提供对应终端的产品规格书或型号资料。",
+      "cls": "answered",
+      "gate": "fail",
+      "gate_reason": "系统回答未直接给出终端是否支持OPUS的结论，而是以未找到记载为由无法确认，属于拒答，未实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "终端-cat1-Linux和CAT1机器都不支持OPUS语音编码"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 31,
+      "section": "终端-cat1",
+      "query": "终端-cat1-国内miniserver，卡商需要开放的白名单",
+      "gold_answer": "*.shanliptt.com 47.93.34.158",
+      "agent_answer": "根据知识库中 Miniserver V2.3 相关资料，针对“终端（CAT1）经 SIM 卡/物联网卡访问国内 Miniserver”的公网部署场景，卡商侧需放行的访问白名单如下。\n\n## 一、需要加入白名单的服务器地址（按部署场景）\n\n| 部署场景 | 卡商需开放/加入白名单的地址 | 说明 |\n|---|---|---|\n| 公网使用场景（无固定公网IP，默认） | Miniserver 的 DDNS 动态域名 | 终端通过域名解析访问 Miniserver，域名在 Miniserver 配置工具“信息 → 配置信息”中查看 |\n| 固定公网IP使用场景 | Miniserver 的固定公网 IP | 需现场已由运营商/网络管理员提供固定公网IP，且路由器/防火墙已做端口映射与放行 |\n| 纯内网使用场景 | 无需卡商白名单 | 终端与 Miniserver 在同一局域网内使用 |\n\n## 二、终端访问所需放行的端口（卡商如按端口管控需一并开放）\n\n来源：《POCSTARS Miniserver-快速使用手册V2.3》《POCSTARS Miniserver Quick Operation Guide V2.3》中“固定公网IP使用场景”的放行端口列表，其中与终端（CAT1 对讲终端）直接相关的端口为：\n\n| 服务 | 协议 | 端口 | 用途 |\n|---|---|---|---|\n| 调度器 | UDP | 10200 | 终端登录 |\n| 语音服务 | TCP | 11055 | 终端登录 |\n| 语音服务 | UDP | 30000 | 终端对讲 |\n\n其余为调度台/运营平台端口（如 TCP 10201、11056、31000、7272、6130、7298），若卡商白名单仅面向终端侧，则以上表三个端口为主。\n\n## 三、补充说明\n\n- 知识库要求终端到服务器的网络延迟建议低于 200ms，否则对讲体验会受影响。\n- 知识库未单独说明“卡商平台”上白名单的具体配置入口或是否按端口管控，实际是否需要同时开放端口，建议与卡商确认其平台的白名单粒度（仅地址白名单，或地址+端口白名单）。\n\n来源：`poc-资料/POCSTARS Miniserver-快速使用手册V2.3.docx`、`POCSTARS Miniserver Quick Operation Guide V2.3.docx/pdf`、`Pocstar项目内网部署前置条件与运维检查指南v2.docx`。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，切题，未拒答或跑题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未提供域名*.shanliptt.com",
+        "未提供IP 47.93.34.158"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 32,
+      "section": "终端-cat1",
+      "query": "终端-cat1-海外miniserver，卡商需要开放的白名单",
+      "gold_answer": "*.shanlipoc.com 调度器 47.245.104.125 新加坡代理 47.87.12.48 墨西哥代理",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答，未提供实质作答。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "*.shanlipoc.com 调度器",
+        "47.245.104.125 新加坡代理",
+        "47.87.12.48 墨西哥代理"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 33,
+      "section": "终端-cat1",
+      "query": "终端-cat1-E600的认证报告中的频段和产品规格中的频段不一致，规格中有B5，认证报告中不包含B5，确认设备是否支持B5？",
+      "gold_answer": "设备是支持B5频段的。测试报告中没有B5的原因是，咱们的测试报告是CE认证的测试报告，CE是欧盟认证，B5不是欧盟的频段，所以不会测B5，在测试报告中也不会体现。",
+      "agent_answer": "根据知识库中的两份 E600 资料，规格书与认证报告确实存在不一致，现分别说明：\n\n## 结论\n\n- **认证报告（CE-RED LTE 射频测试报告）明确记载 Band 5 为\"不支持\"（Support: NO）**，其认证覆盖的频段也不含 B5；\n- **产品规格书（E600 Brochure）将 B5 列入网络频段**（东南亚、欧洲、拉美配置均含 B5）；\n- 两份资料相互矛盾，按认证报告证据，**已认证版本的 E600 不支持 B5**；规格书中的 B5 记载无法与认证结果相互印证，是否支持需向厂商/研发进一步核实。\n\n## 证据对比\n\n| 项目 | 产品规格书（E600 Brochure） | CE-RED 认证报告（UNIA24061124ER-02） |\n|---|---|---|\n| B5 记载 | 东南亚：LTE-FDD B1/B3/**B5**/B8<br>欧洲：LTE-FDD B1/B3/**B5**/B7/B8/B20/B28<br>拉美：LTE-FDD B2/B3/B4/**B5**/B7/B8/B28/B66 | 频段清单仅列 FDD B1/B3/B7/B8/B20/B28、TDD B38/B40 |\n| B5 支持声明 | 未单独说明 | 表格\"TYPE OF MOBILE STATION AND ADDITIONAL INFORMATION\"中，Band 5（824-849 / 869-894 MHz）标注 **Support: NO** |\n| 配套测试数据 | 无 | Appendix Data 仅有 LTE Band 1/3/7/8/20/28/38/40，无 Band 5 |\n\n## 说明\n\n- 认证报告中 Band 5 被明确标注为\"NO\"，且认证覆盖频段未包含 B5，这与\"认证报告中不包含 B5\"的现象一致，即**认证版本按厂商申报不支持 B5**；\n- 规格书列出的 B5 属于产品宣传规格记载，与认证声明冲突，建议以厂商/研发对实际硬件频段支持的确认结果为准，并同步核实规格书是否需要修订。\n\n**来源**\n- 《E600 Brochure.pdf》（poc-资料知识库）\n- 《UNIA24061124ER-02 CE 对讲机 LTE EN301908-13 RF Test Report.pdf》（POC-证书/认证知识库，报告编号 UNIA24061124ER-02）\n- 《UNIA24061124EC-01 CE 对讲机 CE-RED Test Certificate.pdf》（POC-证书/认证知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了实质性的证据对比与结论，非拒答或答非所问",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "设备支持B5频段",
+        "认证报告无B5因CE认证且B5非欧盟频段"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    }
+  ]
+}

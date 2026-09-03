@@ -1,0 +1,658 @@
+{
+  "run_name": "all_miniserver_20260820_v2",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 0.9655172413793104,
+    "scored": 29,
+    "answered": 29,
+    "refusal_gap": 0,
+    "clarify_missing": 0,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 15,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持监听吗?",
+      "gold_answer": "支持监听",
+      "agent_answer": "**支持监听。**\n\n根据客服知识库记载，Miniserver（微型服务器）支持监听功能。\n\n**来源：** 客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出支持监听的结论，且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 2,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver数据保存多久",
+      "gold_answer": "语音记录保存3个月",
+      "agent_answer": "根据客服知识库记载，Miniserver 数据保存时长如下：\n\n| 项目 | 保存时长 |\n|------|----------|\n| Miniserver（通用口径）语音记录 | 3个月 |\n| 新版 Miniserver 录音记录 | 6个月 |\n| 新版 Miniserver 定位记录 | 3个月 |\n\n说明：\n- 知识库中\"Miniserver数据保存多久\"的条目记载为**语音记录保存3个月**（与\"平台数据保存多久\"条目中 miniserver 的口径一致）。\n- 另有\"新版 Miniserver\"条目单独记载：**录音记录保存6个月、定位记录保存3个月**，即新版在录音/定位记录的保存时长上有所差异。\n- 回答时需注意区分设备是否为\"新版\"，两者数据保存期限不同。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，明确给出Miniserver数据保存时长，切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的OS（操作系统）是什么",
+      "gold_answer": "Debian 9.基于Linux内核",
+      "agent_answer": "根据客服知识库中的记录，Miniserver 的操作系统为 **Debian（基于 Linux 内核）**，但知识库中存在两条不同版本的记录：\n\n| 记录 | 内容 |\n|------|------|\n| 记录一 | Debian 9，基于 Linux 内核 |\n| 记录二 | Debian 12 |\n\n即知识库中对 Miniserver 操作系统的记载不完全一致（Debian 9 与 Debian 12），可能对应不同时期或不同版本的设备，具体以所查询设备对应版本为准。\n\n**来源：** 客服知识库（客服知识库.md，file_d72ba9，chunk 33、chunk 34）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了Miniserver操作系统为Debian（基于Linux内核）的实质答复，并引用知识库记录，无拒答或跑题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [
+        "操作系统是 Debian 9"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持的数据传输速率是 1gbit/s",
+      "gold_answer": "1gbit/s指的是网卡的带宽即硬件的带宽",
+      "agent_answer": "根据客服知识库中的记载，确认如下：\n\n**MiniServer 支持的数据传输速率为 1 Gbit/s，该速率指网卡的带宽（即硬件带宽）。**\n\n- 知识库原文：Miniserver 支持的数据传输速率是 1 Gbit/s，**1 Gbit/s 指的是网卡的带宽，即硬件的带宽**。\n- 相关记载：Miniserver 网口最大的传输速度为 **1 Gbps**。\n\n即：1 Gbit/s 是 MiniServer 网口（硬件）的标称带宽上限，而非实际业务吞吐的保证值。\n\n来源：客服知识库（客服知识库.md，file_d72ba9_chunk_33）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，确认了问题中的速率含义。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver调度台定位上报时间不准确/谷歌Key导致地图不显示",
+      "gold_answer": "更新网盘解决对应问题的ROM",
+      "agent_answer": "根据知识库检索结果，该问题在客服知识库中有明确记载，结论如下。\n\n## 结论\n\n**Miniserver 调度台定位上报时间不准确 / 谷歌Key导致地图不显示**的处理方式：**更新网盘上解决对应问题的 ROM**（知识库原文记载，未提供具体网盘路径或版本号）。\n\n## 相关排查建议（知识库记载）\n\n若问题表现属于\"调度台定位时间不对\"或\"定位不显示\"，可参考以下排查步骤：\n\n**1. 调度台上的定位时间不对**\n1. 验证修改客户时区后是否有问题，确认平台服务无问题。\n2. 若验证无误，排查调度台所在电脑的时间是否正确、终端的时间是否正确。\n3. 仍有问题，收集调度台账号、问题终端账号以及终端显示时间的图片，反馈研发处理。\n\n**2. 定位不显示（含 Google 定位相关）**\n1. 检查是否已充值定位卡。\n2. 检查客户使用的节点是否正确。\n3. 测试同一节点的账号是否可以正常显示。\n4. 若可以显示，检查机器使用的版本是否为 Google 定位；若是 Google 定位，需查机器是否支持 Google。\n5. 若测试账号也不显示，提交运维排查。\n\n## 来源\n\n- 客服知识库（客服知识库.md）：\"Miniserver调度台定位上报时间不准确/谷歌Key导致地图不显示——更新网盘解决对应问题的ROM\"\n- 客服知识库（客服知识库.md）：\"调度台上的定位时间不对\"、\"定位不显示\" 条目\n\n> 说明：知识库未记载该问题对应的具体 ROM 版本号、网盘地址及更新操作细节；如需要可进一步咨询对应网盘资料的获取渠道。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出了“更新网盘解决对应问题的ROM”，与问题直接相关且实质作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "miniserver",
+      "query": "miniserver-miniserver网口最大的传输速度",
+      "gold_answer": "1Gbps",
+      "agent_answer": "根据知识库记载，MiniServer 网口最大的传输速度为 **1Gbps（即 1Gbit/s）**。\n\n补充说明：\n\n- 该速率指的是**网卡/硬件接口的带宽**，即硬件支持的最大数据传输速率。\n- 知识库中同时记载\"miniserver 支持的数据传输速率是 1gbit/s，1gbit/s 指的是网卡的带宽即硬件的带宽\"，与上述结论一致。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了网口最大传输速度1Gbps。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver规格书",
+      "gold_answer": "Miniserver M200规格书20251125.xlsx",
+      "agent_answer": "已在知识库中找到 Miniserver 规格书文档，即《Miniserver M200规格书20251125.xlsx》（更新日期：2025-11-25）。内容如下：\n\n## Miniserver M200 规格书\n\n### 基本信息\n\n| 项目 | 规格描述 |\n|------|----------|\n| 型号 | M200 |\n| 类型 | Mini型桌面式路由整机 |\n| 操作系统 | Debian 12 |\n| 尺寸 | 136×126×40 mm（长×宽×高） |\n| 外壳 | 铝型材 |\n| 主体颜色 | 全黑色 |\n| 重量 | 590 g |\n| 供电要求 | DC-IN 12V 5A |\n\n### 处理器\n\n| 项目 | 规格描述 |\n|------|----------|\n| CPU | Intel 赛扬 J1900 |\n| BIOS | AMI 8M BIOS |\n| 性能 | 四核四线程 |\n| 频率 | 2.0GHz–2.42GHz |\n\n### 显示\n\n| 项目 | 规格描述 |\n|------|----------|\n| 显示芯片 | 集成英特尔 HD Graphics |\n| 显示接口 | VGA ×1、HDMI ×1 |\n| 显示参数 | 最高支持 1920×1080 @60Hz |\n\n### 网络\n\n| 项目 | 规格描述 |\n|------|----------|\n| 网卡芯片 | Intel I211-AT 千兆网卡（82574L/82583V/I211） |\n| 网络接口 | RJ45 ×4 |\n\n### 内存\n\n| 项目 | 规格描述 |\n|------|----------|\n| 内存规格 | DDR3L 1600MHz |\n| 最大内存 | 8GB |\n\n### 存储\n\n| 项目 | 规格描述 |\n|------|----------|\n| mSATA | mSATA 128GB（金士顿 Kingston） |\n| 拓展插槽 | 2.5寸 SATA 2.0 ×1 |\n\n### I/O 接口\n\n| 项目 | 规格描述 |\n|------|----------|\n| USB | USB 3.0 ×2 |\n| COM | 无 |\n\n### 环境参数\n\n| 项目 | 规格描述 |\n|------|----------|\n| 工作温度 | -15~60℃ |\n| 工作湿度 | 0%~95%，无冷凝 |\n| 储存温度 | -10~60℃ |\n| 储存湿度 | 5%~95%，无冷凝（防潮防静电） |\n\n### 包装清单\n\n| 项目 | 数量 |\n|------|------|\n| M200 主机 | 1 台 |\n| 电源适配器 | 1 套 |\n| 网线 | 2 根 |\n| U盘 | 1 个 |\n| 产品包装盒 | 1 套 |\n\n**来源**：poc-资料知识库《Miniserver M200规格书20251125.xlsx》（file_id: file_7241f9）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质提供了Miniserver规格书文档信息及内容，切题作答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "miniserver",
+      "query": "miniserver-Minisever 上没有多媒体消息菜单",
+      "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放",
+      "agent_answer": "根据知识库中的记载，**Minisever 上没有多媒体消息菜单是正常现象**。\n\n**结论**：Minisever 调度台/平台只有**语音、定位、录音和 SOS** 这几个菜单，不提供多媒体消息菜单，同时**不支持轨迹回放**功能。\n\n**说明**：\n- 多媒体消息（语音/文本/图片/短视频/位置/文件等）是公网平台或调度台侧的功能，Minisever 本地部署环境未包含该菜单。\n- 如需使用多媒体消息或轨迹回放，需确认当前方案是否部署在支持这些功能的大公网平台上。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对问题给出了明确、相关的说明，非空非拒答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的3种使用方式",
+      "gold_answer": "局域网方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.终端配置内网IP和context，终端登录（Miniserver tools显示的） c.调度台和运营平台通过内网IP访问 d.不需要在Miniserver管理平台激活 e.不支持容灾 2.固定IP公网方式 a.开机后使用Tools设置本机内网IP，公网IP配置固定的公网IP（如果不固定，重启路由会变，导致终端和调度台无法使用） b.路由上做端口映射 c.终端配置公网IP和context，终端登录（Miniserver tools显示的） d.调度台和运营平台通过公网IP访问 e.不需要在Miniserver管理平台激活 f.不支持容灾 3.代理方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.在Miniserver管理平台上注册设备并激活（激活后语音服务就会走代理） c.终端配置miniserver.pocstar.com:10200和pocstar，终端登录（升级后不需要终端配置，用大公网的版本即可登录） d.调度台和运营平台通过内网IP访问 e.支持容灾（激活时选择）",
+      "agent_answer": "根据客服知识库中的记载，Miniserver 有 3 种使用方式：**局域网方式、固定IP公网方式、代理方式**。\n\n## 1. 局域网方式\n\n- 开机后使用 Tools 设置本机内网 IP，公网 IP 空置\n- 终端配置内网 IP 和 context，终端登录（Miniserver tools 显示的）\n- 调度台和运营平台通过内网 IP 访问\n- 不需要在 Miniserver 管理平台激活\n- **不支持容灾**\n\n## 2. 固定IP公网方式\n\n- 开机后使用 Tools 设置本机内网 IP，公网 IP 配置固定的公网 IP（如果不固定，重启路由会变，导致终端和调度台无法使用）\n- 路由上做端口映射\n- 终端配置公网 IP 和 context，终端登录（Miniserver tools 显示的）\n- 调度台和运营平台通过公网 IP 访问\n- 不需要在 Miniserver 管理平台激活\n- **不支持容灾**\n\n## 3. 代理方式\n\n- 开机后使用 Tools 设置本机内网 IP，公网 IP 空置\n- 在 Miniserver 管理平台上注册设备并激活（激活后语音服务就会走代理）\n- 终端配置 `miniserver.pocstar.com:10200` 和 `pocstar`，终端登录（升级后不需要终端配置，用大公网的版本即可登录）\n- 调度台和运营平台通过内网 IP 访问\n- **支持容灾**（激活时选择）\n\n**补充说明**：仅代理方式支持容灾；另外知识库也记载\"MiniServer 目前已支持容灾机制，前提条件是只有走代理的方式才支持容灾\"。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答完整列出三种使用方式，实质作答且切题。",
+      "key_facts": {
+        "total": 15,
+        "hit": 15
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "miniserver",
+      "query": "miniserver-固定IP的网络是否支持外网访问运营平台和调度台",
+      "gold_answer": "使用固定IP公网方式配置，此方式可以外网访问运营平台调度台",
+      "agent_answer": "## 结论\n\n支持。MiniServer 采用**固定IP公网方式**配置时，可以外网访问运营平台和调度台。\n\n## 说明与适用条件\n\n知识库中明确记载：\"使用固定IP公网方式配置，此方式可以外网访问运营平台调度台\"。\n\n固定IP公网方式的具体配置要点如下：\n\n1. 开机后使用 Tools 设置本机内网 IP，公网 IP 配置为**固定**的公网 IP（如果不固定，重启路由会变，导致终端和调度台无法使用）。\n2. 需要在路由器上做**端口映射**。\n3. 终端配置公网 IP 和 context 登录。\n4. 调度台和运营平台通过**公网 IP** 访问。\n5. 不需要在 MiniServer 管理平台激活。\n6. **不支持容灾**（容灾仅代理方式支持）。\n\n## 来源\n\n- 客服知识库（`kb_2ak3wcz9wx`）— 客服知识库.md，条目\"固定IP的网络是否支持外网访问运营平台和调度台\"、\"Miniserver的3种使用方式\"。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出支持结论并围绕固定IP公网方式说明，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "miniserver",
+      "query": "miniserver-miniserver是否支持配置域名和证书",
+      "gold_answer": "不支持配置域名。对于证书，已经添加了SSL证书。对于动态IP的网络，我们系统目前设计是https+IP的方式，而非域名+ssl的方式。对于https+IP的方式，在激活时已经自动添加了SSL加密证书，所以无需再额外申请域名和SSL证书",
+      "agent_answer": "**结论：MiniServer 不支持配置域名；证书方面系统已内置 SSL 证书，无需额外申请。**\n\n根据知识库记载（来源：客服知识库.md）：\n\n- **域名**：不支持配置域名。\n- **证书**：已添加 SSL 证书。\n- **设计方式**：对于动态 IP 的网络，系统目前的设计是 **https + IP** 方式，而非\"域名 + SSL\"方式。\n- **https + IP 方式下**：在激活时已自动添加 SSL 加密证书，因此无需再额外申请域名和 SSL 证书。\n\n出处：客服知识库（kb_2ak3wcz9wx）《客服知识库.md》\"miniserver是否支持配置域名和证书\"条目。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，直接回答了域名和证书的支持情况。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "miniserver",
+      "query": "miniserver-新版本是否支持组织/部门管理",
+      "gold_answer": "已发布版本不支持，下一个版本支持",
+      "agent_answer": "根据知识库中的记载：\n\n**已发布版本不支持组织/部门管理，下一个版本支持。**\n\n即当前已发布的新版本 MiniServer 尚未支持组织/部门管理功能，该功能计划在下一个版本中提供。\n\n来源：客服知识库（《客服知识库.md》，问题\"新版本是否支持组织/部门管理\"）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回答了问题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "miniserver",
+      "query": "miniserver-Mini Server 是否支持多名调度员？",
+      "gold_answer": "支持，调度员占用户数",
+      "agent_answer": "**结论：支持。** Mini Server 支持多名调度员，调度员账号计入用户数。\n\n依据知识库原文：\n\n> Mini Server 是否支持多名调度员？——支持，调度员占用户数。\n\n来源：客服知识库（《客服知识库.md》，file_d72ba9，chunk 34）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答直接给出“支持”结论并说明调度员计入用户数，切题且实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "miniserver",
+      "query": "miniserver-Mini Server 是否支持下载单个用户的录音记录？",
+      "gold_answer": "支持，通过调度台下载",
+      "agent_answer": "**支持。**\n\nMini Server 支持下载单个用户的录音记录，通过**调度台**进行下载。\n\n补充说明：Mini Server 的语音记录保存时长为 3 个月（另一资料中也提到新版录音记录保存 6 个月，存在不同记载，如需确认当前版本可进一步核实）。\n\n来源：客服知识库（《客服知识库.md》）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确说明支持下载并通过调度台进行。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持监听吗?",
+      "gold_answer": "支持监听",
+      "agent_answer": "支持。知识库明确记载：MiniServer 支持监听。\n\n**相关说明：**\n- 客服知识库中关于 MiniServer 的功能问答明确回复\"支持监听\"。\n- 与监听同批记载的还有：调度员可通过调度台下载单个用户的录音记录（Mini Server 支持下载单个用户的录音记录，通过调度台下载）。\n\n**来源：**\n- 客服知识库（客服知识库.md，文件 file_d72ba9 中 \"# miniserver 支持监听吗?\" 及 \"# Mini Server 是否支持下载单个用户的录音记录？\" 条目）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出“支持”，与问题直接相关，属实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的OS（操作系统）是什么",
+      "gold_answer": "debian 12",
+      "agent_answer": "根据知识库（客服知识库）检索结果，关于 Miniserver 的操作系统共有两条记录：\n\n| 记录 | OS |\n| --- | --- |\n| 记录 1 | Debian 9，基于 Linux 内核 |\n| 记录 2 | Debian 12 |\n\n说明：\n- 两条记录均为知识库中\"Miniserver 的 OS（操作系统）是什么\"这一问题的答复，但答案不同。\n- 记录 2（Debian 12）所在段落上下文涉及新版 MiniServer（如\"新版录音记录保存 6 个月、定位 3 个月\"\"新版 Miniserver\"等），推测可能对应不同版本/批次的设备；但知识库未明确说明两条记录对应的具体设备版本，建议按实际设备确认。\n\n来源：客服知识库（kb_2ak3wcz9wx），文档《客服知识库.md》。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了Miniserver操作系统的知识库检索结果，属实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "miniserver",
+      "query": "miniserver-关于MiniServer（微型服务器）相关能力与限制的结论",
+      "gold_answer": "存量设备不支持升级：今年之前发货的存量MiniServer，由于架构或版本限制，不支持升级到最新版本。 2、新设备支持升级，但需具备镜像恢复能力：今年发货的MiniServer支持版本升级。升级需通过镜像方式进行，我们将提供详细的操作手册，但要求客户具备一定的技术能力以完成镜像恢复操作。 3、账号不支持改名：MiniServer上的用户账号一旦创建，不支持修改名称。 4、热备功能暂不支持，但可定制开发：当前MiniServer版本不支持主备热切换（热备）功能。如有需求，可评估并支持定制开发。 5、DMR网关暂不支持，但可定制开发：当前MiniServer版本不支持DMR网关功能。如有需求，可评估并支持定制开发。 6、容灾功能已支持：MiniServer目前已支持容灾机制，前提条件是只有走代理的方式才支持容灾，能够在异常情况下保障业务的连续性。",
+      "agent_answer": "## 关于 MiniServer（微型服务器）相关能力与限制的结论\n\n以下结论来自知识库《客服知识库》（客服知识库.md）中\"关于MiniServer（微型服务器）相关能力与限制的结论\"章节：\n\n1. **存量设备不支持升级**：今年之前发货的存量 MiniServer，由于架构或版本限制，不支持升级到最新版本。\n2. **新设备支持升级，但需具备镜像恢复能力**：今年发货的 MiniServer 支持版本升级。升级需通过镜像方式进行，会提供详细操作手册，但要求客户具备一定的技术能力以完成镜像恢复操作。\n3. **账号不支持改名**：MiniServer 上的用户账号一旦创建，不支持修改名称。\n4. **热备功能暂不支持，但可定制开发**：当前版本不支持主备热切换（热备）功能；如有需求，可评估并支持定制开发。\n5. **DMR 网关暂不支持，但可定制开发**：当前版本不支持 DMR 网关功能；如有需求，可评估并支持定制开发。\n6. **容灾功能已支持**：MiniServer 目前已支持容灾机制，但前提条件是只有走代理的方式才支持容灾，能够在异常情况下保障业务连续性。\n\n## 其他相关能力与限制（同知识库补充）\n\n| 项目 | 能力/限制 |\n| --- | --- |\n| 使用方式 | 三种：局域网方式、固定 IP 公网方式、代理方式；仅代理方式支持容灾 |\n| 数据保存 | 语音记录保存 3 个月；新版录音记录 6 个月、定位记录 3 个月 |\n| 多媒体功能 | 无多媒体消息菜单，仅支持语音、定位、录音和 SOS，不支持轨迹回放 |\n| 监听 | 支持 |\n| 调度员 | 支持多名调度员（调度员占用户数） |\n| 录音下载 | 支持通过调度台下载单个用户的录音记录 |\n| 域名/证书 | 不支持配置域名；采用 https+IP 方式，激活时已自动添加 SSL 证书 |\n| 网口速率 | 最大传输速度 1Gbps |\n| 云容灾 | 当前为手动切换，需在 MiniServer 管理平台操作 |\n\n**来源**：客服知识库（客服知识库.md，file_d72ba9 相关片段）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕MiniServer能力与限制进行了实质作答，内容切题且未拒答。",
+      "key_facts": {
+        "total": 6,
+        "hit": 6
+      },
+      "supp_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "miniserver",
+      "query": "miniserver-MINISEVER 新版 录音记录/定位保存多久",
+      "gold_answer": "录音记录6个月，定位记录3个月",
+      "agent_answer": "根据知识库记载，MINISERVER 新版的数据保存时长如下：\n\n**结论：**\n- **录音记录**：保存 **6 个月**\n- **定位记录**：保存 **3 个月**\n\n补充说明：知识库中还提到，Miniserver 常规版本语音记录保存 3 个月，但针对\"新版\"的明确记载为录音记录 6 个月、定位记录 3 个月，以上述为准。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出录音6个月、定位3个月的结论，实质且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "miniserver",
+      "query": "miniserver-miniserver 云容灾",
+      "gold_answer": "目前是手动，需要在Miniserver管理平台切换。后续看下如何判断异常后，做成自动切。 当初定的自动切会引起不必要的切换，需要有客户使用后，根据实际情况再定自动切换机制 前期方案是运维通过监控Miniserver是否异常发出告警，然后在Miniserver管理平台根据实际情况点击按钮去切",
+      "agent_answer": "根据知识库检索结果，MiniServer 云容灾相关内容如下。\n\n## MiniServer 云容灾\n\n**当前实现状态：手动切换**\n- 云容灾目前是手动方式，需要在 Miniserver 管理平台进行切换。\n- 自动切换尚未实现：后续计划根据异常判断做成自动切换，但当初评估认为自动切换会引起不必要的切换，需待客户实际使用后，再根据实际情况确定自动切换机制。\n\n**前期切换方案**\n- 运维通过监控 MiniServer 是否异常发出告警，然后在 Miniserver 管理平台根据实际情况点击按钮进行切换。\n\n## 容灾支持条件\n\n- MiniServer 已支持容灾机制，**前提是只有走代理方式才支持容灾**（激活时选择），能够在异常情况下保障业务连续性。\n- 局域网方式、固定 IP 公网方式**不支持容灾**。\n- 主备热切换（热备）功能当前版本暂不支持，但可评估定制开发。\n\n**补充说明：** 现有知识库中未找到关于两个 MiniServer 之间（miniserver-miniserver）容灾的具体实现机制或配置步骤的记载，仅有上述\"云容灾\"整体方案说明。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了MiniServer云容灾当前手动切换、后续自动切换规划及前期切换方案。",
+      "key_facts": {
+        "total": 3,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "miniserver",
+      "query": "miniserver-imei在公网激活的，要先删除再激活吗？",
+      "gold_answer": "imei在公网激活的，需要先删除再激活到新版Miniserver下使用",
+      "agent_answer": "是的，需要先删除再激活。\n\n知识库中明确记载：\n\n> IMEI 在公网激活的，需要先删除再激活到新版 Miniserver 下使用。\n\n即：公网激活过的 IMEI 无法直接用于新版 Miniserver，需先在公网侧删除该 IMEI，再重新激活到新版 Miniserver 下使用。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确回答了需要先删除再激活。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "miniserver",
+      "query": "miniserver-公司版miniserver可以添加imei吗？",
+      "gold_answer": "可以通过直接输入imei号添加到公司",
+      "agent_answer": "**可以。** 公司版 Miniserver 支持添加 IMEI，操作方式是**直接输入 IMEI 号添加到公司**。\n\n补充说明（来自知识库的相关记载）：\n\n- 若 IMEI 已在公网激活，需要**先删除，再激活到新版 Miniserver 下使用**，不能直接沿用公网激活状态。\n- 查看公司下已有 IMEI 账号的路径为：登录代理商账号 → 公司管理 → 公司列表 → 找到对应公司 → 点击\"IMEI 账号\"一栏对应的蓝色数字。\n\n来源：客服知识库《客服知识库.md》",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确作答且切题，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "miniserver",
+      "query": "miniserver-调度员如何连接到miniserver",
+      "gold_answer": "ip+端口的方式，但和端口没有任何关系，一个账号连接也不会占用一个端口",
+      "agent_answer": "**结论**：调度员通过“IP + 端口”的方式连接到 miniserver；但连接与端口没有实际对应关系，一个账号连接也不会占用一个端口。\n\n补充说明（来自同一知识库的部署方式说明）：\n\n| 使用方式 | 调度台访问方式 |\n| --- | --- |\n| 局域网方式 | 调度台和运营平台通过内网 IP 访问 |\n| 固定 IP 公网方式 | 调度台和运营平台通过公网 IP 访问 |\n| 代理方式 | 调度台和运营平台通过内网 IP 访问 |\n\n即无论采用哪种部署方式，调度员均以 IP（内网或公网，视部署方式而定）+ 端口的形式连接 miniserver，端口仅用于建立访问入口，不与具体账号绑定。\n\n来源：客服知识库.md（kb_2ak3wcz9wx，file_d72ba9）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了连接方式及澄清。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "miniserver",
+      "query": "miniserver-miniserver更换logo/运营平台/调度台",
+      "gold_answer": "属于商机问题，转销售处理。（有量才有可能支持修改logo，需销售去沟通）",
+      "agent_answer": "根据客服知识库中的记载：\n\n**结论**：MiniServer 更换 logo / 运营平台 / 调度台属于**商机问题**，需转销售处理。知识库明确说明\"有量才有可能支持修改 logo，需销售去沟通\"。\n\n即：该需求不按常规客服流程处理，需要销售介入沟通（可能涉及采购量等商务条件）后评估是否支持修改。\n\n来源：客服知识库.md（file_d72ba9，chunk 35）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，准确说明了属于商机问题并转销售处理。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "miniserver",
+      "query": "miniserver-miniserver的终端apk是否支持录音记录功能",
+      "gold_answer": "录音一直都有.小屏机的话得终端改个版本",
+      "agent_answer": "## 结论\n\n支持。miniserver 的终端 APK 具备录音记录功能，且该功能一直都有。\n\n## 说明\n\n- **录音功能**：miniserver 终端 APK 一直支持录音记录功能。\n- **适用限制**：如果是**小屏机**，需要终端更换/升级到对应的版本后才支持该功能。\n- **数据保存时长**（关联信息）：新版 miniserver 的录音记录保存 **6 个月**（另有说明语音记录保存 3 个月，定位记录保存 3 个月）。\n\n## 来源\n\n- 客服知识库（客服知识库.md）：\"miniserver的终端apk是否支持录音记录功能 — 录音一直都有.小屏机的话得终端改个版本\"\n- 客服知识库（客服知识库.md）：\"MINISEVER 新版 录音记录/定位保存多久 — 录音记录6个月，定位记录3个月\"",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，直接回答支持录音记录并说明小屏机条件。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "miniserver",
+      "query": "miniserver-miniserver如何开启AES256加密功能",
+      "gold_answer": "miniserver配置完成后，需要在这台机器的运营平台上登录对应的代理商账 号，在公司设置里面把AES256打开 若公司账号是:admin@org.hxd，那么代理商账号是:admin@hxd，密码 是默认的",
+      "agent_answer": "根据知识库中的记载，miniserver 开启 AES256 加密功能的操作如下：\n\n## 开启步骤\n\n1. **登录运营平台**：miniserver 配置完成后，在这台机器的运营平台上登录对应的**代理商账号**。\n2. **打开加密开关**：登录后，在**公司设置**里面把 AES256 打开。\n\n关于账号的对应关系，知识库给出的示例是：若公司账号是 `admin@org.hxd`，则代理商账号是 `admin@hxd`，密码是默认的。\n\n## 相关说明\n\n- **加密范围**：终端到终端支持 AES256 加密，存储的也是加密数据（需在运营平台打开加密功能）；AES256 对用户之间的对话及系统中存储的录音数据进行加密。调度台采用 TLS 加密。\n- **录音播放逻辑**：AES256 加密打开时，\"本次\"加密和不加密的语音记录都能播放，但上次或更早加密期间的录音播放不了；AES256 加密关闭时，只有不加密的录音可以播放和下载。每次加密的密钥都不一样。\n- **注意事项**：cat1 机型目前不支持语音加密功能。若 cat1 机器只能收到按麦提示音而没有语音，需检查是否开启了 AES256 功能。\n\n## 来源\n\n- 客服知识库（客服知识库.md）：miniserver 如何开启 AES256 加密功能、AES256 加密工作逻辑、平台采用的加密方式、cat1 机型语音加密相关说明",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了开启AES256的具体步骤和示例。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "miniserver",
+      "query": "miniserver-miniserver升级后 重新添加账号提示超出授权无法创建",
+      "gold_answer": "联系邹波报客户名字 查询记录，.Miniserver刷镜像后.需要在管理平台上删除重建",
+      "agent_answer": "根据客服知识库中的记录，该问题有明确的处理方式：\n\n**结论**：miniserver 升级后重新添加账号提示超出授权无法创建，需要联系运维人员查询记录，并在 Miniserver 刷镜像后在管理平台上删除重建账号。\n\n**处理建议**：\n1. 联系邹波，报客户名字，查询相关授权记录。\n2. Miniserver 刷镜像后，需要在 Miniserver 管理平台上删除原账号并重新创建。\n\n**补充说明**（知识库相关记录）：\n- imei 在公网激活的，需要先删除再激活到新版 Miniserver 下使用。\n- 账号创建后不支持修改名称（MiniServer 上的用户账号一旦创建，不支持修改名称）。\n\n来源：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，给出了具体处理步骤",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "miniserver",
+      "query": "miniserver-cat1机器智能收到按麦提示音，没有语音",
+      "gold_answer": "检查是否开启了AES256功能，cat1目前不支持语音加密功能",
+      "agent_answer": "## 结论\n\n知识库中明确记载：**cat1 机器智能收到按麦提示音但没有语音，需检查是否开启了 AES256 功能——cat1 目前不支持语音加密功能**。\n\n## 排查说明\n\n| 项目 | 内容 |\n|------|------|\n| 现象 | cat1 机器能收到按麦提示音，但没有语音 |\n| 可能原因 | 开启了 AES256 语音加密功能（cat1 不支持语音加密） |\n| 检查方法 | 检查该 cat1 设备是否开启了 AES256 功能 |\n| 处理建议 | 关闭 AES256 语音加密功能后重试（cat1 目前不支持语音加密） |\n\n## 来源\n\n- 知识库：客服知识库\n- 文档：客服知识库.md",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，直接给出检查AES256和cat1不支持语音加密的结论，切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "miniserver",
+      "query": "miniserver-如果创建好的账号提示账号不存在排查思路",
+      "gold_answer": "检查配置的什么网络； 2、如果是代理模式，我们自己登录看能否登录：如果也登录不了，切换下网络为内网，再切换回去（目的是同步数据到云端） 如果我们可以登录，检查终端登录方式，账号输入之类的 3、如果是固定公网模式，需要改终端的context DNS信息",
+      "agent_answer": "根据客服知识库中的记录，Miniserver 创建好的账号提示\"账号不存在\"的排查思路如下：\n\n**排查思路**\n\n1. **检查配置的是什么网络**（代理模式 / 固定公网模式等）。\n2. **如果是代理模式**，自己登录该账号测试能否登录：\n   - 如果我们也登录不了：切换网络为内网，再切换回去（目的是同步数据到云端）。\n   - 如果我们可以登录：检查终端登录方式、账号输入之类的（如账号是否输错、输入格式是否正确）。\n3. **如果是固定公网模式**：需要修改终端的 context DNS 信息。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕问题给出具体排查步骤，切题且实质作答。",
+      "key_facts": {
+        "total": 5,
+        "hit": 5
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "miniserver",
+      "query": "miniserver-miniserver重置网络",
+      "gold_answer": "重置网络：从代理模式-固定ip或者内网模式、固定公网ip模式------恢复到代理模式自动获取ip（其它模式时重置网络慎用） 如果是代理模式自动获取ip换了网线会自动检测，，如果失败就重启Miniserver 如果代理模式固定ip换了网线，需要tools手动设置新的ip，或者重置网络",
+      "agent_answer": "## miniserver 重置网络\n\n**结论**：重置网络的作用是将 miniserver 从「代理模式-固定 IP」「内网模式」「固定公网 IP 模式」恢复为**代理模式自动获取 IP**。\n\n**操作说明与注意事项**：\n\n1. 重置网络后，网络模式恢复为**代理模式自动获取 IP**。\n2. **慎用提醒**：在代理模式以外的其他模式（内网模式、固定公网 IP 模式）下执行重置网络需谨慎。\n3. **代理模式（自动获取 IP）换网线**：设备会自动检测；若检测失败，重启 Miniserver。\n4. **代理模式（固定 IP）换网线**：需要手动通过 Tools 设置新的 IP，或者执行重置网络。\n\n**来源**：客服知识库（客服知识库.md）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质针对miniserver重置网络主题，给出明确操作和注意事项，无拒答或答非所问。",
+      "key_facts": {
+        "total": 4,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "其它模式慎用提醒未覆盖代理模式固定IP"
+      ],
+      "supp_missed": [],
+      "score": 0.8,
+      "judge_error": null
+    }
+  ]
+}

@@ -126,43 +126,26 @@
 
       <!-- 企微客服（拒答转人工） -->
       <div class="section-title">{{ $t('settings.wecomTitle') }}</div>
-      <div class="section wecom-section">
+      <div class="section">
         <p class="section-description">{{ $t('settings.wecomDesc') }}</p>
-        <div class="setting-row">
+        <div v-for="(row, index) in wecomUrls" :key="index" class="wecom-url-row">
           <div class="col-item">
-            <div class="setting-label">{{ $t('settings.wecomGlobalUrl') }}</div>
+            <div class="setting-label">{{ $t('settings.wecomServiceLabel', { index: index + 1 }) }}</div>
             <a-input
-              v-model:value="globalWecomUrl"
-              :placeholder="$t('settings.wecomGlobalUrlPlaceholder')"
+              v-model:value="row.url"
+              :placeholder="$t('settings.wecomServicePlaceholder')"
               @change="wecomDirty = true"
-              @blur="saveGlobalWecomUrl"
+              @blur="saveWecomUrls"
             />
           </div>
-        </div>
-        <div class="setting-label wecom-domain-title">{{ $t('settings.wecomDomainUrls') }}</div>
-        <div v-for="(row, index) in wecomRows" :key="index" class="wecom-row">
-          <a-input
-            v-model:value="row.domain"
-            :placeholder="$t('settings.wecomDomainKeyPlaceholder')"
-            class="wecom-domain-key"
-            @change="wecomDirty = true"
-          />
-          <a-input
-            v-model:value="row.url"
-            :placeholder="$t('settings.wecomDomainUrlPlaceholder')"
-            class="wecom-domain-url"
-            @change="wecomDirty = true"
-          />
-          <a-button type="text" class="wecom-remove-btn" @click="removeWecomRow(index)">
-            {{ $t('settings.wecomDelete') }}
+          <a-button type="text" class="wecom-remove-btn" @click="removeWecomUrl(index)">
+            {{ $t('settings.removeWecomService') }}
           </a-button>
         </div>
-        <div class="wecom-actions">
-          <a-button size="small" @click="addWecomRow">{{ $t('settings.wecomAddDomain') }}</a-button>
-          <a-button size="small" type="primary" @click="saveWecomConfig">
-            {{ $t('settings.wecomSave') }}
-          </a-button>
-        </div>
+        <a-button type="dashed" block @click="addWecomUrl">
+          <template #icon><Plus class="icon" :size="16" /></template>
+          {{ $t('settings.addWecomService') }}
+        </a-button>
       </div>
     </template>
 
@@ -241,7 +224,7 @@ import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
 import { useUserStore } from '@/stores/user'
-import { Globe } from 'lucide-vue-next'
+import { Globe, Plus } from 'lucide-vue-next'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import RerankModelSelector from '@/components/RerankModelSelector.vue'
@@ -288,7 +271,7 @@ const handleContentGuardModelSelect = (spec) => {
   }
 }
 
-// ---- 企微客服（拒答转人工）配置 ----
+// ---- 企微客服（拒答转人工）配置：1..N 个客服入口，转人工时轮替转接 ----
 const isHttpsUrl = (url) => {
   try {
     const parsed = new URL(url)
@@ -299,56 +282,41 @@ const isHttpsUrl = (url) => {
 }
 
 const wecomDirty = ref(false)
-const globalWecomUrl = ref('')
-const wecomRows = ref([])
+const wecomUrls = ref([])
 
 // 配置异步加载时回填一次；用户在编辑中（wecomDirty）不覆盖。
 watch(
   () => configStore.config?.wecom_customer_service_urls,
   (urls) => {
     if (wecomDirty.value) return
-    wecomRows.value = Object.entries(urls || {}).map(([domain, url]) => ({ domain, url }))
-    globalWecomUrl.value = configStore.config?.wecom_customer_service_url || ''
+    wecomUrls.value = (Array.isArray(urls) ? urls : []).map((url) => ({ url: url || '' }))
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 )
 
-const addWecomRow = () => {
-  wecomRows.value.push({ domain: '', url: '' })
+const addWecomUrl = () => {
+  wecomUrls.value.push({ url: '' })
   wecomDirty.value = true
 }
 
-const removeWecomRow = (index) => {
-  wecomRows.value.splice(index, 1)
-  wecomDirty.value = true
+const removeWecomUrl = (index) => {
+  wecomUrls.value.splice(index, 1)
+  saveWecomUrls()
 }
 
-const saveGlobalWecomUrl = () => {
-  const url = (globalWecomUrl.value || '').trim()
-  if (url && !isHttpsUrl(url)) {
-    message.error(t('settings.wecomInvalidUrl'))
-    return
-  }
-  wecomDirty.value = false
-  configStore.setConfigValue('wecom_customer_service_url', url)
-}
-
-const saveWecomConfig = () => {
-  const urls = {}
-  for (const row of wecomRows.value) {
-    const domain = (row.domain || '').trim()
+const saveWecomUrls = () => {
+  const urls = []
+  for (const row of wecomUrls.value) {
     const url = (row.url || '').trim()
-    if (!domain) continue
-    if (!url) continue
-    if (!isHttpsUrl(url)) {
+    if (url && !isHttpsUrl(url)) {
       message.error(t('settings.wecomInvalidUrl'))
+      wecomDirty.value = true
       return
     }
-    urls[domain] = url
+    if (url) urls.push(url)
   }
   wecomDirty.value = false
   configStore.setConfigValue('wecom_customer_service_urls', urls)
-  message.success(t('settings.wecomSaved'))
 }
 
 const openLink = (url) => {
@@ -397,6 +365,21 @@ const openLink = (url) => {
     }
   }
 
+  .wecom-url-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+
+    .col-item {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .wecom-remove-btn {
+      flex-shrink: 0;
+    }
+  }
+
   .setting-label {
     font-size: 13px;
     font-weight: 500;
@@ -438,36 +421,6 @@ const openLink = (url) => {
   .agent-select {
     width: 320px;
     max-width: 100%;
-  }
-
-  .wecom-section {
-    .wecom-domain-title {
-      margin-top: 8px;
-    }
-
-    .wecom-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 8px;
-
-      .wecom-domain-key {
-        width: 200px;
-        max-width: 30%;
-      }
-
-      .wecom-domain-url {
-        flex: 1;
-        min-width: 0;
-      }
-    }
-
-    .wecom-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 12px;
-    }
   }
 
   .services-grid {

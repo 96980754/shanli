@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import re
 from typing import Any
 
 from langgraph.prebuilt.tool_node import ToolRuntime
@@ -585,6 +586,259 @@ async def search_file(
         "offset": offset,
         "limit": limit,
         "has_more": offset + limit < total,
+    }
+
+
+# ========== 读历史归档版本（只读） ==========
+#
+# 平台内部 document_version 是版本链序号（1、2…），而用户口中的版本号写在文件名里
+# （如《测试文档-v1.1.docx》→ V1.1）。匹配历史归档必须以文件名内嵌标签为准、序号兜底，
+# 不能拿序号直接当版本号去对用户说的 1.1。
+_KNOWN_DOC_EXT_RE = re.compile(r"\.(?:docx?|pdf|pptx?|xlsx?|csv|md|txt|wps)$", re.IGNORECASE)
+_VERSION_DECIMAL_SUFFIX_RE = re.compile(r"[-_\s]*(?:[vV]|版本)?\s*(?P<ver>\d+(?:\.\d+)+)\s*$")
+_VERSION_INTEGER_SUFFIX_RE = re.compile(r"[-_\s]+(?:[vV]|版本)\s*(?P<ver>\d+)\s*$")
+
+
+def _extract_trailing_version(name: str) -> tuple[str, str | None]:
+    """拆文档名尾部的版本标签，返回 (去版本后的家族名, 版本标签或 None)。"""
+    stem = _KNOWN_DOC_EXT_RE.sub("", str(name or "").strip())
+    match = _VERSION_DECIMAL_SUFFIX_RE.search(stem) or _VERSION_INTEGER_SUFFIX_RE.search(stem)
+    if not match:
+        return stem, None
+    family = stem[: match.start()]
+    family = re.sub(r"(?:[-_\s]*[vV]|[-_\s]*版本|[-_\s]+)$", "", family, flags=re.IGNORECASE).strip()
+    return family, match.group("ver")
+
+
+def _version_number(value: str | float | None) -> float | None:
+    try:
+        return float(str(value).strip().lstrip("vV").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _same_version(left: str | float | None, right: str | None) -> bool:
+    left_num = _version_number(left)
+    right_num = _version_number(right)
+    return left_num is not None and left_num == right_num
+
+
+def _record_version(record: dict[str, Any]) -> str:
+    """版本条目的用户可见版本号：文件名标签优先，链序号兜底。"""
+    _, token = _extract_trailing_version(str(record.get("filename") or ""))
+    return token or str(record.get("document_version") or "").strip()
+
+
+def _chain_summary(chain: dict[str, Any]) -> dict[str, Any]:
+    """家族版本链的可读摘要（不含 file_id，避免诱导模型猜读内部 ID）。"""
+    return {
+        "kb_name": chain["kb_name"],
+        "kb_id": chain["kb_id"],
+        "current_file": {"filename": chain["current_filename"], "version": chain["current_version"]},
+        "history_versions": [
+            {"filename": h["filename"], "version": h["version"], "updated_at": h.get("updated_at")}
+            for h in chain["history_versions"]
+        ],
+    }
+
+
+def _chain_describe(chain: dict[str, Any]) -> str:
+    """一条版本链的文字描述，供提示文案引用。"""
+    brief = f"当前版本《{chain['current_filename']}》（V{chain['current_version']}）"
+    if chain["history_versions"]:
+        histories = "、".join(f"V{h['version']}《{h['filename']}》" for h in chain["history_versions"])
+        return f"{brief}；历史归档版本：{histories}。"
+    return f"{brief}，无历史归档版本。"
+
+
+class ReadDocumentVersionInput(BaseModel):
+    """读取历史归档版本输入模型"""
+
+    document_name: str = Field(
+        description="文档家族名或完整文件名，可带版本后缀（如“测试文档”“测试文档-v1.1”），不含知识库名"
+    )
+    kb_name: str | None = Field(default=None, description="知识库名称；为空时在所有可访问知识库中查找")
+    document_version: str | float | None = Field(
+        default=None,
+        description="要读取的历史版本号（如 1.1）；为空时返回该文档可选的历史版本清单",
+    )
+
+
+@tool(category="knowledge", tags=["知识库"], args_schema=ReadDocumentVersionInput)
+async def read_document_version(
+    document_name: str,
+    kb_name: str | None = None,
+    document_version: str | float | None = None,
+    runtime: ToolRuntime = None,
+) -> dict[str, Any] | str:
+    """读取某文档**历史归档版本**的正文（只读）。
+
+    当用户询问历史/旧版本内容，或要求对比新旧版本时使用。普通检索（query_kb / search_file）
+    只能看到当前版本，被替换归档的旧版本已不在检索结果中，需要按“家族名 + 版本号”读取归档正文。
+    本工具只返回被替换归档的历史版本，不返回当前版本；当前版本内容请用 query_kb / open_kb_document。
+    返回正文不代表当前版本，仅作历史查看与版本对比用。
+
+    Args:
+        document_name: 文档家族名或完整文件名，可带版本后缀（如“测试文档”“测试文档-v1.1”）
+        kb_name: 知识库名称；为空时在所有可访问知识库中查找
+        document_version: 要读取的历史版本号（如 1.1）；为空时返回该文档可选的历史版本清单
+    """
+    if not str(document_name or "").strip():
+        return "请提供文档家族名（document_name），例如“测试文档”或“测试文档-v1.1”。"
+
+    visible_kbs = await _resolve_visible_knowledge_bases_for_query(runtime)
+    if not visible_kbs:
+        return "无法获取当前会话可访问的知识库"
+
+    if kb_name:
+        target_kbs = [kb for kb in visible_kbs if kb.get("name") == kb_name]
+        if not target_kbs:
+            return f"知识库 '{kb_name}' 不存在或当前会话未启用"
+    else:
+        target_kbs = visible_kbs
+
+    family, name_version = _extract_trailing_version(document_name)
+    if not family:
+        return f"无法从文档名 '{document_name}' 识别家族名，请提供不含版本号的文档名。"
+
+    requested = str(document_version).strip() if document_version not in (None, "") else name_version
+
+    # 收集各可见知识库中“当前生效”的候选文件，拼出对应的家族版本链
+    from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+    from yuxi.services.knowledge_source_version_service import KnowledgeSourceVersionService
+
+    repo = KnowledgeFileRepository()
+    version_service = KnowledgeSourceVersionService()
+    family_lower = family.lower()
+
+    chains: list[dict[str, Any]] = []
+    for kb in target_kbs:
+        kb_id = kb.get("kb_id")
+        if not kb_id:
+            continue
+        files = await repo.list_by_kb_id_after(kb_id=kb_id, limit=_KB_FILE_SCAN_LIMIT, files_only=True)
+        stems = [(f, _KNOWN_DOC_EXT_RE.sub("", f.filename)) for f in files]
+        matched = [(f, s) for f, s in stems if s.lower() == family_lower]
+        if not matched:
+            matched = [(f, s) for f, s in stems if family_lower in s.lower()]
+        candidate_ids = [f.file_id for f, _ in matched]
+        if not candidate_ids:
+            continue
+
+        items = await version_service.list_for_current_files(kb_id=kb_id, file_ids=candidate_ids)
+        for item in items:
+            histories = [
+                {
+                    "file_id": h["file_id"],
+                    "filename": h["filename"],
+                    "version": _record_version(h),
+                    "updated_at": h.get("updated_at"),
+                }
+                for h in item.get("history_versions") or []
+            ]
+            chains.append(
+                {
+                    "kb_id": kb_id,
+                    "kb_name": kb.get("name"),
+                    "current_file_id": item["file_id"],
+                    "current_filename": item["filename"],
+                    "current_version": _record_version(item),
+                    "history_versions": histories,
+                }
+            )
+
+    if not chains:
+        scope = f"知识库 '{kb_name}'" if kb_name else "可访问知识库"
+        return f"在{scope}中未找到名称包含 '{family}' 的文档。"
+
+    if len(chains) > 1:
+        return {
+            "ok": False,
+            "reason": "ambiguous_family",
+            "message": f"文档家族名 '{family}' 命中多个知识库中的同名文档，请带上 kb_name 精确到具体知识库后重试。",
+            "matches": [_chain_summary(chain) for chain in chains],
+        }
+
+    chain = chains[0]
+    histories = chain["history_versions"]
+
+    if requested and _same_version(requested, chain["current_version"]):
+        return {
+            "ok": False,
+            "reason": "target_is_current",
+            "message": (
+                f"V{requested} 对应的是当前版本《{chain['current_filename']}》，不是历史归档版本。"
+                "本工具只读取被替换归档的历史版本，当前版本正文请用 query_kb / open_kb_document 读取。"
+                f"（{_chain_describe(chain)}）"
+            ),
+            "history_versions": [_chain_summary(chain)["history_versions"]],
+        }
+
+    if not histories:
+        return {
+            "ok": False,
+            "reason": "no_history",
+            "message": (
+                f"《{chain['current_filename']}》（V{chain['current_version']}）"
+                "是当前版本，该文档没有可读的历史归档版本。"
+            ),
+        }
+
+    if requested:
+        archive = next((h for h in histories if _same_version(requested, h["version"])), None)
+        if archive is None:
+            return {
+                "ok": False,
+                "reason": "version_not_found",
+                "message": (
+                    f"未找到版本 V{requested} 的历史归档，请从中选择其一后带上 document_version 重新调用："
+                    f"{_chain_describe(chain)}"
+                ),
+                "history_versions": [_chain_summary(chain)["history_versions"]],
+            }
+    elif len(histories) > 1:
+        return {
+            "ok": True,
+            "action": "list",
+            "message": (
+                f"该文档有多个历史归档版本，请选定要查看/对比的版本后带 document_version 再次调用"
+                f"读取该版本正文：{_chain_describe(chain)}"
+            ),
+            "families": [_chain_summary(chain)],
+        }
+    else:
+        archive = histories[0]
+
+    from yuxi.services.document_diff_service import DocumentDiffNotFoundError, DocumentDiffService
+    from yuxi.services.document_version_run_service import _head_tail_truncate, _max_input_chars
+
+    try:
+        text = await DocumentDiffService().get_version_text(kb_id=chain["kb_id"], file_id=archive["file_id"])
+    except DocumentDiffNotFoundError:
+        return {
+            "ok": False,
+            "reason": "version_source_unavailable",
+            "message": (
+                f"历史归档版本 V{archive['version']}《{archive['filename']}》的正文暂不可读（源文件缺失），"
+                "请尝试其他历史版本或如实告知用户。"
+            ),
+        }
+
+    content, truncated = _head_tail_truncate(text, _max_input_chars())
+    return {
+        "ok": True,
+        "kb_name": chain["kb_name"],
+        "kb_id": chain["kb_id"],
+        "file_id": archive["file_id"],
+        "filename": archive["filename"],
+        "version": archive["version"],
+        "current_version": {"filename": chain["current_filename"], "version": chain["current_version"]},
+        "note": (
+            "以下正文来自该文件被替换归档前的历史版本，仅供查看历史与版本对比，"
+            "不代表当前生效内容；当前版本以普通知识库检索结果为准。"
+        ),
+        "content": content,
+        "truncated": truncated,
     }
 
 

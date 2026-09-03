@@ -45,6 +45,7 @@ BUILTIN_SKILLS: list[BuiltinSkillSpec] = [
             "find_kb_document",
             "open_kb_document",
             "search_file",
+            "read_document_version",
         ),
         enabled=True,
     ),

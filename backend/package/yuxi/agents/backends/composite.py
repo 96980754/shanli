@@ -123,6 +123,7 @@ class _BackendScope:
     readable_skills: list[str]
     file_thread_id: str
     skills_thread_id: str
+    readable_roots: tuple[str, ...] | None = None
 
     @classmethod
     def from_runtime(cls, runtime) -> _BackendScope:
@@ -147,6 +148,16 @@ class _BackendScope:
                     return value.strip()
             return None
 
+        def list_value(key: str) -> tuple[str, ...] | None:
+            for source in sources:
+                value = source.get(key) if isinstance(source, dict) else getattr(source, key, None)
+                if isinstance(value, str) and value.strip():
+                    return (value.strip(),)
+                if isinstance(value, (list, tuple)):
+                    cleaned = tuple(str(item).strip() for item in value if str(item).strip())
+                    return cleaned or None
+            return None
+
         thread_id = string_value("thread_id")
         if not thread_id:
             raise ValueError(f"thread_id is required in {error_context}")
@@ -162,6 +173,7 @@ class _BackendScope:
             readable_skills=normalize_string_list(selected if isinstance(selected, list) else []),
             file_thread_id=string_value("file_thread_id") or thread_id,
             skills_thread_id=string_value("skills_thread_id") or thread_id,
+            readable_roots=list_value("fs_read_roots"),
         )
 
     def create_backend(self) -> CompositeBackend:
@@ -172,6 +184,7 @@ class _BackendScope:
                 readable_skills=self.readable_skills,
                 file_thread_id=self.file_thread_id,
                 skills_thread_id=self.skills_thread_id,
+                readable_roots=self.readable_roots,
             ),
             routes={
                 "/skills/": SelectedSkillsReadonlyBackend(selected_slugs=self.readable_skills),
@@ -190,16 +203,22 @@ def create_agent_filesystem_middleware(
     context=None,
 ) -> FilesystemMiddleware:
     backend = create_agent_composite_backend
+    restrict_execute = False
     if context is not None:
-        backend = _BackendScope.from_sources(
+        scope = _BackendScope.from_sources(
             context,
             readable_skills_source=context,
             error_context="runtime context",
-        ).create_backend()
+        )
+        backend = scope.create_backend()
+        # 读范围收窄（如主对话排除共享工作区）时去掉 execute：shell 可绕过路径读门直读工作区。
+        restrict_execute = scope.readable_roots is not None
     middleware = YuxiFilesystemMiddleware(
         backend=backend,
         tool_token_limit_before_evict=tool_token_limit_before_evict,
     )
     middleware._large_tool_results_prefix = VIRTUAL_PATH_LARGE_TOOL_RESULTS
     middleware._conversation_history_prefix = VIRTUAL_PATH_CONVERSATION_HISTORY
+    if restrict_execute:
+        middleware.tools = [tool for tool in middleware.tools if tool.name != "execute"]
     return middleware

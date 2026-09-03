@@ -238,56 +238,92 @@ async def test_get_folder_chain_guards_against_cycle(monkeypatch):
     ]
 
 
-class _DeleteCandidatesResult:
-    """fake result：第一次 execute（候选查询）走 .scalars().all()。"""
+class _QueueResult:
+    """fake result：支持 scalar_one_or_none / scalars().all() / all() 三种取值。"""
 
-    def __init__(self, rows):
+    def __init__(self, *, scalar=None, rows=None):
+        self._scalar = scalar
         self._rows = rows
+
+    def scalar_one_or_none(self):
+        return self._scalar
 
     def scalars(self):
         return self
 
     def all(self):
-        return self._rows
+        return self._rows if self._rows is not None else []
 
 
-class _DeleteMainResult:
-    """fake result：第二次 execute（主记录查询）走 .scalar_one_or_none()。"""
+class _DeleteCandidatesResult(_QueueResult):
+    """兼容既有同名检查测试的位置参数调用（原实现直接接收 rows 列表）。"""
 
-    def __init__(self, row):
-        self._row = row
-
-    def scalar_one_or_none(self):
-        return self._row
+    def __init__(self, rows=None):
+        super().__init__(rows=rows)
 
 
 class _DeleteSession:
-    """fake session：第一次 execute 返回候选列表、第二次返回主记录，记录 delete 调用与编译 SQL。"""
+    """fake session：按 execute 调用顺序依次吐出预设结果，记录 delete 调用与编译 SQL。"""
 
-    def __init__(self, candidates, main):
-        self._candidates = candidates
-        self._main = main
+    def __init__(self, results):
+        self._results = list(results)
         self._execute_count = 0
         self.deleted: list = []
         self.compiled: list[str] = []
 
     async def execute(self, statement, *args, **kwargs):
         self.compiled.append(str(statement.compile(dialect=postgresql.dialect())))
+        result = self._results[self._execute_count]
         self._execute_count += 1
-        if self._execute_count == 1:
-            return _DeleteCandidatesResult(self._candidates)
-        return _DeleteMainResult(self._main)
+        return result
 
     async def delete(self, record):
         self.deleted.append(record)
 
 
+class _CreateGuardSession(_DeleteSession):
+    """create_document_with_duplicate_guard 专用 fake：兜住末尾的 session.add / flush。"""
+
+    def __init__(self, results):
+        super().__init__(results)
+        self.added = None
+
+    def add(self, record):
+        self.added = record
+
+    async def flush(self):
+        pass
+
+
 @pytest.mark.asyncio
-async def test_delete_cascades_pending_version_and_replacement_candidates(monkeypatch):
-    main = SimpleNamespace(file_id="file-main", filename="doc.md")
+async def test_delete_cascades_whole_version_family(monkeypatch):
+    """删除当前文档（family=True）应连同同 logical_document_id 的整族行一并删除。"""
+    main = SimpleNamespace(
+        file_id="file-main",
+        kb_id="kb-1",
+        is_current=True,
+        logical_document_id="logical-1",
+        filename="doc.md",
+    )
     version_candidate = SimpleNamespace(file_id="file-cand-v2", filename="doc.md")
+    archived_old_version = SimpleNamespace(file_id="file-v1", filename="doc.md")
     replacement_candidate = SimpleNamespace(file_id="file-cand-rep", filename="doc.md")
-    session = _DeleteSession(candidates=[version_candidate, replacement_candidate], main=main)
+    session = _DeleteSession(
+        [
+            _QueueResult(scalar=main),  # resolve_delete_file_ids: 目标行
+            _QueueResult(  # resolve_delete_file_ids: 命中 id 集
+                rows=[
+                    ("file-cand-v2",),
+                    ("file-v1",),
+                    ("file-cand-rep",),
+                    ("file-main",),
+                ]
+            ),
+            _QueueResult(  # delete: 取整族行对象
+                rows=[version_candidate, archived_old_version, replacement_candidate, main]
+            ),
+        ]
+    )
 
     @asynccontextmanager
     async def fake_session_context():
@@ -297,18 +333,29 @@ async def test_delete_cascades_pending_version_and_replacement_candidates(monkey
 
     await KnowledgeFileRepository().delete(file_id="file-main")
 
-    # 候选与主记录都在同一事务内删除，避免留下不可见的孤儿记录
-    assert session.deleted == [version_candidate, replacement_candidate, main]
-    candidate_sql = session.compiled[0].lower()
-    assert "supersedes_file_id" in candidate_sql, "版本候选应按 supersedes_file_id 关联清理"
-    assert "replacement_target_file_id" in candidate_sql, "替换候选应按 replacement_target_file_id 关联清理"
-    assert "is_current is false" in candidate_sql, "只应清理未激活候选，不影响正式版本"
+    # 归档旧版本 + 未激活候选与当前行整族删除，避免留下孤儿行导致重传同名旧内容误判重复
+    assert session.deleted == [version_candidate, archived_old_version, replacement_candidate, main]
+    resolve_sql = session.compiled[1].lower()
+    assert "logical_document_id" in resolve_sql, "删除当前文档应按 logical_document_id 级联同族归档行"
 
 
 @pytest.mark.asyncio
-async def test_delete_without_candidates_only_deletes_main(monkeypatch):
-    main = SimpleNamespace(file_id="file-main", filename="doc.md")
-    session = _DeleteSession(candidates=[], main=main)
+async def test_delete_without_version_family_only_deletes_main(monkeypatch):
+    """无版本链的文档（logical_document_id 为空）删除时仅清理目标行本身。"""
+    main = SimpleNamespace(
+        file_id="file-main",
+        kb_id="kb-1",
+        is_current=True,
+        logical_document_id=None,
+        filename="doc.md",
+    )
+    session = _DeleteSession(
+        [
+            _QueueResult(scalar=main),  # resolve: 目标行
+            _QueueResult(rows=[("file-main",)]),  # resolve: 只有自身
+            _QueueResult(rows=[main]),  # delete
+        ]
+    )
 
     @asynccontextmanager
     async def fake_session_context():
@@ -319,12 +366,13 @@ async def test_delete_without_candidates_only_deletes_main(monkeypatch):
     await KnowledgeFileRepository().delete(file_id="file-main")
 
     assert session.deleted == [main]
+    assert "is_current is false" not in session.compiled[1].lower()
 
 
 @pytest.mark.asyncio
 async def test_list_pending_candidate_file_ids_returns_matching_rows(monkeypatch):
     rows = [("file-cand-v2",), ("file-cand-rep",)]
-    session = _DeleteSession(candidates=rows, main=None)
+    session = _DeleteSession([_QueueResult(rows=rows)])
 
     @asynccontextmanager
     async def fake_session_context():
@@ -335,3 +383,62 @@ async def test_list_pending_candidate_file_ids_returns_matching_rows(monkeypatch
     candidate_ids = await KnowledgeFileRepository().list_pending_candidate_file_ids(file_id="file-main")
 
     assert candidate_ids == ["file-cand-v2", "file-cand-rep"]
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_guard_content_query_ignores_archived_rows(monkeypatch):
+    """内容重复守卫只匹配当前可见文档行。
+
+    回归 bug1：多版本文档删除后再传旧版本内容，若守卫 SQL 仍按旧条件
+    （is_active OR replacement_target_file_id is null OR status not in 失败态）判定，
+    归档旧版本/删除遗留孤儿行会被误判为"内容相同"而拒绝入库。守卫的 content_hash
+    查询必须只看 is_current & is_active，二者缺一不可。
+    """
+    # 执行序：2 条 advisory lock → content_hash 精确查询 → 同名查询 → 落库
+    session = _CreateGuardSession([_QueueResult(), _QueueResult(), _QueueResult(rows=[]), _QueueResult(rows=[])])
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    outcome = await KnowledgeFileRepository().create_document_with_duplicate_guard(
+        file_id="file-new",
+        data={
+            "kb_id": "kb-1",
+            "filename": "doc.md",
+            "content_hash": "hash-x",
+            "path": "kb-1/upload/doc.md",
+        },
+        duplicate_strategy="prompt",
+    )
+
+    assert outcome.action == "created"
+    guard_sql = next(sql for sql in session.compiled if "content_hash" in sql.lower())
+    where_clause = guard_sql.lower().rpartition("where")[2]
+    assert "is_current is true" in where_clause, "内容重复守卫应只匹配 is_current=true 的当前行"
+    assert "is_active is true" in where_clause, "内容重复守卫应同时要求 is_active=true，排除归档行"
+    assert "replacement_target_file_id" not in where_clause, "守卫不应再按旧条件放行归档/孤儿行"
+
+
+@pytest.mark.asyncio
+async def test_directory_listing_carries_logical_document_id(monkeypatch):
+    """目录/根视图列表投影需带出 logical_document_id。
+
+    回归 bug3：文件列表（默认 status=all）走 _list_directory_documents 的裁剪投影，
+    若缺 logical_document_id 列，list_document_files 无法按家族统计待审核候选，
+    所有行的 version_review_pending 恒为 False，冲突/待审核变更在表格不可见。
+    """
+    session = _RecordingSession()
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    await KnowledgeFileRepository().list_documents(kb_id="kb-1")
+
+    joined_sql = " ".join(sql.lower() for sql in session.compiled)
+    assert "logical_document_id" in joined_sql, "目录列表投影应包含 logical_document_id（供文件行待审核提示）"

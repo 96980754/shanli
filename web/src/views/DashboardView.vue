@@ -5,6 +5,13 @@
     <!-- 现代化顶部统计栏 -->
     <div class="modern-stats-header">
       <StatusBar />
+      <!-- 顶部操作区：反馈列表入口独立成显眼按钮，避免只藏在统计卡里 -->
+      <div class="dashboard-toolbar">
+        <a-button type="primary" @click="handleOpenFeedback">
+          <template #icon><MessageSquare class="toolbar-icon" /></template>
+          {{ t('dash.viewFeedbackList') }}
+        </a-button>
+      </div>
       <StatsOverviewComponent :basic-stats="basicStats" @open-feedback="handleOpenFeedback" />
     </div>
 
@@ -52,8 +59,6 @@
       </div>
     </div>
 
-    <!-- 反馈模态框 -->
-    <FeedbackModalComponent ref="feedbackModal" />
   </div>
 </template>
 
@@ -61,9 +66,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { MessageSquare } from 'lucide-vue-next'
 import { dashboardApi } from '@/apis/dashboard_api'
 
 const { t } = useI18n()
+const router = useRouter()
 
 // 导入子组件
 import StatusBar from '@/components/StatusBar.vue'
@@ -73,11 +81,7 @@ import KnowledgeStatsComponent from '@/components/dashboard/KnowledgeStatsCompon
 import AgentStatsComponent from '@/components/dashboard/AgentStatsComponent.vue'
 import CallStatsComponent from '@/components/dashboard/CallStatsComponent.vue'
 import StatsOverviewComponent from '@/components/dashboard/StatsOverviewComponent.vue'
-import FeedbackModalComponent from '@/components/dashboard/FeedbackModalComponent.vue'
 import FeedbackSummaryComponent from '@/components/dashboard/FeedbackSummaryComponent.vue'
-
-// 组件引用
-const feedbackModal = ref(null)
 
 // 统计数据 - 使用新的响应式结构
 const basicStats = ref({})
@@ -138,9 +142,9 @@ const loadAllStats = async () => {
   }
 }
 
-// 打开反馈详情弹窗
+// 打开反馈管理全页
 const handleOpenFeedback = () => {
-  feedbackModal.value?.show()
+  router.push('/feedback')
 }
 
 // 清理函数 - 清理所有子组件的图表实例
@@ -168,6 +172,17 @@ onUnmounted(() => {
   background-color: var(--gray-25);
   min-height: calc(100vh - 64px);
   overflow-x: hidden;
+}
+
+.dashboard-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px var(--page-padding) 0;
+
+  .toolbar-icon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 // Dashboard 特有的网格布局

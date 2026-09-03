@@ -6,7 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
-from yuxi.services.feedback_service import FEEDBACK_REASON_OPTIONS, parse_feedback_reason
+from yuxi.services.feedback_service import (
+    FEEDBACK_REASON_OPTIONS,
+    build_satisfaction_stats,
+    count_evaluable_answers,
+    parse_feedback_reason,
+)
 from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback, User
 
 
@@ -23,7 +28,10 @@ class FeedbackSummaryResponse(BaseModel):
     total_feedbacks: int
     like_count: int
     dislike_count: int
+    evaluable_count: int
+    silent_count: int
     satisfaction_rate: float
+    participation_rate: float
     reason_stats: list[FeedbackReasonStat]
     legacy_unclassified_count: int
 
@@ -69,7 +77,13 @@ async def get_feedback_summary(
         elif reason:
             legacy_unclassified_count += 1
 
-    satisfaction_rate = round((like_count / total_feedbacks * 100), 2) if total_feedbacks > 0 else 100.0
+    # 满意度口径：未反馈默认计满意（satisfaction_rate = (好评 + 未反馈) / 可评价基数）
+    evaluable_count = await count_evaluable_answers(db=db, agent_id=agent_id)
+    stats = build_satisfaction_stats(
+        evaluable_count=evaluable_count,
+        like_count=like_count,
+        dislike_count=dislike_count,
+    )
     reason_stats = [
         FeedbackReasonStat(code=code, label=label, count=reason_counts[code])
         for code, label in FEEDBACK_REASON_OPTIONS.items()
@@ -77,9 +91,12 @@ async def get_feedback_summary(
 
     return FeedbackSummaryResponse(
         total_feedbacks=total_feedbacks,
-        like_count=like_count,
-        dislike_count=dislike_count,
-        satisfaction_rate=satisfaction_rate,
+        like_count=stats["like_count"],
+        dislike_count=stats["dislike_count"],
+        evaluable_count=stats["evaluable_count"],
+        silent_count=stats["silent_count"],
+        satisfaction_rate=stats["satisfaction_rate"],
+        participation_rate=stats["participation_rate"],
         reason_stats=reason_stats,
         legacy_unclassified_count=legacy_unclassified_count,
     )

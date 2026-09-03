@@ -1452,15 +1452,18 @@ class MilvusKB(KnowledgeBase):
         )
         await self.refresh_database_stats(kb_id)
 
-    async def delete_file(self, kb_id: str, file_id: str) -> None:
-        """删除文件（包括元数据），并级联清理指向它的未完成版本/替换候选。"""
-        # 先清理候选与当前文件的 chunks（Milvus + PG），避免删除当前版本后留下孤儿向量
-        candidate_ids = await KnowledgeFileRepository().list_pending_candidate_file_ids(file_id=file_id)
-        for candidate_id in candidate_ids:
-            await self.delete_file_chunks_only(kb_id, candidate_id)
-        await self.delete_file_chunks_only(kb_id, file_id)
+    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = True) -> None:
+        """删除文件（包括元数据）。
 
-        await KnowledgeFileRepository().delete(file_id)
+        family=True（默认）时连同同一 logical_document_id 的版本链一并删除，先清理整族
+        chunks（Milvus + PG）与图谱投影，避免删完元数据后留下孤儿向量/断言。
+        """
+        repository = KnowledgeFileRepository()
+        # 待删整族（含目标本身、指向目标的候选、归档旧版本）
+        delete_ids = await repository.resolve_delete_file_ids(file_id, family=family)
+        for target_id in delete_ids:
+            await self.delete_file_chunks_only(kb_id, target_id)
+        await repository.delete(file_id, family=family)
         await self.refresh_database_stats(kb_id)
 
     async def get_file_basic_info(self, kb_id: str, file_id: str) -> dict:

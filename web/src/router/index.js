@@ -88,6 +88,19 @@ const router = createRouter({
       ]
     },
     {
+      path: '/feedback',
+      name: 'feedback-management',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'FeedbackManagementComp',
+          component: () => import('../views/FeedbackManagementView.vue'),
+          meta: { requiresAuth: true, requiresSuperAdmin: true }
+        }
+      ]
+    },
+    {
       path: '/knowledge-browser',
       component: AppLayout,
       children: [
@@ -96,18 +109,6 @@ const router = createRouter({
           name: 'KnowledgeBrowser',
           component: () => import('../views/KnowledgeBrowserView.vue'),
           meta: { requiresAuth: true }
-        }
-      ]
-    },
-    {
-      path: '/product-images',
-      component: AppLayout,
-      children: [
-        {
-          path: '',
-          name: 'ProductImageLibrary',
-          component: () => import('../views/ProductImageLibraryView.vue'),
-          meta: { requiresAuth: true, requiresAdmin: true }
         }
       ]
     },

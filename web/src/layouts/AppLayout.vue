@@ -12,9 +12,9 @@ import {
   X,
   MessageCirclePlus,
   CircleHelp,
+  ThumbsUp,
   Search,
-  FolderOpen,
-  Image as ImageIcon
+  FolderOpen
 } from 'lucide-vue-next'
 
 import { useConfigStore } from '@/stores/config'
@@ -153,17 +153,6 @@ const mainList = computed(() => {
     })
   }
 
-  // 产品图库（按外观检索产品的参照图，跨库管理），仅管理员可见
-  if (userStore.isAdmin) {
-    items.push({
-      name: t('nav.productImages'),
-      path: '/product-images',
-      activePaths: ['/product-images'],
-      icon: ImageIcon,
-      activeIcon: ImageIcon
-    })
-  }
-
   if (userStore.isAdmin) {
     items.push({
       name: t('nav.agentManage'),
@@ -185,6 +174,12 @@ const mainList = computed(() => {
       path: '/knowledge-gaps',
       icon: CircleHelp,
       activeIcon: CircleHelp
+    })
+    items.push({
+      name: t('nav.feedbackManagement'),
+      path: '/feedback',
+      icon: ThumbsUp,
+      activeIcon: ThumbsUp
     })
   }
 

@@ -526,8 +526,9 @@ class KnowledgeBaseManager:
         await self.parse_file(kb_id, new_file_id, operator_id=operator_id)
         await self.index_file(kb_id, new_file_id, operator_id=operator_id, params=params)
 
-        # 删除旧版（含 chunk、Milvus 向量）
-        await self.delete_file(kb_id, file_id)
+        # 删除旧版（含 chunk、Milvus 向量）；编辑保存只替换当前行，不级联删除该文档的
+        # 历史版本链（family=False），避免“编辑文档”误删整条版本历史。
+        await self.delete_file(kb_id, file_id, family=False)
 
         return new_file_id
 
@@ -697,7 +698,20 @@ class KnowledgeBaseManager:
         folder_ids = [record.file_id for record in records if record.is_folder]
         child_counts = await repo.count_children_by_parent_ids(kb_id=kb_id, parent_ids=folder_ids)
         stats = await repo.get_kb_file_stats(kb_id) if include_stats else None
-        items = [self._file_record_list_item(record, child_counts) for record in records]
+        # 统计各文档家族待审核的新版本候选，供文件行展示“版本变更待审核”提示
+        logical_ids = sorted(
+            {
+                record.logical_document_id
+                for record in records
+                if not record.is_folder and getattr(record, "logical_document_id", None)
+            }
+        )
+        review_counts = await repo.version_review_pending_counts(kb_id, logical_ids) if logical_ids else {}
+        items = []
+        for record in records:
+            item = self._file_record_list_item(record, child_counts)
+            item["version_review_pending"] = bool(review_counts.get(getattr(record, "logical_document_id", None)))
+            items.append(item)
         normalize_path_prefix = getattr(repo, "_normalize_path_prefix", lambda value: value or "")
 
         result = {
@@ -746,10 +760,10 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(kb_id)
         await kb_instance.delete_folder(kb_id, folder_id)
 
-    async def delete_file(self, kb_id: str, file_id: str) -> None:
-        """删除文件"""
+    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = True) -> None:
+        """删除文件（默认连同该文档整条版本链一并删除）"""
         kb_instance = await self._get_kb_for_database(kb_id)
-        await kb_instance.delete_file(kb_id, file_id)
+        await kb_instance.delete_file(kb_id, file_id, family=family)
 
     async def update_content(self, kb_id: str, file_ids: list[str], params: dict | None = None) -> list[dict]:
         """更新内容（重新分块）"""

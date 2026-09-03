@@ -12,6 +12,7 @@ from tavily import AsyncTavilyClient
 from yuxi.repositories.curated_qa_repository import CuratedQARepository
 from yuxi.repositories.knowledge_gap_repository import KnowledgeGapRepository
 from yuxi.services.curated_qa_service import CuratedQAService
+from yuxi.utils import logger
 
 
 class KnowledgeGapWebSearchService:
@@ -53,6 +54,46 @@ class KnowledgeGapWebSearchService:
             )
         return sources
 
+    @staticmethod
+    async def _compose_chinese_draft(question: str, sources: list[dict[str, Any]]) -> str:
+        """用平台聊天模型把联网片段归纳成中文草稿。
+
+        搜索引擎（Tavily）的 `include_answer` 摘要是其自带摘要引擎生成的、无语言参数可传，
+        默认偏向英文；直接回填会让管理员收到英文草稿，确认保存后还会作为人工问答对在
+        聊天里被原样命中输出英文。这里改由平台聊天模型按「始终使用中文、只依据片段」
+        的约束归纳，保证中文交付。失败返回空串，由调用方回退 Tavily 摘要。
+        """
+        from yuxi.agents.models import resolve_chat_model_spec
+        from yuxi.models.chat import select_model
+
+        numbered = "\n".join(
+            f"[{index}] {item.get('title') or item.get('url')}\n{item.get('content') or ''}"
+            for index, item in enumerate(sources, start=1)
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是知识库运营助手，负责把联网检索到的资料归纳成一份可直接作为人工答案的中文草稿。"
+                    "要求：1) 始终使用中文；2) 只依据给出的检索片段，不要编造片段之外的信息；"
+                    "3) 结构清晰、要点简明，适合直接整理发布；4) 若片段与问题不相关或信息不足，"
+                    "如实说明“未找到可靠资料”，不要硬凑。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"用户问题：{question}\n\n检索片段：\n{numbered}",
+            },
+        ]
+        try:
+            model_spec = resolve_chat_model_spec(None)
+            response = await select_model(model_spec).call(messages, stream=False)
+            composed = str((response and response.content) or "").strip()
+            return composed
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("联网补答中文草稿归纳失败，回退搜索引擎摘要: %s", exc)
+            return ""
+
     async def search(self, session: AsyncSession, gap_id: int) -> dict[str, Any] | None:
         gap = await KnowledgeGapRepository(session).get(gap_id)
         if gap is None:
@@ -73,13 +114,19 @@ class KnowledgeGapWebSearchService:
         if not isinstance(response, dict):
             raise RuntimeError("联网搜索返回格式异常")
 
-        draft_answer = str(response.get("answer") or "").strip()
+        sources = self._normalize_sources(response.get("results"))
+        # 平台模型归纳的中文草稿优先；无片段或归纳失败时回退 Tavily 自带摘要
+        draft_answer = ""
+        if sources:
+            draft_answer = await self._compose_chinese_draft(gap.question, sources)
+        if not draft_answer:
+            draft_answer = str(response.get("answer") or "").strip()
         return {
             "gap_id": gap.id,
             "question": gap.question,
             "agent_slug": gap.agent_slug,
             "draft_answer": draft_answer,
-            "sources": self._normalize_sources(response.get("results")),
+            "sources": sources,
         }
 
     async def save_answer(

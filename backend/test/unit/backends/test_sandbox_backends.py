@@ -19,7 +19,16 @@ from yuxi.agents.backends.composite import (
 from yuxi.agents.backends.sandbox import resolve_virtual_path, sandbox_id_for_thread
 from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
 from yuxi.agents.middlewares.skills import SkillsMiddleware
-from yuxi.utils.paths import VIRTUAL_PATH_CONVERSATION_HISTORY, VIRTUAL_PATH_LARGE_TOOL_RESULTS
+from yuxi.utils.paths import (
+    VIRTUAL_PATH_CONVERSATION_HISTORY,
+    VIRTUAL_PATH_LARGE_TOOL_RESULTS,
+    VIRTUAL_PATH_OUTPUTS,
+    VIRTUAL_PATH_UPLOADS,
+    VIRTUAL_SKILLS_PATH,
+)
+
+# 顶层主对话（bug3）的受限读根：本线程 uploads/outputs + skills，排除共享 workspace。
+_RESTRICTED_READ_ROOTS = (VIRTUAL_PATH_UPLOADS, VIRTUAL_PATH_OUTPUTS, VIRTUAL_SKILLS_PATH)
 
 
 def _runtime(
@@ -710,3 +719,154 @@ def test_provisioner_execute_returns_error_response_on_client_failure(monkeypatc
 
     assert result.exit_code == 1
     assert "Error:" in result.output
+
+
+def _restricted_backend(monkeypatch) -> ProvisionerSandboxBackend:
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    return ProvisionerSandboxBackend(
+        thread_id="thread-1",
+        uid="user-1",
+        readable_roots=_RESTRICTED_READ_ROOTS,
+    )
+
+
+def test_provisioner_restricted_roots_deny_shared_workspace_reads(monkeypatch) -> None:
+    backend = _restricted_backend(monkeypatch)
+
+    # 共享 workspace 与裸 user-data 不在受限读根内，直接拒绝（不需要访问沙箱客户端）。
+    result = backend.read("/home/gem/user-data/workspace/plan.txt")
+    assert result.error == "permission denied for read on '/home/gem/user-data/workspace/plan.txt'"
+    result = backend.read("/home/gem/user-data/shared-note.txt")
+    assert result.error == "permission denied for read on '/home/gem/user-data/shared-note.txt'"
+
+    # 本会话 outputs 仍可读。
+    fake_client = SimpleNamespace(
+        file=SimpleNamespace(read_file=lambda **_kwargs: SimpleNamespace(data=SimpleNamespace(content="hello")))
+    )
+    backend._get_client = MethodType(lambda self: fake_client, backend)
+    result = backend.read("/home/gem/user-data/outputs/note.txt")
+    assert result.error is None
+    assert result.file_data == {"content": "hello", "encoding": "utf-8"}
+
+
+def test_provisioner_unrestricted_backend_still_reads_workspace(monkeypatch) -> None:
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    backend = ProvisionerSandboxBackend(thread_id="thread-1", uid="user-1")
+
+    fake_client = SimpleNamespace(
+        file=SimpleNamespace(read_file=lambda **_kwargs: SimpleNamespace(data=SimpleNamespace(content="plan")))
+    )
+    backend._get_client = MethodType(lambda self: fake_client, backend)
+    result = backend.read("/home/gem/user-data/workspace/plan.txt")
+    assert result.error is None
+    assert result.file_data == {"content": "plan", "encoding": "utf-8"}
+
+
+def test_provisioner_restricted_roots_glob_searches_only_local_roots(monkeypatch) -> None:
+    backend = _restricted_backend(monkeypatch)
+    calls = []
+
+    def _find_files(**kwargs):
+        calls.append(kwargs["path"])
+        return SimpleNamespace(data=SimpleNamespace(files=[f"{kwargs['path']}/match.md"]))
+
+    fake_client = SimpleNamespace(file=SimpleNamespace(find_files=_find_files))
+    backend._get_client = MethodType(lambda self: fake_client, backend)
+
+    result = backend.glob("**/*.md")
+
+    assert result.error is None
+    assert sorted(calls) == sorted(_RESTRICTED_READ_ROOTS)
+    assert [item["path"] for item in result.matches] == sorted(f"{root}/match.md" for root in _RESTRICTED_READ_ROOTS)
+    assert not any("workspace" in item["path"] for item in result.matches)
+
+
+def test_provisioner_restricted_roots_ls_filters_out_workspace_entries(monkeypatch) -> None:
+    backend = _restricted_backend(monkeypatch)
+
+    def _list_path(**kwargs):
+        return SimpleNamespace(
+            data=SimpleNamespace(
+                files=[
+                    SimpleNamespace(
+                        path="/home/gem/user-data/outputs/plan.txt",
+                        is_directory=False,
+                        size=5,
+                        modified_time=None,
+                    ),
+                    SimpleNamespace(
+                        path="/home/gem/user-data/workspace/other.txt",
+                        is_directory=False,
+                        size=9,
+                        modified_time=None,
+                    ),
+                ]
+            )
+        )
+
+    fake_client = SimpleNamespace(file=SimpleNamespace(list_path=_list_path))
+    backend._get_client = MethodType(lambda self: fake_client, backend)
+
+    result = backend.ls("/home/gem/user-data")
+
+    assert result.error is None
+    assert [entry["path"] for entry in result.entries] == ["/home/gem/user-data/outputs/plan.txt"]
+
+
+def test_provisioner_restricted_roots_grep_denies_workspace_path(monkeypatch) -> None:
+    backend = _restricted_backend(monkeypatch)
+
+    result = backend.grep("needle", path="/home/gem/user-data/workspace")
+
+    assert result.error == "permission denied for read on '/home/gem/user-data/workspace'"
+
+
+def test_provisioner_restricted_roots_download_denies_workspace(monkeypatch) -> None:
+    backend = _restricted_backend(monkeypatch)
+
+    responses = backend.download_files(["/home/gem/user-data/workspace/plan.md"])
+
+    assert responses[0].error == "permission_denied"
+
+
+def test_middleware_drops_execute_and_scopes_roots_when_fs_read_roots_set(monkeypatch) -> None:
+    """bug3：context 注入 fs_read_roots 时后端受限，且 execute（shell 旁路）从工具集移除。"""
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    context = SimpleNamespace(
+        thread_id="thread-1",
+        uid="user-1",
+        fs_read_roots=_RESTRICTED_READ_ROOTS,
+        _readable_skills=["reporter"],
+    )
+
+    middleware = create_agent_filesystem_middleware(context=context)
+
+    assert middleware.backend.default._readable_roots == _RESTRICTED_READ_ROOTS
+    tool_names = [tool.name for tool in middleware.tools]
+    assert "execute" not in tool_names
+    assert {"ls", "read_file", "write_file", "edit_file", "glob", "grep"} <= set(tool_names)
+
+
+def test_middleware_keeps_execute_and_full_scope_without_fs_read_roots(monkeypatch) -> None:
+    """未受限（subagent/默认）保持现状：execute 存在、后端读根保持全量默认。"""
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    context = SimpleNamespace(
+        thread_id="thread-1",
+        uid="user-1",
+        _readable_skills=[],
+    )
+
+    middleware = create_agent_filesystem_middleware(context=context)
+
+    assert middleware.backend.default._readable_roots is None
+    assert "execute" in [tool.name for tool in middleware.tools]
+
+
+def test_create_agent_composite_backend_passes_fs_read_roots_from_runtime(monkeypatch) -> None:
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    runtime = _runtime(thread_id="thread-1", uid="user-1", readable_skills=["reporter"])
+    runtime.context.fs_read_roots = list(_RESTRICTED_READ_ROOTS)
+
+    backend = create_agent_composite_backend(runtime)
+
+    assert backend.default._readable_roots == _RESTRICTED_READ_ROOTS

@@ -593,6 +593,13 @@ class MessageFeedback(Base):
     uid = Column(String(64), nullable=False, index=True, comment="UID who provided feedback")
     rating = Column(String(10), nullable=False, comment="Feedback rating: like or dislike")
     reason = Column(Text, nullable=True, comment="Optional reason for dislike feedback")
+    status = Column(
+        String(20),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="Handling status: pending/processed/ignored",
+    )
     created_at = Column(DateTime, default=utc_now_naive, comment="Feedback creation time")
 
     # Relationships
@@ -605,6 +612,7 @@ class MessageFeedback(Base):
             "uid": self.uid,
             "rating": self.rating,
             "reason": self.reason,
+            "status": self.status,
             "created_at": format_utc_datetime(self.created_at),
         }
 

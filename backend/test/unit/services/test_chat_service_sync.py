@@ -252,6 +252,11 @@ async def test_save_messages_from_langgraph_state_backfills_run_output_message(m
             captured["message_id"] = message_id
 
     monkeypatch.setattr(svc, "AgentRunRepository", FakeRunRepo)
+    # “answer”是零检索硬答，会被 ② 改写为拒答并走域/缺口落库；单测里隔离 DB 副作用。
+    async def _no_gap(**kwargs):
+        return None
+
+    monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
 
     await svc.save_messages_from_langgraph_state(
         agent_instance=FakeAgent(),
@@ -612,3 +617,190 @@ async def test_build_agent_input_context_keeps_prompt_when_workspace_agent_conte
     )
 
     assert context["system_prompt"] == "原始系统提示词"
+
+
+def _save_fake_agent(messages):
+    class FakeGraph:
+        async def aget_state(self, _config):
+            return SimpleNamespace(values={"messages": messages})
+
+    class FakeAgent:
+        async def get_graph(self, *, context):
+            return FakeGraph()
+
+    return FakeAgent()
+
+
+async def _no_gap(**kwargs):
+    return None
+
+
+@pytest.mark.asyncio
+async def test_save_messages_revokes_zero_evidence_hard_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """决策②：业务内问题零检索硬答（epoll 场景）在落库时改写为 knowledge_refusal 并转人工。"""
+    monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
+
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "介绍一下linux的epoll"},
+                {"type": "ai", "content": "Linux 的 epoll 是一种 IO 事件通知机制……（通用知识）"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
+    disposition = meta["knowledge_disposition"]
+    assert disposition["type"] == "knowledge_refusal"
+    assert disposition["reason"] == "no_evidence_output"
+    assert disposition["domain"] == "unknown"
+    assert meta["knowledge_no_evidence"] is True
+    assert meta["handoff_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_save_messages_keeps_answer_when_grounded_by_legit_tool() -> None:
+    """文件等合法非 KB 来源的作答不被 ② 误伤。"""
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "根据上传的文档回答"},
+                {"type": "tool", "name": "read_file", "content": "/attachments/a.md"},
+                {"type": "ai", "content": "文档结论：该终端支持 CAT1。"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
+    assert meta["knowledge_disposition"]["type"] == "answered"
+    assert "knowledge_no_evidence" not in meta
+    assert "handoff_available" not in meta
+
+
+@pytest.mark.asyncio
+async def test_save_messages_exempts_continuation_after_evidence_answer() -> None:
+    """紧邻上一条带 ok 证据回答的续答轮（“那这个参数呢”）不被 ② 改写。"""
+    conv_repo = _FakeConvRepo(None)
+
+    async def _prev_evidence(_thread_id: str, limit: int | None = None):
+        return [
+            SimpleNamespace(
+                role="assistant",
+                extra_metadata={
+                    "knowledge_evidence": {
+                        "schema_version": 1,
+                        "kb_scope": ["kb_a"],
+                        "queries": [{"kb_id": "kb_a", "status": "ok", "reason": None, "result_count": 3}],
+                    }
+                },
+            )
+        ]
+
+    conv_repo.get_messages_by_thread_id = _prev_evidence
+
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [{"type": "human", "content": "那它的工作频率呢？"}, {"type": "ai", "content": "工作频率为 450MHz。"}]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
+    assert meta["knowledge_disposition"]["type"] == "answered"
+    assert "knowledge_no_evidence" not in meta
+
+
+def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
+    scope_refusal = {"knowledge_disposition": {"type": "scope_refusal", "reason": "off_topic"}}
+    answered = {"knowledge_disposition": {"type": "answered"}}
+    assert svc._assistant_meta_is_answer(scope_refusal) is False
+    assert svc._assistant_meta_is_answer({"handoff_available": True}) is False
+    assert svc._assistant_meta_is_answer({"is_error": True}) is False
+    assert svc._assistant_meta_is_answer(answered) is True
+    assert svc._assistant_meta_is_answer(None) is True
+
+
+def test_requires_knowledge_preflight_skips_greeting_and_identity_but_keeps_business() -> None:
+    # 问候 / 自我介绍类不走知识库预检与入口门，直接交主模型（身份由提示词回 IDENTITY_REPLY）
+    for query in ["你是谁", "你能做什么", "介绍一下你自己", "who are you", "你好", "在吗"]:
+        assert svc._requires_knowledge_preflight("ChatbotAgent", query) is False, query
+    # 业务外/业务内实质问题仍走预检（由入口门或检索判定）
+    for query in ["介绍一下linux的epoll", "MCX和PoC有什么区别？", "我们公司调度台怎么开通权限"]:
+        assert svc._requires_knowledge_preflight("ChatbotAgent", query) is True, query
+    # 非 ChatbotAgent 不触发
+    assert svc._requires_knowledge_preflight("OtherAgent", "介绍一下linux的epoll") is False
+
+
+def test_main_chat_read_scope_injected_for_main_and_resume_not_subagent() -> None:
+    """bug3：主对话（chat/resume）注入受限读根；subagent 子流保持全量（不注入）。"""
+    from yuxi.agents.buildin.chatbot.context import ChatBotContext
+
+    class _StubAgent:
+        context_schema = ChatBotContext
+
+    main_context = svc._build_agent_context(_StubAgent(), {"thread_id": "t1", "uid": "u1"})
+    svc._apply_main_chat_read_scope(main_context, run_type="chat")
+    assert getattr(main_context, "fs_read_roots", None) == svc._MAIN_CHAT_READ_ROOTS
+
+    resume_context = svc._build_agent_context(_StubAgent(), {"thread_id": "t1", "uid": "u1"})
+    svc._apply_main_chat_read_scope(resume_context, run_type="resume")
+    assert getattr(resume_context, "fs_read_roots", None) == svc._MAIN_CHAT_READ_ROOTS
+
+    subagent_context = svc._build_agent_context(_StubAgent(), {"thread_id": "t1", "uid": "u1"})
+    svc._apply_main_chat_read_scope(subagent_context, run_type="subagent")
+    assert not hasattr(subagent_context, "fs_read_roots")
+
+
+def test_main_chat_read_roots_exclude_shared_workspace() -> None:
+    """bug3：受限读根只含本线程 uploads/outputs + skills，不含共享 workspace。"""
+    from yuxi.utils.paths import VIRTUAL_PATH_OUTPUTS, VIRTUAL_PATH_UPLOADS, VIRTUAL_SKILLS_PATH
+
+    roots = svc._MAIN_CHAT_READ_ROOTS
+    assert roots == (VIRTUAL_PATH_UPLOADS, VIRTUAL_PATH_OUTPUTS, VIRTUAL_SKILLS_PATH)
+    workspace_prefix = str(VIRTUAL_PATH_UPLOADS).removesuffix("uploads") + "workspace"
+    assert workspace_prefix not in roots
+    assert any(root != workspace_prefix for root in roots)
+
+
+def test_industry_solution_skill_gate_strips_for_plain_main_chat_only() -> None:
+    """bug1（验收③）：普通主对话（chat/resume，无行业结构化标记）摘除 industry-solution，
+    防止模型自激活 Word 方案；显式行业请求与 subagent 子流保留。"""
+    from yuxi.agents.buildin.chatbot.context import ChatBotContext
+
+    class _StubAgent:
+        context_schema = ChatBotContext
+
+    def _context_with_skills():
+        return svc._build_agent_context(
+            _StubAgent(),
+            {"thread_id": "t1", "uid": "u1", "skills": ["industry-solution", "knowledge-base"]},
+        )
+
+    plain_chat = _context_with_skills()
+    svc._apply_industry_solution_skill_gate(plain_chat, run_type="chat", industry_enabled=False)
+    assert plain_chat.skills == ["knowledge-base"]
+
+    plain_resume = _context_with_skills()
+    svc._apply_industry_solution_skill_gate(plain_resume, run_type="resume", industry_enabled=False)
+    assert plain_resume.skills == ["knowledge-base"]
+
+    industry_chat = _context_with_skills()
+    svc._apply_industry_solution_skill_gate(industry_chat, run_type="chat", industry_enabled=True)
+    assert industry_chat.skills == ["industry-solution", "knowledge-base"]
+
+    subagent = _context_with_skills()
+    svc._apply_industry_solution_skill_gate(subagent, run_type="subagent", industry_enabled=False)
+    assert subagent.skills == ["industry-solution", "knowledge-base"]

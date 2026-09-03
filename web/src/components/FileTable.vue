@@ -304,6 +304,15 @@
             />
             <span class="file-name-text">{{ row.displayName || row.filename }}</span>
           </a-button>
+          <a-tag
+            v-if="!row.is_folder && row.version_review_pending"
+            class="file-review-pending"
+            color="orange"
+            :title="$t('fileTable.versionReviewPending')"
+            @click.stop="openVersionHistory(row)"
+          >
+            {{ $t('fileTable.versionReviewPending') }}
+          </a-tag>
         </span>
       </template>
 
@@ -1483,6 +1492,12 @@ import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-review-pending {
+  flex: none;
+  margin-left: 8px;
+  cursor: pointer;
 }
 
 .main-btn:hover {

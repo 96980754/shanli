@@ -127,3 +127,80 @@ def test_parse_feedback_reason_keeps_legacy_free_text():
         "reason_label": "历史反馈",
         "reason_detail": "旧版自由文本原因",
     }
+
+
+def test_parse_feedback_reason_code_form():
+    assert svc.parse_feedback_reason("answer_incorrect") == {
+        "reason_code": "answer_incorrect",
+        "reason_label": "答案有误",
+        "reason_detail": None,
+    }
+
+
+def test_parse_feedback_reason_code_form_with_detail():
+    assert svc.parse_feedback_reason("answer_incorrect\n我想要的答案和实际不符合") == {
+        "reason_code": "answer_incorrect",
+        "reason_label": "答案有误",
+        "reason_detail": "我想要的答案和实际不符合",
+    }
+
+
+def test_parse_feedback_reason_code_form_with_blank_detail():
+    assert svc.parse_feedback_reason("other\n   ")["reason_detail"] is None
+
+
+def test_parse_feedback_reason_en_alias_buckets_into_code():
+    # 历史英文界面存库标签 → 归入正确 code，保证统计跨语言一致
+    assert svc.parse_feedback_reason("Answer is incorrect") == {
+        "reason_code": "answer_incorrect",
+        "reason_label": "答案有误",
+        "reason_detail": None,
+    }
+
+
+def test_parse_feedback_reason_en_alias_with_detail():
+    assert svc.parse_feedback_reason("Answer is irrelevant\ntoo vague") == {
+        "reason_code": "irrelevant",
+        "reason_label": "答非所问",
+        "reason_detail": "too vague",
+    }
+
+
+def test_parse_feedback_reason_empty():
+    assert svc.parse_feedback_reason(None) == {
+        "reason_code": None,
+        "reason_label": None,
+        "reason_detail": None,
+    }
+    assert svc.parse_feedback_reason("  ") == {
+        "reason_code": None,
+        "reason_label": None,
+        "reason_detail": None,
+    }
+
+
+def test_build_satisfaction_stats_unreplied_counts_as_satisfied():
+    stats = svc.build_satisfaction_stats(evaluable_count=10, like_count=1, dislike_count=3)
+
+    assert stats["evaluable_count"] == 10
+    assert stats["like_count"] == 1
+    assert stats["dislike_count"] == 3
+    assert stats["silent_count"] == 6
+    # (1 好评 + 6 未反馈) / 10
+    assert stats["satisfaction_rate"] == 70.0
+    assert stats["participation_rate"] == 40.0
+
+
+def test_build_satisfaction_stats_no_evaluable_defaults_to_100():
+    stats = svc.build_satisfaction_stats(evaluable_count=0, like_count=0, dislike_count=0)
+
+    assert stats["silent_count"] == 0
+    assert stats["satisfaction_rate"] == 100.0
+    assert stats["participation_rate"] == 0.0
+
+
+def test_build_satisfaction_stats_silent_never_negative():
+    stats = svc.build_satisfaction_stats(evaluable_count=2, like_count=1, dislike_count=2)
+
+    assert stats["silent_count"] == 0
+    assert stats["satisfaction_rate"] == 50.0

@@ -1,0 +1,744 @@
+{
+  "run_name": "miniserver_all_20260819",
+  "formula": "答案正确性 = 硬门槛 × (0.8 × 关键事实命中率 + 0.2 × 补充事实命中率)",
+  "judge_llm": "deepseek:deepseek-v4-flash",
+  "overall": {
+    "mean": 0.48402298850574715,
+    "scored": 29,
+    "answered": 28,
+    "refusal_gap": 1,
+    "clarify_missing": 0,
+    "e2e_error": 0,
+    "judge_error": 0
+  },
+  "items": [
+    {
+      "index": 2,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver数据保存多久",
+      "gold_answer": "语音记录保存3个月",
+      "agent_answer": "**结论：知识库中未规定 Miniserver 数据的固定保存时长**。Miniserver 从 V2.3 版本起提供数据备份功能，其数据保留规则如下：\n\n## 数据备份规则（V2.3）\n\n1. **备份周期**：数据备份按周期执行，**每天执行一次备份**。\n2. **空间不足时的处理**：当 U 盘剩余存储空间**不足 2GB** 时，系统会**覆盖最早存储的数据**进行备份。\n3. **新插入 U 盘限制**：若新插入 U 盘剩余空间不足 2GB，系统无法启动自动备份，并提示\"备份需要空间\"，至少需要使用剩余空间大于 2GB 的 U 盘。\n\n**注意事项**：\n- 必须插入 U 盘才能进行数据备份；\n- 请使用出厂附带的专用 U 盘进行备份，该 U 盘不能挪作他用；\n- Miniserver 使用过程中请勿中途拔掉 U 盘。\n\n## 说明\n\n也就是说，Miniserver 数据的实际可保存时间**没有固定的天数上限**，而是取决于 **U 盘容量和每日数据量**：数据按天备份，当备份占用使 U 盘剩余空间低于 2GB 时，最早的备份数据会被覆盖，属于\"空间驱动的滚动覆盖\"机制，而非按固定时长删除。\n\n来源：poc资料库《POCSTARS Miniserver 快速使用手册 V2.3》\"4.5 数据备份 / 4.5.2 数据备份规则\"章节（中文版及英文版 Quick Operation Guide V2.3 内容一致）。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕Miniserver数据保存时长进行了实质说明，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "语音记录保存3个月"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的OS（操作系统）是什么",
+      "gold_answer": "Debian 9.基于Linux内核",
+      "agent_answer": "根据知识库资料，Miniserver 的操作系统为 **Debian**（Linux 系统）。\n\n具体信息如下：\n\n| 项目 | 内容 | 来源 |\n|------|------|------|\n| 操作系统 | Debian 12 | Miniserver M200 规格书 |\n| 系统要求 | Debian 12.9 系统以上 | POCSTARS PRO 产品解决方案 |\n\n说明：Miniserver M200 规格书中\"基本信息—操作系统\"一栏明确标注为 **Debian 12**；POCSTARS PRO 产品解决方案中 Miniserver M200 的配置参数标注为\"Intel 赛扬 J1900 四核，主频 2.0GHz，**Debian 12.9 系统以上**\"。\n\n**来源：**\n- poc-资料：Miniserver M200规格书20251125.xlsx\n- poc-资料：POCSTARS PRO产品解决方案 V1.2-202605.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了具体操作系统信息，属于实质作答且切题",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "key_missed": [
+        "Debian 9"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持监听吗?",
+      "gold_answer": "支持监听",
+      "agent_answer": "结论：**MiniServer 支持监听功能**，知识库中记载的监听能力均为调度台（或终端）对群组/终端发起，具体如下：\n\n## 支持的监听功能\n\n**1. 多群组监听（语音群组监听）**\n- MiniServer 调度台集成多群组监听能力，主界面设有\"多群组监听区\"，可点击\"监听图标\"监听对应群组（来源：POCSTAR MiniServer 调度台用户手册 V2.3）。\n- 调度台可同时监听多个群组，最多可设置 **8 个监听群组**；当多个群组同时有人讲话时，按优先级进行播放，并显示当前话权状态（来源：POCSTARS MNO 全平台功能清单 V1.0）。\n- 终端和调度台均可同时监听多个群组的语音通信（来源：POCSTARS Miniserver solution 英文版）。\n\n**2. SOS 报警时的环境音监听（遥控终端麦克风）**\n- 处理 SOS 报警时，调度台可远程开启终端麦克风监听环境音（来源：POCSTAR MiniServer 调度台用户手册 V2.3）。\n- 对应功能为\"遥控麦克风\"：调度员可远程遥控终端麦克风自动打开，目前以单呼形式实现（来源：POCSTARS MNO 全平台功能清单 V1.0）。\n\n## 需要说明的限制\n\n- 知识库中记载的 MiniServer 监听均为**调度台/终端对群组或终端用户**的监听，未检索到\"MiniServer 设备与 MiniServer 设备之间\"（两台设备互联互听）的监听功能记载。\n\n来源资料（poc-资料知识库）：\n- POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx\n- Miniserver产品解决方案.pptx / POCSTARS Miniserver solution.pptx\n- POCSTARS MNO全平台功能清单V1.0-20260522.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对MiniServer监听问题给出实质结论与功能说明，未拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 4,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持的数据传输速率是 1gbit/s",
+      "gold_answer": "1gbit/s指的是网卡的带宽即硬件的带宽",
+      "agent_answer": "根据知识库资料，该说法成立。\n\n**结论：** Miniserver（M200）采用千兆以太网卡，其网口支持的数据传输速率为 1 Gbit/s（千兆），因此 Miniserver 之间通过网口互联时的数据速率可达到 1 Gbit/s。\n\n**知识库依据（Miniserver M200 规格书）：**\n\n| 项目 | 规格 |\n|------|------|\n| 网卡芯片 | Intel I211-AT 千兆网卡（备选芯片：82574L / 82583V / I211） |\n| 网络接口 | RJ45 × 4 |\n\n- 中文规格书（《Miniserver M200规格书20251125.xlsx》，更新日期 2025-11-25）明确标注“Intel1211-AT千兆网卡”；\n- 英文规格书（《Miniserver M200 Datesheet 2025.xlsx》）标注为“Intel I211-AT Gigabit Ethernet Controller”，即千兆以太网控制器。\n\n需要说明的是：资料中的“1 Gbit/s”体现在网卡芯片为千兆（Gigabit）级别，即单网口理论最大速率 1000 Mbps；这适用于所有经 RJ45 网口建立的以太网链路，包括 Miniserver 与 Miniserver 之间的互联。\n\n来源：poc-资料（kb_3cm2gz6tyb）— Miniserver M200规格书20251125.xlsx、Miniserver M200 Datesheet 2025.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质说明了Miniserver网卡/网口支持1Gbit/s，并解释为千兆网卡的理论速率，与问题相关且非拒答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 6,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver规格书",
+      "gold_answer": "Miniserver M200规格书20251125.xlsx",
+      "agent_answer": "根据知识库中的《Miniserver M200规格书20251125.xlsx》及相关产品资料，Miniserver（小型化一体机）的规格如下：\n\n## Miniserver M200 产品规格\n\n### 基本信息\n\n| 项目 | 规格描述 |\n|------|---------|\n| 型号 | M200 |\n| 类型 | Mini型桌面式路由整机 |\n| 操作系统 | Debian 12 |\n| 尺寸 | 136×126×40mm（长×宽×高） |\n| 外壳 | 铝型材 |\n| 主体颜色 | 全黑色 |\n| 重量 | 590g |\n| 供电要求 | DC-IN 12V 5A |\n\n### 处理器与显示\n\n| 项目 | 规格描述 |\n|------|---------|\n| CPU | Intel 赛扬 J1900 |\n| BIOS | AMI 8M BIOS |\n| 性能 | 四核四线程 |\n| 频率 | 2.0GHz–2.42GHz |\n| 显示芯片 | 集成英特尔 HD Graphics |\n| 显示接口 | VGA ×1、HDMI ×1 |\n| 显示参数 | 最高支持 1920×1080 @60Hz |\n\n### 网络与内存\n\n| 项目 | 规格描述 |\n|------|---------|\n| 网卡芯片 | Intel I211-AT 千兆网卡（82574L/82583V/I211） |\n| 网络接口 | RJ45 ×4 |\n| 内存规格 | DDR3L 1600MHz |\n| 最大内存 | 8GB |\n\n### 存储与 I/O\n\n| 项目 | 规格描述 |\n|------|---------|\n| mSATA | 128GB（金士顿 Kingston） |\n| 拓展插槽 | 2.5寸 SATA2.0 ×1 |\n| USB | USB3.0 ×2 |\n| COM | 无（NA） |\n\n### 工作环境\n\n| 项目 | 规格描述 |\n|------|---------|\n| 工作温度 | -15~60℃ |\n| 工作湿度 | 0%~95%，无冷凝 |\n| 储存温度 | -10~60℃ |\n| 储存湿度 | 5%~95%，无冷凝（防潮防静电） |\n\n### 包装清单\n\n| 项目 | 数量 |\n|------|------|\n| M200 主机 | 1 台 |\n| 电源适配器 | 1 套 |\n| 网线 | 2 根 |\n| U盘 | 1 个 |\n| 产品包装盒 | 1 套 |\n\n## 补充说明\n\n- **产品功能**：支持语音对讲、录音、定位、SOS、指挥调度。\n- **容量**：默认 50 用户授权，最多可支持 200 用户；有 M200-50LIC、M200-100LIC、M200-150LIC、M200-200LIC 等授权配置。\n- **产品定位**：1 台 Miniserver 小型化设备即可实现本地部署并提供宽带集群对讲服务。\n- **可选服务**：AES256 加密功能、云容灾等（选配）。\n\n**来源**：\n- poc资料/miniserver/Miniserver M200规格书20251125.xlsx（kb_3cm2gz6tyb）\n- poc资料/miniserver/Miniserver产品解决方案.pptx（kb_3cm2gz6tyb）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了Miniserver规格书内容，切题且非拒答。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 5,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver调度台定位上报时间不准确/谷歌Key导致地图不显示",
+      "gold_answer": "更新网盘解决对应问题的ROM",
+      "agent_answer": "基于知识库中 MiniServer 相关手册，两个问题分别说明如下（均为故障排查类，按现象—可能原因—检查/处理组织）。\n\n## 一、定位上报时间不准确\n\n**现象**：调度台显示的终端定位（位置/上报时间）滞后于实际情况，看起来\"时间不准\"。\n\n**可能原因（知识库记载的上报机制）**：\n\n1. **调度台显示的是终端\"最新上报的位置\"，而非实时位置**。终端按设定频率周期性自动上报位置，两次上报之间的位置和时间不会实时刷新，上报间隔越大，时间滞后越明显。\n2. **上报频率设置偏大**。上报频率可通过调度台调整，各手册记载的默认值与范围如下（不同文档口径不一致，请注意版本）：\n\n| 来源文档 | 默认频率 | 可设置范围 |\n|---|---|---|\n| 调度台用户手册（V2.3） | — | 10S~300S |\n| 终端APP用户手册（V2.3） | 30s/次 | 10-120s |\n| 全平台功能清单（V2.3） | — | 10S~3000S |\n\n3. **定位功能或终端GPS未开启**：定位功能开关默认为关闭；且需终端设备系统设置中开启\"位置信息/GPS\"。未开启时终端不上报，调度台收不到新位置信息。\n\n**检查方法**：\n- 调度台菜单栏点击\"设置定位\"，查看/修改目标终端的上报频率，确认定位开关状态；\n- 检查终端设备系统设置（非APP内设置）中\"位置信息\"是否开启。\n\n**处理建议**：\n- 按业务需要调小上报频率（如30s以内），定位与时间的刷新会更及时；\n- 确认已在调度台/运营平台开启用户定位，且终端GPS已开启。\n\n## 二、谷歌地图不显示（谷歌Key导致）\n\n**现象**：调度台使用谷歌地图时底图不加载/不显示。\n\n**可能原因与处理建议**：\n\n1. **网络环境限制**：调度台手册明确建议，**国内网络环境优先选择百度地图（加载更稳定），海外网络环境可选择谷歌地图**。国内环境访问谷歌地图服务不稳定时，地图底图可能无法加载。\n   - 处理：在地图区域**右上角地图选择下拉框**中切换为「百度地图」或「谷歌地图」，系统自动重新加载。\n\n2. **地图Key/外部服务问题**：POCSTARS 平台操作说明中对依赖 Google Maps 的地图页有如下排查指引——**若地图底图无法加载，应先检查网络、地图 Key 或外部服务可达性**（该条出自 MDM 平台操作说明书\"设备地图\"章节，可作为同类地图加载问题的排查参考）。\n   - 处理：若必须使用谷歌地图，需确认调度台所在网络可访问谷歌地图服务、地图 Key 有效且外部服务可达。\n\n3. **终端侧补充（非调度台问题）**：终端APP手册记载，海外版APP依赖 Google 定位服务，设备不支持时位置相关界面无法访问并提示不支持 Google Play services；该限制属于终端侧，与调度台地图显示问题需区分排查。\n\n---\n\n**参考来源**：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n- poc资料/MDM/POCSTARS MDM平台操作说明书V1.0-20260415.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对两个问题给出了实质性的故障排查说明，非拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "更新网盘解决对应问题的ROM"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 7,
+      "section": "miniserver",
+      "query": "miniserver-miniserver网口最大的传输速度",
+      "gold_answer": "1Gbps",
+      "agent_answer": "根据知识库中的产品规格资料，结论如下：\n\n**Miniserver 网口为千兆网口，单个网口最大传输速度为 1000Mbps（1Gbps）。** 两台 Miniserver 之间通过网口直连/互联时，单个网口最高速率即为 1000Mbps（千兆）。\n\n依据与说明：\n\n| 项目 | 规格 |\n|------|------|\n| 网卡芯片 | Intel I211-AT 千兆网卡（备注：82574L/82583V/1211） |\n| 网络接口 | RJ45 × 4 |\n\n- 各资料（Miniserver M200 规格书、Miniserver 产品解决方案、PRO 产品解决方案）均标注网卡为 **千兆网卡**（Intel 82574L/82583V/I211），即每个 RJ45 网口最高支持 1000Mbps。\n- 该设备共配置 **4 个 RJ45 千兆网口**，多网口可分别用于路由上行、调试电脑（ETH0/ETH1）等场景；Miniserver 之间互联时，单网口上限同样为千兆速率。\n- 知识库中未记载 Miniserver 与 Miniserver 之间\"级联/互联\"的专项吞吐量测试数值，以上为设备网口本身的规格能力。\n\n来源：\n- poc-资料：Miniserver M200规格书20251125.xlsx（网卡芯片：Intel1211-AT千兆网卡；网络接口：RJ45*4）\n- poc-资料：Miniserver产品解决方案.pptx / POCSTARS PRO产品解决方案 V1.2-202605.pptx（网卡芯片：4* 82574L/82583V/I211）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确给出网口最大传输速度为1000Mbps（1Gbps）。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 9,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的3种使用方式",
+      "gold_answer": "局域网方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.终端配置内网IP和context，终端登录（Miniserver tools显示的） c.调度台和运营平台通过内网IP访问 d.不需要在Miniserver管理平台激活 e.不支持容灾 2.固定IP公网方式 a.开机后使用Tools设置本机内网IP，公网IP配置固定的公网IP（如果不固定，重启路由会变，导致终端和调度台无法使用） b.路由上做端口映射 c.终端配置公网IP和context，终端登录（Miniserver tools显示的） d.调度台和运营平台通过公网IP访问 e.不需要在Miniserver管理平台激活 f.不支持容灾 3.代理方式 a.开机后使用Tools设置本机内网IP，公网IP空置 b.在Miniserver管理平台上注册设备并激活（激活后语音服务就会走代理） c.终端配置miniserver.pocstar.com:10200和pocstar，终端登录（升级后不需要终端配置，用大公网的版本即可登录） d.调度台和运营平台通过内网IP访问 e.支持容灾（激活时选择）",
+      "agent_answer": "根据《POCSTARS Miniserver-快速使用手册V2.3》（poc资料/miniserver），Miniserver 的 3 种使用方式（配置场景）如下：\n\n## Miniserver 的 3 种使用方式\n\n### 1. 公网使用场景\n- **适用条件**：运营平台、调度台和终端都在公网使用，且不需要开通专用公网 IP。\n- **配置方法**：登录配置工具（http://192.168.11.2:6860，账号 admin，密码 Admin168）后，从左侧菜单进入\"初始化\" → \"设置NETWORK IP\"，网络类型选择\"公网\"（默认设置），系统自动配置网络，提示\"网络设置完成\"即配置完成。\n- **注意**：若从内网变更为公网场景，设置网络类型为\"公网\"后需点击【保存】。\n\n### 2. 纯内网使用场景\n- **适用条件**：运营平台、调度台和终端均在局域网中使用。\n- **配置方法**：\n  1. 从左侧菜单进入\"初始化\" → \"设置NETWORK IP\"，网络类型选择\"内网\"，点击【保存】，Miniserver 自动重启；\n  2. 工具自动下载 SSL 证书安装手册，并提示重新登录配置工具；\n  3. 手动重新登录配置工具，等待 Miniserver 启动完成。\n\n### 3. 固定公网IP使用场景\n- **适用条件**：给 Miniserver 配备固定公网 IP 地址，运营平台、调度台使用固定公网 IP 地址访问。\n- **前提条件**：\n  - 现场网络已由运营商或网络管理员提供固定公网 IP；\n  - 路由器或防火墙已完成对应业务端口的映射/放行，确保外部终端可以访问 Miniserver；\n  - 相关公网访问策略已验证可用（公网入口地址、端口转发规则及防火墙放行规则）。\n- **配置方法**：从左侧菜单进入\"初始化\" → \"设置NETWORK IP\"，网络类型选择\"内网\"，并在\"对外通信公网IP\"中设置为 Miniserver 配备的固定公网 IP 地址，点击【保存】，Miniserver 自动重启。\n\n## 三种方式配置完成后\n均可点击【立即前往开户】，或在菜单\"信息\" → \"配置信息\"中查看运营平台访问地址和登录账号，复制访问地址到浏览器访问（运营平台默认密码 a123456）。\n\n---\n\n**来源**：poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx（V2.3，2026.6.5）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质列出了Miniserver的3种使用方式，主题切题，非空非拒答。",
+      "key_facts": {
+        "total": 16,
+        "hit": 3
+      },
+      "supp_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "key_missed": [
+        "局域网: 设置本机内网IP，公网IP空置",
+        "局域网: 终端配置内网IP和context登录",
+        "局域网: 调度台和运营平台通过内网IP访问",
+        "局域网: 不需要在Miniserver管理平台激活",
+        "局域网: 不支持容灾",
+        "固定IP公网: 终端配置公网IP和context登录",
+        "固定IP公网: 不需要在Miniserver管理平台激活",
+        "固定IP公网: 不支持容灾",
+        "代理: 设置本机内网IP，公网IP空置",
+        "代理: 在Miniserver管理平台注册设备并激活",
+        "代理: 终端配置pocstar域名和pocstar登录",
+        "代理: 调度台和运营平台通过内网IP访问",
+        "代理: 支持容灾"
+      ],
+      "supp_missed": [
+        "固定IP公网: 公网IP不固定重启会变，终端和调度台无法使用",
+        "代理: 激活后语音服务走代理",
+        "代理: 升级后终端无需配置，用大公网版本登录"
+      ],
+      "score": 0.15000000000000002,
+      "judge_error": null
+    },
+    {
+      "index": 10,
+      "section": "miniserver",
+      "query": "miniserver-固定IP的网络是否支持外网访问运营平台和调度台",
+      "gold_answer": "使用固定IP公网方式配置，此方式可以外网访问运营平台调度台",
+      "agent_answer": "## 结论\n\n支持。Miniserver 配备固定公网 IP 时，可通过固定公网 IP 地址从外网访问运营平台和调度台，但需要满足前提条件并完成相应配置。\n\n## 前提条件\n\n按《POCSTARS Miniserver-快速使用手册V2.3》\"固定公网IP使用场景\"记载，需确认以下条件已满足：\n\n1. 现场网络已由运营商或网络管理员提供**固定公网IP**。\n2. 路由器或防火墙已完成**对应业务端口的映射/放行**，确保外部终端可以访问 Miniserver。\n3. 相关**公网访问策略已验证可用**，包括公网入口地址、端口转发规则及防火墙放行规则。\n\n## 需要放行的业务端口\n\n| 服务 | 协议 | 端口 | 备注 |\n|------|------|------|------|\n| 调度器 | udp | 10200 | 终端登录 |\n| 调度器 | tcp | 10201 | 调度台登录 |\n| 语音服务 | tcp | 11055 | 终端登录 |\n| 语音服务 | tcp | 11056 | 调度台登录 |\n| 语音服务 | udp | 30000 | 终端对讲 |\n| 语音服务 | tcp | 31000 | 调度台对讲 |\n| 调度台 | tcp | 7272 | 调度台前端 |\n| 运营平台 | tcp | 6130 | 运营平台前端 |\n| 网关 | tcp | 7298 | 网关 |\n\n## 配置步骤\n\n1. 在 Miniserver 配置工具中，从左侧菜单进入 **\"初始化\" → \"设置NETWORK IP\"**。\n2. 网络类型设置选择 **\"内网\"**，并在 **\"对外通信公网IP\"** 中设置为 Miniserver 配备的固定公网 IP 地址。\n3. 点击【保存】，Miniserver 会自动重启。\n4. 启动完成后，点击【立即前往开户】，或进入菜单 **\"信息\" → \"配置信息\"** 查看运营平台访问地址和登录账号，将访问地址复制到浏览器地址栏即可访问。\n\n补充说明：产品解决方案资料中亦记载\"支持外网使用管理平台和调度台，浏览器访问\"，与上述配置方式一致。\n\n## 来源\n\n- poc-资料 / POCSTARS Miniserver-快速使用手册V2.3.docx（\"3.3.3 固定公网IP使用场景\"章节）\n- poc-资料 / POCSTARS Miniserver Quick Operation Guide V2.3.pdf\n- poc-资料 / Miniserver产品解决方案.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出支持结论和配置方式，与问题相关且实质作答",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 8,
+      "section": "miniserver",
+      "query": "miniserver-Minisever 上没有多媒体消息菜单",
+      "gold_answer": "只有语音，定位，录音和SOS. 不支持轨迹回放",
+      "agent_answer": "根据知识库资料，**MiniServer（Minisever）产品本身不含\"多媒体消息\"功能菜单，这是该产品的功能范围设定，并非异常或缺失**。\n\n## 结论\n\n- MiniServer V2.3 全平台功能清单中没有\"多媒体\"功能模块，\"多媒体消息\"菜单不存在于 MiniServer 的运营平台、调度台和终端 APP 中。\n- \"多媒体消息\"功能（群组多媒体消息、会话、上报调度台多媒体消息等）属于 **MNO 全平台** 的功能清单。\n\n## MiniServer 实际包含的功能菜单\n\n**运营平台**（V2.3 用户手册目录）：组织管理、调度员管理、群组管理、用户管理、APK下载、个人中心。\n\n**调度台**：语音对讲（组呼/临时组呼/单呼/临时单呼应答/遥闭遥开/强拉强拆）、GIS地图操作、定位服务、录音功能、SOS报警、个人中心设置。\n\n**终端 APP**：\n- 产品简介中虽提到\"收发多媒体信息\"，但手册正文的\"消息\"界面仅用于查看**当前群组的对讲录音记录、漏话记录**。\n- 手册明确说明：在单呼和临时群组中，通过成员列表或菜单进入的\"消息\"页，**目前只能查看对讲记录，不支持收发 IM（多媒体）消息**。\n\n## 与 MNO 平台的差异\n\nMNO 全平台功能清单中包含完整的\"多媒体\"模块：群组多媒体消息、预定义消息、状态码消息、转发多媒体消息、会话（自定义会话收发文本/语音/图片/短视频）、上报调度台多媒体消息、消息通知、清除消息记录等。这些是 MNO 平台（公网对讲云平台）的功能，MiniServer 小型化一体机版本未包含。\n\n---\n\n**来源：**\n- POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx（poc资料/miniserver/）\n- POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx（poc资料/miniserver/）\n- POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（poc资料/miniserver/）\n- POCSTARS MiniServer V2.3 全平台功能清单.xlsx（poc资料/miniserver/）\n- POCSTARS MNO全平台功能清单V1.0-20260522.xlsx（poc资料/MNO/）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，围绕MiniServer无多媒体消息菜单进行说明，切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [
+        "不支持轨迹回放"
+      ],
+      "score": 0.8,
+      "judge_error": null
+    },
+    {
+      "index": 12,
+      "section": "miniserver",
+      "query": "miniserver-新版本是否支持组织/部门管理",
+      "gold_answer": "已发布版本不支持，下一个版本支持",
+      "agent_answer": "根据知识库资料，MiniServer 新版本（V2.3）**支持组织/部门管理**。\n\n## 结论\n\nPOCSTAR MiniServer V2.3 运营平台提供\"组织管理\"功能，可通过组织管理为公司创建不同层级的组织（或部门），用于层级组织管理和层级调度管理。\n\n## 功能明细\n\n依据《POCSTAR MiniServer V2.3 全平台功能清单》及 V2.3 运营平台用户手册，组织管理模块包含：\n\n| 功能点 | 说明 |\n|--------|------|\n| 组织树 | 公司组织架构支持最多 12 级层级 |\n| 新建组织 | 可添加组织层级，并在层级下添加成员和调度员 |\n| 编辑组织 | 支持修改组织名称 |\n| 删除组织 | 支持删除组织 |\n| 添加成员 | 可添加成员账号和调度员账号 |\n| 移除成员 | 可删除成员账号和调度员账号 |\n\n## 操作要点（来自 V2.3 运营平台用户手册）\n\n- 组织管理页面左侧展示公司账号可管理的所有组织，选中组织后右侧显示该组织内的用户和调度员账号列表，以及可执行的操作项（新建组织、添加组织成员、编辑组织、删除组织、移除组织成员、搜索账号）。\n- 删除组织时，其所有下级子组织会被自动删除，被删除组织的成员将移至上级组织。\n\n## 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-User Admin Panel User Manual-20260602.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3- List of all platform functions.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕新版本是否支持组织/部门管理进行了实质作答，未空答或拒答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "已发布版本不支持组织/部门管理",
+        "下一个版本才支持组织/部门管理"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 13,
+      "section": "miniserver",
+      "query": "miniserver-Mini Server 是否支持多名调度员？",
+      "gold_answer": "支持，调度员占用户数",
+      "agent_answer": "**结论：支持。** MiniServer 支持创建和管理多名调度员账号。\n\n依据知识库资料：\n\n1. **多名调度员账号可创建**\n   - MiniServer 运营平台提供“调度员管理”功能，公司账号可查看和管理公司所有调度员账号。\n   - 创建调度员时，可**输入本次要创建的调度员数量**及登录密码，保存后自动生成相应数量的调度员账号（即支持批量创建多名调度员）。\n   - 功能清单中对应描述为：“支持创建调度员账号，输入开户数量及登录密码，完成创建即可使用。”\n\n2. **调度员账号可独立管理**\n   每个调度员账号均支持以下管理操作：\n   - 停用/启用：停用后该调度员不可登录调度台；\n   - 编辑：修改用户名和联系电话等；\n   - 修改登录密码（密码规则：6–16 个字符，至少由数字、字母、特殊字符两者组合）；\n   - 设置用户等级（范围 1–20，数字越小等级越高；调度员账号等级默认为 10）；\n   - 批量导出调度员信息（Excel 格式）。\n\n3. **概念定义**\n   - 调度员：调度台使用的账号，即每位调度员使用各自账号登录调度台进行调度操作。\n\n来源：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx（调度员管理章节）\n- poc资料/miniserver/POCSTAR MiniServer V2.3 全平台功能清单.xlsx（调度员管理功能清单）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确支持且切题，未拒答或跑题",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [
+        "调度员占用户数"
+      ],
+      "score": 0.8,
+      "judge_error": null
+    },
+    {
+      "index": 11,
+      "section": "miniserver",
+      "query": "miniserver-miniserver是否支持配置域名和证书",
+      "gold_answer": "不支持配置域名。对于证书，已经添加了SSL证书。对于动态IP的网络，我们系统目前设计是https+IP的方式，而非域名+ssl的方式。对于https+IP的方式，在激活时已经自动添加了SSL加密证书，所以无需再额外申请域名和SSL证书",
+      "agent_answer": "## 结论\n\nMiniserver（V2.3）**支持证书配置**，**不支持（操作手册中未提供）手动配置域名**；但方案层面支持通过 DDNS 动态域名解析实现\"域名访问\"，且该能力仅用于\"无固定 IP 公网\"部署场景。\n\n## 说明\n\n### 1. 域名（DDNS 动态域名，仅方案层支持）\n\n- 知识库中的 Miniserver 产品解决方案将部署模式分为三种：局域网/纯内网、固定公网 IP、无固定 IP 公网。\n- 在\"无固定 IP 公网\"场景下，方案描述为：**借助 DDNS 动态域名解析技术，将动态公网 IP 映射到固定域名，即使 IP 发生变化，远程终端也能通过域名稳定访问服务器**。\n- 但《快速使用手册》中的配置项仅为网络类型（公网/内网/固定公网 IP）及\"对外通信公网 IP\"，**未描述在 Miniserver 配置工具中直接填写/绑定域名的操作步骤**。日常访问地址均为 IP 形式（如 `https://192.168.1.245:7273`）。\n\n### 2. 证书（支持两类操作）\n\n**（1）授权证书更新（扩容用户数）**\n- 当 Miniserver 需要扩容用户数时，需更新证书：在配置工具\"设定\"→\"系统设定\"页面，证书区域点击【导入证书文件】，导入我方根据客户订单信息提供的授权证书文件。\n- 导入成功后系统自动重启，重启完成后可在运营平台首页查看最新用户总数。\n\n**（2）Web 调度台 SSL 证书安装（消除浏览器\"不安全\"提示）**\n- 调度台地址栏 https 显示红色或\"不安全\"，是因未安装 SSL 证书，访问时会出现\"连接不是私密连接\"警告。\n- 安装步骤：从浏览器导出证书（保存类型须为\"Base64 编码 ASCII，单一证书（.pem/.crt）\"）→ 双击证书文件启动导入向导 → 存储位置选\"本地计算机\" → 证书存储选\"受信任的根证书颁发机构\" → 完成导入并验证（地址栏 HTTPS 显示绿色、无安全警告）。\n- **注意：Miniserver 修改配置后，需重新下载并导入新证书。**\n\n## 来源\n\n- poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx（kb_3cm2gz6tyb / file_497561）\n- poc资料/miniserver/POCSTARS Miniserver Quick Operation Guide V2.3.docx（kb_3cm2gz6tyb / file_993725）\n- poc资料/miniserver/Miniserver产品解决方案.pptx（kb_3cm2gz6tyb / file_3ad892）\n- poc资料/miniserver/POCSTARS Miniserver solution.pptx（kb_3cm2gz6tyb / file_0476e8）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答对Miniserver是否支持配置域名和证书给出了明确切题的实质说明。",
+      "key_facts": {
+        "total": 3,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "未说明已自动添加SSL证书，反而指导手动安装",
+        "未说明无需额外申请域名和SSL证书"
+      ],
+      "supp_missed": [
+        "未说明动态IP设计为https+IP而非域名+SSL"
+      ],
+      "score": 0.26666666666666666,
+      "judge_error": null
+    },
+    {
+      "index": 14,
+      "section": "miniserver",
+      "query": "miniserver-Mini Server 是否支持下载单个用户的录音记录？",
+      "gold_answer": "支持，通过调度台下载",
+      "agent_answer": "**支持。** MiniServer 调度台可以在录音查询页面按单个用户（讲话人）筛选并下载其录音记录。\n\n依据 MiniServer 调度台用户手册（V2.3）：\n\n1. **录音范围**：平台自动记录所有超过 200ms 的通话，最长可查询 1 个月内的录音，按记录时间倒序排列。\n2. **按用户筛选**：录音查询页面支持按**时间、讲话人（calling party）、所属组类型**等条件搜索录音，即可以筛选出单个用户的录音记录。\n3. **下载操作**：未加密或当前加密期间的录音可在线播放、下载；**已加密录音无法播放和下载**（下载后的录音文件可本地播放，加密录音除外）。\n\n注意事项：\n- 只有时长超过 200ms 的通话才会被记录；\n- 录音查询范围为最近 1 个月内；\n- 若录音已加密，则不支持播放和下载。\n\n来源：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx（2.3.8 录音功能）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-Dispatch Console User Manual-20260602.docx（2.3.8 Voice Recording Function）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确说明支持通过调度台下载单个用户录音记录。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 15,
+      "section": "miniserver",
+      "query": "miniserver-miniserver支持监听吗?",
+      "gold_answer": "支持监听",
+      "agent_answer": "是的，MiniServer 支持监听功能。\n\n根据知识库中 MiniServer（POCSTAR MiniServer V2.3）相关文档，监听能力主要体现在以下方面：\n\n**1. 调度台多群组监听**\n- MiniServer 调度台集成\"多群组监听\"功能，可在调度台同时监听多个群组，当多个群组同时有人讲话时，优先收听到先到达的语音，并显示当前讲话群组及讲话人信息。\n- 调度台主界面设有\"多群组监听区\"，显示当前监听的群组及讲话人信息。\n- 群组管理支持设置群组成员优先级，配合多群组监听使用。\n\n**2. 终端多群组监听**\n- 终端和调度台均可同时监听多个群组的语音；当多个群组同时有人讲话时，优先收听到先到达的语音。\n\n**3. SOS 报警场景的环境监听**\n- 调度台收到 SOS 报警后，在报警处理弹窗中可远程开启终端麦克风，监听报警终端的环境音；同时可回放该群组报警前 10 分钟内的对讲录音（无记录时显示最近 10 条）。\n\n来源：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- poc资料/miniserver/Miniserver产品解决方案.pptx\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，明确说明MiniServer支持监听",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 16,
+      "section": "miniserver",
+      "query": "miniserver-Miniserver的OS（操作系统）是什么",
+      "gold_answer": "debian 12",
+      "agent_answer": "**结论：Miniserver（M200）预装的操作系统为 Debian 12。**\n\n依据知识库中的资料：\n\n- **Miniserver M200 规格书**（poc资料/miniserver/Miniserver M200规格书20251125.xlsx）明确记载：基本信息—操作系统为 **Debian 12**。\n- **POCSTARS PRO 产品解决方案 V1.2**（poc资料/PRO/POCSTARS PRO产品解决方案 V1.2-202605.pptx）中 Miniserver M200 配置记载：CPU 为 Intel 赛扬 J1900 四核、主频 2.0GHz，系统为 **Debian 12.9 系统以上**。\n\n两份资料均指向 Debian 系列 Linux 系统，其中规格书标注为 Debian 12，解决方案中表述为 Debian 12.9 及以上版本。\n\n**来源：**\n- poc资料/miniserver/Miniserver M200规格书20251125.xlsx\n- poc资料/PRO/POCSTARS PRO产品解决方案 V1.2-202605.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答明确给出操作系统为 Debian 12，实质作答且切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 18,
+      "section": "miniserver",
+      "query": "miniserver-miniserver 云容灾",
+      "gold_answer": "目前是手动，需要在Miniserver管理平台切换。后续看下如何判断异常后，做成自动切。 当初定的自动切会引起不必要的切换，需要有客户使用后，根据实际情况再定自动切换机制 前期方案是运维通过监控Miniserver是否异常发出告警，然后在Miniserver管理平台根据实际情况点击按钮去切",
+      "agent_answer": "## MiniServer 云端容灾\n\n**结论**：MiniServer 支持\"本地 MiniServer + 云端容灾节点\"的容灾形态，属于**可选开通**的系统保障功能。本地设备故障时，云端节点接管语音业务，保障业务连续性。\n\n### 功能机制\n\n| 环节 | 说明 |\n|------|------|\n| 数据备份 | 系统持续捕获关键配置与基础数据，实时同步至异地云端服务器，确保用户基本数据在云端备份，从源头规避数据丢失风险 |\n| 故障切换 | 云端系统监测本地服务状态，一旦识别异常，立即触发容灾机制，切换至云端节点接管语音业务请求，保障终端用户语音业务服务连续性 |\n| 回迁 | 本地设备恢复正常后，系统可**自动/手动**切回服务；云端不存储业务数据，防止业务数据外漏 |\n| 开通方式 | 按需开通，通过实时同步实现\"本地故障触发云端接管\" |\n\n### 配置与切换\n\n- 云端容灾需在 **miniserver 管理平台侧完成配置与启用**。\n- 运维手动配置成功后，系统支持在 **5 分钟内**完成业务切换到容灾侧（切换时间与网络环境、系统负载相关，以实际为准）。\n\n### 产品定位\n\n- 在销售\"一纸禅\"中，云容灾列为**可选**系统软件：服务器异常时支持云端容灾，保障语音业务不间断（基础服务系统为必选，AES256 加密与云容灾均为可选）。\n\n> 说明：现有资料描述的容灾形态为\"本地 MiniServer 故障 → 云端容灾节点接管\"，未检索到两台 MiniServer 之间互为容灾（即 miniserver-to-miniserver 直连容灾）的记载。\n\n**来源**：\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n- poc资料/miniserver/Miniserver产品解决方案.pptx\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质介绍了MiniServer云容灾功能，未拒答或明显离题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "key_missed": [
+        "当前为手动切换，需在MiniServer管理平台操作",
+        "前期由运维监控异常并告警后手动点击切换",
+        "后续再研究异常判断与自动切换机制"
+      ],
+      "supp_missed": [
+        "自动切会引起不必要切换，故未采用",
+        "需客户使用后据实确定自动切换机制"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 17,
+      "section": "miniserver",
+      "query": "miniserver-关于MiniServer（微型服务器）相关能力与限制的结论",
+      "gold_answer": "存量设备不支持升级：今年之前发货的存量MiniServer，由于架构或版本限制，不支持升级到最新版本。 2、新设备支持升级，但需具备镜像恢复能力：今年发货的MiniServer支持版本升级。升级需通过镜像方式进行，我们将提供详细的操作手册，但要求客户具备一定的技术能力以完成镜像恢复操作。 3、账号不支持改名：MiniServer上的用户账号一旦创建，不支持修改名称。 4、热备功能暂不支持，但可定制开发：当前MiniServer版本不支持主备热切换（热备）功能。如有需求，可评估并支持定制开发。 5、DMR网关暂不支持，但可定制开发：当前MiniServer版本不支持DMR网关功能。如有需求，可评估并支持定制开发。 6、容灾功能已支持：MiniServer目前已支持容灾机制，前提条件是只有走代理的方式才支持容灾，能够在异常情况下保障业务的连续性。",
+      "agent_answer": "## MiniServer（M200 微型服务器）能力与限制结论\n\n**总体结论**：MiniServer（型号 M200）是面向 200 用户以内中小规模场景的桌面型一体化对讲服务器，出厂内置 POCSTARS 集群通信系统，主打\"零部署、低投入、便携、数据私有化\"，通过客户现有 4G/5G 或 WiFi 网络即可提供私有化公网对讲服务。\n\n### 一、核心能力\n\n**1. 功能能力**\n- 语音对讲：群组对讲、半双工语音单呼、临时群组、话权优先级、多群组监听、漏话提醒\n- 语音调度：强拉进组、话权强拆、遥闭/遥开、优先级抢麦\n- GIS 地图定位：实时同步 GPS 位置、成员实时位置查看\n- 对讲录音：平台记录所有超过 200ms 的通话，调度台可在线播放、下载、删除\n- 安全报警：紧急手动 SOS 一键报警，报警记录自动保存\n- 维护管理：账号管理、终端管理、群组管理、自定义 logo（运营平台与调度台）\n- 系统保障：AES256 语音加密（选配）、云端容灾（选配）、U 盘一键数据备份与异常快速恢复、用户数扩容\n\n**2. 部署能力（三种模式）**\n- 局域网/纯内网：服务器与终端同内网，无需公网 IP，外网无法访问，数据安全性最高\n- 固定 IP 公网：适合总部与多分支机构互联，链路稳定、延迟低\n- 无固定 IP 公网：借助 DDNS 动态域名解析，家庭宽带/动态 IP 网络也可用\n\n**3. 硬件规格（Miniserver M200）**\n\n| 属性 | 参数 |\n|---|---|\n| 产品功能 | 语音对讲、录音、定位、SOS、指挥调度 |\n| 容量 | 默认 50 用户授权，最多可支持 200 用户 |\n| CPU | Intel 赛扬 J1900 四核，主频 2.0GHz，Debian 12.9 系统以上 |\n| 内存 | DDR3L 1600MHz，8GB |\n| 网卡芯片 | 4× 82574L/82583V/I211 |\n| 硬盘 | MSATA128 |\n| 外观 | 铝合金，全黑色 |\n| 尺寸（W×D×H） | 136×126×40mm |\n\n**4. 产品配置**\n- MiniServer 主机 1 台（标配），用户数配置可选：50 / 100 / 150 / 200 用户（对应 M200-50LIC / 100LIC / 150LIC / 200LIC）\n- U 盘 1 个（标配，数据备份用）、电源适配器（含电源线）1 套（标配）、安装挂件和螺丝 1 套（标配）\n- AES256 加密服务（选配）、云端容灾服务（选配）\n- 基础服务系统（语音对讲、定位、SOS、录音、用户/群组管理、web 调度台）为必选；配套对讲终端由客户按需选择\n\n### 二、限制与适用条件\n\n1. **容量上限**：产品定位为 200 个以内终端规模的客户（中小型企业、临时项目、分散型组织），\"可以满足 200 人以内的对讲需求\"；超过该规模需采用服务器/私有云中型部署方案（单节点在线 500 人以下等）。\n2. **网络依赖**：服务基于客户现有 4G/5G 或 WiFi 网络提供，客户需自行提供网络；无固定 IP 公网场景依赖 DDNS 技术。\n3. **局域网模式限制**：终端需要修改登录配置；数据私有化，外网无法访问。\n4. **选配能力**：AES256 加密、云端容灾为选配项，不在基础标配范围内。\n5. **录音规则**：仅记录超过 200ms 的通话。\n6. **终端适配**：可直接使用 POCSTARS 公网版（MNO 版本）终端，无需额外适配，但终端需按需另购。\n\n### 来源\n- poc资料/miniserver/Miniserver产品解决方案.pptx（poc-资料库）\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx（poc-资料库）\n- poc资料/PRO/POCSTARS PRO产品解决方案 V1.2-202605.pptx（poc-资料库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质介绍了MiniServer的能力与限制，主题相关，非拒答或答非所问。",
+      "key_facts": {
+        "total": 6,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "存量MiniServer不支持升级到最新版本",
+        "新设备升级需镜像方式且具备镜像恢复能力",
+        "用户账号创建后不支持修改名称",
+        "热备功能暂不支持，可定制开发",
+        "DMR网关暂不支持，可定制开发",
+        "容灾仅支持走代理方式"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 20,
+      "section": "miniserver",
+      "query": "miniserver-imei在公网激活的，要先删除再激活吗？",
+      "gold_answer": "imei在公网激活的，需要先删除再激活到新版Miniserver下使用",
+      "agent_answer": "抱歉，在现有知识库中未找到相关依据。",
+      "cls": "refusal_gap",
+      "gate": "fail",
+      "gate_reason": "系统回答为拒答（未找到相关依据），未实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "公网激活的imei需先删除",
+        "再激活到新版Miniserver下使用"
+      ],
+      "supp_missed": [],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 21,
+      "section": "miniserver",
+      "query": "miniserver-公司版miniserver可以添加imei吗？",
+      "gold_answer": "可以通过直接输入imei号添加到公司",
+      "agent_answer": "可以。根据知识库中 POCSTARS MiniServer（V2.3）运营平台文档，MiniServer 支持添加终端 IMEI 作为用户账号。\n\n**结论**\n- MiniServer 运营平台的「用户管理」中提供【添加终端】功能，可将终端的 IMEI 添加为公司用户账号，创建后账号即可使用。\n- 支持单个添加和批量添加两种方式。\n- IMEI 账号（终端账号）是以终端 IMEI 号码作为登录凭证的对讲账号；当终端有多个 IMEI 时，录入 IMEI 1 作为终端账号。\n\n**操作步骤（以运营平台 V2.3 为例）**\n1. 登录 MiniServer 运营平台，进入「用户管理 → 用户列表」。\n2. 点击【添加终端】。\n3. 单个添加：在「输入账号」中输入终端的 IMEI，点击【保存】完成添加。\n4. 批量添加：下载账号模板 → 在模板中编辑要批量添加的 IMEI 账号 → 点击【浏览】选择编辑好的表格 → 点击【导入】完成批量添加。\n5. 添加时可快捷关联群组（下拉选择目标群组；若无合适群组，可点击【添加群组】按默认参数快速新建，默认通话时长 30 秒、所属组织为最高级组织）。\n\n**补充说明**\n- 平台支持创建 IMEI、ICCID、APP 三类账号，账号创建后立即可用。\n- 若终端需在 MiniServer 上注册上线（如动态 IP 版），终端 IMEI 需先分配/绑定到对应的 MiniServer，且终端接入与业务使用依赖 MiniServer 在线运行。\n\n来源：\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-User Admin Panel User Manual-20260602.docx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答，明确说明可以添加IMEI并给出操作方式，切题。",
+      "key_facts": {
+        "total": 1,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [],
+      "supp_missed": [],
+      "score": 1.0,
+      "judge_error": null
+    },
+    {
+      "index": 22,
+      "section": "miniserver",
+      "query": "miniserver-调度员如何连接到miniserver",
+      "gold_answer": "ip+端口的方式，但和端口没有任何关系，一个账号连接也不会占用一个端口",
+      "agent_answer": "## 结论\n\n调度员通过**浏览器访问 Web 调度台地址**即可连接到 MiniServer，登录前需要先在运营平台开通调度员账号。\n\n## 操作步骤\n\n1. **获取调度台地址**\n   - 在 miniserver 配置工具（浏览器访问 `http://192.168.11.2:6860`，账号 `admin`，密码 `Admin168`）中，点击菜单 **\"信息\" → \"配置信息\"**，查看\"运营平台\"和\"调度台\"地址，并复制保存。\n\n2. **打开浏览器访问调度台**\n   - 打开浏览器新窗口，在地址栏输入配置工具中找到的**调度台地址**进行访问。\n   - Web 调度台通过浏览器访问统一 Web 地址即可使用，支持跨平台（Windows/macOS 等），无需安装传统客户端。\n\n3. **处理浏览器安全提示（如有）**\n   - 若浏览器提示\"连接不是私密连接\"，点击【高级】→【继续前往...（不安全）】，进入 Web 调度台登录页面。\n   - 如需彻底解决\"不安全\"提示，可参照手册附录 5.3\"Web 调度台安装 SSL 证书\"。\n\n4. **麦克风授权**\n   - 进入登录页面后，浏览器弹出麦克风授权请求，选择【访问该网站时允许】进行授权。\n\n5. **输入调度员账号登录**\n   - 输入在运营平台开通的**调度员账号**进行登录，登录后即可使用语音对讲调度、终端管理、位置服务等调度功能。\n\n## 前置条件与注意事项\n\n- **开通账号**：调度员账号需先在运营平台开通（运营平台默认密码 `a123456`），并在运营平台创建群组、将用户关联到群组，调度员才有调度对象。\n- **固定公网 IP 场景**：需确认路由器/防火墙已放行对应业务端口，其中与调度台相关的端口包括：\n\n| 服务 | 协议 | 端口 | 用途 |\n|------|------|------|------|\n| 调度器 | tcp | 10201 | 调度台登录 |\n| 语音服务 | tcp | 11056 | 调度台登录 |\n| 语音服务 | tcp | 31000 | 调度台对讲 |\n| 调度台 | tcp | 7272 | 调度台前端 |\n\n## 来源\n\n- poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答详细说明了调度员通过浏览器Web调度台连接MiniServer的操作步骤，属于实质作答且切题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "连接方式与端口无实际关系"
+      ],
+      "supp_missed": [
+        "一个账号连接不会占用一个端口"
+      ],
+      "score": 0.4,
+      "judge_error": null
+    },
+    {
+      "index": 23,
+      "section": "miniserver",
+      "query": "miniserver-miniserver更换logo/运营平台/调度台",
+      "gold_answer": "属于商机问题，转销售处理。（有量才有可能支持修改logo，需销售去沟通）",
+      "agent_answer": "根据知识库中《POCSTARS Miniserver-快速使用手册V2.3》的记载，MiniServer 支持客户自定义上传 Logo，展示在运营平台和调度台上。具体说明如下：\n\n## 自定义 Logo 要求\n\n| Logo 名称 | 格式 | 大小 | 尺寸 | 展示位置 |\n|---|---|---|---|---|\n| 系统 Logo | PNG | 不超过 2M | 460 × 64 px | 运营平台和调度台的登录页和内页标签栏 |\n| 标签 Logo | PNG | 不超过 10K | 14 × 14 px | 浏览器标签栏小图标 |\n\n## 更换操作步骤\n\n1. 进入配置工具菜单 **“信息”→“配置信息”**；\n2. 在 **运营平台和调度台 Logo 设置区域**，按要求上传需要更换的 Logo 图片；\n3. 重新访问运营平台和调度台进行检查，若 Logo 未更新，请**清除浏览器缓存**。\n\n补充说明：\n- 更换 Logo 后需重新访问页面才能看到效果，若未生效需清理浏览器缓存（可强制刷新）。\n- 该操作通过 MiniServer 配置工具完成，适用于运营平台和调度台两处展示。\n\n来源：\n- poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx（poc-资料知识库）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质给出了更换Logo的操作步骤，与问题相关，并非拒答或答非所问。",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "更换logo属于商机问题，应转销售处理"
+      ],
+      "supp_missed": [
+        "有量才有可能支持修改logo，需销售沟通"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 19,
+      "section": "miniserver",
+      "query": "miniserver-MINISEVER 新版 录音记录/定位保存多久",
+      "gold_answer": "录音记录6个月，定位记录3个月",
+      "agent_answer": "根据企业知识库中的 Miniserver（V2.3 新版）资料，回答如下：\n\n## 结论\n\n- **录音记录**：最长可查询 **1 个月**内的录音。\n- **定位（位置）数据**：现有 Miniserver 资料中**未查到明确记载的保存时长**；定位功能为实时位置查看，不涉及历史轨迹保存期限。\n\n## 说明\n\n**1. 录音记录（有明确依据）**\n\n《POCSTAR MiniServer V2.3-调度台用户手册》（2026-06-01）及英文版《Dispatch Console User Manual》（2026-06-02）2.3.8 录音功能均记载：\n\n> 平台自动记录所有超过 200ms 的通话，最长可查询 1 个月内的录音，按记录时间倒序排列。\n\n配套说明：\n- 可按时间、讲话人、所属组类型筛选录音；\n- 未加密或当前加密期间的录音可在线播放、下载；已加密录音无法播放和下载；\n- 运营平台支持对终端账号进行录音开启/关闭设置。\n\n**2. 定位（位置）数据（资料未明确保存时长）**\n\nMiniserver V2.3 资料中关于定位的记载均为实时定位：\n- 终端开启 GPS 且运营平台/调度台开启用户定位（默认关闭）后，调度台点击成员\"定位\"图标可查看该终端**最新位置**；\n- 位置上报频率可设置（调度台手册为 10S~300S，全平台功能清单为 10S~3000S，两份资料存在差异）；\n- 未查到 Miniserver 定位/位置数据或轨迹的保存期限规定。\n\n## 来源\n\n- POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx（录音功能、GPS 定位章节）\n- POCSTAR MiniServer V2.3-Dispatch Console User Manual-20260602.docx（Voice Recording Function 章节）\n- POCSTARS MiniServer V2.3 全平台功能清单.xlsx（录音/定位设置项）\n\n若您需要定位数据保存期限的正式承诺值，建议与产品/研发确认后补充至资料，当前知识库中无此依据。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答针对录音和定位保存时长给出具体回答，实质作答且切题",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "录音记录保存6个月",
+        "定位记录保存3个月"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 24,
+      "section": "miniserver",
+      "query": "miniserver-miniserver的终端apk是否支持录音记录功能",
+      "gold_answer": "录音一直都有.小屏机的话得终端改个版本",
+      "agent_answer": "根据知识库中的 Miniserver 相关资料，结论如下：\n\n## 结论\n\nMiniserver 的**终端 APK 本身不提供\"录音记录\"功能**；录音记录由 **Miniserver 平台（服务器端）统一完成**，终端账号的录音开关由运营平台控制，录音记录在**调度台**查看和管理。\n\n## 依据说明\n\n**1. 录音由平台自动记录（终端无需操作）**\n- 对讲录音：平台自动记录所有用户超过 200ms 的通话，调度台可查看所有呼叫的录音记录，并可在线播放、下载、删除。\n- Miniserver M200 产品定位为提供语音对讲、录音、定位和报警功能，录音记录可用于查证。\n\n**2. 终端账号录音开关由运营平台设置**\n- 运营平台\"用户管理-用户录音设置\"：支持对终端账号进行录音开启和关闭。即终端侧是否录音由平台侧统一配置，而非终端 APK 内自行操作。\n\n**3. 录音记录在调度台查看**\n- 调度台\"录音功能\"：自动记录超过 200ms 的通话，按时间倒序排列，最长可查 6 个月内记录；支持按时间、讲话人、所属组类型筛选；录音可在线播放、下载。\n- 调度台\"SOS 报警-SOS 录音回听\"：可回听报警前 10 分钟内群组对讲录音（无记录则显示最近 10 条）。\n\n**4. 终端 APK 功能清单对照**\n- Miniserver V2.3 全平台功能清单中，终端 APP 的功能项为：登录（3 种登录方式/切换环境/扫码）、语音对讲（多群组监听、单呼、固定/临时群组对讲、强拆、遥开遥闭、话权/成员状态显示）、定位（位置上报）、报警（发送/接收/查看 SOS）、系统设置（Tone 音、版本号、电量信号上报），**未包含\"录音记录\"功能项**。\n\n## 来源\n\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx\n- poc资料/miniserver/Miniserver产品解决方案.pptx\n- poc资料/miniserver/POCSTARS MiniServer V2.3 全平台功能清单.xlsx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答实质作答且切题，围绕终端APK录音功能进行说明",
+      "key_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "录音一直都有"
+      ],
+      "supp_missed": [
+        "小屏机需终端改个版本"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 26,
+      "section": "miniserver",
+      "query": "miniserver-miniserver升级后 重新添加账号提示超出授权无法创建",
+      "gold_answer": "联系邹波报客户名字 查询记录，.Miniserver刷镜像后.需要在管理平台上删除重建",
+      "agent_answer": "已根据知识库完成核查。以下是基于《POCSTARS Miniserver-快速使用手册V2.3》《POCSTAR MiniServer V2.3-运营平台用户手册》《Miniserver产品解决方案》《POCSTARS Miniserver 销售\"一纸禅\" V2.3》等资料整理的回答。\n\n## 结论\n\n\"提示超出授权无法创建\"表示当前 Miniserver 的**已使用授权用户数已达到该系统授权用户总数上限**，无法再创建新账号。需要先确认授权余量；若已用尽，须**导入新的授权证书进行扩容**后，才能继续添加账号。\n\n## 现象—原因—检查—处理\n\n**现象**\nMiniserver 升级后，重新添加账号时提示超出授权，无法创建。\n\n**可能原因（知识库记载）**\n- Miniserver 账号创建受系统授权用户数限制，运营平台可查看\"已授权用户总数\"和\"已使用授权用户数\"。\n- 授权用户数按购买配置固定：Miniserver M200 默认 50 用户授权，另有 100/150/200 用户授权版本（M200-50LIC / 100LIC / 150LIC / 200LIC）。已使用授权达到上限后，无法继续创建新账号。\n\n**检查方法**\n登录运营平台，在首页查看\"已授权用户总数\"和\"已使用授权用户数\"，确认是否已用尽、以及授权总数是否与购买配置一致。\n\n**处理建议**\n若授权已用尽需要扩容，按以下步骤导入新的授权证书（授权证书由我方根据客户订单信息提供）：\n\n1. 进入配置工具菜单 **\"设定\" → \"系统设定\"** 页面；\n2. 在证书区域点击 **【导入证书文件】**，选择从我方获取的证书文件进行导入；\n3. 导入成功后，系统自动重启；\n4. 重启完成后，在运营平台首页查看最新的用户总数，再重新添加账号。\n\n## 说明\n\n知识库中**未记载**\"升级\"操作与授权失效之间的直接关联，也未记载\"升级后需重新导入授权证书\"的专项说明，故不对此进行推测。若确认升级后系统显示的授权用户总数与购买配置不一致，建议核对订单及授权证书信息，联系我方获取对应授权证书后按上述流程导入。\n\n**来源**\n- poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx（5.4 更新证书、3.2 查看系统用户数）\n- poc资料/miniserver/Miniserver产品解决方案.pptx（容量：默认50用户授权，最多200用户）\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx（M200-50/100/150/200LIC 授权配置）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-运营平台用户手册-20260601.docx（首页查看系统用户数）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕授权问题给出了实质性排查和操作建议，未拒答或答非所问。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "联系邹波报客户名字查询记录",
+        "需要在管理平台上删除重建"
+      ],
+      "supp_missed": [
+        "Miniserver刷镜像后"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    },
+    {
+      "index": 25,
+      "section": "miniserver",
+      "query": "miniserver-miniserver如何开启AES256加密功能",
+      "gold_answer": "miniserver配置完成后，需要在这台机器的运营平台上登录对应的代理商账 号，在公司设置里面把AES256打开 若公司账号是:admin@org.hxd，那么代理商账号是:admin@hxd，密码 是默认的",
+      "agent_answer": "基于知识库检索，回答如下。\n\n## 结论\n\nMiniServer 支持 AES256 加密功能，属于**可选功能模块**（对讲语音 AES256 加密）。知识库中记载的开启方式为：**在运营平台中为公司账号开启 AES256 加密**，开启后该公司下所有用户的 PTT 对讲语音都会加密。\n\n## 开启步骤\n\n1. 使用代理商/分销商账号登录运营平台（MiniServer 运营平台访问地址与账号从 MiniServer 配置工具的\"配置信息\"中获取，默认密码 a123456）。\n2. 进入\"公司管理 → 公司列表\"，找到目标公司。\n3. 点击该公司操作项中的【设置】（即\"设置公司服务\"），进入服务设置界面。\n4. 在服务项中找到 **AES256 加密**，将其开关**打开**并保存。\n\n补充说明（同样来自知识库）：\n- 代理商也可在\"代理商管理 → 代理商设置\"中打开 AES256 加密；分销商在\"分销商管理 → 分销商设置（设置服务）\"中开启，服务项包含全双工通话、AES256 加密、用户自建群组、派接组。\n- 开启加密后，终端/调度台发起的 PTT 对讲语音均加密传输；加密期间用户可正常收听对讲语音，也可正常回放加密期间的历史对讲录音记录。\n- 关闭加密后，**无法回放和下载任何加密期间的历史对讲录音记录**（已加密录音无法播放和下载）。\n\n## 证据边界说明\n\n- MiniServer 产品资料（销售\"一纸禅\" V2.3、产品解决方案）确认 MiniServer 支持 AES256 加密且为可选模块；MiniServer 调度台用户手册确认\"已加密录音无法播放和下载\"。\n- 上述\"在运营平台公司设置中开启 AES256 加密\"的具体操作说明，来自《POCSTARS 运营平台用户手册 V3.0-20260409》和《POCSTARS MNO 全平台功能清单 V1.0-20260522》；\n- MiniServer V2.3 专属的《运营平台用户手册》和《全平台功能清单》中**未查到** AES256 加密的开启步骤章节，如需 MiniServer 当前版本的准确开启入口，建议以设备实际运营平台界面或厂商最新文档为准。\n\n来源：\n- poc资料/miniserver/POCSTARS Miniserver 销售\"一纸禅\" V2.3.docx\n- poc资料/MNO/POCSTARS运营平台用户手册V3.0-20260409.docx\n- poc资料/MNO/POCSTARS MNO全平台功能清单V1.0-20260522.xlsx\n- poc资料/miniserver/POCSTAR MiniServer V2.3-调度台用户手册-20260601.docx\n- poc资料/miniserver/Miniserver产品解决方案.pptx",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了具体的开启步骤，与问题切题，实质作答。",
+      "key_facts": {
+        "total": 2,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 2,
+        "hit": 1
+      },
+      "key_missed": [],
+      "supp_missed": [
+        "公司账号admin@org.hxd对应代理商账号admin@hxd"
+      ],
+      "score": 0.9,
+      "judge_error": null
+    },
+    {
+      "index": 28,
+      "section": "miniserver",
+      "query": "miniserver-如果创建好的账号提示账号不存在排查思路",
+      "gold_answer": "检查配置的什么网络； 2、如果是代理模式，我们自己登录看能否登录：如果也登录不了，切换下网络为内网，再切换回去（目的是同步数据到云端） 如果我们可以登录，检查终端登录方式，账号输入之类的 3、如果是固定公网模式，需要改终端的context DNS信息",
+      "agent_answer": "已从知识库检索到相关排查依据，以下为结论。\n\n## 排查结论\n\n在 MiniServer 场景下，运营平台已创建（开户）的账号登录时提示\"账号不存在\"，知识库记载的可能原因及对应排查思路如下：\n\n**现象**：账号已在运营平台创建成功，但终端 APP 登录时提示\"账号不存在\"。\n\n| 序号 | 可能原因 | 检查方法 | 处理建议 |\n|---|---|---|---|\n| 1 | 账号输入错误 | 核对运营平台创建账号时设置的账号名，逐字符确认输入内容 | 检查账号后重新输入 |\n| 2 | 终端 APP 所属平台与账号所在平台不匹配（APP 版本与平台版本不匹配） | 确认终端安装的 APK 版本是否与账号对应服务包中限制的 APK 版本一致 | 安装/升级到指定版本后重试登录（对应提示\"当前版本不匹配，请升级/安装指定版本\"） |\n| 3 | **APP 登录环境未切换到 MiniServer 平台（MiniServer 场景特有原因）** | APP 出厂默认登录环境为 POCSTAR 公网；若未配置登录环境，APP 仍向公网平台发起鉴权，公网上不存在该账号，故提示\"账号不存在\" | 见下方步骤 |\n\n### 针对原因 3 的排查步骤（MiniServer 重点）\n\n1. 在 APP 登录界面选择\"登录设置\"。\n2. 配置环境参数（两种方式任选）：\n   - **手动配置**：按实际部署填写环境参数，其中 Context（Brand）和 DNS 为必填项；\n   - **扫码自动配置**：点击登录设置页面右上角扫码按钮，扫描运营平台【用户列表 – APK 下载】下生成的配置二维码，系统自动识别并填充 DNS 和 Context 参数（仅支持平台生成的标准配置二维码）。\n3. 配置完成后需退出应用并重启 APP，再重新登录。\n4. 如需切回公网，可在登录设置中选择\"恢复默认设置\"，切换回 POCSTAR 公网环境。\n\n**补充提示**：若登录 30 秒后提示\"Login Timeout\"，说明当前配置的环境参数不正确，需重新核对 Context/DNS 配置。\n\n## 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.1.9 常见登录失败的提示和原因、3.1.10 用户可以设置登录的环境、4.1 无法登录）\n- poc资料/miniserver/POCSTAR MiniServer V2.3-Large Screen Terminal APP-20260602.docx（3.1.9 FAQ of Login Failures、3.1.10 Login Environment Settings）",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答给出了具体的排查步骤和原因，属于实质作答且切题。",
+      "key_facts": {
+        "total": 5,
+        "hit": 2
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "检查配置的什么网络",
+        "代理模式下自测能否登录",
+        "自测登录不了时切换内网再切回"
+      ],
+      "supp_missed": [
+        "切换网络目的是同步数据到云端"
+      ],
+      "score": 0.32000000000000006,
+      "judge_error": null
+    },
+    {
+      "index": 27,
+      "section": "miniserver",
+      "query": "miniserver-cat1机器智能收到按麦提示音，没有语音",
+      "gold_answer": "检查是否开启了AES256功能，cat1目前不支持语音加密功能",
+      "agent_answer": "根据知识库检索结果，miniserver-cat1 终端\"收到按麦提示音（按麦Tone音）但没有语音\"属于对讲麦权获取/语音传输问题。以下结论均来自知识库中 MiniServer 终端APP用户手册及内网部署运维检查指南。\n\n## 故障排查：收到按麦提示音但没有语音\n\n**现象说明**：按麦Tone音只表示 PTT 按键已被触发。按麦Tone音后能否正常讲话，取决于是否成功获取麦权；若按麦Tone音后紧接着听到摘麦Tone音，即表示获取麦权失败。\n\n### 可能原因（获取麦权失败，来自终端APP用户手册）\n\n1. **用户掉线**——听到按麦Tone音后马上听到摘麦Tone音；\n2. **用户处于被遥闭状态**——听到按麦Tone音后马上听到摘麦Tone音，被遥闭时无法发起对讲、无法收听对讲；\n3. **当前话权非空时抢麦**——其他成员正在讲话占用话权，抢麦失败，听到按麦Tone音后马上听到摘麦Tone音；\n4. **网络不稳定**——获取麦权失败，听到按麦Tone音后 3 秒内听到摘麦Tone音；\n5. **该用户在某群组的话权优先级被设置为\"仅听\"**——获取麦权失败；\n6. **连续频繁按放 PTT 超过两次**——获取麦权失败。\n\n### 检查方法与处理建议\n\n按以下顺序排查（依据终端APP用户手册\"无法对讲\"及运维检查指南）：\n\n1. 确认终端已**成功登录**终端应用软件；\n2. 确认**当前所在群组**正确；\n3. 确认**网络正常、连接成功**（可在APP\"个人中心-网络连接状态\"查看信号强度）；\n4. 确认**未被调度台遥闭**，且本人在当前群组的话权优先级**不是\"仅听\"**；\n5. 确认当前群组**无其他成员占用话权**后再按PTT，避免抢麦失败；\n6. 避免**连续频繁按放PTT**（超过两次会获取麦权失败）；\n7. 确认终端**麦克风权限已开启**（语音对讲无声音排查第1条）；\n8. 检查**语音服务状态**正常、无异常日志；\n9. 检查**UDP 30000-30002 端口**已放行（语音媒体流使用 UDP 30000-30002，防火墙需放行 UDP 协议）；\n10. 可先**测试单向通话**（A呼B，B不接听仅听），确认至少一个方向有声音，以缩小问题范围。\n\n**补充说明**：按麦Tone、放麦Tone、摘麦Tone 均可在APP\"设置-TONE音\"菜单中统一开关，如排查时需确认提示音来源可查看该设置项。\n\n### 来源\n\n- poc资料/miniserver/POCSTAR MiniServer V2.3-终端APP用户手册-20260601.docx（3.2.1 进行语音对讲、3.6.3 TONE音开/关设置、4.2 无法对讲）\n- poc资料/Pocstar项目内网部署前置条件与运维检查指南v2.docx（6.3.2 语音对讲无声音）\n\n如上述排查后问题仍存在，知识库未记载更进一步的定位方法，建议按运维指南整理客户名称、问题描述、服务状态（./check.sh 输出）、相关服务 error.log 最后50行等信息提交技术支持。",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答围绕“收到按麦提示音但没有语音”的故障排查展开，构成实质作答，未空答、拒答或离题。",
+      "key_facts": {
+        "total": 2,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 0,
+        "hit": 0
+      },
+      "key_missed": [
+        "未检查是否开启AES256功能",
+        "未说明cat1不支持语音加密功能"
+      ],
+      "supp_missed": [],
+      "score": 0.2,
+      "judge_error": null
+    },
+    {
+      "index": 29,
+      "section": "miniserver",
+      "query": "miniserver-miniserver重置网络",
+      "gold_answer": "重置网络：从代理模式-固定ip或者内网模式、固定公网ip模式------恢复到代理模式自动获取ip（其它模式时重置网络慎用） 如果是代理模式自动获取ip换了网线会自动检测，，如果失败就重启Miniserver 如果代理模式固定ip换了网线，需要tools手动设置新的ip，或者重置网络",
+      "agent_answer": "根据知识库中《POCSTARS Miniserver-快速使用手册V2.3》和《POCSTARS Miniserver Quick Operation Guide V2.3》的记载，Miniserver 的网络重置（重新设置）通过配置工具中的“设置NETWORK IP”完成，具体如下：\n\n## 重置网络操作步骤\n\n1. 准备工作：准备一台带网口的调试电脑；一根网线连接路由器和 Miniserver 的 ETH0 口，另一根连接调试电脑与 Miniserver 的 ETH1 口。\n2. 将调试电脑 IP 改为手动：IPv4 地址设为 `192.168.11.100`（末位可换，但不能用 1 和 2），子网掩码 `255.255.255.0`；先关闭电脑 Wi-Fi 避免 IP 冲突。\n3. 打开调试电脑浏览器，访问 `http://192.168.11.2:6860`，登录 Miniserver 配置工具（账号 admin，密码 Admin168）。\n4. 进入左侧菜单“初始化” → “设置NETWORK IP”，按使用场景选择网络类型后点击【保存】，Miniserver 会自动重启完成网络重置。\n\n## 三种网络类型的设置方式\n\n| 场景 | 操作 |\n|---|---|\n| 公网使用场景 | 网络类型选择“公网”（默认设置），系统自动开始网络设置，底部提示“网络设置完成”即完成。若是从内网变更为公网，需选择“公网”后点击【保存】 |\n| 纯内网使用场景 | 网络类型选择“内网”，点击【保存】，Miniserver 自动重启；工具会自动下载 SSL 证书安装手册并提示重新登录配置工具，重启完成后再登录查看运营平台访问地址 |\n| 固定公网IP使用场景 | 网络类型选择“内网”，在“对外通信公网IP”中填写 Miniserver 配备的固定公网IP地址，点击【保存】后自动重启 |\n\n## 注意事项\n\n- 固定公网IP场景需先确认前提条件：现场网络已有运营商/网络管理员提供的固定公网IP；路由器或防火墙已完成业务端口映射/放行；公网入口地址、端口转发及防火墙放行规则已验证可用。\n- 固定公网IP场景需放行的业务端口：调度器 udp 10200（终端登录）、tcp 10201（调度台登录）；语音服务 tcp 11055（终端登录）、tcp 11056（调度台登录）、udp 30000（终端对讲）、tcp 31000（调度台对讲）；调度台 tcp 7272（调度台前端）；运营平台 tcp 6130（运营平台前端）；网关 tcp 7298。\n- 若 Miniserver 重装系统或恢复出厂设置后需要恢复数据，可在配置工具“设定” → “系统设定”的“数据恢复”区域执行恢复，且数据备份时的使用模式（公网/内网）需与恢复时配置的模式一致。\n\n**来源**：poc资料/miniserver/POCSTARS Miniserver-快速使用手册V2.3.docx；poc资料/miniserver/POCSTARS Miniserver Quick Operation Guide V2.3.pdf",
+      "cls": "answered",
+      "gate": "pass",
+      "gate_reason": "系统回答提供了重置网络的操作步骤和模式设置，实质作答且切题。",
+      "key_facts": {
+        "total": 3,
+        "hit": 0
+      },
+      "supp_facts": {
+        "total": 1,
+        "hit": 0
+      },
+      "key_missed": [
+        "重置网络应恢复到代理模式自动获取IP",
+        "代理模式自动获取IP换网线自动检测，失败则重启",
+        "代理模式固定IP换网线需手工设置新IP或重置网络"
+      ],
+      "supp_missed": [
+        "其它模式时重置网络慎用"
+      ],
+      "score": 0.0,
+      "judge_error": null
+    }
+  ]
+}
