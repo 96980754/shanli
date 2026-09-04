@@ -837,3 +837,38 @@ def test_industry_solution_skill_gate_grants_on_structured_run_when_not_configur
     no_grant_without_marker = _context_with_skills(["knowledge-base"])
     svc._apply_industry_solution_skill_gate(no_grant_without_marker, run_type="chat", industry_enabled=False)
     assert no_grant_without_marker.skills == ["knowledge-base"]
+
+
+def test_industry_solution_skill_gate_must_target_input_context_dict() -> None:
+    """回归（bug2）：门禁必须作用在传给流式执行的 input_context dict 上。
+
+    运行期工具绑定由 input_context 重建 context（agents/base.py:_stream_input_with_state
+    → get_graph → prepare_agent_runtime_context），只改 dataclass context 会在重建时丢失，
+    导致 industry-solution 技能与其检索工具（research_industry_products）挂载不上——
+    此前 default-chatbot（config 声明 skills=['knowledge-base']）行业方案 run 的沙箱
+    context 实际只有 knowledge-base，模型只能降级手工拼引用、最终被正文校验拒绝。
+    """
+    from yuxi.agents.buildin.chatbot.context import ChatBotContext
+
+    input_context = {"thread_id": "t1", "uid": "u1", "skills": ["knowledge-base"]}
+    svc._apply_industry_solution_skill_gate(input_context, run_type="chat", industry_enabled=True)
+    assert input_context["skills"] == ["knowledge-base", "industry-solution"]
+
+    # base.py 重建逻辑：从 input_context 重造 context，门禁结果必须能透传进 prepare。
+    rebuilt = ChatBotContext()
+    rebuilt.update_from_dict(input_context)
+    assert rebuilt.skills == ["knowledge-base", "industry-solution"]
+
+    resume_context = {"thread_id": "t1", "uid": "u1", "skills": ["knowledge-base"]}
+    svc._apply_industry_solution_skill_gate(resume_context, run_type="resume", industry_enabled=True)
+    assert resume_context["skills"] == ["knowledge-base", "industry-solution"]
+
+    # 普通主对话（无结构化标记）在 dict 上同样摘除，防止广告自激活。
+    plain_dict = {"thread_id": "t1", "uid": "u1", "skills": ["industry-solution", "knowledge-base"]}
+    svc._apply_industry_solution_skill_gate(plain_dict, run_type="chat", industry_enabled=False)
+    assert plain_dict["skills"] == ["knowledge-base"]
+
+    # subagent 子流不受上层门禁影响。
+    subagent_dict = {"thread_id": "t1", "uid": "u1", "skills": ["industry-solution", "knowledge-base"]}
+    svc._apply_industry_solution_skill_gate(subagent_dict, run_type="subagent", industry_enabled=False)
+    assert subagent_dict["skills"] == ["industry-solution", "knowledge-base"]

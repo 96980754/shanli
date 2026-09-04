@@ -85,20 +85,35 @@ def _apply_industry_solution_skill_gate(context, *, run_type: str | None, indust
     不受影响（由上层门禁决定是否进入）。
 
     结构化请求是唯一放行通道：即便 agent 未在技能清单里声明 industry-solution，
-    也把它补进 context.skills，get_graph→prepare_agent_runtime_context 重算后即可
+    也把它补进 skills，get_graph→prepare_agent_runtime_context 重算后即可
     挂载/广告该技能；否则「放开」退化为依赖 agent 预配置，行业方案模式在未配置的
     agent 上会静默失效、模型只能降级手工生成 Word。
+
+    context 既可以是已构造的 BaseContext（读写 .skills），也可以是 input_context
+    dict（读写 ['skills']）。运行期工具绑定从 input_context 重建 context
+    （agents/base.py:_stream_input_with_state → get_graph → prepare），因此调用方必须
+    把门禁作用在传给流式执行的 input_context 上；只改一个事后不参与工具绑定的
+    dataclass 实例会在重建时丢失，导致技能与检索工具挂载不上。
     """
     if run_type not in ("chat", "resume"):
         return
-    skills = list(getattr(context, "skills", None) or [])
+    if isinstance(context, dict):
+        skills = list(context.get("skills") or [])
+    else:
+        skills = list(getattr(context, "skills", None) or [])
     has_industry = "industry-solution" in skills
     if industry_enabled:
-        if not has_industry:
-            context.skills = [*skills, "industry-solution"]
+        if has_industry:
+            return
+        skills = [*skills, "industry-solution"]
+    elif not has_industry:
         return
-    if has_industry:
-        context.skills = [slug for slug in skills if slug != "industry-solution"]
+    else:
+        skills = [slug for slug in skills if slug != "industry-solution"]
+    if isinstance(context, dict):
+        context["skills"] = skills
+    else:
+        context.skills = skills
 
 
 def _build_state_files(attachments: list[dict]) -> dict:
@@ -1161,13 +1176,16 @@ async def stream_agent_chat(
     )
     _apply_model_override(input_context, meta)
     _apply_subagent_runtime_context(input_context, meta)
-    context = _build_agent_context(agent, input_context)
-    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
+    # 行业方案门禁必须作用在 input_context 上：运行期工具绑定由 input_context 重建
+    # context（agents/base.py:_stream_input_with_state→get_graph→prepare），只改 dataclass
+    # context 会在重建时丢失，导致 industry-solution 技能与其检索工具挂载不上。
     _apply_industry_solution_skill_gate(
-        context,
+        input_context,
         run_type=meta.get("run_type"),
         industry_enabled=bool(meta.get("industry_solution")),
     )
+    context = _build_agent_context(agent, input_context)
+    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,
@@ -1595,13 +1613,14 @@ async def stream_agent_resume(
         skills_thread_id=meta.get("skills_thread_id") or thread_id,
     )
     _apply_model_override(input_context, meta)
-    context = _build_agent_context(agent, input_context)
-    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
+    # 同 stream_agent_chat：门禁作用在 input_context，运行期 context 由它重建才会挂载。
     _apply_industry_solution_skill_gate(
-        context,
+        input_context,
         run_type=meta.get("run_type"),
         industry_enabled=bool(meta.get("industry_solution")),
     )
+    context = _build_agent_context(agent, input_context)
+    _apply_main_chat_read_scope(context, run_type=meta.get("run_type"))
     langfuse_run = _build_langfuse_run_context(
         current_user=current_user,
         thread_id=thread_id,
