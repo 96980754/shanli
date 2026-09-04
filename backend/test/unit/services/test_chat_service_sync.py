@@ -804,3 +804,36 @@ def test_industry_solution_skill_gate_strips_for_plain_main_chat_only() -> None:
     subagent = _context_with_skills()
     svc._apply_industry_solution_skill_gate(subagent, run_type="subagent", industry_enabled=False)
     assert subagent.skills == ["industry-solution", "knowledge-base"]
+
+
+def test_industry_solution_skill_gate_grants_on_structured_run_when_not_configured() -> None:
+    """行业方案模式（结构化 industry_solution 请求）在 agent 未声明该技能时也应放行：
+    门禁把 industry-solution 补进 context.skills，get_graph 的 prepare 重算后才会挂载；
+    否则该技能依赖 agent 预配置，行业方案模式在未配置的 agent 上静默失效。"""
+    from yuxi.agents.buildin.chatbot.context import ChatBotContext
+
+    class _StubAgent:
+        context_schema = ChatBotContext
+
+    def _context_with_skills(skills):
+        return svc._build_agent_context(_StubAgent(), {"thread_id": "t1", "uid": "u1", "skills": skills})
+
+    unconfigured_chat = _context_with_skills(["knowledge-base"])
+    svc._apply_industry_solution_skill_gate(unconfigured_chat, run_type="chat", industry_enabled=True)
+    assert unconfigured_chat.skills == ["knowledge-base", "industry-solution"]
+
+    unconfigured_resume = _context_with_skills(["knowledge-base"])
+    svc._apply_industry_solution_skill_gate(unconfigured_resume, run_type="resume", industry_enabled=True)
+    assert unconfigured_resume.skills == ["knowledge-base", "industry-solution"]
+
+    empty_context = _context_with_skills([])
+    svc._apply_industry_solution_skill_gate(empty_context, run_type="chat", industry_enabled=True)
+    assert empty_context.skills == ["industry-solution"]
+
+    already_present = _context_with_skills(["industry-solution", "knowledge-base"])
+    svc._apply_industry_solution_skill_gate(already_present, run_type="chat", industry_enabled=True)
+    assert already_present.skills == ["industry-solution", "knowledge-base"]
+
+    no_grant_without_marker = _context_with_skills(["knowledge-base"])
+    svc._apply_industry_solution_skill_gate(no_grant_without_marker, run_type="chat", industry_enabled=False)
+    assert no_grant_without_marker.skills == ["knowledge-base"]

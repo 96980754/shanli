@@ -83,11 +83,21 @@ def _apply_industry_solution_skill_gate(context, *, run_type: str | None, indust
     普通主对话（chat/resume）不再广告/自激活 industry-solution，避免模型因一句
     泛化指令（如「再去寻找一些内容」）擅自进入行业方案流程；subagent 等内层流
     不受影响（由上层门禁决定是否进入）。
+
+    结构化请求是唯一放行通道：即便 agent 未在技能清单里声明 industry-solution，
+    也把它补进 context.skills，get_graph→prepare_agent_runtime_context 重算后即可
+    挂载/广告该技能；否则「放开」退化为依赖 agent 预配置，行业方案模式在未配置的
+    agent 上会静默失效、模型只能降级手工生成 Word。
     """
-    if run_type not in ("chat", "resume") or industry_enabled:
+    if run_type not in ("chat", "resume"):
         return
     skills = list(getattr(context, "skills", None) or [])
-    if "industry-solution" in skills:
+    has_industry = "industry-solution" in skills
+    if industry_enabled:
+        if not has_industry:
+            context.skills = [*skills, "industry-solution"]
+        return
+    if has_industry:
         context.skills = [slug for slug in skills if slug != "industry-solution"]
 
 
