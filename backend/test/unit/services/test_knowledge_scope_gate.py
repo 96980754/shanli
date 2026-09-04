@@ -31,6 +31,7 @@ async def _should_not_call(messages):
 
 # ---- 关键词命中（免费层，零模型开销）----
 
+
 async def test_term_hit_returns_in_scope_without_model():
     corpus = _corpus(terms=("调度台",), anchors=("调度台开通权限流程",))
     # 关键词命中在 embedding / judge 之前返回；caller 抛错可证明未被调用。
@@ -39,12 +40,11 @@ async def test_term_hit_returns_in_scope_without_model():
 
 # ---- embedding 亲和层 ----
 
+
 async def test_high_affinity_returns_in_scope_without_judge():
     corpus = _corpus(anchors=("调度台开通权限流程",))
     embedder = _FakeEmbedder("调度台")
-    verdict = await evaluate_scope(
-        "调度台开通权限需要哪些材料？", corpus, caller=_should_not_call, embedder=embedder
-    )
+    verdict = await evaluate_scope("调度台开通权限需要哪些材料？", corpus, caller=_should_not_call, embedder=embedder)
     assert verdict == "in_scope"
 
 
@@ -85,6 +85,7 @@ async def test_embedding_failure_degrades_to_judge():
 
 # ---- 无锚无词时完全依赖 judge ----
 
+
 async def test_no_corpus_text_relies_on_judge():
     corpus = _corpus()
 
@@ -119,6 +120,7 @@ async def test_judge_off_topic_parses_json_wrapped_in_text():
 
 # ---- build_scope_corpus（语料构建 + 使能 KB 过滤）----
 
+
 async def test_build_scope_corpus_combines_terms_and_enabled_kb_anchors():
     async def fake_list_databases(uid):
         return {
@@ -148,3 +150,18 @@ async def test_build_scope_corpus_loader_failure_keeps_terms():
 
     corpus = await build_scope_corpus(uid="u1", list_databases=failing_list)
     assert "客服" in corpus.terms
+
+
+async def test_build_scope_corpus_merges_configured_line_keywords(monkeypatch: pytest.MonkeyPatch):
+    """设置页新增产品线后，其关键词并入入口门词表（新增线问题不被误判跑题）。"""
+    from yuxi.config.app import config as runtime_config
+
+    monkeypatch.setattr(
+        runtime_config,
+        "business_lines",
+        [{"code": "newline", "name": "新线", "keywords": ["星舰终端", "自研模组"]}],
+    )
+    corpus = await build_scope_corpus(uid="u1", list_databases=lambda uid: {})
+    assert "星舰终端" in corpus.terms
+    assert "自研模组" in corpus.terms
+    assert "客服" in corpus.terms  # 内置基线仍在

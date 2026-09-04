@@ -94,7 +94,13 @@ async def build_scope_corpus(
 
     list_databases 可注入以便测试，默认走 knowledge_base.get_databases_by_uid。
     """
+    # 设置页维护的「业务线」每线关键词并入词表：新增产品线后其问题不被入口门误判跑题。
+    # 局部导入避免 config → parser 注册表与入口门之间的潜在环；词表构建低频，可接受。
+    from yuxi.config.app import resolve_business_lines  # noqa: PLC0415
+
     terms = set(BUILTIN_SCOPE_TERMS)
+    for line in resolve_business_lines():
+        terms.update(line.keywords)
     anchors: list[str] = []
     lines: list[str] = []
 
@@ -177,8 +183,7 @@ async def judge_off_topic(question: str, scope_description: str, *, caller=None)
     if not REFUSAL_JUDGE_MODEL and caller is None:
         return None
     user_prompt = (
-        f"业务范围说明：\n{scope_description.strip() or '（无）'}"
-        f"\n\n用户问题：{question.strip()}\n\n只输出 JSON。"
+        f"业务范围说明：\n{scope_description.strip() or '（无）'}\n\n用户问题：{question.strip()}\n\n只输出 JSON。"
     )
     messages = [
         {"role": "system", "content": JUDGE_OFF_TOPIC_SYSTEM_PROMPT},

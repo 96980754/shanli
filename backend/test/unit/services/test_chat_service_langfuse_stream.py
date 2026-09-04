@@ -545,3 +545,99 @@ async def test_stream_agent_chat_maps_custom_compression_event_to_context_compre
     assert compression_chunks[1]["compression"]["status"] == "completed"
     assert compression_chunks[1]["compression"]["cutoff_index"] == 5
     assert compression_chunks[1]["compression"]["file_path"] == "/conv/x.md"
+
+
+@pytest.mark.asyncio
+async def test_multilingual_gate_normalizes_query_and_localizes_reply(monkeypatch: pytest.MonkeyPatch):
+    """enable_multilingual=True 时：非中文问题先中译进判定链，最终回复再本地化回提问语言。"""
+    from yuxi import config as conf
+    from yuxi.services.translation_service import InboundTranslation
+
+    seen_agent_query: list[str] = []
+    outbound_calls: list[tuple[str, str]] = []
+    updated: list[tuple[int, str]] = []
+
+    class _RecordingConvRepo(_FakeConvRepo):
+        async def update_message_content(self, message_id: int, content: str):
+            updated.append((message_id, content))
+            return SimpleNamespace(id=message_id, content=content)
+
+    class FakeGraph:
+        async def aget_state(self, _config):
+            return SimpleNamespace(values={"messages": []})
+
+    class FakeAgent:
+        context_schema = _FakeContext
+
+        async def stream_messages_with_state(self, messages, input_context=None, **kwargs):
+            first = messages[0]
+            seen_agent_query.append(str(getattr(first, "content", "")))
+            yield "messages", (AIMessageChunk(content="中文回答内容"), {"node": "llm"})
+
+        async def stream_messages(self, messages, input_context=None, **kwargs):
+            raise AssertionError("stream_messages fallback should not be used")
+
+        async def get_graph(self, *, context=None):
+            return FakeGraph()
+
+    async def fake_resolve_agent_runtime(**_kwargs):
+        return SimpleNamespace(slug="test-agent", backend_id="ChatbotAgent"), FakeAgent(), {}
+
+    async def fake_save_messages_from_langgraph_state(
+        *, agent_instance, thread_id, conv_repo, config_dict, context, trace_info, run_id=None, request_id=None
+    ):
+        return SimpleNamespace(id=42, content="中文回答内容")
+
+    async def fake_guard_check(_content):
+        return False
+
+    async def fake_guard_check_with_keywords(_content):
+        return False
+
+    async def fake_interrupts(agent, langgraph_config, make_chunk, meta, thread_id, context):
+        if False:
+            yield None
+        return
+
+    async def fake_translate_to_chinese(_text):
+        return InboundTranslation(source_lang="ms", chinese="调度台如何登录？")
+
+    async def fake_translate_from_chinese(text, target_lang, **kwargs):
+        outbound_calls.append((text, target_lang))
+        return "Bagaimana cara log masuk ke konsol?"
+
+    monkeypatch.setattr(conf, "enable_multilingual", True)
+    monkeypatch.setattr(svc, "_resolve_agent_runtime", fake_resolve_agent_runtime)
+    monkeypatch.setattr(svc, "normalize_agent_context_config", _fake_normalize_agent_context_config)
+    monkeypatch.setattr(svc, "ConversationRepository", _RecordingConvRepo)
+    monkeypatch.setattr(svc, "save_messages_from_langgraph_state", fake_save_messages_from_langgraph_state)
+    monkeypatch.setattr(svc, "translate_to_chinese", fake_translate_to_chinese)
+    monkeypatch.setattr(svc, "translate_from_chinese", fake_translate_from_chinese)
+    monkeypatch.setattr(svc.content_guard, "check", fake_guard_check)
+    monkeypatch.setattr(svc.content_guard, "check_with_keywords", fake_guard_check_with_keywords)
+    monkeypatch.setattr(svc, "check_and_handle_interrupts", fake_interrupts)
+    monkeypatch.setattr(
+        svc,
+        "_build_langfuse_run_context",
+        lambda **kwargs: SimpleNamespace(callbacks=[], metadata={}, tags=[], trace_id=None),
+    )
+    monkeypatch.setattr(svc, "get_trace_info", lambda _run_context: {})
+    monkeypatch.setattr(svc, "flush_langfuse", lambda: None)
+
+    chunks = []
+    async for chunk in svc.stream_agent_chat(
+        agent_slug="test-agent",
+        thread_id="thread-1",
+        meta={"request_id": "req-1"},
+        input_message=build_chat_input_message("hello"),
+        current_user=SimpleNamespace(id=1, uid="user-1", role="user", department_id="dept-1"),
+        db=_FakeSession(),
+    ):
+        chunks.append(json.loads(chunk.decode("utf-8")))
+
+    # 入口：交给智能体图的是中文归一 query（判定链语言不变）
+    assert seen_agent_query == ["调度台如何登录？"]
+    # 出口：以检测到的源语言调用本地化，结果写回 content（中文原文留在 extra_metadata）
+    assert outbound_calls == [("中文回答内容", "ms")]
+    assert updated == [(42, "Bagaimana cara log masuk ke konsol?")]
+    assert chunks[-1]["status"] == "finished"

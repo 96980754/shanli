@@ -35,13 +35,23 @@ _WHITEPAPER_DISCLAIMER = (
 _WHITEPAPER_AI_NOTE = "请注意，本内容由AI生成。"
 
 
-def _set_run_font(run: Any, font_name: str) -> None:
+# 白皮书字体对齐甲方（POCSTARS）样张：西文/数字统一 Arial，中文正文与标题宋体，表格内中文黑体。
+_WHITEPAPER_FONT_LATIN = "Arial"
+_WHITEPAPER_FONT_CJK_TABLE = "黑体"
+
+
+def _set_run_font(run: Any, font_name: str, *, table: bool = False) -> None:
+    """按白皮书组合设置 run 字体：西文/数字（ascii/hAnsi）Arial，中文（eastAsia）为 font_name。
+
+    font_name 即中文正文字体；table=True 时中文改用黑体，对齐甲方样张表格（Table Grid）风格。
+    """
     from docx.oxml.ns import qn
 
-    run.font.name = font_name
+    cjk = _WHITEPAPER_FONT_CJK_TABLE if table else font_name
+    run.font.name = _WHITEPAPER_FONT_LATIN
     fonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-    for attribute in ("ascii", "hAnsi", "eastAsia"):
-        fonts.set(qn(f"w:{attribute}"), font_name)
+    fonts.set(qn("w:eastAsia"), cjk)
+    fonts.set(qn("w:cs"), _WHITEPAPER_FONT_LATIN)
 
 
 def _configure_docx_styles(document: Any, font_name: str) -> None:
@@ -62,15 +72,16 @@ def _configure_docx_styles(document: Any, font_name: str) -> None:
     }
     for style_name, (size, bold) in style_specs.items():
         style = document.styles[style_name]
-        style.font.name = font_name
+        style.font.name = _WHITEPAPER_FONT_LATIN
         style.font.size = Pt(size)
         style.font.bold = bold
         fonts = style._element.get_or_add_rPr().get_or_add_rFonts()
-        for attribute in ("ascii", "hAnsi", "eastAsia"):
-            fonts.set(qn(f"w:{attribute}"), font_name)
+        for attribute in ("ascii", "hAnsi", "cs"):
+            fonts.set(qn(f"w:{attribute}"), _WHITEPAPER_FONT_LATIN)
+        fonts.set(qn("w:eastAsia"), font_name)
 
 
-def _write_inline(paragraph: Any, value: Any, font_name: str | None) -> None:
+def _write_inline(paragraph: Any, value: Any, font_name: str | None, *, table: bool = False) -> None:
     if isinstance(value, dict):
         runs = value.get("runs")
         text = str(value.get("text") or "")
@@ -84,12 +95,12 @@ def _write_inline(paragraph: Any, value: Any, font_name: str | None) -> None:
             run.bold = bool(item.get("bold"))
             run.italic = bool(item.get("italic"))
             if font_name:
-                _set_run_font(run, font_name)
+                _set_run_font(run, font_name, table=table)
         return
 
     run = paragraph.add_run(text)
     if font_name:
-        _set_run_font(run, font_name)
+        _set_run_font(run, font_name, table=table)
 
 
 def _write_blocks(document: Any, blocks: list[dict] | None, font_name: str | None) -> None:
@@ -109,7 +120,9 @@ def _write_blocks(document: Any, blocks: list[dict] | None, font_name: str | Non
                 for i, row in enumerate(rows):
                     for j in range(ncols):
                         cell = table.cell(i, j)
-                        _write_inline(cell.paragraphs[0], row[j] if j < len(row) else "", font_name)
+                        _write_inline(
+                            cell.paragraphs[0], row[j] if j < len(row) else "", font_name, table=True
+                        )
         elif kind == "list_item":
             paragraph = document.add_paragraph(style="List Number" if block.get("ordered") else "List Bullet")
             _write_inline(paragraph, block, font_name)

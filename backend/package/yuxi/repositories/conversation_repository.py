@@ -224,6 +224,22 @@ class ConversationRepository:
             delivery_status=delivery_status,
         )
 
+    async def update_message_content(self, message_id: int, content: str) -> Message | None:
+        """覆写一条消息的可展示内容（多语言出口本地化用）。
+
+        仅更新 content 列；extra_metadata 保留中文原文与 knowledge_disposition 等判定元数据，
+        因此不会破坏按 metadata 工作的判定链。
+        """
+        result = await self.db.execute(select(Message).where(Message.id == message_id))
+        message = result.scalar_one_or_none()
+        if message is None:
+            logger.warning(f"Message not found for id: {message_id}")
+            return None
+        message.content = content
+        await self.db.commit()
+        await self.db.refresh(message)
+        return message
+
     async def add_tool_call(
         self,
         message_id: int,

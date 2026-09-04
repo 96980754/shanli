@@ -124,29 +124,6 @@
         </div>
       </template>
 
-      <!-- 企微客服（拒答转人工） -->
-      <div class="section-title">{{ $t('settings.wecomTitle') }}</div>
-      <div class="section">
-        <p class="section-description">{{ $t('settings.wecomDesc') }}</p>
-        <div v-for="(row, index) in wecomUrls" :key="index" class="wecom-url-row">
-          <div class="col-item">
-            <div class="setting-label">{{ $t('settings.wecomServiceLabel', { index: index + 1 }) }}</div>
-            <a-input
-              v-model:value="row.url"
-              :placeholder="$t('settings.wecomServicePlaceholder')"
-              @change="wecomDirty = true"
-              @blur="saveWecomUrls"
-            />
-          </div>
-          <a-button type="text" class="wecom-remove-btn" @click="removeWecomUrl(index)">
-            {{ $t('settings.removeWecomService') }}
-          </a-button>
-        </div>
-        <a-button type="dashed" block @click="addWecomUrl">
-          <template #icon><Plus class="icon" :size="16" /></template>
-          {{ $t('settings.addWecomService') }}
-        </a-button>
-      </div>
     </template>
 
     <!-- 服务链接部分 -->
@@ -219,17 +196,13 @@
 </template>
 
 <script setup>
-import { computed, h, ref, watch } from 'vue'
-import { message } from 'ant-design-vue'
-import { useI18n } from 'vue-i18n'
+import { computed, h } from 'vue'
 import { useConfigStore } from '@/stores/config'
 import { useUserStore } from '@/stores/user'
-import { Globe, Plus } from 'lucide-vue-next'
+import { Globe } from 'lucide-vue-next'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import RerankModelSelector from '@/components/RerankModelSelector.vue'
-
-const { t } = useI18n()
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
@@ -269,54 +242,6 @@ const handleContentGuardModelSelect = (spec) => {
   if (typeof spec === 'string' && spec) {
     configStore.setConfigValue('content_guard_llm_model', spec)
   }
-}
-
-// ---- 企微客服（拒答转人工）配置：1..N 个客服入口，转人工时轮替转接 ----
-const isHttpsUrl = (url) => {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-const wecomDirty = ref(false)
-const wecomUrls = ref([])
-
-// 配置异步加载时回填一次；用户在编辑中（wecomDirty）不覆盖。
-watch(
-  () => configStore.config?.wecom_customer_service_urls,
-  (urls) => {
-    if (wecomDirty.value) return
-    wecomUrls.value = (Array.isArray(urls) ? urls : []).map((url) => ({ url: url || '' }))
-  },
-  { immediate: true }
-)
-
-const addWecomUrl = () => {
-  wecomUrls.value.push({ url: '' })
-  wecomDirty.value = true
-}
-
-const removeWecomUrl = (index) => {
-  wecomUrls.value.splice(index, 1)
-  saveWecomUrls()
-}
-
-const saveWecomUrls = () => {
-  const urls = []
-  for (const row of wecomUrls.value) {
-    const url = (row.url || '').trim()
-    if (url && !isHttpsUrl(url)) {
-      message.error(t('settings.wecomInvalidUrl'))
-      wecomDirty.value = true
-      return
-    }
-    if (url) urls.push(url)
-  }
-  wecomDirty.value = false
-  configStore.setConfigValue('wecom_customer_service_urls', urls)
 }
 
 const openLink = (url) => {
@@ -365,7 +290,7 @@ const openLink = (url) => {
     }
   }
 
-  .wecom-url-row {
+  .cs-service-row {
     display: flex;
     align-items: flex-end;
     gap: 8px;
@@ -375,7 +300,52 @@ const openLink = (url) => {
       min-width: 0;
     }
 
-    .wecom-remove-btn {
+    .row-remove-btn {
+      flex-shrink: 0;
+    }
+  }
+
+  .cs-access-section {
+    gap: 12px;
+
+    .full-width {
+      width: 100%;
+    }
+
+    .access-sub-title {
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+
+    .access-sub-desc {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--gray-500);
+    }
+
+    .access-sub-tip {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--gray-400);
+    }
+  }
+
+  .business-line-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+
+    .col-item {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+
+    .business-line-remove-btn {
       flex-shrink: 0;
     }
   }
@@ -466,9 +436,25 @@ const openLink = (url) => {
     }
   }
 
+  @media (max-width: 900px) {
+    .cs-service-row {
+      flex-direction: column;
+      align-items: stretch;
+
+      .row-remove-btn {
+        align-self: flex-start;
+      }
+    }
+  }
+
   @media (max-width: 768px) {
     .agent-select {
       width: 100%;
+    }
+
+    .business-line-row {
+      flex-direction: column;
+      align-items: stretch;
     }
   }
 }

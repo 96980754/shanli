@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY, SYSTEM_ERROR_REPLY
+from yuxi.config.app import config as runtime_config
 from yuxi.services.knowledge_answer_disposition import (
     apply_knowledge_disposition,
     apply_refusal_judgment,
+    build_judge_system_prompt,
     build_knowledge_evidence,
     classify_knowledge_disposition,
     collect_turn_tool_names,
@@ -236,6 +238,7 @@ def test_apply_knowledge_disposition_attaches_question_and_evidence():
 
 # ---- collect_turn_tool_names / ② 兜底判定 ----
 
+
 def test_collect_turn_tool_names_resets_at_latest_human():
     messages = [
         {"type": "human", "content": "上一个问题"},
@@ -300,3 +303,57 @@ def test_no_evidence_disposition_ignores_refusal_or_grounded():
         evidence=_evidence([_query(status="ok")]),
     )
     assert no_evidence_disposition(grounded, evidence=_evidence([_query(status="ok")]), tool_names=set()) is None
+
+
+# ---- 业务线清单可配置：judge 提示词动态组装 + domain 归一 ----
+
+
+def test_build_judge_system_prompt_custom_lines_include_unknown_tail():
+    from yuxi.config.app import BusinessLine
+
+    prompt = build_judge_system_prompt(lines=[BusinessLine(code="diaodutai", name="调度台")])
+    assert "业务域取值：diaodutai（调度台）、unknown" in prompt
+
+
+def test_build_judge_system_prompt_empty_lines_only_unknown():
+    prompt = build_judge_system_prompt(lines=[])
+    assert "业务域取值：unknown" in prompt
+
+
+def test_build_judge_system_prompt_preserves_json_example_braces():
+    """@DOMAIN_CHOICES@ 占位符替换不得破坏模板内示例 JSON 的 {}。"""
+    prompt = build_judge_system_prompt(lines=[])
+    assert '{"type": "knowledge_refusal"' in prompt
+    assert "@DOMAIN_CHOICES@" not in prompt
+
+
+def test_apply_refusal_judgment_keeps_listed_domain(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        runtime_config,
+        "business_lines",
+        [{"code": "diaodutai", "name": "调度台", "keywords": []}, {"code": "terminal", "name": "终端", "keywords": []}],
+    )
+    disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, None)
+    result = apply_refusal_judgment(
+        disposition, {"type": "knowledge_refusal", "reason": "no_enabled_knowledge_base", "domain": "terminal"}
+    )
+    assert result["type"] == "knowledge_refusal"
+    assert result["domain"] == "terminal"
+
+
+def test_apply_refusal_judgment_falls_back_unknown_for_unlisted_domain(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "diaodutai", "name": "调度台", "keywords": []}])
+    disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, None)
+    result = apply_refusal_judgment(
+        disposition, {"type": "policy_refusal", "reason": "privacy", "domain": "不存在的业务线"}
+    )
+    assert result["type"] == "policy_refusal"
+    assert result["reason"] == "privacy"
+    assert result["domain"] == "unknown"
+
+
+def test_apply_refusal_judgment_missing_domain_sets_unknown(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "diaodutai", "name": "调度台", "keywords": []}])
+    disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, None)
+    result = apply_refusal_judgment(disposition, {"type": "scope_refusal", "reason": "ambiguous"})
+    assert result["domain"] == "unknown"

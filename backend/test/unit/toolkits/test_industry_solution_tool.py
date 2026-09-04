@@ -210,22 +210,39 @@ def test_render_solution_docx_formats_inline_markdown_and_fonts_consistently():
     assert "`product-a-smart-access.md`" in chat_markdown
     assert "http://product-a-smart-access.md" not in chat_markdown
 
+    # 字体对齐甲方（POCSTARS）样张：西文/数字 Arial，正文与标题中文宋体。
     for style_name in ("Normal", "Heading 1", "Heading 2", "Heading 3", "List Bullet", "List Number"):
         style = document.styles[style_name]
         fonts = style._element.get_or_add_rPr().get_or_add_rFonts()
-        assert style.font.name == "Microsoft YaHei"
-        assert fonts.get(qn("w:ascii")) == "Microsoft YaHei"
-        assert fonts.get(qn("w:hAnsi")) == "Microsoft YaHei"
-        assert fonts.get(qn("w:eastAsia")) == "Microsoft YaHei"
+        assert style.font.name == "Arial"
+        assert fonts.get(qn("w:ascii")) == "Arial"
+        assert fonts.get(qn("w:hAnsi")) == "Arial"
+        assert fonts.get(qn("w:cs")) == "Arial"
+        assert fonts.get(qn("w:eastAsia")) == "宋体"
 
-    controlled_runs = [run for run in runs if run.text.strip()]
-    assert controlled_runs
-    for run in controlled_runs:
-        fonts = run._element.get_or_add_rPr().get_or_add_rFonts()
-        assert run.font.name == "Microsoft YaHei"
-        assert fonts.get(qn("w:ascii")) == "Microsoft YaHei"
-        assert fonts.get(qn("w:hAnsi")) == "Microsoft YaHei"
-        assert fonts.get(qn("w:eastAsia")) == "Microsoft YaHei"
+    body_runs = [run for paragraph in document.paragraphs for run in paragraph.runs if run.text.strip()]
+    table_runs = [
+        run
+        for table in document.tables
+        for row in table.rows
+        for cell in row.cells
+        for paragraph in cell.paragraphs
+        for run in paragraph.runs
+        if run.text.strip()
+    ]
+    assert body_runs
+    assert table_runs
+
+    def _assert_run_fonts(runs, cjk):
+        for run in runs:
+            fonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+            assert run.font.name == "Arial"
+            assert fonts.get(qn("w:ascii")) == "Arial"
+            assert fonts.get(qn("w:hAnsi")) == "Arial"
+            assert fonts.get(qn("w:eastAsia")) == cjk
+
+    _assert_run_fonts(body_runs, "宋体")
+    _assert_run_fonts(table_runs, "黑体")
 
 
 def test_render_solution_docx_rejects_missing_reference_and_omits_unused_sources():

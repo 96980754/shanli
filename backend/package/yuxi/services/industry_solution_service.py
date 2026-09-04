@@ -14,7 +14,8 @@ MIN_PRODUCTS = 2
 MAX_PRODUCTS = 5
 MAX_PRODUCT_NAME_LENGTH = 80
 MAX_SOLUTION_CONTENT_LENGTH = 200_000
-INDUSTRY_SOLUTION_FONT = "Microsoft YaHei"
+# 白皮书中文正文/标题字体（西文/数字 Arial、表格黑体由 office_writer 固定），对齐甲方 POCSTARS 样张。
+INDUSTRY_SOLUTION_CJK_FONT = "宋体"
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._\-\u4e00-\u9fff]+")
 _TRAILING_REFERENCES_RE = re.compile(
     r"\n#{1,6}\s*(?:来源(?:\s*/\s*References)?|References)\s*\n.*\Z",
@@ -161,7 +162,7 @@ def render_solution_docx(
         markdown_to_blocks(document_markdown),
         cover=cover,
         header_text=document_title,
-        font_name=INDUSTRY_SOLUTION_FONT,
+        font_name=INDUSTRY_SOLUTION_CJK_FONT,
     )
     return document_bytes, chat_markdown
 

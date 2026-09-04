@@ -9,6 +9,7 @@ from yuxi.agents.buildin.chatbot.prompt import (
     KNOWLEDGE_REFUSAL_REPLY,
     SYSTEM_ERROR_REPLY,
 )
+from yuxi.config.app import BusinessLine, resolve_business_lines, sanitize_business_domain
 from yuxi.models import select_model
 from yuxi.utils.logging_config import logger
 
@@ -55,7 +56,7 @@ _CONVERSATIONAL_ACKS = frozenset(
 # 入口门（knowledge_scope_gate）复用同一模型做跑题确认。
 REFUSAL_JUDGE_MODEL = os.getenv("REFUSAL_JUDGE_MODEL", "").strip()
 
-JUDGE_SYSTEM_PROMPT = """\
+JUDGE_SYSTEM_PROMPT_TEMPLATE = """\
 你是企业知识库客服的拒答原因分类器。仅当系统无法回答用户问题时调用。把问题归类并只输出 JSON（不要输出任何其它文字）。
 
 可选输出（type / reason / domain）：
@@ -66,9 +67,22 @@ JUDGE_SYSTEM_PROMPT = """\
 - {"type": "policy_refusal", "reason": "policy_violation|privacy|jailbreak|sensitive", "domain": "unknown"}
     问题本身违规/涉隐私/诱导越狱/高争议，系统拒绝回答是正确的，不转普通客服，仅复核。
 
-domain 只作运营统计标签（记录缺口属于哪条业务线），不再决定转接去向。
-业务域取值（仅标签）：diaodutai（调度台）、terminal（终端）、ops（运营平台）、kefu（通用客服）、unknown。
+domain 归属业务线（agent 未预设业务域时由你判定最贴切的一条）；该标签同时决定转人工去向——
+命中业务线绑定的客服团队会收到转接（未绑定的线回落到通用客服），请尽量选最贴切的业务线。
+业务域取值：@DOMAIN_CHOICES@
 """
+
+
+def build_judge_system_prompt(lines: list[BusinessLine] | None = None) -> str:
+    """按配置业务线动态组装 judge 提示词：新增产品线后模型即可判到新线。
+
+    lines 可注入以便测试；缺省读系统配置（设置页维护）。unknown 始终作为兜底可选项。
+    """
+    if lines is None:
+        lines = resolve_business_lines()
+    choices = "、".join(f"{line.code}（{line.name}）" for line in lines)
+    domain_choices = f"{choices}、unknown" if choices else "unknown"
+    return JUDGE_SYSTEM_PROMPT_TEMPLATE.replace("@DOMAIN_CHOICES@", domain_choices)
 
 
 def _disposition(
@@ -166,9 +180,7 @@ def collect_turn_tool_names(messages: list[Any]) -> set[str]:
 
 
 def has_kb_ok_evidence(evidence: dict[str, Any] | None) -> bool:
-    return bool(evidence) and any(
-        query.get("status") == "ok" for query in (evidence.get("queries") or [])
-    )
+    return bool(evidence) and any(query.get("status") == "ok" for query in (evidence.get("queries") or []))
 
 
 def is_conversational_ack(content: str) -> bool:
@@ -305,9 +317,8 @@ def apply_refusal_judgment(disposition: dict[str, Any], judgment: dict[str, Any]
         disposition["type"] = "scope_refusal"
         if reason in SCOPE_REFUSAL_REASONS:
             disposition["reason"] = reason
-    domain = judgment.get("domain")
-    if domain:
-        disposition["domain"] = domain
+    # 域只认配置清单内的 code；模型给出游离值/空值时回退 unknown（保留兜底）。
+    disposition["domain"] = sanitize_business_domain(judgment.get("domain"))
     return disposition
 
 
@@ -341,7 +352,7 @@ async def judge_refusal(question: str, *, caller=None) -> dict[str, Any] | None:
     if not REFUSAL_JUDGE_MODEL and caller is None:
         return None
     messages = [
-        {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+        {"role": "system", "content": build_judge_system_prompt()},
         {"role": "user", "content": f"用户问题：{question.strip() or '（空）'}\n\n只输出 JSON。"},
     ]
     try:

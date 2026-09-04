@@ -20,13 +20,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from langchain.messages import AIMessage, AIMessageChunk
+from langchain.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
 from yuxi import config as conf
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.buildin.chatbot.prompt import SCOPE_REFUSAL_REPLY
 from yuxi.agents.context import build_agent_input_context, normalize_agent_context_config
 from yuxi.agents.state import AgentStatePayload
+from yuxi.config.app import sanitize_business_domain
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
@@ -47,6 +48,7 @@ from yuxi.services.knowledge_answer_disposition import (
 )
 from yuxi.services.knowledge_gap_service import record_knowledge_gap
 from yuxi.services.knowledge_scope_gate import build_scope_corpus, evaluate_scope
+from yuxi.services.translation_service import is_chinese_text, translate_from_chinese, translate_to_chinese
 from yuxi.services.langfuse_service import (
     LangfuseRunContext,
     build_run_context,
@@ -799,8 +801,8 @@ async def save_messages_from_langgraph_state(
                     msg_dict["knowledge_no_evidence"] = True
             if disposition.get("type") in HANDOFF_REFUSAL_TYPES or disposition.get("type") == "policy_refusal":
                 # 业务域仅作统计标签且不再有 agent 级配置来源：无检索证据拒答经 judge 细分时
-                # 域已由 apply_refusal_judgment 写入，其余（如 insufficient_evidence）落 unknown。
-                disposition.setdefault("domain", "unknown")
+                # 域已由 apply_refusal_judgment 写入；此处统一归一，游离/空值回退 unknown（清单外 code 不入库）。
+                disposition["domain"] = sanitize_business_domain(disposition.get("domain"))
                 msg_dict["knowledge_disposition"] = disposition
                 if is_handoff_disposition(disposition):
                     msg_dict["handoff_available"] = True
@@ -839,6 +841,8 @@ async def save_messages_from_langgraph_state(
                 conversation_thread_id=thread_id,
                 assistant_message_id=final_ai_message.id,
             )
+    # 返回本轮最终 assistant 落库行，供调用方做出口多语言本地化（原调用方忽略返回值，行为不变）。
+    return output_message
 
 
 def _extract_interrupt_info(state) -> Any | None:
@@ -1085,6 +1089,26 @@ async def stream_agent_chat(
     human_message = input_message.require_langchain_message()
     message_type = input_message.message_type
 
+    # 多语言边界（入口）：仅对非中文纯文本问题做「语言检测 + 中译」，让跑题门/检索/judge/拒答分类
+    # 仍在中文内部规范语上工作。中文（含中英混合）、多模态、以及带结构化包装（industry_solution /
+    # output_format 已并入 langchain 文本导致 content != query）的问题不转换。
+    # 受配置 conf.enable_multilingual 门控（设置页可热开关；默认关闭保持既有行为与测试不变）。
+    # 内部 query/state 用中文，落库与 init 回显保留用户原文。
+    display_query = query
+    source_lang: str | None = None
+    if (
+        conf.enable_multilingual
+        and not image_content
+        and isinstance(human_message.content, str)
+        and human_message.content == query
+        and not is_chinese_text(query)
+    ):
+        inbound = await translate_to_chinese(query)
+        if inbound is not None and inbound.chinese and inbound.chinese != query:
+            query = inbound.chinese
+            human_message = HumanMessage(content=query)
+            source_lang = inbound.source_lang
+
     if conf.enable_content_guard and await content_guard.check(query):
         yield make_chunk(
             status="error", error_type="content_guard_blocked", error_message="输入内容包含敏感词", meta=meta
@@ -1168,7 +1192,7 @@ async def stream_agent_chat(
 
         init_msg = {
             "role": "user",
-            "content": query,
+            "content": display_query,
             "type": "human",
             "message_type": message_type,
             "extra_metadata": {
@@ -1185,7 +1209,7 @@ async def stream_agent_chat(
                 await conv_repo.add_message_by_thread_id(
                     thread_id=thread_id,
                     role="user",
-                    content=query,
+                    content=display_query,
                     message_type=message_type,
                     image_content=image_content,
                     extra_metadata={
@@ -1215,6 +1239,11 @@ async def stream_agent_chat(
                 scope_verdict = await evaluate_scope(query, corpus)
                 if scope_verdict == "off_topic":
                     refusal, message_id = SCOPE_REFUSAL_REPLY, f"scope-{meta['request_id']}"
+                    # 出口边界：跑题拒绝正文随提问语言本地化后再落库/回显；disposition 仍按中文判定。
+                    if source_lang:
+                        localized = await translate_from_chinese(refusal, source_lang)
+                        if localized:
+                            refusal = localized
                     await conv_repo.add_message_by_thread_id(
                         thread_id=thread_id,
                         role="assistant",
@@ -1250,6 +1279,10 @@ async def stream_agent_chat(
                 results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
                 if not results and not incomplete:
                     refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
+                    if source_lang:
+                        localized = await translate_from_chinese(refusal, source_lang)
+                        if localized:
+                            refusal = localized
                     await conv_repo.add_message_by_thread_id(
                         thread_id=thread_id,
                         role="assistant",
@@ -1416,8 +1449,9 @@ async def stream_agent_chat(
             yield make_chunk(status="agent_state", agent_state=agent_state, meta=meta)
 
         # 先存储数据库，再返回 finished，避免前端查询时数据未落库
+        output_message = None
         try:
-            await save_messages_from_langgraph_state(
+            output_message = await save_messages_from_langgraph_state(
                 agent_instance=agent,
                 thread_id=thread_id,
                 conv_repo=conv_repo,
@@ -1430,6 +1464,14 @@ async def stream_agent_chat(
         except Exception as e:
             logger.exception(f"Error saving messages from LangGraph state: {e}")
             yield make_chunk(status="warning", message=f"消息保存失败: {e}", meta=meta)
+
+        # 出口边界（正常作答路径）：最终 assistant 内容本地化到提问语言并写回 content。
+        # 中文原文与 knowledge_disposition 仍在 extra_metadata 中——分类在保存阶段已按中文跑完，
+        # 后续判定只读 metadata，覆写展示文本不影响判定链（LangGraph state 仍持中文供续答）。
+        if source_lang and output_message is not None and str(getattr(output_message, "content", "") or "").strip():
+            localized = await translate_from_chinese(str(output_message.content), source_lang)
+            if localized and localized != str(output_message.content):
+                await conv_repo.update_message_content(output_message.id, localized)
 
         if interrupted:
             return
