@@ -16,7 +16,8 @@ from yuxi.agents.backends.sandbox.paths import (
     sandbox_uploads_dir,
     virtual_path_for_thread_file,
 )
-from yuxi.agents.toolkits.buildin.tools import ocr_parse_file
+from yuxi.agents.toolkits.buildin.tools import ocr_parse_file, recognize_product_image
+from yuxi.knowledge.product_detector import get_product_detector
 
 _TOOL_IMAGE_USER_TEXT = "Images returned by read_file are attached below. Inspect them when answering."
 _IMAGE_ERROR_TERMS = ("image", "vision", "multimodal", "multi-modal")
@@ -29,9 +30,11 @@ _REJECTION_TERMS = (
     "text-only prompts",
     "unsupported",
 )
-# 用户对话里上传的产品图片：模型拒绝图片输入时落沙盒 uploads 供 ocr_parse_file 解析。
+# 用户对话里上传的产品图片：模型拒绝图片输入时落沙盒 uploads 供 ocr_parse_file / recognize_product_image 解析。
 _CHAT_IMAGE_STEM = "chat-image"
-_CHAT_IMAGE_PLACEHOLDER = "（用户上传的产品图片，文字已由 OCR 工具提取）"
+_CHAT_IMAGE_PLACEHOLDER = "（用户上传的图片，内容已由系统工具解析）"
+# 图片被某工具（OCR/本地识别）在后续消息中解析时，该图片块不再原样进纯文本模型。
+_HANDLED_TOOL_NAMES = frozenset({"ocr_parse_file", "recognize_product_image"})
 _IMAGE_MIME_TO_EXT = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -42,9 +45,16 @@ _IMAGE_MIME_TO_EXT = {
 
 
 class ImageInputCompatibilityMiddleware(AgentMiddleware[Any, Any, Any]):
-    """Bridge OpenAI tool images and translate explicit image capability errors."""
+    """Bridge OpenAI tool images and translate explicit image capability errors.
 
-    tools = [ocr_parse_file]
+    product_detect=True 时（主对话纯文本兜底），图片被拒后优先注入本地产品型号识别，
+    识别未命中再由模型自行调 OCR；否则维持 OCR 兜底现状。
+    """
+
+    tools = [ocr_parse_file, recognize_product_image]
+
+    def __init__(self, product_detect: bool = False) -> None:
+        self.product_detect = product_detect
 
     def wrap_model_call(
         self,
@@ -57,7 +67,10 @@ class ImageInputCompatibilityMiddleware(AgentMiddleware[Any, Any, Any]):
             return handler(request)
         except Exception as exc:  # noqa: BLE001
             if _has_image(request.messages) and _is_image_input_rejection(exc):
-                return _ocr_fallback_response(image_paths or _materialize_chat_images(request))
+                return _image_fallback_response(
+                    image_paths or _materialize_chat_images(request),
+                    product_detect=self.product_detect,
+                )
             raise
 
     async def awrap_model_call(
@@ -71,7 +84,10 @@ class ImageInputCompatibilityMiddleware(AgentMiddleware[Any, Any, Any]):
             return await handler(request)
         except Exception as exc:  # noqa: BLE001
             if _has_image(request.messages) and _is_image_input_rejection(exc):
-                return _ocr_fallback_response(image_paths or _materialize_chat_images(request))
+                return _image_fallback_response(
+                    image_paths or _materialize_chat_images(request),
+                    product_detect=self.product_detect,
+                )
             raise
 
 
@@ -81,16 +97,16 @@ def _bridge_openai_tool_images(request: ModelRequest) -> ModelRequest:
 
     bridged_messages = []
     pending_images: list[dict[str, Any]] = []
-    latest_ocr_call_by_path: dict[str, int] = {}
+    latest_handled_call_by_path: dict[str, tuple[int, str]] = {}
     for index, message in enumerate(request.messages):
         if not isinstance(message, AIMessage):
             continue
         for tool_call in message.tool_calls:
-            if tool_call.get("name") != "ocr_parse_file":
+            if tool_call.get("name") not in _HANDLED_TOOL_NAMES:
                 continue
             file_path = tool_call.get("args", {}).get("file_path")
             if isinstance(file_path, str) and file_path:
-                latest_ocr_call_by_path[file_path] = index
+                latest_handled_call_by_path[file_path] = (index, str(tool_call.get("name")))
 
     def flush_pending_images() -> None:
         if not pending_images:
@@ -103,7 +119,7 @@ def _bridge_openai_tool_images(request: ModelRequest) -> ModelRequest:
     for index, message in enumerate(request.messages):
         if not isinstance(message, ToolMessage):
             flush_pending_images()
-            bridged_messages.append(_strip_handled_chat_images(message, index, latest_ocr_call_by_path, request))
+            bridged_messages.append(_strip_handled_chat_images(message, index, latest_handled_call_by_path, request))
             continue
 
         image_blocks = [block for block in message.content_blocks if block.get("type") == "image"]
@@ -112,9 +128,18 @@ def _bridge_openai_tool_images(request: ModelRequest) -> ModelRequest:
             continue
 
         image_path = message.additional_kwargs.get("read_file_path")
-        ocr_fallback_requested = isinstance(image_path, str) and latest_ocr_call_by_path.get(image_path, -1) > index
-        if not ocr_fallback_requested:
+        handled_by = None
+        if isinstance(image_path, str):
+            handled_entry = latest_handled_call_by_path.get(image_path)
+            if handled_entry is not None and handled_entry[0] > index:
+                handled_by = handled_entry[1]
+        if handled_by is None:
             pending_images.extend(image_blocks)
+        handled_note = "The image content is attached in the following user message for visual inspection."
+        if handled_by == "ocr_parse_file":
+            handled_note = "OCR fallback was requested for this image."
+        elif handled_by == "recognize_product_image":
+            handled_note = "Local product-model recognition was requested for this image."
         text = "\n".join(
             block["text"]
             for block in message.content_blocks
@@ -124,14 +149,7 @@ def _bridge_openai_tool_images(request: ModelRequest) -> ModelRequest:
             message.model_copy(
                 update={
                     "content": text
-                    or (
-                        f"read_file returned {len(image_blocks)} image(s). "
-                        + (
-                            "OCR fallback was requested for this image."
-                            if ocr_fallback_requested
-                            else "The image content is attached in the following user message for visual inspection."
-                        )
-                    )
+                    or f"read_file returned {len(image_blocks)} image(s). {handled_note}"
                 }
             )
         )
@@ -231,10 +249,10 @@ def _materialize_chat_images(request: ModelRequest) -> list[str]:
 
 
 def _strip_handled_chat_images(
-    message, index: int, latest_ocr_call_by_path: dict[str, int], request: ModelRequest
+    message, index: int, latest_handled_call_by_path: dict[str, tuple[int, str]], request: ModelRequest
 ) -> Any:
-    """同一对话中已被 OCR 过的用户 base64 图片，不再发给纯文本模型。"""
-    if getattr(message, "type", None) != "human" or not latest_ocr_call_by_path:
+    """同一对话中已被 OCR / 本地识别处理过的用户 base64 图片，不再发给纯文本模型。"""
+    if getattr(message, "type", None) != "human" or not latest_handled_call_by_path:
         return message
     scope = _request_thread_scope(request)
     if not scope:
@@ -255,7 +273,8 @@ def _strip_handled_chat_images(
             kept.append(block)
             continue
         path = _chat_image_virtual_path(url, thread_id, uid)
-        if path and latest_ocr_call_by_path.get(path, -1) > index:
+        handled_entry = latest_handled_call_by_path.get(path) if path else None
+        if handled_entry is not None and handled_entry[0] > index:
             dropped = True
             continue
         kept.append(block)
@@ -284,26 +303,23 @@ def _read_file_image_paths(messages: list[Any]) -> list[str]:
     return paths
 
 
-def _ocr_fallback_response(image_paths: list[str]) -> ModelResponse:
+def _image_fallback_response(image_paths: list[str], *, product_detect: bool = False) -> ModelResponse:
+    """图片被纯文本模型拒绝时的兜底：优先本地产品识别，未启用时维持 OCR 提取文字。"""
     if not image_paths:
         return ModelResponse(result=[AIMessage(content="当前模型无法读取图片，且没有可供 OCR 工具解析的文件路径。")])
 
-    tool_calls = [
-        {
-            "name": "ocr_parse_file",
-            "args": {"file_path": path},
-            "id": f"call_ocr_{uuid4().hex}",
-        }
-        for path in image_paths
-    ]
-    return ModelResponse(
-        result=[
-            AIMessage(
-                content="当前模型不支持图片输入，正在改用 OCR 工具提取图片文字。",
-                tool_calls=tool_calls,
-            )
-        ]
+    use_detector = product_detect and get_product_detector().available
+    tool_name = "recognize_product_image" if use_detector else "ocr_parse_file"
+    id_prefix = "call_recog_" if use_detector else "call_ocr_"
+    content = (
+        "当前模型不支持图片输入，正在用本地识别模型判断图片中的产品型号。"
+        if use_detector
+        else "当前模型不支持图片输入，正在改用 OCR 工具提取图片文字。"
     )
+    tool_calls = [
+        {"name": tool_name, "args": {"file_path": path}, "id": f"{id_prefix}{uuid4().hex}"} for path in image_paths
+    ]
+    return ModelResponse(result=[AIMessage(content=content, tool_calls=tool_calls)])
 
 
 def _has_image(messages: list[Any]) -> bool:

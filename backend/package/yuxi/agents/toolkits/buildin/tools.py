@@ -282,6 +282,68 @@ async def search_product_image(query_text: str = "", runtime: ToolRuntime = None
     return {"query_text": query_text, "matches": matches}
 
 
+class ProductImageRecognizeInput(BaseModel):
+    """本地识别产品型号的输入：可显式给沙盒虚拟路径，或省略取最新用户图片。"""
+
+    file_path: str | None = Field(
+        default=None,
+        description="可选的沙盒虚拟图片路径（uploads/workspace/outputs 下）；省略时取当前对话最新一张用户图片",
+    )
+
+
+PRODUCT_RECOGNIZE_DESCRIPTION = """本地识别产品/设备图片中的具体型号（内置 8 款：艾尔锐EH01、倍控M200、彬其E600、
+九分F10、森海克斯D11、森海克斯D12、森海克斯D21、森海克斯D22）。
+
+适用场景：用户上传的产品图片上看不出型号——无铭牌、铭牌文字不清、贴牌产品、或需按外观确认具体型号时，
+调用本地目标检测模型做一次外观识别，得到最可能的型号候选。
+不适用：普通聊天截图、文档/表格图片等非产品图——不要调用本工具。
+
+返回 detections（按置信度降序的候选型号列表）与 hit（最可能型号是否达标）。识别结果只是线索：给出型号结论前应
+结合知识库检索（query_kbs）核对参数；若本地识别模型未启用（enabled=false）或 detections 为空，表示没有识别出
+内置几款型号，应改用 OCR 读铭牌文字或按外观检索（search_product_image），不要臆断型号。
+"""
+
+
+@tool(
+    category="buildin",
+    tags=["产品识别", "图片"],
+    display_name="本地识别产品型号",
+    description=PRODUCT_RECOGNIZE_DESCRIPTION,
+    args_schema=ProductImageRecognizeInput,
+)
+async def recognize_product_image(file_path: str | None = None, runtime: ToolRuntime = None) -> dict:
+    """用本地 YOLO 模型识别用户图片中的产品型号（内置 8 款），返回候选型号与命中标志。"""
+    from yuxi.knowledge.product_detector import get_product_detector, top_hit
+
+    detector = get_product_detector()
+    if not detector.available:
+        return {"enabled": False, "hit": False, "detections": []}
+
+    if file_path:
+        source = "file_path"
+        try:
+            _, _, actual_path = _resolve_ocr_source_path(file_path, runtime)
+        except ValueError as exc:
+            return {"enabled": True, "hit": False, "detections": [], "note": str(exc)}
+        payload = actual_path.read_bytes()
+    else:
+        source = "latest_user_image"
+        payload = _extract_user_image_data_uri(runtime)
+        if not payload:
+            return {"enabled": True, "hit": False, "detections": [], "note": "当前对话中没有可用的用户图片。"}
+
+    try:
+        detections = await detector.detect(payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"recognize_product_image 识别失败: {exc}")
+        return {"enabled": True, "hit": False, "detections": [], "note": f"本地识别失败：{exc}"}
+
+    result: dict = {"enabled": True, "source": source, "hit": top_hit(detections) is not None, "detections": detections}
+    if not detections:
+        result["note"] = "未识别出内置 8 款产品型号，请改用 OCR 读铭牌文字或按外观检索。"
+    return result
+
+
 def _resolve_ocr_source_path(file_path: str, runtime: ToolRuntime) -> tuple[str, str, Path]:
     """Resolve a sandbox virtual path to a host file inside the Agent-visible user-data roots."""
     from yuxi.agents.backends.sandbox.paths import get_virtual_path_prefix, resolve_virtual_path

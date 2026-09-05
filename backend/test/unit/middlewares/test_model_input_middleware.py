@@ -179,6 +179,41 @@ async def test_translates_siliconflow_non_vlm_error_without_retrying() -> None:
     assert response.result[0].tool_calls[0]["name"] == "ocr_parse_file"
 
 
+@pytest.mark.asyncio
+async def test_product_detection_takes_priority_when_detector_available(monkeypatch) -> None:
+    """主对话纯文本拒图时，本地识别可用 → 优先注入 recognize_product_image。"""
+    monkeypatch.setattr(
+        "yuxi.agents.middlewares.model_input.get_product_detector",
+        lambda: SimpleNamespace(available=True),
+    )
+    middleware = ImageInputCompatibilityMiddleware(product_detect=True)
+    request = _request(SimpleNamespace(), [_read_file_image_message()])
+
+    response = await middleware.awrap_model_call(request, _non_vlm_handler())
+
+    result = response.result[0]
+    assert result.content == "当前模型不支持图片输入，正在用本地识别模型判断图片中的产品型号。"
+    assert result.tool_calls[0]["name"] == "recognize_product_image"
+    assert result.tool_calls[0]["args"] == {"file_path": "/home/gem/user-data/uploads/image.png"}
+
+
+@pytest.mark.asyncio
+async def test_product_detection_disabled_keeps_ocr_fallback(monkeypatch) -> None:
+    """本地识别未启用（product_detect=True 但模型不可用）→ 维持 OCR 兜底。"""
+    monkeypatch.setattr(
+        "yuxi.agents.middlewares.model_input.get_product_detector",
+        lambda: SimpleNamespace(available=False),
+    )
+    middleware = ImageInputCompatibilityMiddleware(product_detect=True)
+    request = _request(SimpleNamespace(), [_read_file_image_message()])
+
+    response = await middleware.awrap_model_call(request, _non_vlm_handler())
+
+    result = response.result[0]
+    assert result.content == "当前模型不支持图片输入，正在改用 OCR 工具提取图片文字。"
+    assert result.tool_calls[0]["name"] == "ocr_parse_file"
+
+
 def test_omits_historical_tool_image_after_ocr_fallback() -> None:
     middleware = ImageInputCompatibilityMiddleware()
     path = "/home/gem/user-data/uploads/image.png"
@@ -208,8 +243,11 @@ def test_omits_historical_tool_image_after_ocr_fallback() -> None:
     assert "OCR fallback was requested" in seen["messages"][0].content
 
 
-def test_registers_ocr_tool_for_automatic_fallback() -> None:
-    assert [tool.name for tool in ImageInputCompatibilityMiddleware().tools] == ["ocr_parse_file"]
+def test_registers_image_fallback_tools() -> None:
+    assert [tool.name for tool in ImageInputCompatibilityMiddleware().tools] == [
+        "ocr_parse_file",
+        "recognize_product_image",
+    ]
 
 
 @pytest.mark.asyncio
@@ -281,7 +319,45 @@ def test_strips_handled_chat_image_from_followup_request(tmp_path, monkeypatch) 
     human = seen["messages"][0]
     blocks = list(human.content_blocks)
     assert not any(block.get("type") == "image_url" for block in blocks)
-    assert blocks == [{"type": "text", "text": "（用户上传的产品图片，文字已由 OCR 工具提取）"}]
+    assert blocks == [{"type": "text", "text": "（用户上传的图片，内容已由系统工具解析）"}]
+
+
+def test_strips_handled_chat_image_after_product_recognition(tmp_path, monkeypatch) -> None:
+    """本地识别处理过的用户图片同样不再发给纯文本模型。"""
+    monkeypatch.setattr("yuxi.config.save_dir", str(tmp_path))
+    middleware = ImageInputCompatibilityMiddleware()
+    data_uri = f"data:image/png;base64,{_ONE_PX_PNG}"
+    path = _chat_image_virtual_path(data_uri, "thread-1", "user-1")
+    messages = [
+        _user_image_message(data_uri, with_text=""),
+        AIMessage(
+            content="正在本地识别型号。",
+            tool_calls=[
+                {"name": "recognize_product_image", "args": {"file_path": path}, "id": "call_recog"}
+            ],
+        ),
+        ToolMessage(
+            content=(
+                '{"hit": true, "detections": [{"model": "森海克斯D11", "confidence": 0.91}]}'
+            ),
+            tool_call_id="call_recog",
+        ),
+    ]
+    seen: dict[str, object] = {}
+
+    def handler(request):
+        seen["messages"] = request.messages
+        return ModelResponse(result=[AIMessage(content="ok")])
+
+    middleware.wrap_model_call(
+        _request(_openai_model(), messages, runtime=_thread_runtime()),
+        handler,
+    )
+
+    human = seen["messages"][0]
+    blocks = list(human.content_blocks)
+    assert not any(block.get("type") == "image_url" for block in blocks)
+    assert blocks == [{"type": "text", "text": "（用户上传的图片，内容已由系统工具解析）"}]
 
 
 @pytest.mark.asyncio

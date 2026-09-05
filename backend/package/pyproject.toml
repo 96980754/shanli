@@ -76,6 +76,7 @@ dependencies = [
     "torchvision==0.27.1",
     "tqdm>=4.66.4",
     "typer>=0.16.0",
+    "ultralytics>=8.3.0",
     "unstructured>=0.17.2",
     "wcmatch>=8.0.0",
     # Markdown 解析语义切分相关依赖

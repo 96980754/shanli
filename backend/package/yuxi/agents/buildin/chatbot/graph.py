@@ -69,7 +69,8 @@ async def _build_middlewares(context):
             TodoListMiddleware(system_prompt=TODO_MID_PROMPT),
             PatchToolCallsMiddleware(),
             ModelRetryMiddleware(max_retries=getattr(context, "model_retry_times", 2)),
-            ImageInputCompatibilityMiddleware(),
+            # 主对话纯文本模型拒图时，先走本地产品识别，再退 OCR（产品图片识别链路）。
+            ImageInputCompatibilityMiddleware(product_detect=True),
             TokenUsageMiddleware(),
         ]
     )
