@@ -274,8 +274,16 @@ def _retrieval_config_options() -> list[dict[str, Any]]:
             **metadata,
         }
         if options_provider == "rerank_models":
+            rerank_models = list(model_cache.get_all_specs("rerank"))
+            # 空值语义为"跟随全局默认"，作为默认选中项，避免下拉空白无效
+            default_reranker_spec = resolve_reranker_model(None)
+            default_reranker_label = next(
+                (info.display_name for info in rerank_models if info.spec == default_reranker_spec),
+                default_reranker_spec,
+            )
             option["options"] = [
-                {"label": info.display_name, "value": info.spec} for info in model_cache.get_all_specs("rerank")
+                {"value": "", "label": f"跟随全局默认（{default_reranker_label}）"},
+                *({"label": info.display_name, "value": info.spec} for info in rerank_models),
             ]
         options.append(option)
     return options

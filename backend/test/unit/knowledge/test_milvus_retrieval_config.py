@@ -15,6 +15,29 @@ def test_milvus_retrieval_config_exposes_graph_and_dependencies():
     assert by_key["reranker_model"]["depend_on"] == ("use_reranker", True)
 
 
+def test_reranker_model_select_offers_follow_global_default(monkeypatch):
+    from yuxi.knowledge.implementations import milvus as milvus_module
+    from yuxi.models.providers.cache import ModelInfo
+
+    def fake_rerank_models(_model_type):
+        return [
+            ModelInfo("siliconflow-cn", "global-rerank", "rerank", "全局重排", "", "", "openai"),
+            ModelInfo("siliconflow-cn", "other-rerank", "rerank", "其它重排", "", "", "openai"),
+        ]
+
+    monkeypatch.setattr(milvus_module.model_cache, "get_all_specs", fake_rerank_models)
+    monkeypatch.setattr(milvus_module, "resolve_reranker_model", lambda spec=None: "siliconflow-cn:global-rerank")
+
+    reranker = next(o for o in milvus_module._retrieval_config_options() if o["key"] == "reranker_model")
+
+    assert reranker["default"] == ""
+    assert reranker["options"][0] == {"value": "", "label": "跟随全局默认（全局重排）"}
+    assert [o["value"] for o in reranker["options"][1:]] == [
+        "siliconflow-cn:global-rerank",
+        "siliconflow-cn:other-rerank",
+    ]
+
+
 async def test_new_milvus_database_persists_enterprise_retrieval_strategy(tmp_path):
     kb = object.__new__(MilvusKB)
     kb.work_dir = str(tmp_path)
