@@ -394,6 +394,26 @@ async def test_generator_supplement_appends_delta_and_combined_row(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_generator_retrieval_irrelevant_does_not_attach_sources(monkeypatch):
+    """检索有返回但模型判定「无需补充」时，不把无关片段挂成回答来源。
+
+    回归：曾按 extra_sources 非空就 attach query_kbs，导致对 C++ 这类通用问题补检索
+    命中的无关文档（如产品白皮书）被前端当成回答来源展示。
+    """
+    harness = _GeneratorHarness(
+        monkeypatch,
+        retrieve=_EXTRA_SOURCES,
+        compose="",  # 归纳模型认为片段与问题无关，未产出补充内容
+    )
+    chunks = await harness.run()
+
+    assert [chunk["status"] for chunk in chunks] == ["init", "loading", "stream_event", "finished"]
+    assert harness.conv_repo.added["content"] == "人工确认答案"
+    assert harness.attach_calls == []
+    assert harness.qa_pair.hit_count == 1
+
+
+@pytest.mark.asyncio
 async def test_generator_retrieval_failure_falls_back_to_base_answer(monkeypatch):
     """补充检索抛错只影响补充段，基础答案照常落库并正常 finished。"""
 

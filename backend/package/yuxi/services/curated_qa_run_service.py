@@ -335,7 +335,10 @@ async def stream_curated_qa_answer(
         )
         if assistant_message is None:
             raise RuntimeError("人工 QA 命中后保存回答失败")
-        if extra_sources:
+        # 只有归纳模型确实从检索片段提炼出新信息（写进补充段落）时，才把片段
+        # 作为回答来源挂到消息上；检索有返回但模型判定「无需补充」时，这些片段
+        # 与问题无关，不应以来源形式展示给用户。
+        if supplement:
             await _attach_extra_retrieval_tool_call(
                 db=db,
                 message_id=assistant_message.id,
