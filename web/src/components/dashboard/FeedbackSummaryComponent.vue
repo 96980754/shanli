@@ -35,6 +35,13 @@
           <div class="metric-label">{{ $t('feedback.silentLabel') }}</div>
           <div class="metric-value">{{ summary?.silent_count || 0 }}</div>
         </div>
+        <div class="metric-card refusal" :title="$t('feedback.refusalRateTooltip')">
+          <div class="metric-label">{{ $t('feedback.refusalCountLabel') }}</div>
+          <div class="metric-value">{{ summary?.refusal_count || 0 }}</div>
+          <div class="metric-sub">
+            {{ $t('feedback.refusalRateLabel') }} {{ formatRate(summary?.refusal_rate) }}
+          </div>
+        </div>
         <div class="metric-card">
           <div class="metric-label">{{ $t('feedback.totalFeedbackLabel') }}</div>
           <div class="metric-value">{{ summary?.total_feedbacks || 0 }}</div>
@@ -195,6 +202,10 @@ defineExpose({ refresh: loadSummary })
 
   &.satisfaction {
     border-left: 3px solid var(--main-color);
+  }
+
+  &.refusal {
+    border-left: 3px solid var(--color-accent-500);
   }
 }
 

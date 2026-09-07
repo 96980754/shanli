@@ -23,13 +23,18 @@ class _ScalarResult:
 class _FakeDb:
     """按语句类型分流：原始 SQL（可评价基数）返回 scalar，其余（反馈行）返回 rows。"""
 
-    def __init__(self, rows, evaluable_count=0):
+    def __init__(self, rows, evaluable_count=0, refusal_count=0):
         self.rows = rows
-        self.evaluable_count = evaluable_count
+        self.scalar_values = iter((evaluable_count, refusal_count))
 
     async def execute(self, query, *args, **kwargs):
         if isinstance(query, TextClause):
-            return _ScalarResult(self.evaluable_count)
+            return _ScalarResult(next(self.scalar_values))
+        if not hasattr(query, "selected_columns"):
+            return _FakeResult(self.rows)
+        columns = [getattr(column, "name", None) for column in query.selected_columns]
+        if columns == ["count"]:
+            return _ScalarResult(next(self.scalar_values))
         return _FakeResult(self.rows)
 
 
@@ -47,6 +52,7 @@ async def test_feedback_summary_counts_structured_and_legacy_reasons():
             ("dislike", "旧版自由文本原因"),
         ],
         evaluable_count=10,
+        refusal_count=2,
     )
 
     result = await get_feedback_summary(agent_id=None, db=db, current_user=_FakeUser())
@@ -59,6 +65,8 @@ async def test_feedback_summary_counts_structured_and_legacy_reasons():
     assert result.silent_count == 6
     assert result.satisfaction_rate == 70.0
     assert result.participation_rate == 40.0
+    assert result.refusal_count == 2
+    assert result.refusal_rate == 20.0
     assert result.legacy_unclassified_count == 1
     assert {item.code: item.count for item in result.reason_stats} == {
         "answer_incorrect": 1,
@@ -106,6 +114,8 @@ async def test_feedback_summary_no_evaluable_answers_defaults_to_satisfied():
     assert result.silent_count == 0
     assert result.satisfaction_rate == 100.0
     assert result.participation_rate == 0.0
+    assert result.refusal_count == 0
+    assert result.refusal_rate == 0.0
 
 
 @pytest.mark.asyncio

@@ -1272,7 +1272,7 @@ async def stream_agent_chat(
                         localized = await translate_from_chinese(refusal, source_lang)
                         if localized:
                             refusal = localized
-                    await conv_repo.add_message_by_thread_id(
+                    output_message = await conv_repo.add_message_by_thread_id(
                         thread_id=thread_id,
                         role="assistant",
                         content=refusal,
@@ -1288,6 +1288,8 @@ async def stream_agent_chat(
                         run_id=meta.get("run_id"),
                         request_id=meta.get("request_id"),
                     )
+                    if meta.get("run_id") and output_message:
+                        await AgentRunRepository(db).set_output_message(meta["run_id"], output_message.id)
                     await db.commit()
                     yield make_chunk(
                         content=refusal,
@@ -1311,19 +1313,26 @@ async def stream_agent_chat(
                         localized = await translate_from_chinese(refusal, source_lang)
                         if localized:
                             refusal = localized
-                    await conv_repo.add_message_by_thread_id(
+                    output_message = await conv_repo.add_message_by_thread_id(
                         thread_id=thread_id,
                         role="assistant",
                         content=refusal,
                         message_type="text",
                         extra_metadata={
                             "id": message_id,
+                            "knowledge_disposition": {
+                                "schema_version": DISPOSITION_SCHEMA_VERSION,
+                                "type": "knowledge_refusal",
+                                "reason": "no_results",
+                            },
                             "handoff_available": True,
                             "handoff_query": query,
                         },
                         run_id=meta.get("run_id"),
                         request_id=meta.get("request_id"),
                     )
+                    if meta.get("run_id") and output_message:
+                        await AgentRunRepository(db).set_output_message(meta["run_id"], output_message.id)
                     await db.commit()
                     yield make_chunk(
                         content=refusal,

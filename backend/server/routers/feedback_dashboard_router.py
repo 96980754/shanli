@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.services.feedback_service import (
     FEEDBACK_REASON_OPTIONS,
+    build_refusal_stats,
     build_satisfaction_stats,
     count_evaluable_answers,
+    count_refusal_answers,
     parse_feedback_reason,
 )
 from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback, User
@@ -32,6 +34,8 @@ class FeedbackSummaryResponse(BaseModel):
     silent_count: int
     satisfaction_rate: float
     participation_rate: float
+    refusal_count: int
+    refusal_rate: float
     reason_stats: list[FeedbackReasonStat]
     legacy_unclassified_count: int
 
@@ -84,6 +88,10 @@ async def get_feedback_summary(
         like_count=like_count,
         dislike_count=dislike_count,
     )
+    refusal_stats = build_refusal_stats(
+        evaluable_count=evaluable_count,
+        refusal_count=await count_refusal_answers(db=db, agent_id=agent_id),
+    )
     reason_stats = [
         FeedbackReasonStat(code=code, label=label, count=reason_counts[code])
         for code, label in FEEDBACK_REASON_OPTIONS.items()
@@ -97,6 +105,8 @@ async def get_feedback_summary(
         silent_count=stats["silent_count"],
         satisfaction_rate=stats["satisfaction_rate"],
         participation_rate=stats["participation_rate"],
+        refusal_count=refusal_stats["refusal_count"],
+        refusal_rate=refusal_stats["refusal_rate"],
         reason_stats=reason_stats,
         legacy_unclassified_count=legacy_unclassified_count,
     )

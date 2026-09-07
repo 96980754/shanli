@@ -1,8 +1,9 @@
 import asyncio
 
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import exists, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from yuxi.services.langfuse_service import submit_user_feedback_score
 from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback
 from yuxi.utils.logging_config import logger
@@ -67,8 +68,11 @@ def parse_feedback_reason(reason: str | None) -> dict:
 
 
 # =============================================================================
-# 满意度统计（未反馈默认计满意）
+# 满意度与拒答率统计
 # =============================================================================
+
+# 拒答率仅认最终消息上的结构化分类；系统错误、旧消息缺标记等不推断为拒答。
+REFUSAL_DISPOSITION_TYPES = frozenset({"knowledge_refusal", "scope_refusal", "policy_refusal"})
 
 # 可评价基数的判定：role=assistant 且其紧邻下一条消息（同会话、id 更大）不再是
 # assistant——即该条消息是其所在轮次的最后一条 AI 终答（前端赞/踩按钮只出现在这类
@@ -100,6 +104,51 @@ async def count_evaluable_answers(*, db: AsyncSession, agent_id: str | None = No
     sql = text(f"SELECT COUNT(*) FROM messages m WHERE {_EVALUABLE_ANSWERS_WHERE}{agent_scope}")
     result = await db.execute(sql, params)
     return result.scalar() or 0
+
+
+async def count_refusal_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
+    """统计收尾 AI 终答中的结构化拒答消息数。"""
+    next_message = aliased(Message)
+    next_message_id = (
+        select(func.min(next_message.id))
+        .where(
+            next_message.conversation_id == Message.conversation_id,
+            next_message.id > Message.id,
+        )
+        .correlate(Message)
+        .scalar_subquery()
+    )
+    next_assistant = aliased(Message)
+    query = select(func.count(Message.id)).where(
+        Message.role == "assistant",
+        ~exists(
+            select(next_assistant.id).where(
+                next_assistant.id == next_message_id,
+                next_assistant.role == "assistant",
+            )
+        ),
+        Message.extra_metadata["knowledge_disposition"]["type"].as_string().in_(REFUSAL_DISPOSITION_TYPES),
+    )
+    if agent_id:
+        query = query.where(
+            exists(
+                select(Conversation.id).where(
+                    Conversation.id == Message.conversation_id,
+                    Conversation.agent_id == agent_id,
+                )
+            )
+        )
+    result = await db.execute(query)
+    return result.scalar() or 0
+
+
+def build_refusal_stats(*, evaluable_count: int, refusal_count: int) -> dict:
+    """按收尾 AI 终答计算拒答率；无终答时拒答率为 0。"""
+    refusal_rate = round(refusal_count / evaluable_count * 100, 2) if evaluable_count > 0 else 0.0
+    return {
+        "refusal_count": refusal_count,
+        "refusal_rate": refusal_rate,
+    }
 
 
 def build_satisfaction_stats(*, evaluable_count: int, like_count: int, dislike_count: int) -> dict:

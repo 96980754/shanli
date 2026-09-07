@@ -1148,6 +1148,10 @@ export default {
     silentLabel: '未反馈（默认满意）',
     participationLabel: '反馈参与率',
     totalFeedbackLabel: '总反馈',
+    refusalCountLabel: '拒答数',
+    refusalRateLabel: '拒答率',
+    refusalRateTooltip:
+      '拒答率 = 知识无依据、超出范围或安全策略拒答的收尾 AI 终答数 ÷ 可评价回答数；系统错误不计入拒答',
     likeLabel: '点赞',
     dislikeLabel: '点踩',
     reasonDistributionTitle: '点踩原因分布',

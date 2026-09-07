@@ -6,7 +6,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.feedback_service import build_satisfaction_stats, count_evaluable_answers
+from yuxi.services.feedback_service import (
+    build_refusal_stats,
+    build_satisfaction_stats,
+    count_evaluable_answers,
+    count_refusal_answers,
+)
 from yuxi.storage.postgres.models_business import (
     Base,
     Conversation,
@@ -31,8 +36,13 @@ async def satisfaction_session():
         db.add(user)
         # 会话1：一轮问答 = 用户提问 + 中间思考行 + 终答；再补一轮用户提问 + 终答。
         conv1 = Conversation(
-            thread_id="thread-1", uid="user-1", agent_id="agent-a", title="t1", status="active",
-            created_at=now, updated_at=now,
+            thread_id="thread-1",
+            uid="user-1",
+            agent_id="agent-a",
+            title="t1",
+            status="active",
+            created_at=now,
+            updated_at=now,
         )
         conv1_msgs = [
             Message(conversation=conv1, role="user", content="Q1", created_at=now),
@@ -43,17 +53,33 @@ async def satisfaction_session():
         ]
         # 会话2：单轮拒答终答（含拒答口径应计入）。
         conv2 = Conversation(
-            thread_id="thread-2", uid="user-1", agent_id="agent-a", title="t2", status="active",
-            created_at=now, updated_at=now,
+            thread_id="thread-2",
+            uid="user-1",
+            agent_id="agent-a",
+            title="t2",
+            status="active",
+            created_at=now,
+            updated_at=now,
         )
         conv2_msgs = [
             Message(conversation=conv2, role="user", content="Q-refuse", created_at=now),
-            Message(conversation=conv2, role="assistant", content="抱歉，未找到依据", created_at=now),
+            Message(
+                conversation=conv2,
+                role="assistant",
+                content="抱歉，未找到依据",
+                created_at=now,
+                extra_metadata={"knowledge_disposition": {"type": "knowledge_refusal"}},
+            ),
         ]
         # 会话3：用户提问后尚无回答（进行中/中断）→ 不产生可评价基数。
         conv3 = Conversation(
-            thread_id="thread-3", uid="user-1", agent_id="agent-a", title="t3", status="active",
-            created_at=now, updated_at=now,
+            thread_id="thread-3",
+            uid="user-1",
+            agent_id="agent-a",
+            title="t3",
+            status="active",
+            created_at=now,
+            updated_at=now,
         )
         conv3_msgs = [Message(conversation=conv3, role="user", content="Q3", created_at=now)]
         db.add_all([conv1, conv2, conv3] + conv1_msgs + conv2_msgs + conv3_msgs)
@@ -77,6 +103,53 @@ async def test_count_evaluable_answers_counts_only_turn_ending_ai(satisfaction_s
 async def test_count_evaluable_answers_scoped_by_agent(satisfaction_session):
     assert await count_evaluable_answers(db=satisfaction_session, agent_id="agent-a") == 3
     assert await count_evaluable_answers(db=satisfaction_session, agent_id="other-agent") == 0
+
+
+async def test_count_refusal_answers_counts_all_business_types_but_not_errors(satisfaction_session):
+    db = satisfaction_session
+    now = utc_now_naive()
+    conversations = []
+    for index, disposition_type in enumerate(("scope_refusal", "policy_refusal", "system_error"), start=4):
+        conversation = Conversation(
+            thread_id=f"thread-{index}",
+            uid="user-1",
+            agent_id="agent-a",
+            title=f"t{index}",
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+        conversation.messages = [
+            Message(role="user", content="Q", created_at=now),
+            Message(
+                role="assistant",
+                content="result",
+                created_at=now,
+                extra_metadata={"knowledge_disposition": {"type": disposition_type}},
+            ),
+        ]
+        conversations.append(conversation)
+    db.add_all(conversations)
+    await db.commit()
+
+    assert await count_refusal_answers(db=db) == 3
+
+
+async def test_count_refusal_answers_uses_terminal_answer_scope(satisfaction_session):
+    assert await count_refusal_answers(db=satisfaction_session) == 1
+    assert await count_refusal_answers(db=satisfaction_session, agent_id="agent-a") == 1
+    assert await count_refusal_answers(db=satisfaction_session, agent_id="other-agent") == 0
+
+
+async def test_build_refusal_stats_calculates_rate_and_handles_zero_denominator():
+    assert build_refusal_stats(evaluable_count=4, refusal_count=1) == {
+        "refusal_count": 1,
+        "refusal_rate": 25.0,
+    }
+    assert build_refusal_stats(evaluable_count=0, refusal_count=0) == {
+        "refusal_count": 0,
+        "refusal_rate": 0.0,
+    }
 
 
 async def test_satisfaction_stats_no_feedback_counts_as_satisfied(satisfaction_session):

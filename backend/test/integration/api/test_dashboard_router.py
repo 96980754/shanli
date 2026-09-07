@@ -61,9 +61,13 @@ async def test_admin_can_fetch_stats(test_client, admin_headers):
         "silent_count",
         "satisfaction_rate",
         "participation_rate",
+        "refusal_count",
+        "refusal_rate",
     ):
         assert key in feedback_stats, f"feedback_stats missing {key}"
     assert 0 <= feedback_stats["satisfaction_rate"] <= 100
+    assert 0 <= feedback_stats["refusal_count"] <= feedback_stats["evaluable_count"]
+    assert 0 <= feedback_stats["refusal_rate"] <= 100
 
 
 async def test_admin_can_fetch_feedback_summary_with_satisfaction_breakdown(test_client, admin_headers):
@@ -78,6 +82,8 @@ async def test_admin_can_fetch_feedback_summary_with_satisfaction_breakdown(test
         "silent_count",
         "satisfaction_rate",
         "participation_rate",
+        "refusal_count",
+        "refusal_rate",
         "reason_stats",
         "legacy_unclassified_count",
     ):
@@ -85,6 +91,8 @@ async def test_admin_can_fetch_feedback_summary_with_satisfaction_breakdown(test
     # 未反馈 = 可评价基数 − 显式反馈；满意率 = (好评 + 未反馈) / 可评价基数
     assert data["silent_count"] == data["evaluable_count"] - data["like_count"] - data["dislike_count"]
     assert 0 <= data["satisfaction_rate"] <= 100
+    assert 0 <= data["refusal_count"] <= data["evaluable_count"]
+    assert 0 <= data["refusal_rate"] <= 100
 
 
 async def test_admin_can_fetch_feedbacks(test_client, admin_headers):

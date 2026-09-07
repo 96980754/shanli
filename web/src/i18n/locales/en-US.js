@@ -1171,6 +1171,10 @@ export default {
     silentLabel: 'No feedback (counted satisfied)',
     participationLabel: 'Feedback participation',
     totalFeedbackLabel: 'Total Feedback',
+    refusalCountLabel: 'Refusals',
+    refusalRateLabel: 'Refusal rate',
+    refusalRateTooltip:
+      'Refusal rate = settled AI answers refused for missing knowledge, out-of-scope requests, or safety policy ÷ evaluable answers; system errors are excluded',
     likeLabel: 'Like',
     dislikeLabel: 'Dislike',
     reasonDistributionTitle: 'Dislike Reason Distribution',

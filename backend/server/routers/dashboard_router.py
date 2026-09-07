@@ -19,7 +19,13 @@ from sqlalchemy.orm import aliased
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
-from yuxi.services.feedback_service import build_satisfaction_stats, count_evaluable_answers
+from yuxi.services.feedback_service import (
+    REFUSAL_DISPOSITION_TYPES,
+    build_refusal_stats,
+    build_satisfaction_stats,
+    count_evaluable_answers,
+    count_refusal_answers,
+)
 from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
@@ -642,6 +648,10 @@ async def get_dashboard_stats(
             like_count=like_count,
             dislike_count=dislike_count,
         )
+        refusal_stats = build_refusal_stats(
+            evaluable_count=evaluable_count,
+            refusal_count=await count_refusal_answers(db=db),
+        )
 
         return {
             "total_conversations": total_conversations,
@@ -651,6 +661,7 @@ async def get_dashboard_stats(
             "feedback_stats": {
                 "total_feedbacks": total_feedbacks,
                 **satisfaction_stats,
+                **refusal_stats,
             },
         }
     except Exception as e:
@@ -664,7 +675,6 @@ async def get_dashboard_stats(
 # =============================================================================
 
 # 消息被归类为拒答（知识缺口/跑题/策略拦截）即视为「拒答来源」反馈，便于管理员优先补答。
-_REFUSAL_DISPOSITION_TYPES = {"knowledge_refusal", "scope_refusal", "policy_refusal"}
 _FEEDBACK_STATUSES = {"pending", "processed", "ignored"}
 
 
@@ -672,7 +682,7 @@ def _is_refusal_source_message(extra_metadata: dict | None) -> bool:
     """按消息 extra_metadata 中的 knowledge_disposition 判定是否为拒答来源。"""
     metadata = extra_metadata or {}
     disposition = metadata.get("knowledge_disposition") or {}
-    if disposition.get("type") in _REFUSAL_DISPOSITION_TYPES:
+    if disposition.get("type") in REFUSAL_DISPOSITION_TYPES:
         return True
     return metadata.get("knowledge_no_evidence") is True
 
