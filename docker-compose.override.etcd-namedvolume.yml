@@ -1,0 +1,16 @@
+# 本机 (Docker Desktop WSL) 的 etcd bind-mount FUSE 层 flock 语义损坏（幽灵锁，wsl --shutdown 不释放，
+# force-recreate 换不掉），导致 milvus-etcd-dev 无法提交提案。etcd 数据改用命名卷绕开该层。
+# 用法: docker compose -f docker-compose.yml -f docker-compose.override.etcd-namedvolume.yml ...
+# 数据在命名卷 milvus_etcd_data（docker volume ls 可见，不在 docker/volumes 下）。
+services:
+  etcd:
+    volumes:
+      - milvus_etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+volumes:
+  milvus_etcd_data:
