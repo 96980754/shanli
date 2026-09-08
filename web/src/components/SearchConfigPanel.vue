@@ -5,7 +5,12 @@
       <p>{{ $t('searchCfg.loading') }}</p>
     </div>
 
-    <a-result v-else-if="error" status="error" :title="$t('searchCfg.loadFailedTitle')" :sub-title="error">
+    <a-result
+      v-else-if="error"
+      status="error"
+      :title="$t('searchCfg.loadFailedTitle')"
+      :sub-title="error"
+    >
       <template #extra>
         <a-button type="primary" @click="loadQueryParams">{{ $t('searchCfg.reload') }}</a-button>
       </template>
@@ -75,13 +80,14 @@ const props = defineProps({
 
 const emit = defineEmits(['save'])
 
-const { t } = useI18n()
+const { t, tm, locale } = useI18n()
 
 const store = useDatabaseStore()
 
 const loading = ref(false)
 const error = ref('')
 const queryParams = ref([])
+const rawParams = ref([])
 const meta = reactive({})
 
 const isDependencySatisfied = (param) => {
@@ -92,6 +98,35 @@ const isDependencySatisfied = (param) => {
 }
 
 const visibleQueryParams = computed(() => queryParams.value.filter(isDependencySatisfied))
+
+// 后端 schema 的 label/description/选项以中文为内部规范语，英文界面按 param.key
+// 查 i18n 的 retrievalConfig 字典覆写展示文案；未收录的 key 保持后端原文。
+const localizeParams = (params) => {
+  if (locale.value !== 'en-US') return params
+  const copy = tm('retrievalConfig')
+  if (!copy || typeof copy !== 'object') return params
+  return params.map((param) => {
+    const entry = copy[param.key]
+    if (!entry || typeof entry !== 'object') return param
+    const next = { ...param }
+    if (entry.label) next.label = entry.label
+    if (entry.description) next.description = entry.description
+    if (Array.isArray(param.options) && entry.options && typeof entry.options === 'object') {
+      next.options = param.options.map((opt) => {
+        const mapped = entry.options[opt.value]
+        if (mapped) return { ...opt, label: mapped }
+        // 重排序模型的「跟随全局默认（模型）」首选项为动态文案，只翻外层前缀
+        if (param.key === 'reranker_model' && opt.value === '') {
+          const match = String(opt.label || '').match(/^跟随全局默认（(.*)）$/)
+          if (match)
+            return { ...opt, label: t('retrievalConfig.followGlobalDefault', { model: match[1] }) }
+        }
+        return opt
+      })
+    }
+    return next
+  })
+}
 
 const computedMeta = computed(() => {
   const result = {}
@@ -125,9 +160,10 @@ const loadQueryParams = async () => {
   error.value = ''
   try {
     const response = await queryApi.getKnowledgeBaseQueryParams(props.kbId)
-    queryParams.value = (response.params?.options || []).filter(
+    rawParams.value = (response.params?.options || []).filter(
       (param) => param.key !== 'include_distances'
     )
+    queryParams.value = localizeParams(rawParams.value)
 
     const supportedKeys = new Set(queryParams.value.map((param) => param.key))
     for (const key in meta) {
@@ -194,7 +230,9 @@ const save = async () => {
     }
   } catch (err) {
     console.error(t('searchCfg.saveFailedLog'), err)
-    message.error(t('searchCfg.saveFailedMessage', { message: err.message || t('searchCfg.unknownError') }))
+    message.error(
+      t('searchCfg.saveFailedMessage', { message: err.message || t('searchCfg.unknownError') })
+    )
     return false
   }
 }
@@ -218,6 +256,13 @@ watch(
   },
   { immediate: true }
 )
+
+// 语言切换时按已加载的后端参数重映射展示文案（不重复拉取）
+watch(locale, () => {
+  if (rawParams.value.length) {
+    queryParams.value = localizeParams(rawParams.value)
+  }
+})
 
 defineExpose({ save, resetToDefaults, loadQueryParams })
 </script>

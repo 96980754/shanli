@@ -15,6 +15,8 @@
 
 ### 开发记录
 
+- **检索配置面板多语言边界补全**——`SearchConfigPanel` 展示的参数 label/description/选项文案来自后端 `MilvusRetrievalConfig` schema，以中文为内部规范语，英文界面下整块面板仍是中文残留；而布尔下拉选项走前端 i18n，形成「后端中文 + 前端英文」混排。修复：en-US 词条新增 `retrievalConfig` 字典（按 `param.key` 收录全部 label/description 及 search_mode 选项、`followGlobalDefault` 动态文案），组件加载参数时英文模式按 key 覆写展示文案、未收录 key 保持后端原文，zh 界面始终走后端原文不受影响；另存 `rawParams` 并在语言切换时重映射（不重复拉取）。**验证**：prettier 通过。
+
 - **修复 KB 检索配置「重排序模型」下拉空白、无默认选中**——milvus 检索参数 schema 里 `reranker_model` 的默认值硬编码为 `""` 且选项列表不含空值项，ant-select 绑定空值匹配不到选项 → 渲染成空框，看起来「没有默认模型/下拉无效」；运行时语义本身正常（milvus.py 空值回退全局默认 reranker）。修复：`_retrieval_config_options()` 给 rerank 模型选项**前置一个空值选项「跟随全局默认（{全局 reranker 展示名}）」**并作为默认态——沿用 chunk 预设「跟随默认」交互，不选具体模型时继续走设置-基本设置的全局默认（全局变更自动跟随），选中具体模型才按该 KB 覆盖；存量 KB 存的 `reranker_model=''` 无需迁移即正确展示。**验证**：新增单测 `test_reranker_model_select_offers_follow_global_default`（mock rerank 模型列表断言首选项为空值+跟随标签、后续为具体 spec 列表）全绿；ruff 通过。
 
 - **修复人工问答对（curated QA）命中后把无关的补充检索片段展示成回答来源**——快答路径给人工答案后无条件补一轮 KB 检索（`curated_qa_run_service._retrieve_extra_sources`：按智能体当前已启用库每库 top-4、无相关性门槛），归纳模型据此写补充段落；但来源挂载原来只看「检索有返回」（`if extra_sources:`），模型判定片段无关（回复「无需补充」、正文无补充段）时仍会把合成的 `query_kbs` 工具调用挂到回答消息上。典型症状：对「C++ std::vector」这类通用问题命中「联网补答生成的知识缺口问答对」，补检索在全是产品资料的库里带回 mno 白皮书等无关片段，前端来源面板据此显示「来源 4 / 本回答基于《…白皮书》V 版本生成」，即使回答正文与这些文档无关。修复：来源挂载门槛改为 `if supplement:`——只有归纳模型确实从片段提炼出新信息（写进补充段落）才把片段作为来源展示；判定无关/无补充时不再挂 `query_kbs`。**验证**：新增回归单测 `test_generator_retrieval_irrelevant_does_not_attach_sources`（检索返回片段但归纳为空 → 不 attach）连同该文件全部 15 条单测全绿；ruff 通过。

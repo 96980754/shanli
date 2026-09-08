@@ -2263,10 +2263,12 @@ export default {
     csOverviewTitle: 'Routing Overview',
     csOverviewDesc:
       'See where each business line’s handoffs go: bound lines reach their teams (round-robin); unbound lines fall back to General CS.',
-    csOverviewEmpty: 'Add customer-service entries and bind business lines above to see the routing here.',
+    csOverviewEmpty:
+      'Add customer-service entries and bind business lines above to see the routing here.',
     csOverviewUnknown: 'Unmatched questions',
     csOverviewFallbackTag: 'General-CS fallback',
-    csOverviewNoPool: 'No General CS available (no entries, or all are already bound) — these questions cannot be handed off.',
+    csOverviewNoPool:
+      'No General CS available (no entries, or all are already bound) — these questions cannot be handed off.',
     csLinesTitle: 'Business Lines (Handoff Routing)',
     csLineBindingLabel: 'Bound customer service',
     csLineBindingPlaceholder: 'Team that receives this line’s handoffs (multiple allowed)',
@@ -3061,6 +3063,84 @@ export default {
     saveFailedMessage: 'Failed to save config: {message}',
     unknownError: 'Unknown error',
     resetToDefaults: 'Reset to default config'
+  },
+  // 检索配置（MilvusRetrievalConfig schema）label/description/选项在英文界面的覆写文案。
+  // 后端 schema 以中文为内部规范语；前端只在英文模式下按 param.key 查此字典覆写，
+  // 未收录的 key 保持后端原文，中文界面始终走后端原文。
+  retrievalConfig: {
+    followGlobalDefault: 'Follow global default ({model})',
+    search_mode: {
+      label: 'Search Mode',
+      description: 'Choose the search mode',
+      options: {
+        vector: 'Vector Search',
+        keyword: 'BM25 Full-text Search',
+        hybrid: 'Hybrid Search'
+      }
+    },
+    final_top_k: {
+      label: 'Final Chunk Count',
+      description: 'Number of chunks returned to the frontend after reranking'
+    },
+    similarity_threshold: {
+      label: 'Similarity Threshold (0-1)',
+      description: 'Filter out results below this similarity'
+    },
+    bm25_top_k: {
+      label: 'BM25 Recall Count',
+      description: 'BM25 candidates in full-text and hybrid search'
+    },
+    vector_weight: {
+      label: 'Vector Weight',
+      description: 'Fusion weight of vector recall in hybrid search'
+    },
+    bm25_weight: {
+      label: 'BM25 Weight',
+      description: 'Fusion weight of BM25 recall in hybrid search'
+    },
+    bm25_drop_ratio_search: {
+      label: 'BM25 Sparse Drop Ratio',
+      description:
+        'Ratio of low-score sparse terms dropped in BM25; higher is faster but may reduce recall'
+    },
+    use_graph_retrieval: {
+      label: 'Enable Graph Retrieval',
+      description: 'Whether to expand retrieval with entities and triples'
+    },
+    graph_entity_top_k: {
+      label: 'Graph Entity Recall Count',
+      description: 'Entities recalled from the query'
+    },
+    graph_triple_top_k: {
+      label: 'Graph Triple Recall Count',
+      description: 'Triples recalled from the query'
+    },
+    graph_max_nodes: {
+      label: 'Graph Max Nodes',
+      description: 'Max nodes read in the 2-hop expansion subgraph'
+    },
+    graph_top_k: {
+      label: 'Graph Recalled Chunks',
+      description: 'Chunks recalled from graph paths after PPR'
+    },
+    graph_weight: {
+      label: 'Graph Retrieval Weight',
+      description: 'Weight of graph results in rank fusion'
+    },
+    ppr_damping: {
+      label: 'PPR Damping Factor',
+      description: 'Damping factor of Personalized PageRank'
+    },
+    use_reranker: {
+      label: 'Enable Reranking',
+      description: 'Whether to rerank retrieval results with a fine-ranking model'
+    },
+    reranker_model: { label: 'Rerank Model', description: 'Rerank model used for this query' },
+    recall_top_k: {
+      label: 'Recall Count',
+      description:
+        'Candidates kept by vector or hybrid search (effective when reranking is enabled)'
+    }
   },
   attachOption: {
     anyFileTip: 'Any file format supported, up to 5 MB',
