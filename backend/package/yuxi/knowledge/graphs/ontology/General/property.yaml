@@ -1,0 +1,27 @@
+properties:
+  General:
+    version:
+      type: string
+      owners:
+      - Product
+      - Solution
+      - Standard
+      description: 版本标识，例如 v1.0.0
+    release_date:
+      type: string
+      owners:
+      - Product
+      description: 产品发布日期
+  Document:
+    document_type:
+      type: string
+      owners:
+      - Document
+      enum:
+      - UserManual
+      - FAQ
+      - WhitePaper
+      - Case
+      - Contract
+      - Report
+      description: 文档类型

@@ -428,15 +428,27 @@ def test_llm_graph_extractor_accepts_generic_builtin():
     extractor = LLMGraphExtractor(
         {
             "model_spec": "test/model",
-            "ontology_registry_id": "tongyong",
+            "ontology_registry_id": "general",
             "ontology_version": "1.0.0",
         }
     )
 
     extractor.validate_options()
 
-    assert extractor.ontology.registry_id == "tongyong"
-    assert set(extractor.ontology.entities) == {"effect", "feature", "product", "technology"}
+    assert extractor.ontology.registry_id == "general"
+    assert set(extractor.ontology.entities) == {
+        "Organization",
+        "Person",
+        "Product",
+        "Solution",
+        "Capability",
+        "Technology",
+        "Standard",
+        "Scenario",
+        "Industry",
+        "Document",
+        "Evidence",
+    }
 
 
 def test_graph_extractor_factory_supports_only_llm():

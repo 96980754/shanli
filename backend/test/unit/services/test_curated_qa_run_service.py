@@ -354,7 +354,13 @@ async def test_generator_exact_hit_streams_base_then_finished_without_extra(monk
     assert pill["data"]["tool_name"] == "query_kbs"
 
     assert harness.conv_repo.added["content"] == "人工确认答案"
-    assert harness.conv_repo.added["extra_metadata"]["answer_source"] == "curated_qa"
+    meta = harness.conv_repo.added["extra_metadata"]
+    assert meta["answer_source"] == "curated_qa"
+    assert meta["human_confirmed"] is True  # 类别3：人工确认答案，非模型逐库检索作答
+    # 命中问答对走独立快答 run，不落知识 disposition/横幅/转人工标记（多轮线程视为已正常作答）。
+    assert "knowledge_disposition" not in meta
+    assert "handoff_available" not in meta
+    assert "knowledge_no_evidence" not in meta
     assert harness.run_repo.output == ("run-1", 22)
     assert harness.qa_pair.hit_count == 1
     assert harness.attach_calls == []

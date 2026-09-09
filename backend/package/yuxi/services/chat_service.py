@@ -37,6 +37,7 @@ from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.knowledge_answer_disposition import (
     DISPOSITION_SCHEMA_VERSION,
     HANDOFF_REFUSAL_TYPES,
+    QUERY_KB_TOOL_NAMES,
     apply_knowledge_disposition,
     apply_refusal_judgment,
     build_knowledge_evidence,
@@ -475,15 +476,6 @@ def _assistant_meta_is_answer(extra_metadata: dict | None) -> bool:
     return True
 
 
-async def _thread_has_answered_turn(conv_repo: ConversationRepository, thread_id: str) -> bool:
-    """thread 是否已进入正常问答（上一条 assistant 是正常回答）。
-
-    入口门与零命中预检只对「尚无正常作答的首答轮」触发；续答轮放行主模型结合上下文作答。
-    """
-    message = await _get_last_assistant_message(conv_repo, thread_id)
-    return bool(message) and _assistant_meta_is_answer(getattr(message, "extra_metadata", None))
-
-
 async def _last_assistant_has_kb_evidence(conv_repo: ConversationRepository, thread_id: str) -> bool:
     """紧邻上一条 assistant 消息是否带 ok 检索证据（决策② 续答轮豁免判定）。"""
     message = await _get_last_assistant_message(conv_repo, thread_id)
@@ -505,7 +497,7 @@ class _KnowledgeEvidenceTracker:
         if not isinstance(data, dict):
             return
         tool_name = str(data.get("tool_name") or data.get("name") or "")
-        if tool_name != "query_kb":
+        if tool_name not in QUERY_KB_TOOL_NAMES:
             return
         call_id = str(data.get("tool_call_id") or "")
         if data.get("event") == "tool-started":
@@ -811,8 +803,9 @@ async def save_messages_from_langgraph_state(
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
                 msg_dict["knowledge_disposition"] = disposition
-            # 决策② 无依据不输出兜底：模型对业务内问题零检索硬答（守规失败）→ 按知识缺口拒答并转人工。
-            # 豁免：身份/寒暄正文、本轮用了合法来源工具（文件/图片/联网/文档等）、紧邻带 ok 证据回答的续答轮。
+            # 决策② 无依据不输出兜底：本轮确实检索过 query_kb(s) 却仍正常作答（检索失配）
+            # → 按知识缺口拒答并转人工。零检索轮（问候/致谢/闲聊等）一律不改写。
+            # 次级豁免：身份/寒暄正文、用了合法来源工具（文件/图片/联网/文档等）、紧邻带 ok 证据的续答轮。
             if disposition.get("type") == "answered":
                 no_evidence = no_evidence_disposition(
                     msg_dict,
@@ -1253,8 +1246,12 @@ async def stream_agent_chat(
         await db.commit()
 
         # 先构建 langgraph_config
-        # 决策①：入口门与 0 命中预检只对「尚无正常作答的首答轮」触发；续答轮放行主模型结合上下文作答。
-        first_substantive = not await _thread_has_answered_turn(conv_repo, thread_id)
+        # 决策①：入口门与零命中预检只对「尚无正常作答的首答轮」触发；续答轮放行主模型结合上下文作答。
+        # 首答轮判定复用同一次前文读取：无前文或上一条 assistant 未正常作答（拒答/报错）即属首答轮。
+        last_assistant_message = await _get_last_assistant_message(conv_repo, thread_id)
+        first_substantive = last_assistant_message is None or not _assistant_meta_is_answer(
+            getattr(last_assistant_message, "extra_metadata", None)
+        )
         if first_substantive and not image_content and _requires_knowledge_preflight(agent_item.backend_id, query):
             try:
                 # 决策① 跑题入口门：明显业务外/闲聊问题在进主模型前拦截 → scope_refusal/off_topic（不转人工）。
@@ -1304,51 +1301,56 @@ async def stream_agent_chat(
                     yield make_chunk(status="finished", meta=meta)
                     return
 
-                from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
+                # 全局「零命中」预检：每线程至多一次，仅在线程首条消息（尚无任何 assistant 终答）时执行。
+                # 拒答后的重问不再重跑粗粒度全局搜索，直接放行主模型逐库检索——全局搜漏但某库能命中的
+                # 重问才有机会被答到；真缺料时由模型按拒答模板收尾（仍可转人工）。跑题 scope 门不受此限制，
+                # 未正常作答前仍对每条新问题拦截。
+                if last_assistant_message is None:
+                    from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 
-                results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
-                if not results and not incomplete:
-                    refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
-                    if source_lang:
-                        localized = await translate_from_chinese(refusal, source_lang)
-                        if localized:
-                            refusal = localized
-                    output_message = await conv_repo.add_message_by_thread_id(
-                        thread_id=thread_id,
-                        role="assistant",
-                        content=refusal,
-                        message_type="text",
-                        extra_metadata={
-                            "id": message_id,
-                            "knowledge_disposition": {
-                                "schema_version": DISPOSITION_SCHEMA_VERSION,
-                                "type": "knowledge_refusal",
-                                "reason": "no_results",
+                    results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
+                    if not results and not incomplete:
+                        refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
+                        if source_lang:
+                            localized = await translate_from_chinese(refusal, source_lang)
+                            if localized:
+                                refusal = localized
+                        output_message = await conv_repo.add_message_by_thread_id(
+                            thread_id=thread_id,
+                            role="assistant",
+                            content=refusal,
+                            message_type="text",
+                            extra_metadata={
+                                "id": message_id,
+                                "knowledge_disposition": {
+                                    "schema_version": DISPOSITION_SCHEMA_VERSION,
+                                    "type": "knowledge_refusal",
+                                    "reason": "no_results",
+                                },
+                                "handoff_available": True,
+                                "handoff_query": query,
                             },
-                            "handoff_available": True,
-                            "handoff_query": query,
-                        },
-                        run_id=meta.get("run_id"),
-                        request_id=meta.get("request_id"),
-                    )
-                    if meta.get("run_id") and output_message:
-                        await AgentRunRepository(db).set_output_message(meta["run_id"], output_message.id)
-                    await db.commit()
-                    yield make_chunk(
-                        content=refusal,
-                        status="loading",
-                        stream_event={
-                            "type": "message_delta",
-                            "message_id": message_id,
-                            "content": refusal,
-                            "handoff_available": True,
-                            "handoff_query": query,
-                        },
-                        meta=meta,
-                    )
-                    yield make_chunk(status="knowledge_handoff_available", query=query, meta=meta)
-                    yield make_chunk(status="finished", meta=meta)
-                    return
+                            run_id=meta.get("run_id"),
+                            request_id=meta.get("request_id"),
+                        )
+                        if meta.get("run_id") and output_message:
+                            await AgentRunRepository(db).set_output_message(meta["run_id"], output_message.id)
+                        await db.commit()
+                        yield make_chunk(
+                            content=refusal,
+                            status="loading",
+                            stream_event={
+                                "type": "message_delta",
+                                "message_id": message_id,
+                                "content": refusal,
+                                "handoff_available": True,
+                                "handoff_query": query,
+                            },
+                            meta=meta,
+                        )
+                        yield make_chunk(status="knowledge_handoff_available", query=query, meta=meta)
+                        yield make_chunk(status="finished", meta=meta)
+                        return
             except Exception as exc:
                 logger.exception("Knowledge preflight failed; continuing with assistant: %s", exc)
         langgraph_config = {"configurable": {"thread_id": thread_id, "uid": uid}}

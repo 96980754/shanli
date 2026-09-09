@@ -2751,7 +2751,8 @@ export default {
     zipTooLarge: '{name} 超过 5 MiB',
     uploadExists: '{name} 已存在',
     uploadSuccess: '{name} 上传成功',
-    uploadFailed: '上传失败'
+    uploadFailed: '上传失败',
+    isDefault: '默认'
   },
   docVersion: {
     selectTitle: '选择要更新的当前文档',

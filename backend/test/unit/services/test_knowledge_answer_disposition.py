@@ -259,37 +259,75 @@ def test_is_handoff_disposition_rules():
 
 
 def test_no_evidence_exempt_identity_ack_and_empty():
+    # 零检索轮在「本轮是否检索过」门前即豁免（不依赖身份/致谢文案匹配）。
     assert should_revoke_no_evidence(IDENTITY_REPLY, None, set()) is False
+    assert should_revoke_no_evidence("您好！" + IDENTITY_REPLY, None, set()) is False
+    assert should_revoke_no_evidence("你好，" + IDENTITY_REPLY, None, set()) is False
     assert should_revoke_no_evidence("谢谢！", None, set()) is False
     assert should_revoke_no_evidence("   ", None, set()) is False
+    # 次层防护：即便本轮检索过，身份固定答复/寒暄致谢正文仍豁免。
+    insufficient = _evidence([_query(status="insufficient")])
+    assert should_revoke_no_evidence("您好！" + IDENTITY_REPLY, insufficient, {"query_kb"}) is False
+    assert should_revoke_no_evidence("谢谢！", insufficient, {"query_kb"}) is False
 
 
-def test_no_evidence_revokes_zero_evidence_hard_answer():
-    # epoll 场景：业务内问题模型 0 检索凭通用知识硬答 → 改写。
-    assert should_revoke_no_evidence("Linux 的 epoll 是 Linux 下的 IO 事件通知机制……", None, set()) is True
+def test_no_evidence_revokes_query_attempt_with_no_usable_result():
+    # epoll 场景：业务内问题本轮检索过但无可用结果、仍凭通用知识硬答 → 改写。
+    assert (
+        should_revoke_no_evidence(
+            "Linux 的 epoll 是 Linux 下的 IO 事件通知机制……",
+            _evidence([_query(status="insufficient")]),
+            {"query_kb"},
+        )
+        is True
+    )
+
+
+def test_no_evidence_exempts_zero_query_turn():
+    # 零检索轮一律不改写：问候/致谢/闲聊、及业务内“该查未查”的硬答都不凭回答文案反推。
+    assert should_revoke_no_evidence("Linux 的 epoll 是……（通用知识硬答）", None, set()) is False
+    assert should_revoke_no_evidence("你好，很高兴为您服务。", None, set()) is False
+    assert should_revoke_no_evidence("谢谢你的帮助！很高兴能帮到你。", None, set()) is False
+    assert should_revoke_no_evidence("You're welcome.", None, set()) is False
 
 
 def test_no_evidence_exempt_when_ok_kb_evidence():
-    assert should_revoke_no_evidence("调度台支持 CAT1 接入。", _evidence([_query(status="ok")]), set()) is False
+    assert should_revoke_no_evidence("调度台支持 CAT1 接入。", _evidence([_query(status="ok")]), {"query_kb"}) is False
 
 
 def test_no_evidence_exempt_when_legit_non_kb_tool_used():
-    # 文件/图片/文档/联网等合法非 KB 来源豁免零依据改写。
-    assert should_revoke_no_evidence("根据该文档第 2 页……", None, {"read_file"}) is False
+    # 文件/图片/文档/联网等合法非 KB 来源豁免零依据改写（即便本轮也检索过）。
+    assert should_revoke_no_evidence("根据该文档第 2 页……", None, {"query_kb", "read_file"}) is False
     assert should_revoke_no_evidence("识别为 F10 产品。", None, {"ocr_parse_file", "query_kb"}) is False
 
 
 def test_no_evidence_exempt_on_continuation_after_evidence():
-    assert should_revoke_no_evidence("那这个参数呢", None, set(), continuation_with_evidence=True) is False
+    # 紧邻带 ok 证据回答的续答轮，即便本轮检索无果也豁免。
+    assert (
+        should_revoke_no_evidence(
+            "那这个参数呢",
+            _evidence([_query(status="insufficient")]),
+            {"query_kb"},
+            continuation_with_evidence=True,
+        )
+        is False
+    )
 
 
-def test_no_evidence_disposition_rewrites_answered_hard_answer():
-    message = {"type": "ai", "content": "这是模型凭通用知识硬答的一段话，没有任何检索。"}
-    enriched = apply_knowledge_disposition(message, question="介绍一下linux的epoll", evidence=None)
-    disposition = no_evidence_disposition(enriched, evidence=None, tool_names=set())
+def test_no_evidence_disposition_rewrites_answered_after_query_attempt_without_result():
+    evidence = _evidence([_query(status="insufficient")])
+    message = {"type": "ai", "content": "这是模型在检索无果后仍作答的一段话。"}
+    enriched = apply_knowledge_disposition(message, question="介绍一下linux的epoll", evidence=evidence)
+    disposition = no_evidence_disposition(enriched, evidence=evidence, tool_names={"query_kb"})
     assert disposition is not None
     assert disposition["type"] == "knowledge_refusal"
     assert disposition["reason"] == "no_evidence_output"
+
+
+def test_no_evidence_disposition_leaves_zero_query_answer_alone():
+    message = {"type": "ai", "content": "这是模型凭通用知识硬答的一段话，没有任何检索。"}
+    enriched = apply_knowledge_disposition(message, question="介绍一下linux的epoll", evidence=None)
+    assert no_evidence_disposition(enriched, evidence=None, tool_names=set()) is None
 
 
 def test_no_evidence_disposition_ignores_refusal_or_grounded():
@@ -297,12 +335,13 @@ def test_no_evidence_disposition_ignores_refusal_or_grounded():
         {"type": "ai", "content": KNOWLEDGE_REFUSAL_REPLY}, question="q", evidence=None
     )
     assert no_evidence_disposition(refusal, evidence=None, tool_names=set()) is None
+    ok_evidence = _evidence([_query(status="ok")])
     grounded = apply_knowledge_disposition(
         {"type": "ai", "content": "库内依据的回答。"},
         question="q",
-        evidence=_evidence([_query(status="ok")]),
+        evidence=ok_evidence,
     )
-    assert no_evidence_disposition(grounded, evidence=_evidence([_query(status="ok")]), tool_names=set()) is None
+    assert no_evidence_disposition(grounded, evidence=ok_evidence, tool_names={"query_kb"}) is None
 
 
 # ---- 业务线清单可配置：judge 提示词动态组装 + domain 归一 ----

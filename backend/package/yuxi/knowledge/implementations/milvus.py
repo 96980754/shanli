@@ -15,6 +15,7 @@ from pymilvus import (
     FieldSchema,
     Function,
     FunctionType,
+    MilvusException,
     WeightedRanker,
     connections,
     db,
@@ -372,7 +373,16 @@ class MilvusKB(KnowledgeBase):
             raise
 
     async def _create_kb_instance(self, kb_id: str, kb_config: dict) -> Any:
-        """创建 Milvus 集合"""
+        """创建 Milvus 集合（同步阻塞逻辑放入线程，避免冻结共享事件循环）"""
+        return await asyncio.to_thread(self._create_kb_instance_sync, kb_id, kb_config)
+
+    def _create_kb_instance_sync(self, kb_id: str, kb_config: dict) -> Collection:
+        """同步创建/校验 Milvus 集合：阻塞式 pymilvus 调用统一在 to_thread 中执行。
+
+        对模型不匹配 / 不支持 BM25 的存量集合**阻断并显式报错**，而非静默删除重建——
+        该分支可能是单文件重索引或一次冷检索触发，自动 drop 会瞬间清空整库向量。
+        显式重建路径：`backend/scripts/reembed_milvus.py`（先 drop 再走本方法新建）。
+        """
         logger.info(f"Creating Milvus collection for {kb_id}")
 
         if not (metadata := self.databases_meta.get(kb_id)):
@@ -398,17 +408,17 @@ class MilvusKB(KnowledgeBase):
                 expected_model = embedding_info.model_id
 
                 if expected_model not in description:
-                    logger.warning(
-                        f"Collection {collection_name} model mismatch: "
-                        f"expected='{expected_model}', found_in_description='{description}'"
+                    raise ValueError(
+                        f"集合 {collection_name} 的向量模型与当前 embedding 模型不一致"
+                        f"（期望 '{expected_model}'，集合描述为 '{description}'），已阻断自动删除以免误删向量。"
+                        "请先显式重建该库向量集合（drop 后重新嵌入/重建索引）再继续。"
                     )
-                    utility.drop_collection(collection_name, using=self.connection_alias)
-                    return self._create_new_collection(collection_name, embedding_info, kb_id)
 
                 if not self._collection_supports_bm25(collection):
-                    logger.warning(f"Collection {collection_name} schema does not support BM25, recreating")
-                    utility.drop_collection(collection_name, using=self.connection_alias)
-                    return self._create_new_collection(collection_name, embedding_info, kb_id)
+                    raise ValueError(
+                        f"集合 {collection_name} 的 schema 不支持 Milvus 内置 BM25，"
+                        "已阻断自动删除以免误删向量。请先显式重建该库向量集合（drop 后重建 schema）再继续。"
+                    )
 
                 logger.info(f"Retrieved existing collection: {collection_name}")
                 return collection
@@ -416,7 +426,7 @@ class MilvusKB(KnowledgeBase):
                 logger.info(f"Collection {collection_name} not found, creating new one")
                 return self._create_new_collection(collection_name, embedding_info, kb_id)
 
-        except (connections.MilvusException, RuntimeError) as e:
+        except (MilvusException, RuntimeError) as e:
             logger.error(f"Error checking collection {collection_name}: {e}")
             raise
         except Exception as e:
@@ -499,10 +509,42 @@ class MilvusKB(KnowledgeBase):
     async def _initialize_kb_instance(self, instance: Any) -> None:
         """初始化 Milvus 集合（加载到内存）"""
         try:
-            instance.load()
+            await asyncio.to_thread(instance.load)
             logger.info("Milvus collection loaded into memory")
         except Exception as e:
             logger.warning(f"Failed to load collection into memory: {e}")
+
+    def update_database(
+        self,
+        kb_id: str,
+        name: str,
+        description: str,
+        llm_model_spec: str | None = None,
+        update_llm_model_spec: bool = False,
+        embedding_model_spec: str | None = None,
+        update_embedding_model_spec: bool = False,
+    ) -> dict:
+        """更新数据库信息；embedding 模型变更时丢弃该库已缓存的集合对象。
+
+        热进程内若不失效缓存，旧集合对象会被继续复用：同维换模型等于静默写入错误的向量
+        空间；即便维度不同也要等重启后冷路径的模型一致性校验才报错。提前 pop 让下一次
+        访问即触发 _create_kb_instance_sync 的阻断校验，要求显式重建后再继续。
+        """
+        if (
+            update_embedding_model_spec
+            and kb_id in self.databases_meta
+            and self.databases_meta[kb_id].get("embedding_model_spec") != embedding_model_spec
+        ):
+            self.collections.pop(kb_id, None)
+        return super().update_database(
+            kb_id,
+            name,
+            description,
+            llm_model_spec=llm_model_spec,
+            update_llm_model_spec=update_llm_model_spec,
+            embedding_model_spec=embedding_model_spec,
+            update_embedding_model_spec=update_embedding_model_spec,
+        )
 
     def _get_embedding_function(self, embedding_model_spec: str, *, sync: bool = False):
         """获取 embedding 编码函数。sync=True 返回同步版本，否则返回异步版本。"""
@@ -796,8 +838,8 @@ class MilvusKB(KnowledgeBase):
             markdown_content = await self._read_markdown_from_minio(file_meta["markdown_file"])
             filename = file_meta.get("filename")
 
-            # Split
-            chunks = self._split_text_into_chunks(markdown_content, file_id, filename, params)
+            # Split（同步分块栈含语义 embedding HTTP，需离环避免冻结整站）
+            chunks = await asyncio.to_thread(self._split_text_into_chunks, markdown_content, file_id, filename, params)
             logger.info(
                 f"Split {filename} into {len(chunks)} chunks with params: "
                 f"chunk_preset_id={params.get('chunk_preset_id')}, "
@@ -919,8 +961,10 @@ class MilvusKB(KnowledgeBase):
                 parse_params = {**resolved_params, "image_bucket": "public", "image_prefix": f"{kb_id}/kb-images"}
                 markdown_content = await Parser.aparse(source=file_path, params=parse_params)
 
-                # 重新生成 chunks
-                chunks = self._split_text_into_chunks(markdown_content, file_id, filename, resolved_params)
+                # 重新生成 chunks（同步分块栈含语义 embedding HTTP，需离环避免冻结整站）
+                chunks = await asyncio.to_thread(
+                    self._split_text_into_chunks, markdown_content, file_id, filename, resolved_params
+                )
                 logger.info(f"Split {filename} into {len(chunks)} chunks")
                 chunk_stats = self._calculate_chunk_stats(chunks)
 

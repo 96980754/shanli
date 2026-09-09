@@ -663,7 +663,7 @@ const ontologyEntryKey = (entry) =>
 const ontologyRegistryOptions = computed(() =>
   ontologyRegistries.value.map((entry) => ({
     value: ontologyEntryKey(entry),
-    label: `${entry.name} · ${entry.registry_id} · ${entry.version}`
+    label: `${entry.is_default ? `[${t('ontology.isDefault')}] ` : ''}${entry.name} · ${entry.registry_id} · ${entry.version}`
   }))
 )
 

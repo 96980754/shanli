@@ -1,0 +1,78 @@
+relations:
+  OFFERS:
+    aliases:
+    - 提供
+    - 供应
+    - 推出
+    - 经营
+  EMPLOYS:
+    aliases:
+    - 任职
+    - 雇用
+    - 雇佣
+    - 是成员
+  PART_OF:
+    aliases:
+    - 属于方案
+    - 组成
+    - 纳入
+    - 集成为
+  HAS_FEATURE:
+    aliases:
+    - 具备
+    - 拥有
+    - 内建
+    - 实现能力
+  USES:
+    aliases:
+    - 采用
+    - 使用
+    - 基于
+    - 依赖
+    - 运行在
+  APPLIED_IN:
+    aliases:
+    - 用于
+    - 使用于
+    - 落地场景
+    - 部署于
+  SERVES:
+    aliases:
+    - 面向
+    - 服务行业
+    - 针对
+    - 服务
+  COMPLIES_WITH:
+    aliases:
+    - 符合
+    - 遵循
+    - 遵守
+    - 满足
+    - 按照
+  BELONGS_TO:
+    aliases:
+    - 属于行业
+    - 归属领域
+    - 所在行业
+    - 划分到
+  HAS_DOCUMENT:
+    aliases:
+    - 有文档
+    - 关联文档
+    - 对应资料
+    - 配套文档
+    - 见文档
+  SUPPORTED_BY:
+    aliases:
+    - 有证据
+    - 由证据支撑
+    - 依据
+    - 佐证
+    - 来源证据
+  EXTRACTED_FROM:
+    aliases:
+    - 提取自
+    - 摘取自
+    - 来源于
+    - 引自
+    - 来自文档

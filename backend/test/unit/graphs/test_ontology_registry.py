@@ -65,28 +65,30 @@ def _product_ontology() -> OntologySpec:
     )
 
 
-def test_load_generic_registry():
-    entry = resolve_ontology_registry("tongyong", "1.0.0")
+def test_load_general_registry():
+    entry = resolve_ontology_registry("general", "1.0.0")
     ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
 
-    assert entry.name == "通用"
-    assert ontology.registry_id == "tongyong"
+    assert entry.name == "全领域通用"
+    assert entry.source == "builtin"
+    assert entry.public_dict()["is_default"] is True
+    assert ontology.registry_id == "general"
     assert ontology.version == "1.0.0"
     assert ontology.status == "active"
-    assert set(ontology.entities) == {"effect", "feature", "product", "technology"}
-    assert set(ontology.relations) == {"has_effect", "has_feature", "has_tech"}
+    assert set(ontology.entities) == {
+        "Organization", "Person", "Product", "Solution", "Capability", "Technology",
+        "Standard", "Scenario", "Industry", "Document", "Evidence",
+    }
+    assert set(ontology.relations) == {
+        "OFFERS", "EMPLOYS", "PART_OF", "HAS_FEATURE", "USES", "APPLIED_IN", "SERVES",
+        "COMPLIES_WITH", "BELONGS_TO", "HAS_DOCUMENT", "SUPPORTED_BY", "EXTRACTED_FROM",
+    }
+    assert set(ontology.properties["Document"]) == {"document_type"}
 
 
-def test_load_shanli_builtin_preset_v42_is_frozen():
-    entry = resolve_ontology_registry("shanli-preset", "4.2")
-    ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
-
-    assert entry.name == "善理预设 V4.2（历史）"
-    assert entry.digest == "df86d3187392d59cf4b9466b4c152575447f108c17f2283abd2332c522dcdb7b"
-    assert entry.source == "builtin"
-    assert entry.public_dict()["is_default"] is False
-    assert len(ontology.entities) == 20
-    assert len(ontology.relations) == 22
+def test_shanli_preset_v42_is_removed():
+    with pytest.raises(ValueError, match="未找到 Ontology Registry"):
+        resolve_ontology_registry("shanli-preset", "4.2")
 
 
 def test_load_shanli_builtin_preset_v43_has_exact_contract():
@@ -107,7 +109,7 @@ def test_load_shanli_builtin_preset_v43_has_exact_contract():
     ontology = load_ontology(entry.registry_id, entry.version, entry.digest)
 
     assert entry.name == "善理预设新版"
-    assert entry.public_dict()["is_default"] is True
+    assert entry.public_dict()["is_default"] is False
     assert set(ontology.entities) == expected_entities
     assert set(ontology.relations) == expected_relations
     assert all(relation.description for relation in ontology.relations.values())
@@ -143,12 +145,15 @@ def test_v43_rejects_new_has_evidence_relations():
         )
 
 
-def test_shanli_builtin_versions_require_explicit_version():
+def test_shanli_preset_single_remaining_version():
     entries = [entry for entry in list_ontology_registries() if entry.registry_id == "shanli-preset"]
 
-    assert [entry.version for entry in entries] == ["4.2", "4.3"]
-    with pytest.raises(ValueError, match="存在多个版本"):
-        resolve_ontology_registry("shanli-preset")
+    assert [entry.version for entry in entries] == ["4.3"]
+    assert resolve_ontology_registry("shanli-preset").version == "4.3"
+
+
+def test_registry_list_puts_default_first():
+    assert list_ontology_registries()[0].public_dict()["is_default"] is True
 
 
 def test_domain_extension_must_be_structured_yaml():
@@ -708,7 +713,7 @@ def test_detail_preserves_property_constraints(tmp_path, monkeypatch):
 
 
 def test_builtin_ontology_cannot_be_overwritten():
-    entry = resolve_ontology_registry("shanli-preset", "4.2")
+    entry = resolve_ontology_registry("shanli-preset", "4.3")
     detail = get_ontology_registry_detail(entry.registry_id, entry.version, entry.digest)
 
     with pytest.raises(OntologyConflictError, match="内置 Ontology 只读"):

@@ -1,0 +1,12 @@
+entities:
+  Organization: {}
+  Person: {}
+  Product: {}
+  Solution: {}
+  Capability: {}
+  Technology: {}
+  Standard: {}
+  Scenario: {}
+  Industry: {}
+  Document: {}
+  Evidence: {}

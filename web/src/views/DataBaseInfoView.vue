@@ -304,7 +304,7 @@
           />
         </a-form-item>
 
-        <a-form-item v-if="!isConnector" :label="t('dbInfo.autoGenQuestionsLabel')" name="auto_generate_questions">
+        <a-form-item v-if="SHOW_AUTO_GEN_QUESTIONS" :label="t('dbInfo.autoGenQuestionsLabel')" name="auto_generate_questions">
           <a-switch
             v-model:checked="editForm.auto_generate_questions"
             :checked-children="t('dbInfo.on')"
@@ -444,6 +444,9 @@ import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
 import { DEFAULT_CHUNK_PRESET_ID } from '@/utils/chunkUtils'
 import { formatFileSize } from '@/utils/file_utils'
 import { getKbTypeIcon, getKbTypeLabel, kbUtils } from '@/utils/kb_utils'
+
+// “自动生成问题”开关暂不对外展示，保留代码与读写逻辑，后续再启用时置为 true。
+const SHOW_AUTO_GEN_QUESTIONS = false
 
 const route = useRoute()
 const router = useRouter()

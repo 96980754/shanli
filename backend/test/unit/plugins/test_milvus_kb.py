@@ -658,3 +658,71 @@ def test_collection_supports_bm25_requires_analyzed_content_sparse_field_and_fun
     collection = type("Collection", (), {"schema": schema})()
 
     assert kb._collection_supports_bm25(collection)
+
+
+async def test_create_kb_instance_model_mismatch_raises_without_drop(monkeypatch):
+    """模型与集合描述不一致时必须阻断报错，绝不能静默 drop 重建清空整库向量。"""
+    import yuxi.knowledge.implementations.milvus as milvus_mod
+
+    drop_calls = []
+    fake_utility = types.SimpleNamespace(
+        has_collection=lambda *a, **k: True,
+        drop_collection=lambda *a, **k: drop_calls.append(a),
+    )
+    fake_embedding_info = types.SimpleNamespace(model_id="expected-v1", model_type="embedding", dimension=8)
+    # 集合描述里带的是旧模型，与当前 embedding 模型不一致
+    mismatch_collection = type("Collection", (), {"description": "Knowledge base collection for db using old-v2"})()
+
+    kb = MilvusKB.__new__(MilvusKB)
+    kb.databases_meta = {"db": {"embedding_model_spec": "provider:embedding"}}
+    kb.connection_alias = "test-alias"
+
+    monkeypatch.setattr(milvus_mod, "utility", fake_utility)
+    monkeypatch.setattr(milvus_mod, "Collection", lambda name, using=None, **kwargs: mismatch_collection)
+    monkeypatch.setattr(milvus_mod, "resolve_embedding_model", lambda spec: spec)
+    monkeypatch.setattr(
+        milvus_mod,
+        "model_cache",
+        types.SimpleNamespace(get_model_info=lambda spec: fake_embedding_info),
+    )
+
+    with pytest.raises(ValueError, match="不一致"):
+        await kb._create_kb_instance("db", {})
+    assert drop_calls == []
+
+
+async def test_create_kb_instance_bm25_unsupported_raises_without_drop(monkeypatch):
+    """存量集合 schema 不支持 BM25 时必须阻断报错，而不是静默 drop 后按新 schema 重建。"""
+    import yuxi.knowledge.implementations.milvus as milvus_mod
+
+    drop_calls = []
+    fake_utility = types.SimpleNamespace(
+        has_collection=lambda *a, **k: True,
+        drop_collection=lambda *a, **k: drop_calls.append(a),
+    )
+    fake_embedding_info = types.SimpleNamespace(model_id="expected-v1", model_type="embedding", dimension=8)
+    legacy_collection = type(
+        "Collection",
+        (),
+        {
+            "description": "Knowledge base collection for db using expected-v1",
+            "schema": type("Schema", (), {"fields": [], "functions": []})(),
+        },
+    )()
+
+    kb = MilvusKB.__new__(MilvusKB)
+    kb.databases_meta = {"db": {"embedding_model_spec": "provider:embedding"}}
+    kb.connection_alias = "test-alias"
+
+    monkeypatch.setattr(milvus_mod, "utility", fake_utility)
+    monkeypatch.setattr(milvus_mod, "Collection", lambda name, using=None, **kwargs: legacy_collection)
+    monkeypatch.setattr(milvus_mod, "resolve_embedding_model", lambda spec: spec)
+    monkeypatch.setattr(
+        milvus_mod,
+        "model_cache",
+        types.SimpleNamespace(get_model_info=lambda spec: fake_embedding_info),
+    )
+
+    with pytest.raises(ValueError, match="BM25"):
+        await kb._create_kb_instance("db", {})
+    assert drop_calls == []

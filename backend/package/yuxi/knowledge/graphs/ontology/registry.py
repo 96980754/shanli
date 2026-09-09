@@ -19,11 +19,11 @@ import yaml
 
 from yuxi import config
 
-DEFAULT_ONTOLOGY_REGISTRY_ID = "tongyong"
-DEFAULT_GRAPH_ONTOLOGY_IDENTITY = ("shanli-preset", "4.3")
-_BUILTIN_REGISTRY_IDS = ("Generic", "ShanliV4.2", "ShanliV4.3")
+DEFAULT_ONTOLOGY_REGISTRY_ID = "general"
+DEFAULT_GRAPH_ONTOLOGY_IDENTITY = ("general", "1.0.0")
+_BUILTIN_REGISTRY_IDS = ("General", "ShanliV4.3")
 _BUILTIN_DISPLAY_NAMES = {
-    ("shanli-preset", "4.2"): "善理预设 V4.2（历史）",
+    ("general", "1.0.0"): "全领域通用",
     ("shanli-preset", "4.3"): "善理预设新版",
 }
 _ONTOLOGY_ROOT = Path(__file__).parent
@@ -140,7 +140,12 @@ def list_ontology_registries() -> list[OntologyRegistryEntry]:
         by_identity[key] = existing or entry
     return sorted(
         by_identity.values(),
-        key=lambda item: (item.registry_id.casefold(), item.version.casefold(), item.digest),
+        key=lambda item: (
+            (item.registry_id, item.version) != DEFAULT_GRAPH_ONTOLOGY_IDENTITY,
+            item.registry_id.casefold(),
+            item.version.casefold(),
+            item.digest,
+        ),
     )
 
 

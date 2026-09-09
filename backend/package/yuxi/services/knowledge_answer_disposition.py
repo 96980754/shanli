@@ -27,8 +27,8 @@ HANDOFF_REFUSAL_TYPES = {"knowledge_refusal", "scope_refusal"}
 SCOPE_REFUSAL_REASONS = {"off_topic", "other_domain", "ambiguous"}
 POLICY_REFUSAL_REASONS = {"policy_violation", "privacy", "jailbreak", "sensitive"}
 
-# 无依据兜底改写使用的拒答 reason（决策②）：模型对业务内问题零工具硬答，
-# 视为守规失败的知识缺口，转人工。
+# 无依据兜底改写使用的拒答 reason（决策②）：本轮检索过知识库却无可用依据、
+# 仍正常作答，视为检索失配下的知识缺口，转人工。
 NO_EVIDENCE_OUTPUT_REASON = "no_evidence_output"
 
 # 寒暄致谢语：紧邻的答后寒暄（谢谢/好的/嗯…）无需知识库依据，命中则豁免“无依据改写”。
@@ -210,23 +210,38 @@ def turn_has_grounding_source(tool_names: set[str], evidence: dict[str, Any] | N
     return bool(tool_names - QUERY_KB_TOOL_NAMES - {"ask_user_question"})
 
 
-def should_revoke_no_evidence(
-    content: str,
+def is_identity_reply(content: str) -> bool:
+    """识别身份固定答复，允许模型在固定文案前加一小段礼貌问候。"""
+    text = str(content or "").strip()
+    if text == IDENTITY_REPLY:
+        return True
+    for prefix in ("您好", "你好", "嗨", "Hi", "Hello"):
+        if text.startswith(prefix) and text[len(prefix) :].lstrip("，。！？!?、 ") == IDENTITY_REPLY:
+            return True
+    return False
+
+
+def should_revoke_no_evidence(    content: str,
     evidence: dict[str, Any] | None,
     tool_names: set[str],
     *,
     continuation_with_evidence: bool = False,
 ) -> bool:
-    """决策②：业务内问题的“正常作答”是否零依据，应改写为拒答。
+    """决策②：本轮检索过知识库却仍“正常作答”，是否应改写为拒答。
 
     命中条件（全部满足）：
+    - 本轮确实调用了 query_kb / query_kbs（否则绝不改写——横幅语义为
+      “检索过但无可用依据”，问候/致谢/闲聊及业务内“该查未查”的零检索轮一律豁免）；
     - 正文是普通作答而非拒答模板（由调用方保证 type == answered）；
-    - 非身份回复、非答后寒暄致谢（这些本就无需检索）；
-    - 本轮无 ok 检索证据，也未用任何合法来源工具（纯文本硬答）；
+    - 本轮检索无 ok 结果，也未用其它合法来源工具（文件/图片/联网等）；
     - 非“紧邻上一条带 ok 证据回答”的续答轮（续答可基于上文合法作答）。
     """
+    # 零检索轮绝不改写：问候/致谢/闲聊本就无需检索，业务内“该查未查”的硬答
+    # 也不凭回答文案反推（该守规兜底由决策①入口 scope 门承担）。
+    if not (QUERY_KB_TOOL_NAMES & tool_names):
+        return False
     text = str(content or "").strip()
-    if not text or text == IDENTITY_REPLY or is_conversational_ack(text):
+    if not text or is_identity_reply(text) or is_conversational_ack(text):
         return False
     if turn_has_grounding_source(tool_names, evidence):
         return False
@@ -242,11 +257,12 @@ def no_evidence_disposition(
     tool_names: set[str],
     continuation_with_evidence: bool = False,
 ) -> dict[str, Any] | None:
-    """决策②：把「零依据硬答」的 answered 最终消息改写为知识缺口拒答；非改写对象返回 None。
+    """决策②：把「本轮检索过却零可用依据」的 answered 最终消息改写为知识缺口拒答。
 
-    仅在已归类为 answered 的消息上生效；改写返回 knowledge_refusal/no_evidence_output
-    判定（正文保留，由调用方置 knowledge_no_evidence 供前端横幅）。内容 list 先归一为正文文本，
-    与 classify_knowledge_disposition 口径一致。
+    仅在已归类为 answered、且本轮确实检索过 query_kb(s)（should_revoke_no_evidence）的
+    消息上生效；改写返回 knowledge_refusal/no_evidence_output 判定（正文保留，由调用方置
+    knowledge_no_evidence 供前端横幅）。内容 list 先归一为正文文本，与
+    classify_knowledge_disposition 口径一致。
     """
     if (msg_dict.get("knowledge_disposition") or {}).get("type") != "answered":
         return None

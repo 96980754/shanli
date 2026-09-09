@@ -225,3 +225,171 @@ async def test_text_message_still_runs_knowledge_preflight(monkeypatch):
 
     assert search_calls == ["某产品参数"]
     assert any(chunk["status"] == "finished" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_zero_hit_preflight_runs_once_per_thread_then_reroutes_to_agent(monkeypatch):
+    """回归：拒答一次后重问不再被零命中预检反复短路（每线程至多一次）。
+
+    首问全局搜无结果 → 结构化拒答落库；同线程第二条首答轮（上一条 assistant 仍为拒答、
+    线程未正常作答）应跳过零命中预检、放行主模型逐库检索，而不是再次被同一粗粒度搜索拒掉。
+    """
+    search_calls: list[str] = []
+
+    async def fake_search_with_status(self, user, query):
+        search_calls.append(query)
+        return [], False  # 全局零命中 → 首问结构化拒答
+
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+
+    # 第 1 轮（线程首条消息）：全局搜无结果 → 结构化拒答落库并回显。
+    first_chunks = await _run_stream(build_chat_input_message("MNO是什么"))
+    assert search_calls == ["MNO是什么"]
+    assert any(chunk["status"] == "knowledge_handoff_available" for chunk in first_chunks)
+
+    # 第 2 轮（同线程重问）：零命中预检不再重跑，直接放行主模型作答。
+    second_chunks = await _run_stream(build_chat_input_message("MNO？？"))
+    assert search_calls == ["MNO是什么"]  # 未被再次触发
+    assert any(chunk.get("response") == "识别结果" for chunk in second_chunks)
+    assert not any(chunk["status"] == "knowledge_handoff_available" for chunk in second_chunks)
+
+
+@pytest.mark.asyncio
+async def test_off_topic_chitchat_first_turn_refused_by_scope_no_handoff(monkeypatch):
+    """类别2 闲聊·首答轮：业务外话题在进主模型前被入口 scope 门判 off_topic 拦截。
+
+    落 scope_refusal/off_topic、不转人工；scope 拦截先于零命中预检，全局搜索不触发。
+    """
+    scope_calls: list[str] = []
+    search_calls: list[str] = []
+
+    async def fake_scope(question, _corpus):
+        scope_calls.append(question)
+        return "off_topic"
+
+    async def fake_search_with_status(self, user, query):
+        search_calls.append(query)
+        return [], False
+
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+    monkeypatch.setattr(svc, "evaluate_scope", fake_scope)  # 晚于 harness：仅本用例判业务外
+
+    chunks = await _run_stream(build_chat_input_message("今天天气怎么样"))
+
+    assistant = _FakeConvRepo.saved_messages[-1]
+    assert assistant["role"] == "assistant"
+    assert assistant["extra_metadata"]["knowledge_disposition"] == {
+        "schema_version": 2,
+        "type": "scope_refusal",
+        "reason": "off_topic",
+    }
+    assert "handoff_available" not in assistant["extra_metadata"]  # 业务外闲聊不转人工
+    assert scope_calls == ["今天天气怎么样"]
+    assert search_calls == []  # scope 拦截在零命中预检之前，全局搜索不触发
+    statuses = [chunk["status"] for chunk in chunks]
+    assert "knowledge_handoff_available" not in statuses
+    assert "finished" in statuses
+
+
+@pytest.mark.asyncio
+async def test_scope_refusal_then_business_reask_reroutes_to_agent(monkeypatch):
+    """类别5 多轮·拒答不短路：scope 拒答后的业务重问放行主模型，不再重跑零命中预检。
+
+    scope 拒答无 handoff、仍让线程保持“未正常作答”，但重问业务问题（scope 放行）时
+    因已非线程首条消息，零命中预检不再触发，直接进主模型逐库检索。
+    """
+    scope_calls: list[str] = []
+    search_calls: list[str] = []
+
+    async def fake_scope(question, _corpus):
+        scope_calls.append(question)
+        return "off_topic" if "天气" in question else "in_scope"
+
+    async def fake_search_with_status(self, user, query):
+        search_calls.append(query)
+        return [], False
+
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+    monkeypatch.setattr(svc, "evaluate_scope", fake_scope)
+
+    # 第 1 轮（业务外）：scope 拒答落库，无 handoff。
+    await _run_stream(build_chat_input_message("今天天气怎么样"))
+    refusal = _FakeConvRepo.saved_messages[-1]
+    assert refusal["extra_metadata"]["knowledge_disposition"]["type"] == "scope_refusal"
+    assert "handoff_available" not in refusal["extra_metadata"]
+
+    # 第 2 轮（同线程重问业务）：scope 放行 → 零命中预检不再重跑，放行主模型作答。
+    second_chunks = await _run_stream(build_chat_input_message("调度台怎么开通？"))
+    assert scope_calls == ["今天天气怎么样", "调度台怎么开通？"]  # 未作答前 scope 门对每条新问题仍拦
+    assert search_calls == []  # 全局零命中预检未在重问时再次触发
+    assert any(chunk.get("response") == "识别结果" for chunk in second_chunks)
+    assert not any(chunk["status"] == "knowledge_handoff_available" for chunk in second_chunks)
+
+
+@pytest.mark.asyncio
+async def test_greeting_first_turn_bypasses_preflight(monkeypatch):
+    """类别1 问候·首答轮：问候由 _requires_knowledge_preflight 在入口短路，不进 scope 门/零命中预检。"""
+    scope_calls: list[str] = []
+    search_calls: list[str] = []
+
+    async def fake_scope(question, _corpus):
+        scope_calls.append(question)
+        return "in_scope"
+
+    async def fake_search_with_status(self, user, query):
+        search_calls.append(query)
+        return [], False
+
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+    monkeypatch.setattr(svc, "evaluate_scope", fake_scope)
+
+    chunks = await _run_stream(build_chat_input_message("你好"))
+
+    assert scope_calls == []  # 问候豁免先于 scope 门短路
+    assert search_calls == []
+    assert any(chunk.get("response") == "识别结果" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_business_after_answered_turn_skips_preflight(monkeypatch):
+    """多轮·会话答后首条业务问题：线程已有正常作答后，后续业务问题不再被当首答轮预检。
+
+    预置一条 disposition=answered 的上一条终答 → 本业务轮 first_substantive=False，
+    直接放行主模型结合上下文作答（不重跑 scope 门与零命中预检）。
+    """
+    scope_calls: list[str] = []
+    search_calls: list[str] = []
+
+    async def fake_scope(question, _corpus):
+        scope_calls.append(question)
+        return "in_scope"
+
+    async def fake_search_with_status(self, user, query):
+        search_calls.append(query)
+        return [], False
+
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+    monkeypatch.setattr(svc, "evaluate_scope", fake_scope)
+    # 线程历史：上一条 assistant 为正常作答（入口判定只看是否“正常终答”）。
+    _FakeConvRepo.saved_messages.append(
+        {
+            "thread_id": "thread-1",
+            "role": "assistant",
+            "content": "上轮回答",
+            "message_type": "text",
+            "extra_metadata": {"knowledge_disposition": {"schema_version": 2, "type": "answered"}},
+            "run_id": None,
+            "request_id": None,
+        }
+    )
+
+    chunks = await _run_stream(build_chat_input_message("调度台怎么开通？"))
+
+    assert scope_calls == []  # 非首答轮不进入口门
+    assert search_calls == []  # 零命中预检仅在每线程首条消息执行
+    assert any(chunk.get("response") == "识别结果" for chunk in chunks)

@@ -39,6 +39,7 @@
             <div class="registry-title">{{ item.name }}</div>
             <div class="registry-meta">
               <span>{{ item.registry_id }} · {{ item.version }}</span>
+              <a-tag v-if="item.is_default" color="gold">{{ $t('ontology.isDefault') }}</a-tag>
               <a-tag :color="item.source === 'builtin' ? 'blue' : 'green'">
                 {{ item.source === 'builtin' ? $t('ontology.builtin') : $t('ontology.custom') }}
               </a-tag>

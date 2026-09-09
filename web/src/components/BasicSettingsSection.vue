@@ -90,7 +90,7 @@
         </template>
       </div>
 
-      <template v-if="userStore.isSuperAdmin">
+      <template v-if="SHOW_CONTENT_GUARD && userStore.isSuperAdmin">
         <div class="section-title">{{ $t('settings.contentGuardTitle') }}</div>
         <div class="section">
           <div class="card">
@@ -206,6 +206,8 @@ import RerankModelSelector from '@/components/RerankModelSelector.vue'
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
+// “内容审查配置”暂不对外展示，保留代码与读写逻辑，后续再启用时置为 true。
+const SHOW_CONTENT_GUARD = false
 const items = computed(() => configStore.config?._config_items || {})
 const ocrEngineOptions = [
   { value: 'disable', label: 'settings.ocrDisabled' },

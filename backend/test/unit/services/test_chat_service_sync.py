@@ -9,6 +9,7 @@ from langchain.messages import AIMessage, HumanMessage
 
 from yuxi.agents import context as agent_context
 from yuxi.agents.backends.sandbox import paths as workspace_paths
+from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY
 from yuxi.services import chat_service as svc
 
 
@@ -636,8 +637,8 @@ async def _no_gap(**kwargs):
 
 
 @pytest.mark.asyncio
-async def test_save_messages_revokes_zero_evidence_hard_answer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """决策②：业务内问题零检索硬答（epoll 场景）在落库时改写为 knowledge_refusal 并转人工。"""
+async def test_save_messages_exempts_zero_query_hard_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """决策②：零检索轮（问候/致谢/闲聊及“该查未查”的业务硬答）不再改写为无依据拒答。"""
     monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
 
     conv_repo = _FakeConvRepo(None)
@@ -655,10 +656,42 @@ async def test_save_messages_revokes_zero_evidence_hard_answer(monkeypatch: pyte
     )
 
     meta = conv_repo.saved_messages[0]["extra_metadata"]
+    assert meta["knowledge_disposition"]["type"] == "answered"
+    assert "knowledge_no_evidence" not in meta
+    assert "handoff_available" not in meta
+
+
+@pytest.mark.asyncio
+async def test_save_messages_revokes_answer_after_query_attempt_without_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """决策②：本轮真检索过 query_kb(s) 却无可用结果、仍正常作答 → 改写 + 横幅 + 转人工。"""
+    monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
+
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "调度台怎么开通？"},
+                {
+                    "type": "tool",
+                    "name": "query_kb",
+                    "content": '{"schema_version": 1, "status": "insufficient", '
+                    '"kb_id": "kb_a", "reason": "no_results", "results": []}',
+                },
+                {"type": "ai", "content": "您可以联系运维人员开通调度台。"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
     disposition = meta["knowledge_disposition"]
     assert disposition["type"] == "knowledge_refusal"
     assert disposition["reason"] == "no_evidence_output"
-    assert disposition["domain"] == "unknown"
     assert meta["knowledge_no_evidence"] is True
     assert meta["handoff_available"] is True
 
@@ -710,7 +743,16 @@ async def test_save_messages_exempts_continuation_after_evidence_answer() -> Non
 
     await svc.save_messages_from_langgraph_state(
         agent_instance=_save_fake_agent(
-            [{"type": "human", "content": "那它的工作频率呢？"}, {"type": "ai", "content": "工作频率为 450MHz。"}]
+            [
+                {"type": "human", "content": "那它的工作频率呢？"},
+                {
+                    "type": "tool",
+                    "name": "query_kb",
+                    "content": '{"schema_version": 1, "status": "insufficient", '
+                    '"kb_id": "kb_a", "reason": "no_results", "results": []}',
+                },
+                {"type": "ai", "content": "工作频率为 450MHz。"},
+            ]
         ),
         thread_id="thread-1",
         conv_repo=conv_repo,
@@ -723,6 +765,59 @@ async def test_save_messages_exempts_continuation_after_evidence_answer() -> Non
     assert "knowledge_no_evidence" not in meta
 
 
+@pytest.mark.asyncio
+async def test_save_messages_kb_hit_ok_answer_answered_no_banner() -> None:
+    """类别4 命中知识库：query_kb ok + 正常作答 → answered、带 ok 证据、无横幅/转人工。"""
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "调度台支持哪些接入方式？"},
+                {
+                    "type": "tool",
+                    "name": "query_kb",
+                    "content": '{"schema_version": 1, "status": "ok", "kb_id": "kb_a", '
+                    '"reason": null, "results": [{"content": "调度台支持 CAT1 接入。"}]}',
+                },
+                {"type": "ai", "content": "根据知识库，调度台支持 CAT1 接入。"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
+    assert meta["knowledge_disposition"]["type"] == "answered"
+    assert meta["knowledge_evidence"]["queries"][0]["status"] == "ok"
+    assert "knowledge_no_evidence" not in meta
+    assert "handoff_available" not in meta
+
+
+@pytest.mark.asyncio
+async def test_save_messages_identity_greeting_answer_answered_no_banner() -> None:
+    """类别1 问候：身份答零检索 → answered，无横幅/转人工（问候走豁免，绝不被按无依据改写）。"""
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "你好"},
+                {"type": "ai", "content": IDENTITY_REPLY},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    meta = conv_repo.saved_messages[0]["extra_metadata"]
+    assert meta["knowledge_disposition"]["type"] == "answered"
+    assert "knowledge_no_evidence" not in meta
+    assert "handoff_available" not in meta
+
+
 def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
     scope_refusal = {"knowledge_disposition": {"type": "scope_refusal", "reason": "off_topic"}}
     answered = {"knowledge_disposition": {"type": "answered"}}
@@ -731,6 +826,14 @@ def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
     assert svc._assistant_meta_is_answer({"is_error": True}) is False
     assert svc._assistant_meta_is_answer(answered) is True
     assert svc._assistant_meta_is_answer(None) is True
+    # 类别3 命中问答对：带 answer_source/human_confirmed、无 disposition/handoff → 视为正常作答（线程不污染）。
+    assert svc._assistant_meta_is_answer(
+        {"answer_source": "curated_qa", "curated_qa_id": 7, "human_confirmed": True}
+    ) is True
+    # 零命中拒答（入口）带 no_results disposition + handoff → 保持“未作答”，线程仍处首答轮语义。
+    assert svc._assistant_meta_is_answer(
+        {"knowledge_disposition": {"type": "knowledge_refusal", "reason": "no_results"}, "handoff_available": True}
+    ) is False
 
 
 def test_requires_knowledge_preflight_skips_greeting_and_identity_but_keeps_business() -> None:

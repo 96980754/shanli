@@ -2844,7 +2844,8 @@ export default {
     zipTooLarge: '{name} exceeds 5 MiB',
     uploadExists: '{name} already exists',
     uploadSuccess: '{name} uploaded successfully',
-    uploadFailed: 'Upload failed'
+    uploadFailed: 'Upload failed',
+    isDefault: 'Default'
   },
   docVersion: {
     selectTitle: 'Select the current document to update',

@@ -90,3 +90,4 @@ backend/scripts/eval_datasets/reports/*.jsonl
 
 # docker 运行时数据备份（数据库/模型目录，绝不入库）
 docker/_bak-*/
+docker/volumes.pre-restore-*/

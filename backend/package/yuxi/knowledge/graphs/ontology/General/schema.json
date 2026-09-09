@@ -1,0 +1,143 @@
+{
+  "registry_id": "general",
+  "version": "1.0.0",
+  "name": "全领域通用",
+  "status": "active",
+  "design_principles": "面向任意行业/领域的通用本体：只描述长期稳定、可复用、可建立关系网络的公共知识对象，不偏向任何垂直行业。领域特有概念由各知识库的领域扩展叠加，不落入内置。",
+  "entities": {
+    "Organization": {
+      "description": "组织/机构/团队：企业、政府机构、非营利组织、项目组等",
+      "examples": []
+    },
+    "Person": {
+      "description": "人员：作者、负责人、联系人、岗位担任者等",
+      "examples": []
+    },
+    "Product": {
+      "description": "可独立提供或销售的产品/服务：软件、硬件、平台、内容包等",
+      "examples": [
+        "协同办公平台",
+        "边缘网关"
+      ]
+    },
+    "Solution": {
+      "description": "面向某类场景或行业的方案：由多个产品与服务组合而成",
+      "examples": []
+    },
+    "Capability": {
+      "description": "能力/功能：用户可直接感知的业务能力或功能点",
+      "examples": [
+        "可视化报表",
+        "流程自动化"
+      ]
+    },
+    "Technology": {
+      "description": "技术/方法/协议/架构：支撑能力或产品运作的技术手段",
+      "examples": [
+        "REST 接口",
+        "容器化部署"
+      ]
+    },
+    "Standard": {
+      "description": "标准/规范/法规/资质认证：产品需要符合的外部要求",
+      "examples": [
+        "ISO 9001",
+        "国家标准"
+      ]
+    },
+    "Scenario": {
+      "description": "应用/使用场景：产品与方案被使用的具体业务情境",
+      "examples": [
+        "远程协作",
+        "设备巡检"
+      ]
+    },
+    "Industry": {
+      "description": "行业/领域：产品与方案所服务的垂直领域",
+      "examples": [
+        "制造业",
+        "公共事业"
+      ]
+    },
+    "Document": {
+      "description": "文档/资料：承载知识的原始载体，由 RAG 负责检索",
+      "examples": []
+    },
+    "Evidence": {
+      "description": "证据节点：知识对象的事实支撑与出处定位",
+      "examples": []
+    }
+  },
+  "relations": {
+    "OFFERS": {
+      "source": "Organization",
+      "target": "Product",
+      "description": "组织提供、经营某项产品或服务"
+    },
+    "EMPLOYS": {
+      "source": "Organization",
+      "target": "Person",
+      "description": "组织内的人员任职/成员关系"
+    },
+    "PART_OF": {
+      "source": "Product",
+      "target": "Solution",
+      "description": "产品作为某方案的一部分"
+    },
+    "HAS_FEATURE": {
+      "source": "Product",
+      "target": "Capability",
+      "description": "产品具备某项能力或功能"
+    },
+    "USES": {
+      "source": "Product",
+      "target": "Technology",
+      "description": "产品采用某项技术、方法或协议"
+    },
+    "APPLIED_IN": {
+      "source": [
+        "Product",
+        "Solution"
+      ],
+      "target": "Scenario",
+      "description": "产品或方案用于某个使用场景"
+    },
+    "SERVES": {
+      "source": [
+        "Product",
+        "Solution"
+      ],
+      "target": "Industry",
+      "description": "产品或方案服务于某个行业"
+    },
+    "COMPLIES_WITH": {
+      "source": "Product",
+      "target": "Standard",
+      "description": "产品符合某项标准或规范"
+    },
+    "BELONGS_TO": {
+      "source": "Scenario",
+      "target": "Industry",
+      "description": "使用场景归属于某个行业"
+    },
+    "HAS_DOCUMENT": {
+      "source": "Any",
+      "target": "Document",
+      "description": "知识对象关联某份原始文档"
+    },
+    "SUPPORTED_BY": {
+      "source": "Any",
+      "target": "Evidence",
+      "description": "知识对象由证据节点支撑；新抽取统一使用该关系"
+    },
+    "EXTRACTED_FROM": {
+      "source": "Evidence",
+      "target": "Document",
+      "description": "证据提取/定位自某份原始文档"
+    }
+  },
+  "conflict_detection": {
+    "single_valued_relations": [],
+    "keyed_value_relations": []
+  }
+}
