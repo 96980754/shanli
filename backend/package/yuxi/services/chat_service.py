@@ -41,6 +41,7 @@ from yuxi.services.knowledge_answer_disposition import (
     apply_knowledge_disposition,
     apply_refusal_judgment,
     build_knowledge_evidence,
+    classify_domain_by_keywords,
     collect_turn_tool_names,
     is_final_assistant_message,
     is_handoff_disposition,
@@ -795,13 +796,19 @@ async def save_messages_from_langgraph_state(
                 question=knowledge_question,
                 evidence=knowledge_evidence,
             )
-            # 拒答消息：无检索证据的分支用 LLM judge 区分知识缺口/跑题/跨域/策略拦截，
-            # 再落业务域；仅知识类/范围类标记可转人工，策略类拒答不转普通客服。
-            # 域解析只在拒答分支执行，正常回答零额外 DB/LLM 开销。
             disposition = msg_dict.get("knowledge_disposition") or {}
+            # 拒答消息：无检索证据或检索不足时用 LLM judge 区分知识缺口/跑题/策略拦截。
+            # 域解析只在拒答分支执行，正常回答零额外 DB/LLM 开销。
             if disposition.get("judgment_required"):
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
+                msg_dict["knowledge_disposition"] = disposition
+            if disposition.get("type") == "knowledge_refusal":
+                domain = disposition.get("domain")
+                if not sanitize_business_domain(domain) or domain in {None, "unknown"}:
+                    disposition["domain"] = classify_domain_by_keywords(knowledge_question or "")
+                else:
+                    disposition["domain"] = sanitize_business_domain(domain)
                 msg_dict["knowledge_disposition"] = disposition
             # 决策② 无依据不输出兜底：本轮确实检索过 query_kb(s) 却仍正常作答（检索失配）
             # → 按知识缺口拒答并转人工。零检索轮（问候/致谢/闲聊等）一律不改写。
@@ -817,9 +824,19 @@ async def save_messages_from_langgraph_state(
                     disposition = no_evidence
                     msg_dict["knowledge_disposition"] = disposition
                     msg_dict["knowledge_no_evidence"] = True
+            if disposition.get("judgment_required"):
+                judgment = await judge_refusal(knowledge_question or "")
+                disposition = apply_refusal_judgment(disposition, judgment)
+                msg_dict["knowledge_disposition"] = disposition
+            if disposition.get("type") == "knowledge_refusal":
+                domain = disposition.get("domain")
+                if domain in {None, "unknown"}:
+                    disposition["domain"] = classify_domain_by_keywords(knowledge_question or "")
+                else:
+                    disposition["domain"] = sanitize_business_domain(domain)
+                msg_dict["knowledge_disposition"] = disposition
             if disposition.get("type") in HANDOFF_REFUSAL_TYPES or disposition.get("type") == "policy_refusal":
-                # 业务域仅作统计标签且不再有 agent 级配置来源：无检索证据拒答经 judge 细分时
-                # 域已由 apply_refusal_judgment 写入；此处统一归一，游离/空值回退 unknown（清单外 code 不入库）。
+                # 业务域由 judge 或拒答关键词分类，最终统一归一，游离/空值回退 unknown。
                 disposition["domain"] = sanitize_business_domain(disposition.get("domain"))
                 msg_dict["knowledge_disposition"] = disposition
                 if is_handoff_disposition(disposition):
@@ -1326,6 +1343,7 @@ async def stream_agent_chat(
                                     "schema_version": DISPOSITION_SCHEMA_VERSION,
                                     "type": "knowledge_refusal",
                                     "reason": "no_results",
+                                    "domain": classify_domain_by_keywords(query),
                                 },
                                 "handoff_available": True,
                                 "handoff_query": query,

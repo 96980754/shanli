@@ -71,6 +71,7 @@
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
 
       <div v-if="handoffAvailable" class="handoff-action">
+        <span class="handoff-category">{{ handoffCategory }}</span>
         <a-button class="handoff-button" :loading="handoffSending" @click="createHandoff">{{
           $t('chat.transferToHuman')
         }}</a-button>
@@ -238,6 +239,13 @@ const noEvidenceNotice = computed(
 const handoffQuery = computed(
   () => props.message.extra_metadata?.handoff_query || props.message.content || ''
 )
+const handoffCategory = computed(() => {
+  const domain = props.message.extra_metadata?.knowledge_disposition?.domain
+  if (!domain || domain === 'unknown') return t('chat.businessDomain.unknown')
+  const key = `chat.businessDomain.${domain}`
+  const text = t(key)
+  return text === key ? t('chat.businessDomain.custom', { domain }) : text
+})
 
 const createHandoff = async () => {
   if (!handoffQuery.value.trim()) {
@@ -757,24 +765,32 @@ watch(isReasoning, (active) => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  margin: 20px 0 4px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.handoff-category {
+  color: var(--gray-600);
+  font-size: 12px;
 }
 
 .handoff-button {
-  min-width: 128px;
-  height: 58px;
-  color: #ff4d4f;
-  border-color: #ff4d4f;
-  background: #fff;
+  min-width: 112px;
+  height: 36px;
+  padding: 0 14px;
+  color: var(--main-700);
+  border-color: var(--main-200);
+  background: var(--main-50);
+  border-radius: 6px;
   box-shadow: none;
-  font-size: 20px;
+  font-size: 14px;
 
   &:hover,
   &:focus {
-    color: #ff7875;
-    border-color: #ff7875;
-    background: #fff1f0;
+    color: var(--main-700);
+    border-color: var(--main-500);
+    background: var(--main-100);
   }
 }
 

@@ -397,6 +397,15 @@ export default {
     userUploadedImage: 'User uploaded image',
     reasoningProcess: 'Reasoning process',
     transferToHuman: 'Transfer to human',
+    businessDomain: {
+      diaodutai: 'Business domain: Dispatch console',
+      terminal: 'Business domain: Terminal',
+      ops: 'Business domain: Operations platform',
+      mno: 'Business domain: MNO optimization',
+      kefu: 'Business domain: General support',
+      unknown: 'Business domain: unidentified',
+      custom: 'Business domain: {domain}'
+    },
     errorInterrupted: 'Answer generation was interrupted',
     errorUnexpected: 'An exception occurred during generation',
     errorContentBlocked: 'Sensitive content detected, output interrupted',

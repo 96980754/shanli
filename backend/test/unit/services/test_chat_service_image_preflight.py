@@ -204,6 +204,7 @@ async def test_zero_result_preflight_persists_structured_refusal_and_run_output(
         "schema_version": 2,
         "type": "knowledge_refusal",
         "reason": "no_results",
+        "domain": "unknown",
     }
     assert assistant["extra_metadata"]["handoff_available"] is True
     assert output_messages == [("run-1", 2)]

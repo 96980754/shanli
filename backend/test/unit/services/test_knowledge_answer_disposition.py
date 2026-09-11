@@ -11,6 +11,7 @@ from yuxi.services.knowledge_answer_disposition import (
     apply_refusal_judgment,
     build_judge_system_prompt,
     build_knowledge_evidence,
+    classify_domain_by_keywords,
     classify_knowledge_disposition,
     collect_turn_tool_names,
     is_handoff_disposition,
@@ -71,7 +72,7 @@ def test_query_kbs_evidence_prevents_no_kb_mislabel():
     assert evidence is not None
     disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, evidence)
     assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "no_results")
-    assert "judgment_required" not in disposition
+    assert disposition["judgment_required"] is True
 
 
 def test_build_knowledge_evidence_none_without_query_tool():
@@ -106,19 +107,15 @@ def test_system_error_detected_by_prefix():
 
 
 def test_no_results():
-    disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, _evidence([_query()]))
-    assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "no_results")
-    assert "judgment_required" not in disposition
-
-
-def test_empty_content():
     disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, _evidence([_query(reason="empty_content")]))
     assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "empty_content")
+    assert disposition["judgment_required"] is True
 
 
 def test_insufficient_evidence_when_ok_results_exist():
     disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, _evidence([_query(status="ok")]))
     assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "insufficient_evidence")
+    assert disposition["judgment_required"] is True
 
 
 def test_classification_mismatch_when_all_queries_error():
@@ -322,6 +319,7 @@ def test_no_evidence_disposition_rewrites_answered_after_query_attempt_without_r
     assert disposition is not None
     assert disposition["type"] == "knowledge_refusal"
     assert disposition["reason"] == "no_evidence_output"
+    assert disposition["judgment_required"] is True
 
 
 def test_no_evidence_disposition_leaves_zero_query_answer_alone():
@@ -344,7 +342,16 @@ def test_no_evidence_disposition_ignores_refusal_or_grounded():
     assert no_evidence_disposition(grounded, evidence=ok_evidence, tool_names={"query_kb"}) is None
 
 
-# ---- 业务线清单可配置：judge 提示词动态组装 + domain 归一 ----
+def test_keyword_domain_prefers_longest_match_and_config_order():
+    from yuxi.config.app import BusinessLine
+
+    lines = [
+        BusinessLine(code="mno", name="网优", keywords=["安卓"]),
+        BusinessLine(code="terminal", name="终端", keywords=["安卓终端"]),
+    ]
+    assert classify_domain_by_keywords("安卓终端配置", lines) == "terminal"
+    assert classify_domain_by_keywords("安卓问题", lines) == "mno"
+    assert classify_domain_by_keywords("天气", lines) == "unknown"
 
 
 def test_build_judge_system_prompt_custom_lines_include_unknown_tail():

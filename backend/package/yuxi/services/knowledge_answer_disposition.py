@@ -275,7 +275,25 @@ def no_evidence_disposition(
         text = str(content or "")
     if not should_revoke_no_evidence(text, evidence, tool_names, continuation_with_evidence=continuation_with_evidence):
         return None
-    return _disposition("knowledge_refusal", NO_EVIDENCE_OUTPUT_REASON)
+    return _disposition("knowledge_refusal", NO_EVIDENCE_OUTPUT_REASON, judgment_required=True)
+
+
+def classify_domain_by_keywords(question: str, lines: list[BusinessLine] | None = None) -> str:
+    """按业务线关键词确定拒答域；同长度命中按配置顺序取第一条。"""
+    if lines is None:
+        lines = resolve_business_lines()
+    matches: list[tuple[int, int, str]] = []
+    lowered_question = str(question or "").casefold()
+    for line_index, line in enumerate(lines):
+        if line.code == "kefu":
+            continue
+        for keyword in line.keywords:
+            normalized = str(keyword or "").strip().casefold()
+            if normalized and normalized in lowered_question:
+                matches.append((len(normalized), -line_index, line.code))
+    if not matches:
+        return "unknown"
+    return max(matches)[2]
 
 
 def is_final_assistant_message(message: dict[str, Any]) -> bool:
@@ -312,10 +330,10 @@ def classify_knowledge_disposition(content: str, evidence: dict[str, Any] | None
     if queries and all(query["status"] == "error" for query in queries):
         return _disposition("system_error", "classification_mismatch")
     if any(query["status"] == "ok" for query in queries):
-        return _disposition("knowledge_refusal", "insufficient_evidence")
+        return _disposition("knowledge_refusal", "insufficient_evidence", judgment_required=True)
     if any(query["reason"] == "empty_content" for query in queries):
-        return _disposition("knowledge_refusal", "empty_content")
-    return _disposition("knowledge_refusal", "no_results")
+        return _disposition("knowledge_refusal", "empty_content", judgment_required=True)
+    return _disposition("knowledge_refusal", "no_results", judgment_required=True)
 
 
 def apply_refusal_judgment(disposition: dict[str, Any], judgment: dict[str, Any] | None) -> dict[str, Any]:

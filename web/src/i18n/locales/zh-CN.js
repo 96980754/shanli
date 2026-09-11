@@ -393,6 +393,15 @@ export default {
     userUploadedImage: '用户上传的图片',
     reasoningProcess: '推理过程',
     transferToHuman: '转人工',
+    businessDomain: {
+      diaodutai: '业务域：调度台',
+      terminal: '业务域：终端',
+      ops: '业务域：运营平台',
+      mno: '业务域：MNO网优',
+      kefu: '业务域：通用客服',
+      unknown: '业务域：待识别',
+      custom: '业务域：{domain}'
+    },
     errorInterrupted: '回答生成已中断',
     errorUnexpected: '生成过程中出现异常',
     errorContentBlocked: '检测到敏感内容，已中断输出',
