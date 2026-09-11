@@ -77,10 +77,14 @@ def build_table(cfg: dict) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="从 MCX/定位产品 问答表构建测试集")
     parser.add_argument("--out", default="mcx_loc_all.jsonl", help="输出 jsonl 相对 eval_datasets")
+    parser.add_argument("--section", action="append", help="只保留指定分区（可重复），默认全部分区")
     args = parser.parse_args()
 
+    sections = set(args.section or ())
     all_items = []
     for cfg in (MCX, LOC):
+        if sections and cfg["section"] not in sections:
+            continue
         items = build_table(cfg)
         all_items.extend(items)
         print(f"[{cfg['section']}] {cfg['file'].name} → {len(items)} 题")
