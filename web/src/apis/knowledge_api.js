@@ -310,6 +310,10 @@ export const documentApi = {
     return apiGet(`/api/knowledge/databases/${kbId}/documents/${fileId}/versions`)
   },
 
+  detachDocumentVersion: async (kbId, fileId) => {
+    return apiPost(`/api/knowledge/databases/${kbId}/documents/${fileId}/versions/detach`, {})
+  },
+
   getDocumentDiff: async (kbId, versionAFileId, versionBFileId) => {
     return apiPost(`/api/knowledge/databases/${kbId}/documents/diff`, {
       version_a_file_id: versionAFileId,

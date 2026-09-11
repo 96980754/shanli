@@ -103,10 +103,6 @@
                   :show-refs="['model', 'copy', 'sources']"
                   :is-latest-message="false"
                   :sources="getConversationSources(row.conv)"
-                  show-answer-notes
-                  :query-text="getConversationQuery(row.conv)"
-                  :allow-version-ask="isLastSettledConversation(row.conv)"
-                  @version-ask-run="onRowVersionAsk(row.conv, $event)"
                 />
               </div>
               <div v-else class="chat-inline-notice">
@@ -1404,11 +1400,6 @@ const isConversationSettled = (conv) => {
   }
   return !(isProcessing.value || isReplyLoading.value)
 }
-
-// 主动询问仅对「最后一个已收尾会话」开放：历史轮（非最后）与仍在生成中的最后轮都不下传，
-// 防止把基于历史版本的新 run 追加到错误的会话上下文。
-const isLastSettledConversation = (conv) =>
-  conversations.value[conversations.value.length - 1] === conv && isConversationSettled(conv)
 
 // 计算是否显示Refs组件的条件
 const shouldShowRefs = computed(() => {
@@ -2947,79 +2938,6 @@ const getConversationSources = (conv) => {
   return MessageProcessor.hasKnowledgeRetrieval(conv)
     ? { ...extracted, knowledgeChunks: citedChunks, knowledgeActivity: true }
     : extracted
-}
-
-// 该轮对话的人类提问文本（供版本意图规则识别；会话首条消息即用户问题）
-const getConversationQuery = (conv) => {
-  const first = conv?.messages?.[0]
-  return first?.type === 'human' ? String(first.content || '').trim() : ''
-}
-
-// ==================== 历史版本查看/对比（注记条主动询问） ====================
-
-// 依据 payload 本地化合成人类可见的问题句（作为持久化的 Message.content，
-// 线程内可读；结构化 version_ask 只走 run 载荷，供 worker 封闭执行）。
-const buildVersionAskQuery = (mode, payload) => {
-  const name = payload.title || ''
-  const byFileId = Object.fromEntries((payload.versions || []).map((item) => [item.file_id, item]))
-  const versionLabel = (fileId) => {
-    const version = byFileId[fileId]?.document_version
-    return version !== undefined && version !== null && version !== '' ? `V${version}` : fileId
-  }
-  if (mode === 'read') {
-    const [fileId] = payload.file_ids
-    return t('sources.versionRunQueryView', { name, version: versionLabel(fileId) })
-  }
-  const [first, second] = payload.file_ids
-  return t('sources.versionRunQueryCompare', {
-    name,
-    versionA: versionLabel(first),
-    versionB: versionLabel(second)
-  })
-}
-
-// 用户在注记条内选择「查看某历史版本 / 对比两个版本」后发起一轮封闭 run：
-// 复用主对话的乐观插入 + createAgentRun + 流式管线，回答作为新一轮 assistant 消息。
-const onRowVersionAsk = async (conv, { mode, payload }) => {
-  if (isProcessing.value || !isLastSettledConversation(conv)) return
-  const threadId = currentChatId.value
-  if (!threadId) {
-    message.warning(t('chat.createConvFailed'))
-    return
-  }
-  const threadState = getThreadState(threadId)
-  if (!threadState) return
-
-  const query = buildVersionAskQuery(mode, payload)
-  resetOnGoingConv(threadId)
-  const requestId = createClientRequestId()
-  insertOptimisticHumanMessage(threadState, { requestId, text: query })
-  threadState.isStreaming = true
-
-  try {
-    const runResp = await agentApi.createAgentRun({
-      query,
-      agent_slug: currentAgentId.value,
-      thread_id: threadId,
-      meta: { request_id: requestId },
-      image_content: null,
-      model_spec: selectedModelByThread[threadId] || null,
-      version_ask: payload
-    })
-    const runId = runResp?.run_id
-    if (!runId) {
-      throw new Error(t('chat.createRunFailed'))
-    }
-    await nextTick()
-    scrollController.scrollToBottom(true)
-    await startRunStream(threadId, runId, 0)
-  } catch (error) {
-    threadState.isStreaming = false
-    threadState.replyLoadingVisible = false
-    threadState.pendingRequestId = null
-    resetOnGoingConv(threadId)
-    handleChatError(error, 'send')
-  }
 }
 
 // ==================== LIFECYCLE & WATCHERS ====================

@@ -225,6 +225,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS logical_document_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS document_version INTEGER",
+            "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS version_label VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS is_current BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS supersedes_file_id VARCHAR(64)",
             "ALTER TABLE IF EXISTS knowledge_files ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ",

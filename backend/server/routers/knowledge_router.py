@@ -1276,6 +1276,7 @@ async def list_documents(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(100, ge=1, le=500, description="每页数量"),
     recursive: bool = Query(False, description="是否跨目录筛选"),
+    include_history: bool = Query(False, description="是否包含历史版本，仅管理文件列表使用"),
     current_user: User = Depends(get_required_user),
 ):
     """分页获取知识库文件列表。"""
@@ -1290,9 +1291,10 @@ async def list_documents(
             page=page,
             page_size=page_size,
             recursive=recursive,
+            include_history=include_history,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @knowledge.get("/databases/{kb_id}/documents/exists")
@@ -1347,7 +1349,7 @@ async def create_document_version(
         )
     except ValueError as exc:
         code = str(exc)
-        if code in {"SAME_CONTENT", "UPDATE_IN_PROGRESS", "VERSION_CHANGED"}:
+        if code in {"SAME_CONTENT", "UPDATE_IN_PROGRESS", "VERSION_CHANGED", "VERSION_NOT_NEWER"}:
             raise HTTPException(status_code=409, detail={"code": code, "message": code})
         raise HTTPException(status_code=400, detail=code)
 
@@ -1392,6 +1394,26 @@ async def create_document_version(
         "candidate_file_id": candidate.file_id,
         "logical_document_id": candidate.logical_document_id,
         "document_version": candidate.document_version,
+    }
+
+
+@knowledge.post("/databases/{kb_id}/documents/{file_id}/versions/detach")
+async def detach_document_version(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    """将误归族的历史版本解除关联，恢复为独立当前文档。"""
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    try:
+        record = await KnowledgeFileRepository().detach_history_version(kb_id=kb_id, file_id=file_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": str(exc), "message": str(exc)}) from exc
+    return {
+        "file_id": record.file_id,
+        "logical_document_id": record.logical_document_id,
+        "document_version": record.document_version,
+        "is_current": record.is_current,
     }
 
 
@@ -2631,20 +2653,27 @@ async def delete_document(kb_id: str, doc_id: str, current_user: User = Depends(
         file_meta_info = await knowledge_base.get_file_basic_info(kb_id, doc_id)
 
         # Check if it is a folder
-        is_folder = file_meta_info.get("meta", {}).get("is_folder", False)
+        file_meta = file_meta_info.get("meta", {})
+        is_folder = file_meta.get("is_folder", False)
         if is_folder:
             await knowledge_base.delete_folder(kb_id, doc_id)
             return {"message": "文件夹删除成功"}
 
-        file_path = file_meta_info.get("meta", {}).get("path", "")
+        file_path = file_meta.get("path", "")
 
         await _delete_document_storage_objects(kb_id, doc_id, file_path)
 
         # 无论MinIO删除是否成功，都继续从知识库删除
-        await knowledge_base.delete_file(kb_id, doc_id)
+        # 历史版本按行删除，不能因共享 logical_document_id 级联删掉当前版本；
+        # 当前版本仍沿用原有“删除整族”语义，避免留下没有 current 的版本族。
+        await knowledge_base.delete_file(
+            kb_id,
+            doc_id,
+            family=False,
+        )
 
         # 同步清理导图快照，移除已删除文件对应的叶子节点
-        removed_filename = file_meta_info.get("meta", {}).get("filename", "")
+        removed_filename = file_meta.get("filename", "")
         await remove_file_from_mindmap(kb_id, doc_id, removed_filename)
         return {"message": "删除成功"}
     except Exception as e:
@@ -3176,11 +3205,11 @@ async def upload_file(
     minio_url = await aupload_file_to_minio(bucket_name, object_name, file_bytes)
 
     # 检测同名文件（基于原始文件名）
-    same_name_files = await knowledge_base.get_same_name_files(kb_id, filename)
+    same_name_files = await knowledge_base.get_same_name_files(kb_id, filename, parent_id)
     has_same_name = len(same_name_files) > 0
 
     # 自动预判版本候选：按去版本号基础名匹配同文档其他版本（如 sglang-v1.1 -> sglang-v1.0）
-    version_candidate_files = await knowledge_base.get_version_candidate_files(kb_id, filename)
+    version_candidate_files = await knowledge_base.get_version_candidate_files(kb_id, filename, parent_id)
 
     return {
         "message": "File successfully uploaded",

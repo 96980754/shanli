@@ -14,6 +14,7 @@
         <KbResultGroupedList
           v-if="parsedResult(resultContent).chunks.length > 0"
           :chunks="parsedResult(resultContent).chunks"
+          :show-version-info="false"
         />
 
         <div v-if="hasGraphData(parsedResult(resultContent))" class="graph-result-card">

@@ -1,7 +1,11 @@
 <template>
   <div class="source-section">
     <div class="section-title">{{ $t('sources.kbTitle') }} ({{ docCount }})</div>
-    <KbResultGroupedList :chunks="chunks" :show-summary="false" />
+    <KbResultGroupedList
+      :chunks="chunks"
+      :show-summary="false"
+      :show-version-info="showVersionInfo"
+    />
   </div>
 </template>
 
@@ -14,6 +18,10 @@ const props = defineProps({
   chunks: {
     type: Array,
     default: () => []
+  },
+  showVersionInfo: {
+    type: Boolean,
+    default: true
   }
 })
 

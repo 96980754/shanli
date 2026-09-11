@@ -304,6 +304,9 @@
             />
             <span class="file-name-text">{{ row.displayName || row.filename }}</span>
           </a-button>
+          <span v-if="!row.is_folder" class="file-version-state">
+            {{ row.is_current ? $t('fileTable.currentVersion') : $t('fileTable.historyVersion') }}
+          </span>
           <a-tag
             v-if="!row.is_folder && row.version_review_pending"
             class="file-review-pending"
@@ -464,6 +467,16 @@
                     {{ $t('fileTable.versionHistory') }}
                   </a-button>
 
+                  <a-button
+                    v-if="props.canManage && row.is_current === false"
+                    type="text"
+                    block
+                    @click="detachVersion(row)"
+                  >
+                    <template #icon><Unlink :size="14" /></template>
+                    {{ $t('fileTable.detachVersion') }}
+                  </a-button>
+
                   <!-- 清洗预览 / 信息增强 / QA 知识对（PR12 吸收） -->
                   <a-button
                     v-if="props.canManage"
@@ -558,7 +571,8 @@ import {
   Sparkles,
   HelpCircle,
   AlertTriangle,
-  Pencil
+  Pencil,
+  Unlink
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -1052,6 +1066,21 @@ const handleDeleteFile = (fileId) => {
   closePopover(fileId)
 }
 
+const detachVersion = (record) => {
+  closePopover(record.file_id)
+  Modal.confirm({
+    title: t('fileTable.detachVersion'),
+    content: t('fileTable.detachVersionConfirm', { name: record.filename }),
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    onOk: async () => {
+      await documentApi.detachDocumentVersion(store.kbId, record.file_id)
+      await store.loadDocumentFiles({ isBackground: true })
+      message.success(t('fileTable.detachVersionSuccess'))
+    }
+  })
+}
+
 const handleDeleteFolder = (record) => {
   closePopover(record.file_id)
   Modal.confirm({
@@ -1492,6 +1521,14 @@ import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-version-state {
+  flex: none;
+  margin-left: 6px;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .file-review-pending {

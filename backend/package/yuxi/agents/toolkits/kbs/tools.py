@@ -18,6 +18,7 @@ from yuxi.knowledge.schemas import (
     SearchInputSchema,
     SearchOutputSchema,
 )
+from yuxi.knowledge.utils.document_version import parse_filename_version, same_version
 from yuxi.utils import logger
 
 # ========== 通用知识库工具函数 ==========
@@ -626,32 +627,18 @@ async def search_file(
 # （如《测试文档-v1.1.docx》→ V1.1）。匹配历史归档必须以文件名内嵌标签为准、序号兜底，
 # 不能拿序号直接当版本号去对用户说的 1.1。
 _KNOWN_DOC_EXT_RE = re.compile(r"\.(?:docx?|pdf|pptx?|xlsx?|csv|md|txt|wps)$", re.IGNORECASE)
-_VERSION_DECIMAL_SUFFIX_RE = re.compile(r"[-_\s]*(?:[vV]|版本)?\s*(?P<ver>\d+(?:\.\d+)+)\s*$")
-_VERSION_INTEGER_SUFFIX_RE = re.compile(r"[-_\s]+(?:[vV]|版本)\s*(?P<ver>\d+)\s*$")
 
 
 def _extract_trailing_version(name: str) -> tuple[str, str | None]:
     """拆文档名尾部的版本标签，返回 (去版本后的家族名, 版本标签或 None)。"""
-    stem = _KNOWN_DOC_EXT_RE.sub("", str(name or "").strip())
-    match = _VERSION_DECIMAL_SUFFIX_RE.search(stem) or _VERSION_INTEGER_SUFFIX_RE.search(stem)
-    if not match:
-        return stem, None
-    family = stem[: match.start()]
-    family = re.sub(r"(?:[-_\s]*[vV]|[-_\s]*版本|[-_\s]+)$", "", family, flags=re.IGNORECASE).strip()
-    return family, match.group("ver")
-
-
-def _version_number(value: str | float | None) -> float | None:
-    try:
-        return float(str(value).strip().lstrip("vV").strip())
-    except (TypeError, ValueError):
-        return None
+    parsed = parse_filename_version(name)
+    if parsed:
+        return parsed
+    return _KNOWN_DOC_EXT_RE.sub("", str(name or "").strip()), None
 
 
 def _same_version(left: str | float | None, right: str | None) -> bool:
-    left_num = _version_number(left)
-    right_num = _version_number(right)
-    return left_num is not None and left_num == right_num
+    return same_version(left, right)
 
 
 def _record_version(record: dict[str, Any]) -> str:

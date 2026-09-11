@@ -106,6 +106,46 @@ async def count_evaluable_answers(*, db: AsyncSession, agent_id: str | None = No
     return result.scalar() or 0
 
 
+async def count_knowledge_gap_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
+    """统计知识库依据不足的收尾回答，不包含范围或策略拒答。"""
+    next_message = aliased(Message)
+    next_message_id = (
+        select(func.min(next_message.id))
+        .where(
+            next_message.conversation_id == Message.conversation_id,
+            next_message.id > Message.id,
+        )
+        .correlate(Message)
+        .scalar_subquery()
+    )
+    query = select(func.count(Message.id)).where(
+        Message.role == "assistant",
+        ~exists(
+            select(next_message.id).where(
+                next_message.id == next_message_id,
+                next_message.role == "assistant",
+            )
+        ),
+        Message.extra_metadata["knowledge_disposition"]["type"].as_string() == "knowledge_refusal",
+    )
+    if agent_id:
+        query = query.where(
+            exists(
+                select(Conversation.id).where(
+                    Conversation.id == Message.conversation_id,
+                    Conversation.agent_id == agent_id,
+                )
+            )
+        )
+    result = await db.execute(query)
+    return result.scalar() or 0
+
+
+def build_knowledge_gap_stats(*, evaluable_count: int, knowledge_gap_count: int) -> dict:
+    rate = round(knowledge_gap_count / evaluable_count * 100, 2) if evaluable_count else 0.0
+    return {"knowledge_gap_count": knowledge_gap_count, "knowledge_gap_rate": rate}
+
+
 async def count_refusal_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
     """统计收尾 AI 终答中的结构化拒答消息数。"""
     next_message = aliased(Message)
@@ -164,12 +204,16 @@ def build_satisfaction_stats(*, evaluable_count: int, like_count: int, dislike_c
     else:
         satisfaction_rate = 100.0
         participation_rate = 0.0
+    rated_count = like_count + dislike_count
+    rated_satisfaction_rate = round(like_count / rated_count * 100, 2) if rated_count else 0.0
     return {
         "evaluable_count": evaluable_count,
         "like_count": like_count,
         "dislike_count": dislike_count,
         "silent_count": silent_count,
         "satisfaction_rate": satisfaction_rate,
+        "rated_count": rated_count,
+        "rated_satisfaction_rate": rated_satisfaction_rate,
         "participation_rate": participation_rate,
     }
 

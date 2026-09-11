@@ -50,6 +50,129 @@ class CandidateSession:
         self.added.append(record)
 
 
+class DetachSession:
+    def __init__(self, record, family_current):
+        self.record = record
+        self.family_current = family_current
+        self.flush = AsyncMock()
+
+    async def execute(self, _statement):
+        return ScalarResult(scalar=self.record)
+
+    async def scalar(self, _statement):
+        return self.family_current
+
+
+@pytest.mark.asyncio
+async def test_detach_history_version_creates_independent_current(monkeypatch):
+    current = SimpleNamespace(file_id="file-v18")
+    history = SimpleNamespace(
+        file_id="file-v14",
+        kb_id="kb-1",
+        is_folder=False,
+        is_current=False,
+        is_active=False,
+        logical_document_id="file-v18",
+        document_version=1,
+        supersedes_file_id="file-v18",
+        previous_version_id=None,
+        replacement_target_file_id=None,
+        activated_at=None,
+        superseded_at=1,
+        updated_at=None,
+    )
+    session = DetachSession(history, current)
+
+    @asynccontextmanager
+    async def session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", session_context)
+    result = await KnowledgeFileRepository().detach_history_version(kb_id="kb-1", file_id="file-v14")
+
+    assert result is history
+    assert history.logical_document_id == history.file_id
+    assert history.document_version == 1
+    assert history.is_current is True
+    assert history.is_active is True
+    assert history.supersedes_file_id is None
+    assert history.superseded_at is None
+    session.flush.assert_awaited_once()
+
+
+class FamilyAssignmentSession:
+    def __init__(self, incoming, family):
+        self.incoming = incoming
+        self.family = family
+        self.execute_calls = 0
+        self.flush = AsyncMock()
+
+    async def execute(self, _statement, _params=None):
+        self.execute_calls += 1
+        if self.execute_calls == 1:
+            return ScalarResult(scalar=self.incoming)
+        if self.execute_calls == 2:
+            return SimpleNamespace()
+        return ScalarResult(scalars=self.family)
+
+
+@pytest.mark.asyncio
+async def test_late_lower_version_joins_family_without_replacing_current(monkeypatch):
+    newer = SimpleNamespace(
+        file_id="file-v18",
+        kb_id="kb-1",
+        parent_id=None,
+        filename="操作手册-V1.8.docx",
+        logical_document_id="file-v18",
+        document_version=1,
+        version_label=None,
+        is_folder=False,
+        is_current=True,
+        is_active=True,
+        status="indexed",
+        replacement_target_file_id=None,
+        supersedes_file_id=None,
+        created_at=2,
+        activated_at=2,
+        superseded_at=None,
+    )
+    older = SimpleNamespace(
+        file_id="file-v14",
+        kb_id="kb-1",
+        parent_id=None,
+        filename="操作手册-V1.4.docx",
+        logical_document_id="file-v14",
+        document_version=1,
+        version_label=None,
+        is_folder=False,
+        is_current=True,
+        is_active=True,
+        status="indexed",
+        replacement_target_file_id=None,
+        supersedes_file_id=None,
+        created_at=3,
+        activated_at=3,
+        superseded_at=None,
+    )
+    session = FamilyAssignmentSession(older, [newer, older])
+
+    @asynccontextmanager
+    async def session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", session_context)
+    await KnowledgeFileRepository().assign_processed_document_version_family(kb_id="kb-1", file_id="file-v14")
+
+    assert newer.logical_document_id == older.logical_document_id == "file-v18"
+    assert (newer.document_version, newer.version_label) == (2, "1.8")
+    assert (older.document_version, older.version_label) == (1, "1.4")
+    assert (newer.is_current, newer.is_active) == (True, True)
+    assert (older.is_current, older.is_active) == (False, False)
+    assert newer.superseded_at is None
+    assert older.superseded_at is not None
+    assert session.flush.await_count == 2
+
+
 @pytest.mark.asyncio
 async def test_create_third_version_ignores_archived_first_version():
     current = SimpleNamespace(
@@ -177,14 +300,13 @@ def test_normalize_document_base_name_strips_version_suffix():
     assert normalize_document_base_name("sglang-v1.1.docx") == "sglang"
     assert normalize_document_base_name("sglang-v1.0.docx") == "sglang"
     assert normalize_document_base_name("sglang_v2.docx") == "sglang"
-    assert normalize_document_base_name("report-2024.pdf") == "report"
-    assert normalize_document_base_name("manual_3.xlsx") == "manual"
-    # 无版本号的文件名保留原名
-    assert normalize_document_base_name("plain.docx") == "plain"
-    assert normalize_document_base_name("README.md") == "readme"
-    # "测试1/测试2"是版本关系，剥离后基础名相同
-    assert normalize_document_base_name("测试1.docx") == "测试"
-    assert normalize_document_base_name("测试2.docx") == "测试"
+    assert normalize_document_base_name("report-2024.pdf") == "report-2024.pdf"
+    assert normalize_document_base_name("manual_3.xlsx") == "manual_3.xlsx"
+    # 无明确版本标记的文件名保留原名，避免年份/编号误归族
+    assert normalize_document_base_name("plain.docx") == "plain.docx"
+    assert normalize_document_base_name("README.md") == "readme.md"
+    assert normalize_document_base_name("测试1.docx") == "测试1.docx"
+    assert normalize_document_base_name("测试2.docx") == "测试2.docx"
 
 
 @pytest.mark.asyncio

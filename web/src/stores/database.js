@@ -420,7 +420,8 @@ export const useDatabaseStore = defineStore('database', () => {
         page: nextPage,
         page_size: nextPageSize,
         status: nextStatus,
-        recursive: nextRecursive
+        recursive: nextRecursive,
+        include_history: true
       }
       if (!nextRecursive && nextParentId) {
         params.parent_id = nextParentId

@@ -876,6 +876,21 @@ class MilvusKB(KnowledgeBase):
                 }
             )
 
+            if not file_meta.get("replacement_target_file_id") and not file_meta.get("supersedes_file_id"):
+                switched = await KnowledgeFileRepository().assign_processed_document_version_family(
+                    kb_id=kb_id,
+                    file_id=file_id,
+                )
+                if switched:
+                    current_file_id, archived_file_id = switched
+                    from yuxi.services.document_ingestion_service import DocumentIngestionService
+
+                    await DocumentIngestionService().enqueue_replacement_cleanup(
+                        kb_id=kb_id,
+                        new_file_id=current_file_id,
+                        old_file_id=archived_file_id,
+                    )
+
             await self.refresh_database_stats(kb_id)
 
             # 替换版本链：replacement 候选索引完成后激活新版本，切换 is_active/is_current
@@ -1520,18 +1535,17 @@ class MilvusKB(KnowledgeBase):
         )
         await self.refresh_database_stats(kb_id)
 
-    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = True) -> None:
-        """删除文件（包括元数据）。
-
-        family=True（默认）时连同同一 logical_document_id 的版本链一并删除，先清理整族
-        chunks（Milvus + PG）与图谱投影，避免删完元数据后留下孤儿向量/断言。
-        """
+    async def delete_file(self, kb_id: str, file_id: str, *, family: bool = False) -> None:
+        """删除单个版本及其在线投影；删除 current 时由 repository 自动补位。"""
+        del family
         repository = KnowledgeFileRepository()
-        # 待删整族（含目标本身、指向目标的候选、归档旧版本）
-        delete_ids = await repository.resolve_delete_file_ids(file_id, family=family)
+        target = await repository.get_by_file_id(file_id)
+        if target is None or target.kb_id != kb_id:
+            raise ValueError(f"File {file_id} not found")
+        delete_ids = await repository.resolve_delete_file_ids(file_id, family=False)
         for target_id in delete_ids:
             await self.delete_file_chunks_only(kb_id, target_id)
-        await repository.delete(file_id, family=family)
+        await repository.delete_version_and_promote(kb_id=kb_id, file_id=file_id)
         await self.refresh_database_stats(kb_id)
 
     async def get_file_basic_info(self, kb_id: str, file_id: str) -> dict:

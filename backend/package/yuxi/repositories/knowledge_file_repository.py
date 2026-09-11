@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ from typing import Any
 from sqlalchemy import (
     ARRAY,
     DateTime,
+    Integer,
     String,
     and_,
     case,
@@ -28,6 +28,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from yuxi.knowledge.utils.document_version import parse_filename_version, version_key
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_knowledge import KnowledgeChunk, KnowledgeFile
 from yuxi.storage.postgres.models_business import User
@@ -88,16 +89,9 @@ def normalize_document_filename(filename: str) -> str:
 
 
 def normalize_document_base_name(filename: str) -> str:
-    """提取去版本号的基础名，用于"同一逻辑文档不同版本"的自动预判。
-
-    规则：剥掉文件名主名（不含扩展名）末尾的版本号后缀，再归一化。
-    例如 sglang-v1.1.docx -> sglang、sglang_v2 -> sglang、report-2024 -> report、
-    测试1 -> 测试、测试2 -> 测试（"测试1/测试2"是版本关系，自动预判为同一逻辑文档的不同版本）。
-    支持的版本后缀形态：`v1.1`、`-1.1`、`_v2`、`_2`、`-2024`、纯数字结尾（测试1）等。
-    """
-    stem = str(filename or "").strip().rsplit(".", 1)[0] if "." in str(filename or "") else str(filename or "")
-    base = re.sub(r"[-_.]?v?\d+([.-]\d+)*$", "", stem, flags=re.IGNORECASE)
-    return normalize_document_filename(base) if base else normalize_document_filename(stem)
+    """提取显式版本后缀前的规范家族名，用于版本候选预判。"""
+    parsed = parse_filename_version(filename)
+    return parsed[0] if parsed else normalize_document_filename(filename)
 
 
 def stable_advisory_lock_key(namespace: str, value: str) -> int:
@@ -126,6 +120,7 @@ class KnowledgeFileRepository:
         "parent_id",
         "logical_document_id",
         "document_version",
+        "version_label",
         "is_current",
         "supersedes_file_id",
         "activated_at",
@@ -1456,6 +1451,133 @@ class KnowledgeFileRepository:
             await session.flush()
             return DocumentCreateOutcome(action="created", record=record)
 
+    async def assign_processed_document_version_family(
+        self,
+        *,
+        kb_id: str,
+        file_id: str,
+    ) -> tuple[str, str] | None:
+        """将已索引的普通上传按文件名业务版本归族，返回需清理的 (current, previous)。"""
+        async with pg_manager.get_async_session_context() as session:
+            incoming = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.file_id == file_id,
+                        KnowledgeFile.is_folder.is_(False),
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if incoming is None or incoming.replacement_target_file_id or incoming.supersedes_file_id:
+                return None
+
+            parsed = parse_filename_version(incoming.filename)
+            if parsed is None:
+                return None
+            family_name, _ = parsed
+            lock_key = stable_advisory_lock_key(
+                "knowledge-file-version-family",
+                f"{kb_id}\0{incoming.parent_id or '<root>'}\0{family_name}",
+            )
+            await session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+
+            result = await session.execute(
+                select(KnowledgeFile)
+                .where(
+                    KnowledgeFile.kb_id == kb_id,
+                    self._parent_condition(incoming.parent_id),
+                    KnowledgeFile.is_folder.is_(False),
+                    KnowledgeFile.status.in_(["indexed", "done"]),
+                )
+                .with_for_update()
+            )
+            family = []
+            for record in result.scalars().all():
+                record_version = parse_filename_version(record.filename)
+                if record_version and record_version[0] == family_name:
+                    key = version_key(record_version[1])
+                    if key is not None:
+                        family.append((record, record_version[1], key))
+            if not any(record.file_id == file_id for record, _, _ in family):
+                return None
+
+            logical_document_id = next(
+                (str(record.logical_document_id) for record, _, _ in family if record.logical_document_id),
+                incoming.logical_document_id or incoming.file_id,
+            )
+            ordered = sorted(family, key=lambda item: (item[2], item[0].created_at, item[0].file_id))
+            old_current = next((record for record, _, _ in ordered if record.is_current), None)
+            current = ordered[-1][0]
+            now = utc_now_naive()
+
+            # 合并多个原独立家族时，先写临时负序号并撤销 current，再落最终序号和唯一 current。
+            for temporary_version, (record, _, _) in enumerate(ordered, start=1):
+                record.logical_document_id = logical_document_id
+                record.document_version = -temporary_version
+                record.is_current = False
+                record.is_active = False
+                record.superseded_at = now
+            await session.flush()
+
+            for document_version, (record, label, _) in enumerate(ordered, start=1):
+                record.document_version = document_version
+                record.version_label = label
+                record.previous_version_id = ordered[document_version - 2][0].file_id if document_version > 1 else None
+                if record.file_id == current.file_id:
+                    record.is_current = True
+                    record.is_active = True
+                    record.activated_at = now
+                    record.superseded_at = None
+                    if old_current and old_current.file_id != current.file_id:
+                        record.processing_stage = "replacement_cleanup"
+                        record.processing_progress = 95
+            await session.flush()
+            if old_current and old_current.file_id != current.file_id:
+                return current.file_id, old_current.file_id
+            return None
+
+    async def detach_history_version(self, *, kb_id: str, file_id: str) -> KnowledgeFile:
+        """把误归族的历史版本拆为独立 current 文档；当前版本不能通过本操作拆分。"""
+        async with pg_manager.get_async_session_context() as session:
+            record = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == file_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if record is None or record.is_folder:
+                raise ValueError("VERSION_NOT_FOUND")
+            if record.is_current:
+                raise ValueError("CANNOT_DETACH_CURRENT_VERSION")
+
+            old_logical_id = record.logical_document_id
+            record.logical_document_id = record.file_id
+            record.document_version = 1
+            record.is_current = True
+            record.is_active = True
+            record.supersedes_file_id = None
+            record.previous_version_id = None
+            record.replacement_target_file_id = None
+            record.activated_at = utc_now_naive()
+            record.superseded_at = None
+            record.updated_at = record.activated_at
+            await session.flush()
+
+            if old_logical_id:
+                current = await session.scalar(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.kb_id == kb_id,
+                        KnowledgeFile.logical_document_id == old_logical_id,
+                        KnowledgeFile.is_current.is_(True),
+                    )
+                )
+                if current is None:
+                    raise ValueError("VERSION_FAMILY_HAS_NO_CURRENT")
+            return record
+
     async def switch_active_version(self, *, kb_id: str, new_file_id: str, old_file_id: str) -> KnowledgeFile:
         async with pg_manager.get_async_session_context() as session:
             target_lock_key = stable_advisory_lock_key(
@@ -1496,6 +1618,21 @@ class KnowledgeFileRepository:
                 raise ValueError("New document version must be indexed before activation")
 
             now = utc_now_naive()
+            logical_document_id = old_record.logical_document_id or old_record.file_id
+            latest_version = await session.scalar(
+                select(func.max(KnowledgeFile.document_version)).where(
+                    KnowledgeFile.kb_id == kb_id,
+                    KnowledgeFile.logical_document_id == logical_document_id,
+                )
+            )
+            if old_record.logical_document_id is None:
+                old_record.logical_document_id = logical_document_id
+                old_record.document_version = old_record.document_version or 1
+            new_record.logical_document_id = logical_document_id
+            new_record.document_version = int(latest_version or old_record.document_version or 1) + 1
+            parsed = parse_filename_version(new_record.filename)
+            new_record.version_label = parsed[1] if parsed else None
+            new_record.supersedes_file_id = old_file_id
             new_record.is_active = True
             new_record.previous_version_id = old_file_id
             new_record.processing_stage = "replacement_cleanup"
@@ -1740,11 +1877,11 @@ class KnowledgeFileRepository:
         status: str | None,
         recursive: bool,
         files_only: bool,
+        include_history: bool = False,
     ) -> list:
-        filters = [
-            KnowledgeFile.kb_id == kb_id,
-            KnowledgeFile.is_current.is_(True),
-        ]
+        filters = [KnowledgeFile.kb_id == kb_id]
+        if not include_history:
+            filters.append(KnowledgeFile.is_current.is_(True))
         if not recursive:
             filters.append(self._parent_condition(parent_id))
         if files_only:
@@ -1766,15 +1903,17 @@ class KnowledgeFileRepository:
         page: int,
         page_size: int,
         files_only: bool,
+        include_history: bool = False,
     ) -> tuple[list[Any], int]:
         offset = (page - 1) * page_size
         parent_condition = self._parent_condition(parent_id)
         base_filters = [
             KnowledgeFile.kb_id == kb_id,
-            KnowledgeFile.is_current.is_(True),
             parent_condition,
             KnowledgeFile.filename.is_not(None),
         ]
+        if not include_history:
+            base_filters.append(KnowledgeFile.is_current.is_(True))
         if path_prefix:
             base_filters.append(KnowledgeFile.filename.like(self._like_prefix(path_prefix), escape="\\"))
 
@@ -1802,6 +1941,9 @@ class KnowledgeFileRepository:
             KnowledgeFile.minio_url.label("minio_url"),
             KnowledgeFile.markdown_file.label("markdown_file"),
             KnowledgeFile.logical_document_id.label("logical_document_id"),
+            KnowledgeFile.document_version.label("document_version"),
+            KnowledgeFile.version_label.label("version_label"),
+            KnowledgeFile.is_current.label("is_current"),
             literal(False).label("is_virtual_folder"),
             cast(literal(None), String).label("path_prefix"),
             literal(0).label("virtual_children_count"),
@@ -1822,6 +1964,9 @@ class KnowledgeFileRepository:
                 cast(literal(None), String).label("minio_url"),
                 cast(literal(None), String).label("markdown_file"),
                 cast(literal(None), String).label("logical_document_id"),
+                cast(literal(None), Integer).label("document_version"),
+                cast(literal(None), String).label("version_label"),
+                literal(True).label("is_current"),
                 literal(True).label("is_virtual_folder"),
                 virtual_path_prefix,
                 func.count().label("virtual_children_count"),
@@ -1862,6 +2007,7 @@ class KnowledgeFileRepository:
         page_size: int = 100,
         recursive: bool = False,
         files_only: bool = False,
+        include_history: bool = False,
     ) -> tuple[list[KnowledgeFile], int]:
         page = max(int(page or 1), 1)
         page_size = min(max(int(page_size or 100), 1), 500)
@@ -1877,14 +2023,15 @@ class KnowledgeFileRepository:
                 page=page,
                 page_size=page_size,
                 files_only=files_only,
+                include_history=include_history,
             )
-
         filters = self._document_filters(
             kb_id=kb_id,
             parent_id=parent_id,
             status=status,
             recursive=effective_recursive,
             files_only=files_only,
+            include_history=include_history,
         )
 
         async with pg_manager.get_async_session_context() as session:
@@ -2031,6 +2178,55 @@ class KnowledgeFileRepository:
                 .returning(KnowledgeFile)
             )
             return result.scalar_one_or_none()
+
+    async def delete_version_and_promote(
+        self, *, kb_id: str, file_id: str
+    ) -> tuple[KnowledgeFile | None, KnowledgeFile | None]:
+        """删除单个版本；若删除 current，提升剩余业务版本最高者。"""
+        async with pg_manager.get_async_session_context() as session:
+            target = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.file_id == file_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                return None, None
+            promoted = None
+            family = []
+            if target.logical_document_id:
+                family = list(
+                    (
+                        await session.execute(
+                            select(KnowledgeFile)
+                            .where(
+                                KnowledgeFile.kb_id == target.kb_id,
+                                KnowledgeFile.logical_document_id == target.logical_document_id,
+                                KnowledgeFile.file_id != file_id,
+                                KnowledgeFile.is_folder.is_(False),
+                                KnowledgeFile.status.in_(["indexed", "done"]),
+                            )
+                            .with_for_update()
+                        )
+                    ).scalars().all()
+                )
+            if target.is_current and family:
+                def version_sort_key(record):
+                    key = version_key(getattr(record, "version_label", None))
+                    return (key or (int(getattr(record, "document_version", 0) or 0),), str(record.file_id))
+
+                promoted = max(family, key=version_sort_key)
+            await session.delete(target)
+            await session.flush()
+            if promoted is not None:
+                promoted.is_current = True
+                promoted.is_active = True
+                promoted.activated_at = utc_now_naive()
+                promoted.superseded_at = None
+                promoted.updated_at = promoted.activated_at
+                await session.flush()
+            return target, promoted
 
     async def delete(self, file_id: str, *, family: bool = True) -> None:
         """删除文件记录，并级联清理同一 logical_document_id 版本链及指向它的候选。

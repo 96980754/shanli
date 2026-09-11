@@ -24,6 +24,7 @@ from yuxi.services.feedback_service import (
     build_refusal_stats,
     build_satisfaction_stats,
     count_evaluable_answers,
+    count_knowledge_gap_answers,
     count_refusal_answers,
 )
 from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
@@ -537,6 +538,7 @@ async def get_agent_analytics(
                 dislike_count=dislike_count,
             )
 
+            knowledge_gap_count = await count_knowledge_gap_answers(db=db, agent_id=agent_id)
             agent_satisfaction.append(
                 {
                     "agent_id": agent_id,
@@ -546,6 +548,14 @@ async def get_agent_analytics(
                     "dislike_count": dislike_count,
                     "evaluable_count": stats["evaluable_count"],
                     "silent_count": stats["silent_count"],
+                    "rated_count": stats["rated_count"],
+                    "rated_satisfaction_rate": stats["rated_satisfaction_rate"],
+                    "knowledge_gap_count": knowledge_gap_count,
+                    "knowledge_gap_rate": (
+                        round(knowledge_gap_count / stats["evaluable_count"] * 100, 2)
+                        if stats["evaluable_count"]
+                        else 0.0
+                    ),
                 }
             )
 
@@ -651,6 +661,11 @@ async def get_dashboard_stats(
         refusal_stats = build_refusal_stats(
             evaluable_count=evaluable_count,
             refusal_count=await count_refusal_answers(db=db),
+        )
+        knowledge_gap_count = await count_knowledge_gap_answers(db=db)
+        refusal_stats["knowledge_gap_count"] = knowledge_gap_count
+        refusal_stats["knowledge_gap_rate"] = (
+            round(knowledge_gap_count / evaluable_count * 100, 2) if evaluable_count else 0.0
         )
 
         return {

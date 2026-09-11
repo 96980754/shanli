@@ -4,6 +4,7 @@ from typing import Any
 
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_CONFIG_KEY, MilvusGraphService
 from yuxi.knowledge.runtime import knowledge_base
+from yuxi.knowledge.utils.document_version import parse_filename_version, version_key
 from yuxi.repositories.knowledge_base_repository import KnowledgeBaseRepository
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 from yuxi.repositories.knowledge_validation_repository import KnowledgeValidationRepository
@@ -40,6 +41,16 @@ class DocumentVersionService:
             raise ValueError("缺少新文件 content_hash")
         if current.content_hash == content_hash:
             raise ValueError("SAME_CONTENT")
+        current_version = parse_filename_version(current.filename)
+        incoming_filename = uploaded.get("filename") or current.filename
+        incoming_version = parse_filename_version(incoming_filename)
+        if (
+            current_version
+            and incoming_version
+            and current_version[0] == incoming_version[0]
+            and version_key(incoming_version[1]) <= version_key(current_version[1])
+        ):
+            raise ValueError("VERSION_NOT_NEWER")
 
         candidate_data = {
             "file_id": uploaded["file_id"],

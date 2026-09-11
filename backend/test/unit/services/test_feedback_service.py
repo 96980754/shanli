@@ -189,6 +189,8 @@ def test_build_satisfaction_stats_unreplied_counts_as_satisfied():
     # (1 好评 + 6 未反馈) / 10
     assert stats["satisfaction_rate"] == 70.0
     assert stats["participation_rate"] == 40.0
+    assert stats["rated_count"] == 4
+    assert stats["rated_satisfaction_rate"] == 25.0
 
 
 def test_build_satisfaction_stats_no_evaluable_defaults_to_100():
@@ -197,6 +199,8 @@ def test_build_satisfaction_stats_no_evaluable_defaults_to_100():
     assert stats["silent_count"] == 0
     assert stats["satisfaction_rate"] == 100.0
     assert stats["participation_rate"] == 0.0
+    assert stats["rated_count"] == 0
+    assert stats["rated_satisfaction_rate"] == 0.0
 
 
 def test_build_satisfaction_stats_silent_never_negative():

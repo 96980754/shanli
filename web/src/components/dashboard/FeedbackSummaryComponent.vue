@@ -14,10 +14,11 @@
 
     <template v-else>
       <div class="metric-grid">
-        <div class="metric-card satisfaction">
+        <div class="metric-card satisfaction" :title="$t('dash.satisfactionRateTip')">
           <div class="metric-label">{{ $t('feedback.satisfactionInclSilentLabel') }}</div>
           <div class="metric-value">{{ formatRate(summary?.satisfaction_rate) }}</div>
           <div class="metric-sub">{{ $t('feedback.participationLabel') }} {{ formatRate(summary?.participation_rate) }}</div>
+          <div class="metric-sub">{{ $t('dash.ratedSatisfaction', { rate: summary?.rated_satisfaction_rate || 0, count: summary?.rated_count || 0 }) }}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label" :title="$t('feedback.evaluableTooltip')">{{ $t('feedback.evaluableLabel') }}</div>
@@ -38,9 +39,12 @@
         <div class="metric-card refusal" :title="$t('feedback.refusalRateTooltip')">
           <div class="metric-label">{{ $t('feedback.refusalCountLabel') }}</div>
           <div class="metric-value">{{ summary?.refusal_count || 0 }}</div>
-          <div class="metric-sub">
-            {{ $t('feedback.refusalRateLabel') }} {{ formatRate(summary?.refusal_rate) }}
-          </div>
+          <div class="metric-sub">{{ $t('feedback.refusalRateLabel') }} {{ formatRate(summary?.refusal_rate) }}</div>
+        </div>
+        <div class="metric-card knowledge-gap" :title="$t('dash.knowledgeGapRateTip')">
+          <div class="metric-label">{{ $t('dash.knowledgeGapRate') }}</div>
+          <div class="metric-value">{{ formatRate(summary?.knowledge_gap_rate) }}</div>
+          <div class="metric-sub">{{ summary?.knowledge_gap_count || 0 }}{{ $t('dash.knowledgeGapCountSuffix') }}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">{{ $t('feedback.totalFeedbackLabel') }}</div>

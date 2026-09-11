@@ -340,6 +340,35 @@ async def test_delete_cascades_whole_version_family(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delete_history_version_does_not_delete_current_family(monkeypatch):
+    """管理列表删除历史版本时只删该行，不按 logical_document_id 级联当前版。"""
+    history = SimpleNamespace(
+        file_id="file-v28",
+        kb_id="kb-1",
+        is_current=False,
+        logical_document_id="logical-1",
+        filename="手册-V2.8.docx",
+    )
+    session = _DeleteSession(
+        [
+            _QueueResult(scalar=history),
+            _QueueResult(rows=[("file-v28",)]),
+            _QueueResult(rows=[history]),
+        ]
+    )
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+    await KnowledgeFileRepository().delete(file_id="file-v28", family=False)
+
+    assert session.deleted == [history]
+    assert "logical_document_id =" not in session.compiled[1].lower()
+
+
+@pytest.mark.asyncio
 async def test_delete_without_version_family_only_deletes_main(monkeypatch):
     """无版本链的文档（logical_document_id 为空）删除时仅清理目标行本身。"""
     main = SimpleNamespace(

@@ -25,7 +25,7 @@ class _FakeDb:
 
     def __init__(self, rows, evaluable_count=0, refusal_count=0):
         self.rows = rows
-        self.scalar_values = iter((evaluable_count, refusal_count))
+        self.scalar_values = iter((evaluable_count, refusal_count, 0))
 
     async def execute(self, query, *args, **kwargs):
         if isinstance(query, TextClause):

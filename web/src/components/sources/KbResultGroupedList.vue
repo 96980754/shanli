@@ -25,7 +25,10 @@
             <FileText :size="14" color="var(--gray-600)" />
             <span v-if="fileGroup.product" class="product-name">{{ fileGroup.product }}</span>
             <span class="file-name">{{ fileGroup.displayName }}</span>
-            <span v-if="getSourceVersion(fileGroup)?.document_version" class="current-version">
+            <span
+              v-if="showVersionInfo && getSourceVersion(fileGroup)?.document_version"
+              class="current-version"
+            >
               {{ $t('sources.currentVersion', { version: getSourceVersion(fileGroup).document_version }) }}
             </span>
             <span class="chunk-count">{{ fileGroup.chunks.length }} chunks</span>
@@ -56,7 +59,11 @@
           </div>
         </div>
 
-        <div v-if="getHistoryVersions(fileGroup).length" class="history-versions" @click.stop>
+        <div
+          v-if="showVersionInfo && getHistoryVersions(fileGroup).length"
+          class="history-versions"
+          @click.stop
+        >
           <button class="history-toggle" type="button" @click="toggleHistory(fileGroup)">
             <History :size="13" />
             <span>{{ $t('sources.historyVersions', { count: getHistoryVersions(fileGroup).length }) }}</span>
@@ -120,9 +127,11 @@
           </div>
         </div>
       </div>
-      <div v-if="sourceVersionsLoading" class="source-versions-status">{{ $t('sources.loadingVersions') }}</div>
+      <div v-if="showVersionInfo && sourceVersionsLoading" class="source-versions-status">
+        {{ $t('sources.loadingVersions') }}
+      </div>
       <button
-        v-else-if="sourceVersionsError"
+        v-else-if="showVersionInfo && sourceVersionsError"
         type="button"
         class="source-versions-status source-versions-retry"
         @click="loadSourceVersions(fileGroupList)"
@@ -178,6 +187,10 @@ const props = defineProps({
     default: () => []
   },
   showSummary: {
+    type: Boolean,
+    default: true
+  },
+  showVersionInfo: {
     type: Boolean,
     default: true
   },
@@ -342,7 +355,12 @@ watch(
     expandedHistories.value = new Set(
       [...expandedHistories.value].filter((fileKey) => validFileKeys.has(fileKey))
     )
-    loadSourceVersions(groups)
+    if (props.showVersionInfo) loadSourceVersions(groups)
+    else {
+      sourceVersions.value = new Map()
+      sourceVersionsLoading.value = false
+      sourceVersionsError.value = ''
+    }
   },
   { immediate: true }
 )

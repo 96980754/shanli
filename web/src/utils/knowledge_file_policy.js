@@ -96,13 +96,18 @@ export const getFilePrimaryAction = (record) => {
 }
 
 export const canParseFile = (record) =>
-  Boolean(record && !record.is_folder && PARSEABLE_STATUSES.has(record.status))
+  Boolean(record && record.is_current !== false && !record.is_folder && PARSEABLE_STATUSES.has(record.status))
 
 export const canIndexFile = (record) =>
-  Boolean(record && !record.is_folder && INDEXABLE_STATUSES.has(record.status))
+  Boolean(record && record.is_current !== false && !record.is_folder && INDEXABLE_STATUSES.has(record.status))
 
 export const canReindexFile = (record) =>
-  Boolean(record && !record.is_folder && (record.status === 'done' || record.status === 'indexed'))
+  Boolean(
+    record &&
+      record.is_current !== false &&
+      !record.is_folder &&
+      (record.status === 'done' || record.status === 'indexed')
+  )
 
 export const canDownloadFile = (record) =>
   Boolean(

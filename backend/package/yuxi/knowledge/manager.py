@@ -571,6 +571,10 @@ class KnowledgeBaseManager:
             "has_original_file": bool(getattr(record, "minio_url", None) or getattr(record, "path", None)),
             "has_parsed_markdown": bool(getattr(record, "markdown_file", None)),
             "is_virtual_folder": bool(getattr(record, "is_virtual_folder", False)),
+            "logical_document_id": getattr(record, "logical_document_id", None),
+            "document_version": getattr(record, "document_version", None),
+            "version_label": getattr(record, "version_label", None),
+            "is_current": bool(getattr(record, "is_current", True)),
             "path_prefix": getattr(record, "path_prefix", None),
         }
 
@@ -664,6 +668,7 @@ class KnowledgeBaseManager:
         page_size: int = 100,
         recursive: bool = False,
         files_only: bool = False,
+        include_history: bool = False,
         include_stats: bool = True,
     ) -> dict:
         """按目录和筛选条件分页获取轻量文件列表。"""
@@ -685,16 +690,19 @@ class KnowledgeBaseManager:
         normalized_page = max(int(page or 1), 1)
         normalized_page_size = min(max(int(page_size or 100), 1), 500)
         effective_recursive = recursive and bool(status and status != "all")
-        records, total = await repo.list_documents(
-            kb_id=kb_id,
-            parent_id=parent_id,
-            path_prefix=path_prefix,
-            status=status,
-            page=normalized_page,
-            page_size=normalized_page_size,
-            recursive=effective_recursive,
-            files_only=files_only,
-        )
+        list_options = {
+            "kb_id": kb_id,
+            "parent_id": parent_id,
+            "path_prefix": path_prefix,
+            "status": status,
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+            "recursive": effective_recursive,
+            "files_only": files_only,
+        }
+        if include_history:
+            list_options["include_history"] = True
+        records, total = await repo.list_documents(**list_options)
         folder_ids = [record.file_id for record in records if record.is_folder]
         child_counts = await repo.count_children_by_parent_ids(kb_id=kb_id, parent_ids=folder_ids)
         stats = await repo.get_kb_file_stats(kb_id) if include_stats else None
@@ -845,7 +853,7 @@ class KnowledgeBaseManager:
             return False
         return await self.document_file_exists(kb_id, file_name)
 
-    async def get_same_name_files(self, kb_id: str, filename: str) -> list[dict]:
+    async def get_same_name_files(self, kb_id: str, filename: str, parent_id: str | None = None) -> list[dict]:
         """获取同一知识库中同名文件列表
         基于原始文件名直接比较
         返回基础信息：文件名、大小、上传时间
@@ -866,7 +874,9 @@ class KnowledgeBaseManager:
 
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
-        records = await KnowledgeFileRepository().list_same_name_files(kb_id=kb_id, parent_id=None, filename=filename)
+        records = await KnowledgeFileRepository().list_same_name_files(
+            kb_id=kb_id, parent_id=parent_id, filename=filename
+        )
         return [
             {
                 "file_id": record.file_id,
@@ -878,7 +888,9 @@ class KnowledgeBaseManager:
             for record in records
         ]
 
-    async def get_version_candidate_files(self, kb_id: str, filename: str) -> list[dict]:
+    async def get_version_candidate_files(
+        self, kb_id: str, filename: str, parent_id: str | None = None
+    ) -> list[dict]:
         """获取同文档其他版本的候选文件列表（按去版本号基础名匹配）。
 
         例如上传 sglang-v1.1.docx 时，返回基础名同为 sglang 的 sglang-v1.0.docx，
@@ -890,7 +902,7 @@ class KnowledgeBaseManager:
         from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
 
         records = await KnowledgeFileRepository().list_version_candidate_files(
-            kb_id=kb_id, parent_id=None, filename=filename
+            kb_id=kb_id, parent_id=parent_id, filename=filename
         )
         return [
             {

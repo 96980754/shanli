@@ -11,6 +11,7 @@ from yuxi.services.feedback_service import (
     build_refusal_stats,
     build_satisfaction_stats,
     count_evaluable_answers,
+    count_knowledge_gap_answers,
     count_refusal_answers,
     parse_feedback_reason,
 )
@@ -32,10 +33,14 @@ class FeedbackSummaryResponse(BaseModel):
     dislike_count: int
     evaluable_count: int
     silent_count: int
+    rated_count: int
+    rated_satisfaction_rate: float
     satisfaction_rate: float
     participation_rate: float
     refusal_count: int
     refusal_rate: float
+    knowledge_gap_count: int
+    knowledge_gap_rate: float
     reason_stats: list[FeedbackReasonStat]
     legacy_unclassified_count: int
 
@@ -92,6 +97,10 @@ async def get_feedback_summary(
         evaluable_count=evaluable_count,
         refusal_count=await count_refusal_answers(db=db, agent_id=agent_id),
     )
+    knowledge_gap_count = await count_knowledge_gap_answers(db=db, agent_id=agent_id)
+    knowledge_gap_rate = (
+        round(knowledge_gap_count / evaluable_count * 100, 2) if evaluable_count else 0.0
+    )
     reason_stats = [
         FeedbackReasonStat(code=code, label=label, count=reason_counts[code])
         for code, label in FEEDBACK_REASON_OPTIONS.items()
@@ -103,10 +112,14 @@ async def get_feedback_summary(
         dislike_count=stats["dislike_count"],
         evaluable_count=stats["evaluable_count"],
         silent_count=stats["silent_count"],
+        rated_count=stats["rated_count"],
+        rated_satisfaction_rate=stats["rated_satisfaction_rate"],
         satisfaction_rate=stats["satisfaction_rate"],
         participation_rate=stats["participation_rate"],
         refusal_count=refusal_stats["refusal_count"],
         refusal_rate=refusal_stats["refusal_rate"],
+        knowledge_gap_count=knowledge_gap_count,
+        knowledge_gap_rate=knowledge_gap_rate,
         reason_stats=reason_stats,
         legacy_unclassified_count=legacy_unclassified_count,
     )

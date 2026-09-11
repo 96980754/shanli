@@ -88,7 +88,11 @@
 
     <!-- 来源详情面板 -->
     <div v-if="isSourcesExpanded" class="sources-panel-body">
-      <KnowledgeSourceSection v-if="knowledgeChunks.length > 0" :chunks="knowledgeChunks" />
+      <KnowledgeSourceSection
+        v-if="knowledgeChunks.length > 0"
+        :chunks="knowledgeChunks"
+        :show-version-info="false"
+      />
       <WebSearchSourceSection v-if="webSources.length > 0" :sources="webSources" />
     </div>
   </div>

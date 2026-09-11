@@ -125,6 +125,9 @@ class FakeKnowledgeFileRepository:
         self.update_calls.append((file_id, kb_id, dict(data)))
         return record
 
+    async def assign_processed_document_version_family(self, *, kb_id: str, file_id: str):
+        return None
+
     async def list_current_file_ids(self, file_ids: list[str]):
         return {
             file_id

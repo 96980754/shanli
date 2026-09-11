@@ -142,6 +142,7 @@ class KnowledgeFile(Base):
     parent_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"), index=True)
     logical_document_id = Column(String(64))
     document_version = Column(Integer)
+    version_label = Column(String(64))
     is_current = Column(Boolean, nullable=False, default=True)
     supersedes_file_id = Column(String(64), ForeignKey("knowledge_files.file_id", ondelete="SET NULL"), index=True)
     activated_at = Column(DateTime(timezone=True))

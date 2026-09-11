@@ -5,7 +5,7 @@
         <div class="stat-icon">
           <MessageCircle class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.totalConversationsTip')">
           <div class="stat-value">{{ basicStats?.total_conversations || 0 }}</div>
           <div class="stat-label">{{ $t('dash.totalConversations') }}</div>
           <div class="stat-trend" v-if="basicStats?.conversation_trend">
@@ -20,7 +20,7 @@
         <div class="stat-icon">
           <Activity class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.activeConversationsTip')">
           <div class="stat-value">{{ basicStats?.active_conversations || 0 }}</div>
           <div class="stat-label">{{ $t('dash.activeConversations') }}</div>
         </div>
@@ -30,9 +30,20 @@
         <div class="stat-icon">
           <Mail class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.totalMessagesTip')">
           <div class="stat-value">{{ basicStats?.total_messages || 0 }}</div>
           <div class="stat-label">{{ $t('dash.totalMessages') }}</div>
+        </div>
+      </div>
+
+      <div class="stat-card info" :title="$t('dash.knowledgeGapRateTip')">
+        <div class="stat-icon">
+          <Activity class="icon" />
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ basicStats?.feedback_stats?.knowledge_gap_rate || 0 }}%</div>
+          <div class="stat-label">{{ $t('dash.knowledgeGapRate') }}</div>
+          <div class="stat-sub">{{ basicStats?.feedback_stats?.knowledge_gap_count || 0 }}{{ $t('dash.knowledgeGapCountSuffix') }}</div>
         </div>
       </div>
 
@@ -40,7 +51,7 @@
         <div class="stat-icon">
           <Users class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.totalUsersTip')">
           <div class="stat-value">{{ basicStats?.total_users || 0 }}</div>
           <div class="stat-label">{{ $t('dash.totalUsers') }}</div>
         </div>
@@ -50,7 +61,7 @@
         <div class="stat-icon">
           <BarChart3 class="icon" />
         </div>
-        <div class="stat-content">
+        <div class="stat-content" :title="$t('dash.totalFeedbacksTip')">
           <div class="stat-value">{{ basicStats?.feedback_stats?.total_feedbacks || 0 }}</div>
           <div class="stat-label">{{ $t('dash.totalFeedbacks') }}</div>
         </div>
@@ -64,7 +75,7 @@
           <div class="stat-value">{{ basicStats?.feedback_stats?.satisfaction_rate || 0 }}%</div>
           <div class="stat-label">{{ $t('dash.satisfactionRate') }}</div>
           <div class="stat-sub" v-if="feedbackStats">
-            {{ $t('dash.participationRate', { rate: feedbackStats.participation_rate || 0 }) }}
+            {{ $t('dash.ratedSatisfaction', { rate: feedbackStats.rated_satisfaction_rate || 0, count: feedbackStats.rated_count || 0 }) }}
           </div>
         </div>
       </div>
