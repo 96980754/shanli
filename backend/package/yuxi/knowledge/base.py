@@ -853,7 +853,15 @@ class KnowledgeBase(ABC):
                 chunk_index = chunk.get("chunk_index")
             if chunk_index is not None:
                 metadata.setdefault("chunk_index", chunk_index)
-            if chunk.get("score") is not None:
+            rerank_score = chunk.get("rerank_score")
+            if rerank_score is not None:
+                # 精排分出自同一个 rerank 模型和同一次 query，跨库可比，它就是排序轴；
+                # 展示分必须跟着换成精排分，否则来源面板会出现「顺序按精排、数字却是精排前」。
+                if chunk.get("score") is not None:
+                    metadata.setdefault("retrieval_score", chunk.get("score"))
+                metadata["rerank_score"] = float(rerank_score)
+                metadata["score"] = float(rerank_score)
+            elif chunk.get("score") is not None:
                 metadata.setdefault("score", chunk.get("score"))
             if chunk.get("distance") is not None:
                 metadata.setdefault("distance", chunk.get("distance"))
@@ -1782,7 +1790,9 @@ class KnowledgeBase(ABC):
                 # 存原始 spec：为空表示跟随全局默认，使用点实时 resolve，全局 embed_model 切换无需重启生效
                 "embedding_model_spec": kb.embedding_model_spec,
                 "llm_model_spec": kb.llm_model_spec,
-                "query_params": kb.query_params or self._get_default_query_params(kb.kb_id),
+                # 落库为空时用与新建知识库同一份默认值：_get_default_query_params 只是配置项默认值，
+                # 拿它兜底会让这类知识库静默退化成纯向量检索（不精排、不图检索）。
+                "query_params": kb.query_params or self._get_initial_query_params(kb.kb_id),
                 "metadata": self.normalize_additional_params(kb.additional_params),
                 "created_at": utc_isoformat(kb.created_at) if kb.created_at else utc_isoformat(),
             }

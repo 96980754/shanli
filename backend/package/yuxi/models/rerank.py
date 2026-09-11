@@ -66,7 +66,9 @@ class BaseReranker(ABC):
                 logger.debug(f"Reranking batch {batch_no}/{total_batches} completed")
             except Exception as exc:
                 logger.error(f"Reranking batch {batch_no} failed: {exc}")
-                all_scores.extend([0.5] * len(batch))
+                # 占位值要取归一化后的中性分：normalize 时 sigmoid(0.0)=0.5（等同"无信号"），
+                # 若填 0.5 会被 sigmoid 抬到 0.62，反而高过真正不相关的片段。
+                all_scores.extend([0.0] * len(batch))
 
         if normalize:
             all_scores = [float(sigmoid(score)) for score in all_scores]
@@ -95,8 +97,13 @@ class BaseReranker(ABC):
             logger.error(f"Reranking request failed: {exc}")
             raise exc
 
-        processed = sorted(self._extract_results(result), key=lambda item: item.get("index", 0))
-        return [float(entry.get("relevance_score", 0.0)) for entry in processed]
+        processed = self._extract_results(result)
+        # 供应商通常按分数降序返回结果，必须靠 index 才能把分数对回原文档；
+        # 缺 index 时按返回顺序对齐会静默把分数错配到别的文档上，宁可让本次精排失败。
+        missing_index = [entry for entry in processed if "index" not in entry]
+        if missing_index:
+            raise ValueError("Rerank response has entries without `index`; refusing to align scores by return order")
+        return [float(entry.get("relevance_score", 0.0)) for entry in sorted(processed, key=lambda item: item["index"])]
 
     def compute_score(self, sentence_pairs, batch_size=256, max_length=512, normalize=False):
         try:

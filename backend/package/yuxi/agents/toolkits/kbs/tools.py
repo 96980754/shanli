@@ -283,6 +283,41 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
 _QUERY_KBS_PER_KB_KEEP = 5
 
 
+def _merge_kb_results(per_kb_outputs: list[tuple[str, dict]]) -> list[dict]:
+    """合并多库检索结果，按跨库可比的分数全局排序（而不是按库拼接）。
+
+    精排分出自同一个 rerank 模型和同一次 query，跨库可比，作为第一档；
+    没有精排的片段（未开精排，或 BM25 这类无界分）量纲不同，按库内 min-max
+    归一到 [0,1] 后排在第二档。两档不混排，避免弱库片段反超强库。
+    """
+    reranked: list[tuple[float, dict]] = []
+    fallback: list[tuple[float, dict]] = []
+    for _, output in per_kb_outputs:
+        if output.get("status") != "ok":
+            continue
+        kept = output.get("results", [])[:_QUERY_KBS_PER_KB_KEEP]
+        scores = [item.get("metadata", {}).get("score") for item in kept]
+        known = [score for score in scores if isinstance(score, (int, float))]
+        low, high = (min(known), max(known)) if known else (0.0, 0.0)
+        for item, score in zip(kept, scores):
+            rerank_score = item.get("metadata", {}).get("rerank_score")
+            if rerank_score is not None:
+                reranked.append((float(rerank_score), item))
+                continue
+            if not isinstance(score, (int, float)):
+                # 无分数可用的检索结果（如自定义知识库后端）：无信号，沉底但保留
+                fallback.append((0.0, item))
+            elif high <= low:
+                # 库内分数完全相同：非零视作该库的最优候选，零分视作无信号
+                fallback.append((1.0 if high > 0 else 0.0, item))
+            else:
+                fallback.append(((score - low) / (high - low), item))
+
+    reranked.sort(key=lambda entry: entry[0], reverse=True)
+    fallback.sort(key=lambda entry: entry[0], reverse=True)
+    return [item for _, item in reranked] + [item for _, item in fallback]
+
+
 class QueryKBsInput(BaseModel):
     """并行查询多个知识库输入模型"""
 
@@ -361,12 +396,8 @@ async def retrieve_kbs(
     # 各库并行检索，单库失败不阻断其余库
     per_kb_outputs = await asyncio.gather(*[_retrieve_one(r, kid) for r, kid in targets])
 
-    # 合并各库非空结果，每库截取前 N 条保证跨库覆盖；结果内自带来源 kb_id
-    merged_results: list[dict] = []
-    for _, output in per_kb_outputs:
-        if output.get("status") != "ok":
-            continue
-        merged_results.extend(output.get("results", [])[:_QUERY_KBS_PER_KB_KEEP])
+    # 合并各库非空结果并全局排序，结果内自带来源 kb_id
+    merged_results = _merge_kb_results(per_kb_outputs)
 
     if not merged_results:
         return SearchOutputSchema(status="insufficient", reason="no_results", kb_id="").model_dump()

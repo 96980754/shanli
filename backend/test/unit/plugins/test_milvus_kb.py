@@ -610,6 +610,64 @@ async def test_hybrid_mode_filters_scores_below_similarity_threshold():
     assert chunks == []
 
 
+class MultiHitCollection(FakeCollection):
+    """按距离列表返回多条候选，供精排排序相关用例使用。"""
+
+    def __init__(self, distances: list[float]):
+        super().__init__(distances[0])
+        self.distances = distances
+
+    def hybrid_search(self, **kwargs):
+        self.hybrid_calls.append(kwargs)
+        return [[FakeHit(f"doc-{index}", distance) for index, distance in enumerate(self.distances)]]
+
+
+class FakeReranker:
+    def __init__(self, scores: list[float]):
+        self.scores = scores
+        self.calls = 0
+        self.closed = False
+
+    async def acompute_score(self, sentence_pairs, normalize=True):
+        self.calls += 1
+        return list(self.scores)
+
+    async def aclose(self):
+        self.closed = True
+
+
+def patch_reranker(monkeypatch, scores: list[float]) -> FakeReranker:
+    reranker = FakeReranker(scores)
+    monkeypatch.setattr("yuxi.models.rerank.get_reranker", lambda model: reranker)
+    return reranker
+
+
+async def test_hybrid_mode_sorts_by_rerank_score(monkeypatch):
+    """精排分与候选一一对应时，按精排分排序。"""
+    collection = MultiHitCollection([0.9, 0.8, 0.7])
+    kb = make_kb(collection)
+    reranker = patch_reranker(monkeypatch, [0.1, 0.9, 0.5])
+
+    chunks = await kb.aquery("hybrid query", "db", search_mode="hybrid", use_reranker=True, final_top_k=3)
+
+    assert reranker.calls == 1
+    assert [chunk["content"] for chunk in chunks] == ["doc-1", "doc-2", "doc-0"]
+    assert [chunk["rerank_score"] for chunk in chunks] == [0.9, 0.5, 0.1]
+
+
+async def test_hybrid_mode_keeps_retrieval_order_when_rerank_scores_mismatch(monkeypatch):
+    """精排分条数少于候选数时放弃本次精排：混用量纲会让未精排片段反超已精排片段。"""
+    collection = MultiHitCollection([0.9, 0.8, 0.7])
+    kb = make_kb(collection)
+    reranker = patch_reranker(monkeypatch, [0.1, 0.9])
+
+    chunks = await kb.aquery("hybrid query", "db", search_mode="hybrid", use_reranker=True, final_top_k=3)
+
+    assert reranker.calls == 1
+    assert [chunk["content"] for chunk in chunks] == ["doc-0", "doc-1", "doc-2"]
+    assert all("rerank_score" not in chunk for chunk in chunks)
+
+
 def test_query_params_config_uses_bm25_parameters():
     kb = MilvusKB.__new__(MilvusKB)
 

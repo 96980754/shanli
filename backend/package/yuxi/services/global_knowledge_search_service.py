@@ -14,7 +14,8 @@ from yuxi.utils import logger
 # - vector（COSINE）与 hybrid 的 score 都是有界相似度/加权分，可直接跨库比较；
 #   但各库默认 similarity_threshold=0.2 偏低，会带出大量低相关片段，这里在全局融合时
 #   用一个更高的下限过滤"无关内容"。
-# - keyword（BM25）的 bm25_score 无上界、跨库不可比，无法套用下限，退回互惠排名融合。
+# - keyword（BM25）的 bm25_score 无上界、跨库不可比，必须先在本库内归一化到 [0,1] 才能
+#   与上面这类分数放进同一次排序（见 _kb_global_scores），否则它会恒沉底被截断。
 VECTOR_RELEVANCE_FLOOR = 0.35
 
 
@@ -58,13 +59,12 @@ class GlobalKnowledgeSearchService:
         grouped = await asyncio.gather(*(search_one(database) for database in allowed))
         merged: list[dict] = []
         for database, results, _ in grouped:
-            for rank, result in enumerate(results, start=1):
+            for result, global_score in zip(results, self._kb_global_scores(results)):
+                if global_score is None:
+                    continue
                 item = dict(result)
                 item["kb_id"] = database["kb_id"]
                 item["kb_name"] = database.get("name") or database["kb_id"]
-                global_score = self._global_score(item, rank)
-                if global_score is None:
-                    continue
                 item["global_score"] = global_score
                 merged.append(item)
 
@@ -73,20 +73,44 @@ class GlobalKnowledgeSearchService:
         await self._enrich_file_paths(final)
         return final, any(search_failed for _, _, search_failed in grouped)
 
+    @classmethod
+    def _kb_global_scores(cls, results: list[dict]) -> list[float | None]:
+        """把单库结果的分数换算成可跨库比较的 [0,1] 全局分；None 表示被相关性下限过滤。
+
+        - 有界相似度（vector/hybrid 的 score）本身跨库可比，直接沿用，低于下限的过滤掉；
+        - 无界分（keyword 的 bm25_score）与无分数字段（自定义后端）跨库不可比，
+          在本库内归一化：有原始分时做 min-max，没有时按库内排名取相对位置。
+          两类都落在 [0,1]，既保序又不会因为量级太小而恒沉底被截断。
+        """
+        normalized_indexes = [index for index, item in enumerate(results) if cls._needs_normalize(item)]
+        scores: list[float | None] = [None] * len(results)
+        if normalized_indexes:
+            raws: list[float | None] = []
+            for index in normalized_indexes:
+                value = results[index].get("score")
+                raws.append(float(value) if value is not None else None)
+            known = [raw for raw in raws if raw is not None]
+            low, high = (min(known), max(known)) if known else (0.0, 0.0)
+            for rank, (index, raw) in enumerate(zip(normalized_indexes, raws), start=1):
+                if raw is None:
+                    scores[index] = (len(normalized_indexes) - rank + 1) / len(normalized_indexes)
+                elif high > low:
+                    scores[index] = (raw - low) / (high - low)
+                else:
+                    # 库内分数全都相同：非零视作该库的最优候选，零分视作无信号。
+                    scores[index] = 1.0 if raw > 0 else 0.0
+
+        for index, item in enumerate(results):
+            if cls._needs_normalize(item):
+                continue
+            score = float(item["score"])
+            scores[index] = score if score >= VECTOR_RELEVANCE_FLOOR else None
+        return scores
+
     @staticmethod
-    def _global_score(item: dict, rank: int) -> float | None:
-        """把单库结果的原始分换算成可跨库比较的全局分；返回 None 表示过滤该片段。"""
-        # BM25 分数无上界、跨库不可比，退回互惠排名融合（保留单库内相对次序）。
-        if "bm25_score" in item:
-            return 1 / (60 + rank)
-        score = item.get("score")
-        if score is None:
-            # 无分数可用的检索结果（如自定义知识库后端），同样退回 RRF，不误杀。
-            return 1 / (60 + rank)
-        score = float(score)
-        if score < VECTOR_RELEVANCE_FLOOR:
-            return None
-        return score
+    def _needs_normalize(item: dict) -> bool:
+        """BM25 分数无上界，无 score 字段则无从比较：两类都要先在库内归一化。"""
+        return "bm25_score" in item or item.get("score") is None
 
     @staticmethod
     async def _enrich_file_paths(items: list[dict]) -> None:

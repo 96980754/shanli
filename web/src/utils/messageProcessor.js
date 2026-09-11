@@ -490,6 +490,8 @@ export class MessageProcessor {
    * 同一文档跨多个知识库命中（如「营销包」与「定位资料」都含同一份培训材料，
    * metadata.source 路径不同但文件名一致）时合并为一组。
    * 来源面板的分组与「来源 N」计数共用此口径，避免数字与卡片数不一致。
+   * 分组后按相关性排序（组内按分数降序、组间按组内最高分降序），
+   * 面板顺序即相关性顺序；无分数的片段（open_kb_document 等）保持原相对序沉底。
    *
    * @param {Array} chunks - 检索块数组
    * @returns {Array<{filename: string, displayName: string, kb_id: string, file_id: string, chunks: Array}>}
@@ -526,7 +528,17 @@ export class MessageProcessor {
       }
       groups.get(groupKey).chunks.push(item)
     }
-    return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
+
+    const scoreOf = (item) => {
+      const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {}
+      if (typeof item.score === 'number') return item.score
+      return typeof metadata.score === 'number' ? metadata.score : -Infinity
+    }
+    const groupScore = (group) => group.chunks.reduce((max, item) => Math.max(max, scoreOf(item)), -Infinity)
+
+    return Array.from(groups.values())
+      .map((group) => ({ ...group, chunks: [...group.chunks].sort((a, b) => scoreOf(b) - scoreOf(a)) }))
+      .sort((a, b) => groupScore(b) - groupScore(a))
   }
 
   /**

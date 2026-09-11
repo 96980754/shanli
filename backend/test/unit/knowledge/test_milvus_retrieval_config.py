@@ -119,3 +119,21 @@ def test_rrf_fusion_merges_chunk_and_graph_rankings():
     assert [chunk["metadata"]["chunk_id"] for chunk in fused] == ["b", "a", "c"]
     assert fused[0]["graph_score"] == 0.7
     assert fused[0]["fusion_sources"] == ["chunk", "graph"]
+    # 融合分只用于本次排序，不得回写 score：全库检索按 score（有界相似度/加权分）判断相关性，
+    # 回写成 RRF 排名量级会让相关性下限把全部命中过滤掉。
+    assert [chunk["score"] for chunk in fused] == [0.8, 0.9, 0.6]
+
+
+def test_rrf_fusion_keeps_chunk_without_chunk_id():
+    """缺 chunk_id 的片段退回「文件+片内序号」作为键，不能只在开启图检索时凭空消失；
+    连 file_id/chunk_index 都没有的片段无从合并，只能丢弃。"""
+    kb = object.__new__(MilvusKB)
+    base_chunks = [
+        {"content": "no id", "metadata": {"chunk_id": None, "file_id": "f1", "chunk_index": 3}, "score": 0.9},
+        {"content": "no identity", "score": 0.7},
+    ]
+
+    fused = kb._fuse_chunk_rankings(base_chunks, [], graph_weight=0.5)
+
+    assert [chunk["content"] for chunk in fused] == ["no id"]
+    assert fused[0]["fusion_sources"] == ["chunk"]

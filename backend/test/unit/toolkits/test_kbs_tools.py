@@ -467,6 +467,58 @@ async def test_query_kbs_caps_results_per_kb(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_query_kbs_orders_merged_results_by_rerank_score(monkeypatch) -> None:
+    """跨库合并按全局相关性排序，而不是按 kb_ids 的传入顺序拼接。"""
+
+    async def _retriever_a(query_text: str, **kwargs):
+        del kwargs
+        return [
+            {"content": "a-0", "metadata": {"chunk_id": "a-0"}, "score": 0.9, "rerank_score": 0.71},
+            {"content": "a-1", "metadata": {"chunk_id": "a-1"}, "score": 0.8, "rerank_score": 0.52},
+        ]
+
+    async def _retriever_b(query_text: str, **kwargs):
+        del kwargs
+        return [{"content": "b-0", "metadata": {"chunk_id": "b-0"}, "score": 0.4, "rerank_score": 0.68}]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _retriever_a), "db-2": ("milvus", _retriever_b)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    assert [item["content"] for item in result["results"]] == ["a-0", "b-0", "a-1"]
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_keeps_unreranked_kb_behind_reranked_tier(monkeypatch) -> None:
+    """未开精排的库量纲不同，排在精排片段之后，不能靠原始分反超。"""
+
+    async def _reranked(query_text: str, **kwargs):
+        del kwargs
+        return [{"content": "reranked", "metadata": {"chunk_id": "r-0"}, "score": 0.6, "rerank_score": 0.52}]
+
+    async def _plain(query_text: str, **kwargs):
+        del kwargs
+        return [
+            {"content": "plain-high", "metadata": {"chunk_id": "p-0"}, "score": 0.95},
+            {"content": "plain-low", "metadata": {"chunk_id": "p-1"}, "score": 0.55},
+        ]
+
+    _patch_multi_retrievers(
+        monkeypatch,
+        retrievers={"db-1": ("milvus", _plain), "db-2": ("milvus", _reranked)},
+    )
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kbs(kb_ids=["db-1", "db-2"], query_text="cert", runtime=runtime)
+
+    assert [item["content"] for item in result["results"]] == ["reranked", "plain-high", "plain-low"]
+
+
+@pytest.mark.asyncio
 async def test_find_kb_document_returns_context_windows(monkeypatch) -> None:
     _patch_retrievers(monkeypatch)
     monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)

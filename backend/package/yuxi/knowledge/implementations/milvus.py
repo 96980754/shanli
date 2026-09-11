@@ -1094,7 +1094,8 @@ class MilvusKB(KnowledgeBase):
 
                 if results and len(results) > 0 and len(results[0]) > 0:
                     for hit in results[0]:
-                        similarity = hit.distance if metric_type == VECTOR_METRIC_TYPE else 1 / (1 + hit.distance)
+                        # 集合固定按 VECTOR_METRIC_TYPE(COSINE) 建索引，Milvus 返回的 distance 即余弦相似度
+                        similarity = hit.distance
                         if similarity < similarity_threshold:
                             continue
 
@@ -1220,12 +1221,18 @@ class MilvusKB(KnowledgeBase):
                     documents_text = [chunk["content"] for chunk in retrieved_chunks]
                     rerank_scores = await reranker.acompute_score([query_text, documents_text], normalize=True)
 
-                    for chunk, rerank_score in zip(retrieved_chunks, rerank_scores):
-                        chunk["rerank_score"] = float(rerank_score)
+                    if len(rerank_scores) != len(retrieved_chunks):
+                        # 精排分与候选不齐时放弃本次精排：混用精排分和原始分排序（两者量纲不同）
+                        # 会让未被精排的片段反超已精排的片段。
+                        logger.warning(
+                            f"Reranking returned {len(rerank_scores)} scores for {len(retrieved_chunks)} chunks "
+                            f"of {kb_id}; keeping the retrieval order"
+                        )
+                    else:
+                        for chunk, rerank_score in zip(retrieved_chunks, rerank_scores):
+                            chunk["rerank_score"] = float(rerank_score)
 
-                    retrieved_chunks.sort(
-                        key=lambda item: item.get("rerank_score", item.get("score", 0.0)), reverse=True
-                    )
+                        retrieved_chunks.sort(key=lambda item: item["rerank_score"], reverse=True)
                     elapsed = time.time() - rerank_start
                     logger.info(f"Reranking completed for {kb_id} in {elapsed:.3f}s with model {reranker_model}")
                 finally:
@@ -1289,7 +1296,8 @@ class MilvusKB(KnowledgeBase):
                     top_k=graph_top_k,
                 ),
             )
-            # 已审核并发布的断言（知识冲突裁决结果）优先返回
+            # 已审核并发布的断言（知识冲突裁决结果）作为候选参与图检索：
+            # 图侧没有别的候选时直接返回它们；否则与 PPR 召回的片段一起交给融合按 graph_weight 排序。
             assertion_chunks = await self._build_reviewed_assertion_chunks(kb_id, assertion_hits)
             if not entity_hits and not triple_hits and assertion_chunks:
                 return assertion_chunks
@@ -1419,14 +1427,22 @@ class MilvusKB(KnowledgeBase):
         def merge_chunk(chunk: dict, rank: int, weight: float, source: str) -> None:
             chunk_id = chunk.get("metadata", {}).get("chunk_id")
             if not chunk_id:
-                return
+                # 没有 chunk_id 就不能按片段合并（同一片段在两条召回里会各存一份）。
+                # 退回「文件+片内序号」作为键，避免该片段只在开启图检索时凭空消失。
+                metadata = chunk.get("metadata") or {}
+                chunk_id = f"{metadata.get('file_id')}:{metadata.get('chunk_index')}"
+                if chunk_id == "None:None":
+                    logger.warning("Skipping chunk without identity in graph fusion")
+                    return
             score = weight / (rrf_k + rank)
             existing = fused.get(chunk_id)
             if existing is None:
                 existing = {**chunk, "fusion_score": 0.0, "fusion_sources": []}
                 fused[chunk_id] = existing
+            # fusion_score 只作本次融合排序用，不回写 score：
+            # score 约定为有界相似度/加权分（跨库可比），RRF 融合分是排名量级(≈1/(60+rank))，
+            # 回写会让全库检索的相关性下限把所有命中都过滤掉。
             existing["fusion_score"] += score
-            existing["score"] = existing["fusion_score"]
             existing["fusion_sources"].append(source)
             if source == "graph" and "graph_score" in chunk:
                 existing["graph_score"] = chunk["graph_score"]
