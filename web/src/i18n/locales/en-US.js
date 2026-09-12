@@ -397,6 +397,8 @@ export default {
     userUploadedImage: 'User uploaded image',
     reasoningProcess: 'Reasoning process',
     transferToHuman: 'Transfer to human',
+    curatedQASource: 'Answer source: curated Q&A',
+    curatedQASemanticSource: 'Answer source: curated Q&A (semantic match)',
     businessDomain: {
       diaodutai: 'Business domain: Dispatch console',
       terminal: 'Business domain: Terminal',

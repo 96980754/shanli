@@ -70,6 +70,8 @@
 
       <div v-else-if="parsedData.reasoning_content" class="empty-block"></div>
 
+      <div v-if="qaSourceLabel" class="qa-source-label">{{ qaSourceLabel }}</div>
+
       <div v-if="handoffAvailable" class="handoff-action">
         <span class="handoff-category">{{ handoffCategory }}</span>
         <a-button class="handoff-button" :loading="handoffSending" @click="createHandoff">{{
@@ -245,6 +247,14 @@ const handoffCategory = computed(() => {
   const key = `chat.businessDomain.${domain}`
   const text = t(key)
   return text === key ? t('chat.businessDomain.custom', { domain }) : text
+})
+
+const qaSourceLabel = computed(() => {
+  const metadata = props.message.extra_metadata || {}
+  if (!metadata.human_confirmed || !String(metadata.answer_source || '').startsWith('curated_qa')) return ''
+  return metadata.answer_source === 'curated_qa_semantic'
+    ? t('chat.curatedQASemanticSource')
+    : t('chat.curatedQASource')
 })
 
 const createHandoff = async () => {
@@ -759,6 +769,12 @@ watch(isReasoning, (active) => {
 
 .message-md {
   margin: 8px 0;
+}
+
+.qa-source-label {
+  margin: 8px 0 4px;
+  color: var(--gray-500);
+  font-size: 12px;
 }
 
 .handoff-action {

@@ -393,6 +393,8 @@ export default {
     userUploadedImage: '用户上传的图片',
     reasoningProcess: '推理过程',
     transferToHuman: '转人工',
+    curatedQASource: '答案来源：人工维护问答',
+    curatedQASemanticSource: '答案来源：人工维护问答（语义匹配）',
     businessDomain: {
       diaodutai: '业务域：调度台',
       terminal: '业务域：终端',

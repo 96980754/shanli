@@ -43,6 +43,15 @@ class CuratedQARepository:
         result = await self.session.execute(select(CuratedQAPair).where(CuratedQAPair.id == qa_id))
         return result.scalar_one_or_none()
 
+    async def get_enabled(self, qa_id: int) -> CuratedQAPair | None:
+        result = await self.session.execute(
+            select(CuratedQAPair).where(
+                CuratedQAPair.id == qa_id,
+                CuratedQAPair.enabled.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def list_enabled_for_agent(self, agent_slug: str) -> list[CuratedQAPair]:
         """某 agent 的全部启用问答对，供语义召回扫描（含懒回填前的空向量）。"""
         result = await self.session.execute(
