@@ -15,6 +15,8 @@
 
 ### 开发记录
 
+- **知识缺口支持按业务分类筛选**——拒答落库时保存已解析的 `domain`，知识缺口管理接口与页面新增业务分类筛选，并从系统业务线配置生成选项；历史记录无分类时归入「未分类」。
+
 - **人工问答对命中后二次校验启用状态并标注答案来源**——① QA 快答的组装已移入 worker，但 worker 侧按 `curated_qa_id` 取问答对用的是无条件查询（`CuratedQARepository.get`），在「POST 检测命中 → worker 组装」的窗口期里管理员若禁用或删除该问答对，worker 仍会照常输出人工答案。现新增 `get_enabled(qa_id)`（查询同时限定 `enabled=True`）并让 `stream_curated_qa_answer` 改用它；命中已禁用/删除的问答对走既有 `curated_qa_missing` 分支明确报错，不静默回退普通 Agent。② 用户侧低干扰展示答案来源：`AgentMessageComponent` 依 assistant 消息 `extra_metadata` 的 `human_confirmed` 与 `answer_source`，在答案上方以灰色小字显示「答案来源：人工维护问答」（语义召回命中显示「答案来源：人工维护问答（语义匹配）」），不暴露内部 id 与 reason。**验证**：`test_curated_qa_run_service.py` 补 `get_enabled` 替身，15 条单测全绿；`test:frontend` 全绿；i18n 补回被覆盖的 `chat.transferToHuman` 键，新增两键中英文一致（`check-i18n` 其余报错为既有的 `retrievalConfig.*` 缺口，与本次无关）。
 
 - **第二批缺陷修复**——嵌套 HTML/DOCX 表格在知识入库时压平保留内层内容，语义表格转换只遍历当前表格直接行列；知识库回答预览按后端类型严格校验显式 `search_mode`，非法值在检索前返回 422；补齐英文知识拒答、范围拒答和系统错误固定文案及分类，保持结构化拒答、转人工与缺口语义和中文一致。

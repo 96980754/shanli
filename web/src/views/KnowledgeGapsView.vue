@@ -18,6 +18,7 @@
       />
       <a-select v-model:value="filters.status" :options="statusOptions" class="filter-select" @change="applyFilters" />
       <a-select v-model:value="filters.reason" :options="reasonOptions" class="filter-select" @change="applyFilters" />
+      <a-select v-model:value="filters.domain" :options="domainOptions" class="filter-select" @change="applyFilters" />
     </div>
 
     <a-table
@@ -40,6 +41,9 @@
         <template v-else-if="column.key === 'reason'">
           {{ reasonLabel(record.reason) }}
         </template>
+        <template v-else-if="column.key === 'domain'">
+          {{ domainLabel(record.domain) }}
+        </template>
         <template v-else-if="column.key === 'kb_scope'">
           <span>{{ record.kb_scope?.join(', ') || $t('gaps.kbScopeUnspecified') }}</span>
         </template>
@@ -57,6 +61,7 @@
         <a-descriptions-item :label="t('eval.questionColumn')">{{ detail.question }}</a-descriptions-item>
         <a-descriptions-item :label="t('common.status')">{{ statusLabel(detail.status) }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.reasonLabel')">{{ reasonLabel(detail.reason) }}</a-descriptions-item>
+        <a-descriptions-item :label="t('gaps.businessDomainLabel')">{{ domainLabel(detail.domain) }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.occurrenceCountLabel')">{{ detail.occurrence_count }}</a-descriptions-item>
         <a-descriptions-item label="Agent">{{ detail.agent_slug }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.kbScopeLabel')">{{ detail.kb_scope?.join(', ') || $t('gaps.kbScopeUnspecified') }}</a-descriptions-item>
@@ -139,8 +144,10 @@ import { Empty, message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
+import { useConfigStore } from '@/stores/config'
 
 const { t } = useI18n()
+const configStore = useConfigStore()
 
 const statusOptions = computed(() => [
   { label: t('gaps.statusAll'), value: '' },
@@ -156,11 +163,16 @@ const reasonOptions = computed(() => [
   { label: t('gaps.reasonEmptyContent'), value: 'empty_content' },
   { label: t('gaps.reasonInsufficientEvidence'), value: 'insufficient_evidence' }
 ])
+const domainOptions = computed(() => [
+  { label: t('gaps.businessDomainAll'), value: '' },
+  ...(configStore.config.business_lines || []).map((line) => ({ label: line.name, value: line.code })),
+  { label: t('gaps.businessDomainUnknown'), value: 'unknown' }
+])
 const columns = computed(() => [
   { title: t('eval.questionColumn'), key: 'question', width: 360 },
   { title: t('gaps.occurrenceCountColumn'), dataIndex: 'occurrence_count', width: 80 },
   { title: t('common.reason'), key: 'reason', width: 140 },
-  { title: t('gaps.kbScopeLabel'), key: 'kb_scope', width: 180 },
+  { title: t('gaps.businessDomainLabel'), key: 'domain', width: 140 },
   { title: t('common.status'), key: 'status', width: 100 },
   { title: t('gaps.lastSeenLabel'), key: 'last_seen_at', width: 170 },
   { title: t('gaps.actionsColumn'), key: 'actions', width: 150, fixed: 'right' }
@@ -173,7 +185,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const detailOpen = ref(false)
 const detail = ref(null)
-const filters = reactive({ query: '', status: '', reason: '' })
+const filters = reactive({ query: '', status: '', reason: '', domain: '' })
 
 const webSearchOpen = ref(false)
 const webSearching = ref(false)
@@ -195,6 +207,7 @@ const pagination = computed(() => ({
 
 const statusLabel = (status) => statusOptions.value.find((item) => item.value === status)?.label || status
 const reasonLabel = (reason) => reasonOptions.value.find((item) => item.value === reason)?.label || reason
+const domainLabel = (domain) => domainOptions.value.find((item) => item.value === domain)?.label || domain
 const statusColor = (status) => ({ new: 'blue', processing: 'orange', resolved: 'green', ignored: 'default' })[status]
 
 async function loadGaps() {
@@ -203,6 +216,7 @@ async function loadGaps() {
     const response = await dashboardApi.getKnowledgeGaps({
       status: filters.status,
       reason: filters.reason,
+      domain: filters.domain,
       query: filters.query.trim(),
       limit: pageSize.value,
       offset: (page.value - 1) * pageSize.value

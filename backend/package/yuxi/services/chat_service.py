@@ -855,6 +855,7 @@ async def save_messages_from_langgraph_state(
                 agent_slug=str(getattr(conversation, "agent_id", "") or ""),
                 kb_scope=evidence.get("kb_scope") or [],
                 reason=str(disposition.get("reason") or ""),
+                domain=str(disposition.get("domain") or "unknown"),
                 uid=str(getattr(conversation, "uid", "") or "") or None,
                 conversation_thread_id=thread_id,
                 assistant_message_id=final_ai_message.id,

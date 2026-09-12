@@ -37,6 +37,7 @@ class KnowledgeGapRepository:
             set_={
                 "question": excluded.question,
                 "reason": excluded.reason,
+                "domain": excluded.domain,
                 "occurrence_count": KnowledgeGap.occurrence_count + 1,
                 "uid": excluded.uid,
                 "conversation_thread_id": excluded.conversation_thread_id,
@@ -73,6 +74,7 @@ class KnowledgeGapRepository:
         status: str | None = None,
         agent_slug: str | None = None,
         reason: str | None = None,
+        domain: str | None = None,
         query: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -84,6 +86,8 @@ class KnowledgeGapRepository:
             conditions.append(KnowledgeGap.agent_slug == agent_slug)
         if reason:
             conditions.append(KnowledgeGap.reason == reason)
+        if domain:
+            conditions.append(KnowledgeGap.domain == domain)
         if query:
             conditions.append(KnowledgeGap.question.ilike(f"%{query}%"))
         where = and_(*conditions) if conditions else True

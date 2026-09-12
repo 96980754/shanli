@@ -440,6 +440,7 @@ class KnowledgeGap(Base):
         UniqueConstraint("question_hash", "agent_slug", "kb_scope_hash", name="uq_knowledge_gaps_scope"),
         Index("ix_knowledge_gaps_status_seen", "status", "last_seen_at"),
         Index("ix_knowledge_gaps_agent_seen", "agent_slug", "last_seen_at"),
+        Index("ix_knowledge_gaps_domain_seen", "domain", "last_seen_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -451,6 +452,7 @@ class KnowledgeGap(Base):
     kb_scope_hash = Column(String(64), nullable=False)
     status = Column(String(32), nullable=False, default="new")
     reason = Column(String(64), nullable=False)
+    domain = Column(String(64), nullable=False, default="unknown")
     occurrence_count = Column(Integer, nullable=False, default=1)
     uid = Column(String(100), nullable=True)
     conversation_thread_id = Column(String(64), nullable=True)
@@ -477,6 +479,7 @@ class KnowledgeGap(Base):
             "kb_scope": self.kb_scope or [],
             "status": self.status,
             "reason": self.reason,
+            "domain": self.domain or "unknown",
             "occurrence_count": self.occurrence_count,
             "uid": self.uid,
             "conversation_thread_id": self.conversation_thread_id,

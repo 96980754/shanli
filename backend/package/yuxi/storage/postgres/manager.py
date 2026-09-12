@@ -1248,6 +1248,7 @@ class PostgresManager(metaclass=SingletonMeta):
                 kb_scope_hash VARCHAR(64) NOT NULL,
                 status VARCHAR(32) NOT NULL DEFAULT 'new',
                 reason VARCHAR(64) NOT NULL,
+                domain VARCHAR(64) NOT NULL DEFAULT 'unknown',
                 occurrence_count INTEGER NOT NULL DEFAULT 1,
                 uid VARCHAR(100),
                 conversation_thread_id VARCHAR(64),
@@ -1265,6 +1266,10 @@ class PostgresManager(metaclass=SingletonMeta):
             """,
             "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_status_seen ON knowledge_gaps(status, last_seen_at DESC)",
             "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_agent_seen ON knowledge_gaps(agent_slug, last_seen_at DESC)",
+            "ALTER TABLE IF EXISTS knowledge_gaps "
+            "ADD COLUMN IF NOT EXISTS domain VARCHAR(64) NOT NULL DEFAULT 'unknown'",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_domain_seen "
+            "ON knowledge_gaps(domain, last_seen_at DESC)",
             # 团队分组：表 + users.team_id + 默认团队种子 + 存量用户回填
             """
             CREATE TABLE IF NOT EXISTS teams (

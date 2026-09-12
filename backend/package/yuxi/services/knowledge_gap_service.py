@@ -55,6 +55,7 @@ async def record_knowledge_gap(
     uid: str | None,
     conversation_thread_id: str | None,
     assistant_message_id: int,
+    domain: str = "unknown",
 ) -> None:
     if reason not in GAP_REASONS:
         return
@@ -66,6 +67,7 @@ async def record_knowledge_gap(
                     **identity,
                     "question": question.strip(),
                     "reason": reason,
+                    "domain": domain,
                     "uid": uid,
                     "conversation_thread_id": conversation_thread_id,
                     "assistant_message_id": assistant_message_id,
