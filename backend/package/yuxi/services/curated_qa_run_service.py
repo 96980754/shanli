@@ -211,7 +211,7 @@ async def stream_curated_qa_answer(
     qa_repo = CuratedQARepository(db)
     try:
         curated_qa_id = meta.get("curated_qa_id")
-        qa_pair = curated_qa_id and await qa_repo.get(curated_qa_id)
+        qa_pair = curated_qa_id and await qa_repo.get_enabled(curated_qa_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("人工问答对加载失败（id=%s）: %s", meta.get("curated_qa_id"), exc)
         qa_pair = None

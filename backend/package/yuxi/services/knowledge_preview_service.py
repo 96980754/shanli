@@ -12,6 +12,15 @@ from yuxi.utils.logging_config import logger
 
 PREVIEW_CONTEXT_CHUNK_LIMIT = 5
 INSUFFICIENT_ANSWER = "信息不足，无法回答。"
+SEARCH_MODES_BY_KB_TYPE = {
+    "milvus": {"vector", "keyword", "hybrid"},
+    "dify": {"vector", "keyword", "hybrid"},
+    "notion": {"notion_search", "data_source_scan", "hybrid"},
+}
+
+
+class KnowledgePreviewInputError(ValueError):
+    pass
 
 
 class KnowledgePreviewRetrievalError(RuntimeError):
@@ -46,12 +55,24 @@ class KnowledgePreviewService:
         if not database:
             raise KnowledgePreviewRetrievalError("knowledge base unavailable")
 
+        normalized_meta = dict(meta)
+        kb_type = str(database.get("kb_type") or "milvus").lower()
+        if "search_mode" in normalized_meta:
+            search_mode = normalized_meta["search_mode"]
+            if not isinstance(search_mode, str) or not search_mode.strip():
+                raise KnowledgePreviewInputError("search_mode must be a non-empty string")
+            search_mode = search_mode.strip().lower()
+            allowed_modes = SEARCH_MODES_BY_KB_TYPE.get(kb_type)
+            if allowed_modes is None or search_mode not in allowed_modes:
+                raise KnowledgePreviewInputError(f"search_mode is not supported by {kb_type}")
+            normalized_meta["search_mode"] = search_mode
+
         try:
             raw_results = await self.knowledge_manager.aquery(
                 query,
                 kb_id=kb_id,
                 agent_call=True,
-                **meta,
+                **normalized_meta,
             )
             normalized_results = [
                 item
@@ -64,7 +85,7 @@ class KnowledgePreviewService:
             logger.warning("Knowledge preview retrieval failed for {}: {}", kb_id, type(exc).__name__)
             raise KnowledgePreviewRetrievalError("retrieval unavailable") from exc
 
-        retrieval = self._effective_retrieval(database, meta, normalized_results)
+        retrieval = self._effective_retrieval(database, normalized_meta, normalized_results)
         if not normalized_results:
             return {
                 "query": query,
@@ -190,11 +211,8 @@ class KnowledgePreviewService:
         stored = ((database.get("query_params") or {}).get("options") or {})
         effective = {**stored, **meta}
         kb_type = str(database.get("kb_type") or "milvus").lower()
-        mode = str(effective.get("search_mode") or "vector").lower()
-        if kb_type == "milvus" and mode not in {"vector", "keyword", "hybrid"}:
-            mode = "vector"
-        if kb_type != "milvus":
-            mode = kb_type
+        default_mode = "hybrid" if kb_type == "notion" else "vector"
+        mode = str(effective.get("search_mode") or default_mode).strip().lower()
         return {
             "mode": mode,
             "top_k": len(results),

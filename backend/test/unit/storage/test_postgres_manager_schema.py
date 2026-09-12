@@ -5,6 +5,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex
 
 from yuxi.storage.postgres.manager import PostgresManager
+from yuxi.storage.postgres.models_business import MessageFeedback
 from yuxi.storage.postgres.models_knowledge import KnowledgeBaseCategory
 
 
@@ -47,6 +48,40 @@ class _RecordingEngine:
 
     def begin(self):
         return _RecordingBegin(self.connection)
+
+
+def test_message_feedback_has_user_message_unique_constraint():
+    constraint = next(
+        constraint
+        for constraint in MessageFeedback.__table__.constraints
+        if constraint.name == "uq_message_feedback_message_uid"
+    )
+
+    assert [column.name for column in constraint.columns] == ["message_id", "uid"]
+
+
+@pytest.mark.asyncio
+async def test_ensure_business_schema_cleans_duplicate_feedback_before_unique_constraint():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_business_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "WITH ranked_feedbacks AS" in statements
+    assert "ADD CONSTRAINT uq_message_feedback_message_uid UNIQUE (message_id, uid)" in statements
+    assert statements.index("WITH ranked_feedbacks AS") < statements.index(
+        "ADD CONSTRAINT uq_message_feedback_message_uid UNIQUE (message_id, uid)"
+    )
 
 
 @pytest.mark.asyncio

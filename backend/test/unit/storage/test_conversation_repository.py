@@ -28,7 +28,27 @@ async def conversation_session():
     await engine.dispose()
 
 
-def test_normalize_title_truncates_when_too_long():
+@pytest.mark.asyncio
+async def test_get_message_metadata_ids_by_thread_id_returns_only_string_ids(conversation_session):
+    first = Conversation(thread_id="thread-ids", uid="user-a", agent_id="agent-a", title="IDs", status="active")
+    other = Conversation(thread_id="other-thread", uid="user-a", agent_id="agent-a", title="Other", status="active")
+    conversation_session.add_all([first, other])
+    await conversation_session.flush()
+    conversation_session.add_all([
+        Message(conversation=first, role="assistant", content="one", extra_metadata={"id": "one"}),
+        Message(conversation=first, role="assistant", content="two", extra_metadata={"id": "two"}),
+        Message(conversation=first, role="assistant", content="missing", extra_metadata={}),
+        Message(conversation=first, role="assistant", content="number", extra_metadata={"id": 3}),
+        Message(conversation=other, role="assistant", content="other", extra_metadata={"id": "other"}),
+    ])
+    await conversation_session.commit()
+
+    repo = ConversationRepository(conversation_session)
+
+    assert await repo.get_message_metadata_ids_by_thread_id("thread-ids") == {"one", "two"}
+
+
+
     repo = ConversationRepository(None)  # type: ignore[arg-type]
     raw = "a" * (MAX_CONVERSATION_TITLE_LENGTH + 50)
 

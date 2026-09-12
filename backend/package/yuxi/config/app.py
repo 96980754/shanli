@@ -129,7 +129,7 @@ def _normalize_wecom_customer_services(value: Any) -> list[dict[str, Any]]:
 
 
 # 业务线（拒答分类域值）默认清单。code 为稳定英文 snake_case（数据库/统计用，一经使用不更名），
-# name 为显示名；keywords 主要供跑题门词表认词（业务特有词，避免泛词误放行跑题），judge 靠 name 语义判定。
+# name 为显示名；keywords 供跑题门词表认词及拒答 domain 兜底分类（业务特有词，避免泛词误匹配），
 # unknown 为系统保留兜底值，不进入清单。部署方可按业务在设置页增删/改名/补词。
 _DEFAULT_BUSINESS_LINES: list[dict[str, Any]] = [
     {"code": "diaodutai", "name": "调度台", "keywords": ["调度台", "mcx", "指挥调度"]},

@@ -397,6 +397,8 @@ export default {
     userUploadedImage: 'User uploaded image',
     reasoningProcess: 'Reasoning process',
     transferToHuman: 'Transfer to human',
+    curatedQASource: 'Answer source: curated Q&A',
+    curatedQASemanticSource: 'Answer source: curated Q&A (semantic match)',
     businessDomain: {
       diaodutai: 'Business domain: Dispatch console',
       terminal: 'Business domain: Terminal',
@@ -893,6 +895,7 @@ export default {
     satisfactionRateTip:
       'Satisfaction counts unreplied answers as satisfied: denominator = settled AI answers in conversations (incl. refusals / human handoff); (likes + unreplied) / evaluable answers',
     participationRate: 'Feedback participation {rate}%',
+    ratedSatisfaction: 'Rated satisfaction {rate}% ({count} ratings)',
     callStatsTitle: 'Call Statistics',
     timeRangeLast14Hours: 'Last 14 Hours',
     timeRangeLast14Days: 'Last 14 Days',

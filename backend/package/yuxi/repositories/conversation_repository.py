@@ -276,6 +276,18 @@ class ConversationRepository:
         logger.debug(f"Added tool call {tool_name} to message {message_id}")
         return tool_call
 
+    async def get_message_metadata_ids_by_thread_id(self, thread_id: str) -> set[str]:
+        result = await self.db.execute(
+            select(Message.extra_metadata["id"])
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(Conversation.thread_id == thread_id)
+        )
+        return {
+            value
+            for (value,) in result.all()
+            if isinstance(value, str)
+        }
+
     async def get_messages(self, conversation_id: int, limit: int | None = None, offset: int = 0) -> list[Message]:
         query = (
             select(Message)

@@ -8,6 +8,7 @@ import pytest
 
 from yuxi.services.knowledge_preview_service import (
     INSUFFICIENT_ANSWER,
+    KnowledgePreviewInputError,
     KnowledgePreviewModelError,
     KnowledgePreviewRetrievalError,
     KnowledgePreviewService,
@@ -143,6 +144,84 @@ async def test_preview_can_keep_retrieval_only_mode_without_calling_model():
     assert result["citations"] == []
     assert [item["id"] for item in result["retrieved_chunks"]] == ["chunk-v2"]
     model_selector.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_preview_normalizes_valid_search_mode_before_query():
+    manager = SimpleNamespace(
+        get_database_info=AsyncMock(return_value=_database()),
+        aquery=AsyncMock(return_value=[]),
+    )
+    service = KnowledgePreviewService(
+        knowledge_manager=manager,
+        file_repository=SimpleNamespace(list_by_file_ids=AsyncMock(return_value=[])),
+        model_selector=Mock(),
+    )
+
+    result = await service.preview(kb_id="kb-1", query="问题", meta={"search_mode": " Hybrid "})
+
+    manager.aquery.assert_awaited_once_with("问题", kb_id="kb-1", agent_call=True, search_mode="hybrid")
+    assert result["retrieval"]["mode"] == "hybrid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("search_mode", ["invalid", "", None, 3])
+async def test_preview_rejects_invalid_search_mode_before_query(search_mode):
+    manager = SimpleNamespace(
+        get_database_info=AsyncMock(return_value=_database()),
+        aquery=AsyncMock(),
+    )
+    model_selector = Mock()
+    service = KnowledgePreviewService(
+        knowledge_manager=manager,
+        file_repository=SimpleNamespace(),
+        model_selector=model_selector,
+    )
+
+    with pytest.raises(KnowledgePreviewInputError):
+        await service.preview(kb_id="kb-1", query="问题", meta={"search_mode": search_mode})
+
+    manager.aquery.assert_not_awaited()
+    model_selector.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_preview_supports_dify_mode_and_reports_actual_mode():
+    database = _database()
+    database["kb_type"] = "dify"
+    manager = SimpleNamespace(
+        get_database_info=AsyncMock(return_value=database),
+        aquery=AsyncMock(return_value=[]),
+    )
+    service = KnowledgePreviewService(
+        knowledge_manager=manager,
+        file_repository=SimpleNamespace(),
+        model_selector=Mock(),
+    )
+
+    result = await service.preview(kb_id="kb-1", query="问题", meta={"search_mode": "keyword"})
+
+    assert result["retrieval"]["mode"] == "keyword"
+
+
+@pytest.mark.asyncio
+async def test_preview_supports_notion_mode_and_reports_actual_mode():
+    database = _database()
+    database["kb_type"] = "notion"
+    database["query_params"]["options"]["search_mode"] = "hybrid"
+    manager = SimpleNamespace(
+        get_database_info=AsyncMock(return_value=database),
+        aquery=AsyncMock(return_value=[]),
+    )
+    service = KnowledgePreviewService(
+        knowledge_manager=manager,
+        file_repository=SimpleNamespace(),
+        model_selector=Mock(),
+    )
+
+    result = await service.preview(kb_id="kb-1", query="问题", meta={"search_mode": "data_source_scan"})
+
+    assert result["retrieval"]["mode"] == "data_source_scan"
 
 
 @pytest.mark.asyncio

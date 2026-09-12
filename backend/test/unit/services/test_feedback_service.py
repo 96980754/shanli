@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from yuxi.services import feedback_service as svc
+from yuxi.storage.postgres.models_business import MessageFeedback
 
 
 class _FakeResult:
@@ -15,16 +16,25 @@ class _FakeResult:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalar_one(self):
+        return self.value
+
 
 class _FakeSession:
     def __init__(self, results):
         self.results = list(results)
+        self.queries = []
         self.added = []
         self.committed = False
         self.rolled_back = False
 
-    async def execute(self, _query):
-        return _FakeResult(self.results.pop(0))
+    async def execute(self, query):
+        self.queries.append(query)
+        value = self.results.pop(0)
+        if isinstance(value, MessageFeedback):
+            value.id = value.id or 9
+            value.created_at = value.created_at or datetime(2026, 1, 2, 3, 4, 5)
+        return _FakeResult(value)
 
     def add(self, item):
         self.added.append(item)
@@ -48,7 +58,8 @@ async def test_submit_message_feedback_syncs_langfuse_score(monkeypatch: pytest.
         extra_metadata={"langfuse_trace_id": "trace-1"},
     )
     conversation = SimpleNamespace(id=7, uid="user-1")
-    db = _FakeSession([message, conversation, None])
+    feedback = MessageFeedback(message_id=3, uid="user-1", rating="like", reason=None)
+    db = _FakeSession([message, conversation, feedback])
     calls = []
 
     monkeypatch.setattr(svc, "submit_user_feedback_score", lambda **kwargs: calls.append(kwargs) or True)
@@ -70,6 +81,7 @@ async def test_submit_message_feedback_syncs_langfuse_score(monkeypatch: pytest.
     }
     assert db.committed is True
     assert db.rolled_back is False
+    assert "ON CONFLICT ON CONSTRAINT uq_message_feedback_message_uid DO UPDATE" in str(db.queries[-1])
     assert calls == [
         {
             "trace_id": "trace-1",
@@ -87,7 +99,8 @@ async def test_submit_message_feedback_syncs_langfuse_score(monkeypatch: pytest.
 async def test_submit_message_feedback_skips_langfuse_without_trace_id(monkeypatch: pytest.MonkeyPatch):
     message = SimpleNamespace(id=3, conversation_id=7, extra_metadata={})
     conversation = SimpleNamespace(id=7, uid="user-1")
-    db = _FakeSession([message, conversation, None])
+    feedback = MessageFeedback(message_id=3, uid="user-1", rating="dislike", reason="不相关")
+    db = _FakeSession([message, conversation, feedback])
     calls = []
 
     monkeypatch.setattr(svc, "submit_user_feedback_score", lambda **kwargs: calls.append(kwargs) or True)

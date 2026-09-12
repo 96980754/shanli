@@ -89,6 +89,7 @@ from yuxi.services.knowledge_conflict_service import (
     KnowledgeConflictVersionError,
 )
 from yuxi.services.knowledge_preview_service import (
+    KnowledgePreviewInputError,
     KnowledgePreviewModelError,
     KnowledgePreviewRetrievalError,
     KnowledgePreviewService,
@@ -2775,6 +2776,8 @@ async def preview_knowledge_base(
             meta=request.meta,
             generate_answer=request.generate_answer,
         )
+    except KnowledgePreviewInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except KnowledgePreviewRetrievalError as exc:
         raise HTTPException(status_code=503, detail="知识库检索服务暂时不可用") from exc
     except KnowledgePreviewModelError as exc:

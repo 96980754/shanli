@@ -262,6 +262,11 @@ class _GenQaRepo:
             return None
         return self.qa_pair if qa_id == self.qa_pair.id else None
 
+    async def get_enabled(self, qa_id):
+        if self.qa_pair is None or not getattr(self.qa_pair, "enabled", True):
+            return None
+        return self.qa_pair if qa_id == self.qa_pair.id else None
+
     async def mark_hit(self, item):
         item.hit_count += 1
 

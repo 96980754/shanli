@@ -4,7 +4,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY, SYSTEM_ERROR_REPLY
+from yuxi.agents.buildin.chatbot.prompt import (
+    IDENTITY_REPLY,
+    KNOWLEDGE_REFUSAL_REPLY,
+    KNOWLEDGE_REFUSAL_REPLY_EN,
+    SYSTEM_ERROR_REPLY,
+    SYSTEM_ERROR_REPLY_EN,
+)
 from yuxi.config.app import config as runtime_config
 from yuxi.services.knowledge_answer_disposition import (
     apply_knowledge_disposition,
@@ -17,6 +23,7 @@ from yuxi.services.knowledge_answer_disposition import (
     is_handoff_disposition,
     judge_refusal,
     no_evidence_disposition,
+    resolve_handoff_domain,
     should_revoke_no_evidence,
 )
 
@@ -121,6 +128,35 @@ def test_insufficient_evidence_when_ok_results_exist():
 def test_classification_mismatch_when_all_queries_error():
     disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY, _evidence([_query(status="error")]))
     assert (disposition["type"], disposition["reason"]) == ("system_error", "classification_mismatch")
+
+
+def test_english_refusal_detected_by_canonical_prefix():
+    disposition = classify_knowledge_disposition(KNOWLEDGE_REFUSAL_REPLY_EN + " Please contact support.", None)
+
+    assert disposition["type"] == "knowledge_refusal"
+    assert disposition["reason"] == "no_enabled_knowledge_base"
+    assert disposition["judgment_required"] is True
+
+
+def test_english_refusal_keeps_evidence_reason():
+    disposition = classify_knowledge_disposition(
+        KNOWLEDGE_REFUSAL_REPLY_EN,
+        _evidence([_query(reason="empty_content")]),
+    )
+
+    assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "empty_content")
+
+
+def test_english_system_error_detected_by_prefix():
+    disposition = classify_knowledge_disposition(SYSTEM_ERROR_REPLY_EN + " Please retry.", None)
+
+    assert (disposition["type"], disposition["reason"]) == ("system_error", "retrieval_error")
+
+
+def test_generic_english_apology_is_not_a_refusal():
+    disposition = classify_knowledge_disposition("Sorry, the supported value is 10 rather than 20.", None)
+
+    assert disposition["type"] == "answered"
 
 
 # ---- apply_refusal_judgment ----
@@ -342,7 +378,25 @@ def test_no_evidence_disposition_ignores_refusal_or_grounded():
     assert no_evidence_disposition(grounded, evidence=ok_evidence, tool_names={"query_kb"}) is None
 
 
-def test_keyword_domain_prefers_longest_match_and_config_order():
+def test_resolve_handoff_domain_fills_scope_domain_from_keywords(monkeypatch: pytest.MonkeyPatch):
+    from yuxi.config.app import BusinessLine
+
+    lines = [BusinessLine(code="mno", name="网优", keywords=["网优"])]
+    monkeypatch.setattr(runtime_config, "business_lines", [line.model_dump() for line in lines])
+
+    assert resolve_handoff_domain(
+        {"type": "scope_refusal", "reason": "other_domain", "domain": "unknown"}, "网优问题"
+    ) == "mno"
+
+
+def test_resolve_handoff_domain_does_not_fill_policy_or_off_topic(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    assert resolve_handoff_domain({"type": "policy_refusal", "domain": "unknown"}, "网优") == "unknown"
+    assert resolve_handoff_domain({"type": "scope_refusal", "reason": "off_topic"}, "网优") == "unknown"
+
+
+
     from yuxi.config.app import BusinessLine
 
     lines = [

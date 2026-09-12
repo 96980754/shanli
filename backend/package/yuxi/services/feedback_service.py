@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import HTTPException
 from sqlalchemy import exists, func, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from yuxi.services.langfuse_service import submit_user_feedback_score
@@ -240,23 +241,26 @@ async def submit_message_feedback_view(
         if not conversation or conversation.uid != str(current_uid):
             raise HTTPException(status_code=403, detail="Access denied")
 
-        existing_feedback_result = await db.execute(
-            select(MessageFeedback).filter_by(message_id=message_id, uid=str(current_uid))
-        )
-        existing_feedback = existing_feedback_result.scalar_one_or_none()
-        if existing_feedback:
-            raise HTTPException(status_code=409, detail="Feedback already submitted for this message")
-
-        new_feedback = MessageFeedback(
+        feedback_insert = insert(MessageFeedback).values(
             message_id=message_id,
             uid=str(current_uid),
             rating=rating,
             reason=reason,
         )
-
-        db.add(new_feedback)
+        feedback_result = await db.execute(
+            feedback_insert
+            .on_conflict_do_update(
+                constraint="uq_message_feedback_message_uid",
+                set_={
+                    "rating": feedback_insert.excluded.rating,
+                    "reason": feedback_insert.excluded.reason,
+                },
+            )
+            .returning(MessageFeedback)
+            .execution_options(populate_existing=True)
+        )
+        feedback = feedback_result.scalar_one()
         await db.commit()
-        await db.refresh(new_feedback)
 
         trace_id = (message.extra_metadata or {}).get("langfuse_trace_id")
         if trace_id:
@@ -273,8 +277,8 @@ async def submit_message_feedback_view(
             await asyncio.to_thread(
                 submit_user_feedback_score,
                 trace_id=trace_id,
-                feedback_id=new_feedback.id,
-                message_id=new_feedback.message_id,
+                feedback_id=feedback.id,
+                message_id=feedback.message_id,
                 conversation_id=message.conversation_id,
                 uid=str(current_uid),
                 rating=rating,
@@ -284,11 +288,11 @@ async def submit_message_feedback_view(
         logger.info(f"User {current_uid} submitted {rating} feedback for message {message_id}")
 
         return {
-            "id": new_feedback.id,
-            "message_id": new_feedback.message_id,
-            "rating": new_feedback.rating,
-            "reason": new_feedback.reason,
-            "created_at": new_feedback.created_at.isoformat(),
+            "id": feedback.id,
+            "message_id": feedback.message_id,
+            "rating": feedback.rating,
+            "reason": feedback.reason,
+            "created_at": feedback.created_at.isoformat(),
         }
 
     except HTTPException:

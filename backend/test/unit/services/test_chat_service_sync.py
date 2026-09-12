@@ -9,7 +9,7 @@ from langchain.messages import AIMessage, HumanMessage
 
 from yuxi.agents import context as agent_context
 from yuxi.agents.backends.sandbox import paths as workspace_paths
-from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY
+from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN
 from yuxi.services import chat_service as svc
 
 
@@ -82,6 +82,8 @@ class _FakeConvRepo:
         self.db = _db
         self.saved_messages: list[dict] = []
         self.tool_calls: list[dict] = []
+        self.existing_message_ids: set[str] = set()
+        self.metadata_id_calls: list[str] = []
         self.conversations: dict[str, SimpleNamespace] = {}
 
     def _conversation(self, thread_id: str) -> SimpleNamespace:
@@ -126,7 +128,11 @@ class _FakeConvRepo:
     async def get_conversation_by_thread_id(self, thread_id: str):
         return self._conversation(thread_id)
 
-    async def get_messages_by_thread_id(self, _thread_id: str):
+    async def get_message_metadata_ids_by_thread_id(self, _thread_id: str):
+        self.metadata_id_calls.append(_thread_id)
+        return self.existing_message_ids
+
+    async def get_messages_by_thread_id(self, _thread_id: str, limit: int | None = None):
         return []
 
     async def add_tool_call(
@@ -166,6 +172,15 @@ class _FakeConvRepo:
 
     async def bind_attachments_to_request(self, conversation_id: int, request_id: str, file_ids: list[str]):
         return []
+
+
+@pytest.mark.asyncio
+async def test_get_existing_message_ids_uses_projection_repository_method():
+    repo = _FakeConvRepo(None)
+    repo.existing_message_ids = {"existing-ai-id"}
+
+    assert await svc._get_existing_message_ids(repo, "thread-1") == {"existing-ai-id"}
+    assert repo.metadata_id_calls == ["thread-1"]
 
 
 @pytest.mark.asyncio
@@ -659,6 +674,40 @@ async def test_save_messages_exempts_zero_query_hard_answer(monkeypatch: pytest.
     assert meta["knowledge_disposition"]["type"] == "answered"
     assert "knowledge_no_evidence" not in meta
     assert "handoff_available" not in meta
+
+
+@pytest.mark.asyncio
+async def test_save_messages_classifies_english_fixed_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def no_judgment(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
+    monkeypatch.setattr(svc, "judge_refusal", no_judgment)
+
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "Unknown product parameter"},
+                {
+                    "type": "tool",
+                    "name": "query_kb",
+                    "content": '{"schema_version": 1, "status": "insufficient", '
+                    '"kb_id": "kb_a", "reason": "no_results", "results": []}',
+                },
+                {"type": "ai", "content": KNOWLEDGE_REFUSAL_REPLY_EN},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    metadata = conv_repo.saved_messages[0]["extra_metadata"]
+    assert metadata["knowledge_disposition"]["type"] == "knowledge_refusal"
+    assert metadata["knowledge_disposition"]["reason"] == "no_results"
+    assert metadata["handoff_available"] is True
 
 
 @pytest.mark.asyncio
