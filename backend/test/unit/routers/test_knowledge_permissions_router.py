@@ -285,6 +285,26 @@ async def test_preview_requires_search_permission(monkeypatch):
     preview.assert_not_awaited()
 
 
+async def test_preview_rejects_invalid_input_as_422(monkeypatch):
+    install_fakes(monkeypatch, allowed=True)
+    preview = AsyncMock(side_effect=knowledge_router.KnowledgePreviewInputError("invalid search mode"))
+    monkeypatch.setattr(
+        knowledge_router,
+        "KnowledgePreviewService",
+        lambda: SimpleNamespace(preview=preview),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.preview_knowledge_base(
+            "kb-1",
+            knowledge_router.KnowledgePreviewRequest(query="问题", meta={"search_mode": "invalid"}),
+            current_user=user(uid="viewer", role="user"),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "invalid search mode"
+
+
 async def test_preview_uses_scoped_service_and_hides_provider_error(monkeypatch):
     service, _repository = install_fakes(monkeypatch, allowed=True)
     preview = AsyncMock(side_effect=knowledge_router.KnowledgePreviewModelError("secret"))

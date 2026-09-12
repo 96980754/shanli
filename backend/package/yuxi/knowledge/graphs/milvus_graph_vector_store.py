@@ -24,6 +24,7 @@ from yuxi.knowledge.implementations.milvus import (
     VECTOR_METRIC_TYPE,
     _run_milvus_query_io,
 )
+from yuxi.knowledge.milvus_utils import escape_milvus_string_literal
 from yuxi.models.embed import select_embedding_model
 from yuxi.models.providers.cache import model_cache
 from yuxi.utils import hashstr, logger
@@ -320,7 +321,7 @@ class MilvusGraphVectorStore:
         existing_ids: set[str] = set()
         for start in range(0, len(ids), 1000):
             batch = ids[start : start + 1000]
-            quoted_ids = ", ".join(f'"{item}"' for item in batch)
+            quoted_ids = ", ".join(f'"{escape_milvus_string_literal(item)}"' for item in batch)
             rows = collection.query(expr=f"id in [{quoted_ids}]", output_fields=["id"])
             existing_ids.update(row["id"] for row in rows)
         return existing_ids
@@ -351,7 +352,7 @@ class MilvusGraphVectorStore:
         collection = Collection(name=collection_name, using=self.connection_alias)
         for start in range(0, len(ids), 1000):
             batch = ids[start : start + 1000]
-            quoted_ids = ", ".join(f'"{item}"' for item in batch)
+            quoted_ids = ", ".join(f'"{escape_milvus_string_literal(item)}"' for item in batch)
             collection.delete(expr=f"id in [{quoted_ids}]")
 
     async def upsert_reviewed_assertion(
@@ -479,6 +480,6 @@ class MilvusGraphVectorStore:
         collection = Collection(name=collection_name, using=self.connection_alias)
         for start in range(0, len(ids), 1000):
             batch = ids[start : start + 1000]
-            quoted_ids = ", ".join(f'"{item}"' for item in batch)
+            quoted_ids = ", ".join(f'"{escape_milvus_string_literal(item)}"' for item in batch)
             collection.delete(expr=f"id in [{quoted_ids}] and version <= {int(max_version)}")
         collection.flush()

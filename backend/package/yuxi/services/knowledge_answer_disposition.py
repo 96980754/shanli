@@ -7,7 +7,9 @@ from typing import Any
 from yuxi.agents.buildin.chatbot.prompt import (
     IDENTITY_REPLY,
     KNOWLEDGE_REFUSAL_REPLY,
+    KNOWLEDGE_REFUSAL_REPLY_EN,
     SYSTEM_ERROR_REPLY,
+    SYSTEM_ERROR_REPLY_EN,
 )
 from yuxi.config.app import BusinessLine, resolve_business_lines, sanitize_business_domain
 from yuxi.models import select_model
@@ -296,6 +298,14 @@ def classify_domain_by_keywords(question: str, lines: list[BusinessLine] | None 
     return max(matches)[2]
 
 
+def resolve_handoff_domain(disposition: dict[str, Any], question: str) -> str:
+    """Resolve a configured business domain only for refusals eligible for handoff."""
+    domain = sanitize_business_domain(disposition.get("domain"))
+    if domain == "unknown" and is_handoff_disposition(disposition):
+        domain = classify_domain_by_keywords(question)
+    return sanitize_business_domain(domain)
+
+
 def is_final_assistant_message(message: dict[str, Any]) -> bool:
     content = message.get("content")
     if isinstance(content, list):
@@ -319,9 +329,9 @@ def classify_knowledge_disposition(content: str, evidence: dict[str, Any] | None
     （知识缺口 / 跑题 / 跨域 / 策略拦截）。
     """
     normalized = content.strip()
-    if normalized.startswith(SYSTEM_ERROR_REPLY):
+    if normalized.startswith((SYSTEM_ERROR_REPLY, SYSTEM_ERROR_REPLY_EN)):
         return _disposition("system_error", "retrieval_error")
-    if not normalized.startswith(KNOWLEDGE_REFUSAL_REPLY):
+    if not normalized.startswith((KNOWLEDGE_REFUSAL_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN)):
         return _disposition("answered", None)
     if evidence is None:
         return _disposition("knowledge_refusal", "no_enabled_knowledge_base", judgment_required=True)
@@ -437,6 +447,7 @@ __all__ = [
     "judge_refusal",
     "no_evidence_disposition",
     "parse_query_kb_output",
+    "resolve_handoff_domain",
     "should_revoke_no_evidence",
     "turn_has_grounding_source",
 ]

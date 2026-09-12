@@ -26,6 +26,7 @@ from yuxi.config.app import resolve_embedding_model, resolve_reranker_model
 from yuxi.knowledge.base import FileStatus, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.dispatcher import chunk_markdown
 from yuxi.knowledge.chunking.ragflow_like.nlp import count_tokens
+from yuxi.knowledge.milvus_utils import escape_milvus_string_literal
 from yuxi.knowledge.parser.unified import Parser
 from yuxi.knowledge.utils.kb_utils import resolve_processing_params, sanitize_processing_error
 from yuxi.models.providers.cache import model_cache
@@ -555,10 +556,6 @@ class MilvusKB(KnowledgeBase):
         method = model.batch_encode if sync else model.abatch_encode
         return partial(method, batch_size=batch_size)
 
-    @staticmethod
-    def _escape_milvus_string_literal(value: str) -> str:
-        return str(value).replace("\\", "\\\\").replace('"', '\\"')
-
     async def upsert_confirmed_qa(
         self,
         *,
@@ -573,7 +570,7 @@ class MilvusKB(KnowledgeBase):
         if collection is None:
             raise ValueError(f"Milvus collection is unavailable for {kb_id}")
         vector_id = f"qa:{qa_id}"
-        escaped_id = self._escape_milvus_string_literal(vector_id)
+        escaped_id = escape_milvus_string_literal(vector_id)
         await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
         content = f"问题：{question}\n答案：{answer}"
         embedding_model_spec = resolve_embedding_model(self.databases_meta[kb_id].get("embedding_model_spec"))
@@ -597,7 +594,7 @@ class MilvusKB(KnowledgeBase):
         if collection is None:
             raise ValueError(f"Milvus collection is unavailable for {kb_id}")
         vector_id = f"qa:{qa_id}"
-        escaped_id = self._escape_milvus_string_literal(vector_id)
+        escaped_id = escape_milvus_string_literal(vector_id)
         await asyncio.to_thread(collection.delete, expr=f'id == "{escaped_id}"')
         await asyncio.to_thread(collection.flush)
 
@@ -722,7 +719,8 @@ class MilvusKB(KnowledgeBase):
             )
 
     async def _delete_file_chunks_from_milvus(self, collection: Collection, file_id: str) -> None:
-        expr = f'file_id == "{file_id}"'
+        escaped_file_id = escape_milvus_string_literal(file_id)
+        expr = f'file_id == "{escaped_file_id}"'
         results = collection.query(expr=expr, output_fields=["id"], limit=1)
 
         if not results:
@@ -759,7 +757,7 @@ class MilvusKB(KnowledgeBase):
         )
         if not matched_file_ids:
             return 'file_id == "__no_matching_file__"'
-        escaped_ids = [file_id.replace('"', '\\"') for file_id in matched_file_ids]
+        escaped_ids = [escape_milvus_string_literal(file_id) for file_id in matched_file_ids]
         if len(escaped_ids) == 1:
             return f'file_id == "{escaped_ids[0]}"'
         joined_ids = '", "'.join(escaped_ids)

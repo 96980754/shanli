@@ -24,10 +24,14 @@ from langchain.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
 from yuxi import config as conf
 from yuxi.agents.buildin import agent_manager
-from yuxi.agents.buildin.chatbot.prompt import SCOPE_REFUSAL_REPLY
+from yuxi.agents.buildin.chatbot.prompt import (
+    KNOWLEDGE_REFUSAL_REPLY,
+    KNOWLEDGE_REFUSAL_REPLY_EN,
+    SCOPE_REFUSAL_REPLY,
+    SCOPE_REFUSAL_REPLY_EN,
+)
 from yuxi.agents.context import build_agent_input_context, normalize_agent_context_config
 from yuxi.agents.state import AgentStatePayload
-from yuxi.config.app import sanitize_business_domain
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
@@ -36,7 +40,6 @@ from yuxi.services.conversation_service import serialize_attachment
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.knowledge_answer_disposition import (
     DISPOSITION_SCHEMA_VERSION,
-    HANDOFF_REFUSAL_TYPES,
     QUERY_KB_TOOL_NAMES,
     apply_knowledge_disposition,
     apply_refusal_judgment,
@@ -47,6 +50,7 @@ from yuxi.services.knowledge_answer_disposition import (
     is_handoff_disposition,
     judge_refusal,
     no_evidence_disposition,
+    resolve_handoff_domain,
 )
 from yuxi.services.knowledge_gap_service import record_knowledge_gap
 from yuxi.services.knowledge_scope_gate import build_scope_corpus, evaluate_scope
@@ -628,12 +632,7 @@ async def _prewarm_sandbox(
 
 
 async def _get_existing_message_ids(conv_repo: ConversationRepository, thread_id: str) -> set[str]:
-    existing_messages = await conv_repo.get_messages_by_thread_id(thread_id)
-    return {
-        msg.extra_metadata["id"]
-        for msg in existing_messages
-        if msg.extra_metadata and "id" in msg.extra_metadata and isinstance(msg.extra_metadata["id"], str)
-    }
+    return await conv_repo.get_message_metadata_ids_by_thread_id(thread_id)
 
 
 async def _save_ai_message(
@@ -803,13 +802,6 @@ async def save_messages_from_langgraph_state(
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
                 msg_dict["knowledge_disposition"] = disposition
-            if disposition.get("type") == "knowledge_refusal":
-                domain = disposition.get("domain")
-                if not sanitize_business_domain(domain) or domain in {None, "unknown"}:
-                    disposition["domain"] = classify_domain_by_keywords(knowledge_question or "")
-                else:
-                    disposition["domain"] = sanitize_business_domain(domain)
-                msg_dict["knowledge_disposition"] = disposition
             # 决策② 无依据不输出兜底：本轮确实检索过 query_kb(s) 却仍正常作答（检索失配）
             # → 按知识缺口拒答并转人工。零检索轮（问候/致谢/闲聊等）一律不改写。
             # 次级豁免：身份/寒暄正文、用了合法来源工具（文件/图片/联网/文档等）、紧邻带 ok 证据的续答轮。
@@ -828,20 +820,11 @@ async def save_messages_from_langgraph_state(
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
                 msg_dict["knowledge_disposition"] = disposition
-            if disposition.get("type") == "knowledge_refusal":
-                domain = disposition.get("domain")
-                if domain in {None, "unknown"}:
-                    disposition["domain"] = classify_domain_by_keywords(knowledge_question or "")
-                else:
-                    disposition["domain"] = sanitize_business_domain(domain)
-                msg_dict["knowledge_disposition"] = disposition
-            if disposition.get("type") in HANDOFF_REFUSAL_TYPES or disposition.get("type") == "policy_refusal":
-                # 业务域由 judge 或拒答关键词分类，最终统一归一，游离/空值回退 unknown。
-                disposition["domain"] = sanitize_business_domain(disposition.get("domain"))
-                msg_dict["knowledge_disposition"] = disposition
-                if is_handoff_disposition(disposition):
-                    msg_dict["handoff_available"] = True
-                    msg_dict["handoff_query"] = knowledge_question or ""
+            disposition["domain"] = resolve_handoff_domain(disposition, knowledge_question or "")
+            msg_dict["knowledge_disposition"] = disposition
+            if is_handoff_disposition(disposition):
+                msg_dict["handoff_available"] = True
+                msg_dict["handoff_query"] = knowledge_question or ""
             last_ai_message = await _save_ai_message(
                 conv_repo,
                 thread_id,
@@ -1280,10 +1263,10 @@ async def stream_agent_chat(
                 )
                 scope_verdict = await evaluate_scope(query, corpus)
                 if scope_verdict == "off_topic":
-                    refusal, message_id = SCOPE_REFUSAL_REPLY, f"scope-{meta['request_id']}"
-                    # 出口边界：跑题拒绝正文随提问语言本地化后再落库/回显；disposition 仍按中文判定。
-                    if source_lang:
-                        localized = await translate_from_chinese(refusal, source_lang)
+                    refusal = SCOPE_REFUSAL_REPLY if is_chinese_text(display_query) else SCOPE_REFUSAL_REPLY_EN
+                    message_id = f"scope-{meta['request_id']}"
+                    if source_lang and source_lang != "en":
+                        localized = await translate_from_chinese(SCOPE_REFUSAL_REPLY, source_lang)
                         if localized:
                             refusal = localized
                     output_message = await conv_repo.add_message_by_thread_id(
@@ -1327,9 +1310,14 @@ async def stream_agent_chat(
 
                     results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
                     if not results and not incomplete:
-                        refusal, message_id = "抱歉，在现有知识库中未找到相关依据。", f"handoff-{meta['request_id']}"
-                        if source_lang:
-                            localized = await translate_from_chinese(refusal, source_lang)
+                        refusal = (
+                            KNOWLEDGE_REFUSAL_REPLY
+                            if is_chinese_text(display_query)
+                            else KNOWLEDGE_REFUSAL_REPLY_EN
+                        )
+                        message_id = f"handoff-{meta['request_id']}"
+                        if source_lang and source_lang != "en":
+                            localized = await translate_from_chinese(KNOWLEDGE_REFUSAL_REPLY, source_lang)
                             if localized:
                                 refusal = localized
                         output_message = await conv_repo.add_message_by_thread_id(

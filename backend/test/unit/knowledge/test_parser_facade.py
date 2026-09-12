@@ -67,6 +67,54 @@ def test_parser_parse_docx_file_returns_markdown_text(tmp_path: Path, monkeypatc
     assert len(markdown.strip()) > 0
 
 
+def test_parser_parse_html_flattens_nested_table(tmp_path: Path):
+    file_path = tmp_path / "nested.html"
+    file_path.write_text(
+        """
+        <table>
+          <tr><th>Outer</th><th>Value</th></tr>
+          <tr><td>Before<table><tr><th>Inner</th></tr><tr><td>Nested</td></tr></table>After</td><td>Peer</td></tr>
+        </table>
+        """,
+        encoding="utf-8",
+    )
+
+    markdown = Parser.parse(str(file_path))
+
+    assert "Outer" in markdown
+    assert "Peer" in markdown
+    assert markdown.count("Inner") == 1
+    assert markdown.count("Nested") == 1
+
+
+def test_parser_docx_fallback_preserves_nested_table_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    file_path = tmp_path / "nested.docx"
+    document = Document()
+    outer = document.add_table(rows=2, cols=2)
+    outer.cell(0, 0).text = "Outer"
+    outer.cell(0, 1).text = "Value"
+    parent = outer.cell(1, 0)
+    parent.text = "Before"
+    nested = parent.add_table(rows=2, cols=1)
+    nested.cell(0, 0).text = "Inner"
+    nested.cell(1, 0).text = "Nested"
+    outer.cell(1, 1).text = "Peer"
+    document.save(str(file_path))
+
+    monkeypatch.setattr(
+        parser_unified,
+        "_convert_with_docling",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("force fallback")),
+    )
+
+    markdown = Parser.parse(str(file_path))
+
+    assert "| Outer | Value |" in markdown
+    assert "Peer" in markdown
+    assert markdown.count("Inner") == 1
+    assert markdown.count("Nested") == 1
+
+
 def test_convert_csv_to_markdown_preserves_column_dtypes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

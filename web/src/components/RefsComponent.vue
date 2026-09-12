@@ -12,7 +12,7 @@
       <!-- 反馈 -->
       <span
         class="item btn"
-        :class="{ disabled: feedbackState.hasSubmitted }"
+        :class="{ disabled: submittingFeedback }"
         @click="likeThisResponse(msg)"
         :title="
           t(
@@ -26,7 +26,7 @@
       </span>
       <span
         class="item btn"
-        :class="{ disabled: feedbackState.hasSubmitted }"
+        :class="{ disabled: submittingFeedback }"
         @click="dislikeThisResponse(msg)"
         :title="
           t(
@@ -327,10 +327,7 @@ const getModelName = (msg) => {
 }
 // Handle like action
 const likeThisResponse = async (msg) => {
-  if (feedbackState.hasSubmitted) {
-    antMessage.info(t('refs.feedbackAlreadySubmitted'))
-    return
-  }
+  if (submittingFeedback.value) return
 
   if (!msg?.id) {
     antMessage.error(t('refs.feedbackNoMsgId'))
@@ -344,6 +341,7 @@ const likeThisResponse = async (msg) => {
 
     feedbackState.hasSubmitted = true
     feedbackState.rating = 'like'
+    feedbackState.reason = null
 
     antMessage.success(t('refs.feedbackThanks'))
   } catch (error) {
@@ -361,10 +359,7 @@ const likeThisResponse = async (msg) => {
 
 // Handle dislike action
 const dislikeThisResponse = async (msg) => {
-  if (feedbackState.hasSubmitted) {
-    antMessage.info(t('refs.feedbackAlreadySubmitted'))
-    return
-  }
+  if (submittingFeedback.value) return
 
   if (!msg?.id) {
     antMessage.error(t('refs.feedbackNoMsgId'))
@@ -373,6 +368,13 @@ const dislikeThisResponse = async (msg) => {
   }
 
   resetDislikeForm()
+  if (feedbackState.rating === 'dislike' && feedbackState.reason) {
+    const [code, ...detail] = feedbackState.reason.split('\n')
+    if (dislikeReasonOptions.some((option) => option.value === code)) {
+      dislikeReasonCode.value = code
+      dislikeReasonDetail.value = detail.join('\n')
+    }
+  }
   dislikeModalVisible.value = true
 }
 

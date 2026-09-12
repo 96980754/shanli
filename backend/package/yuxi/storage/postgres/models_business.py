@@ -585,6 +585,9 @@ class MessageFeedback(Base):
     """Message feedback table - 消息反馈表"""
 
     __tablename__ = "message_feedbacks"
+    __table_args__ = (
+        UniqueConstraint("message_id", "uid", name="uq_message_feedback_message_uid"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="Primary key")
     message_id = Column(

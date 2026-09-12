@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import aiofiles
+from bs4 import BeautifulSoup
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter
 from langchain_community.document_loaders import PyPDFLoader
@@ -167,6 +168,17 @@ def _convert_with_docling(file_path: Path, params: dict | None = None) -> str:
     return doc.export_to_markdown()
 
 
+def _markdown_cell_text(cell) -> str:
+    parts = [paragraph.text.strip() for paragraph in cell.paragraphs if paragraph.text.strip()]
+    for nested_table in cell.tables:
+        nested_rows = [
+            " / ".join(_markdown_cell_text(nested_cell) for nested_cell in row.cells)
+            for row in nested_table.rows
+        ]
+        parts.extend(row for row in nested_rows if row.strip(" /"))
+    return "; ".join(parts).replace("\n", " ").replace("|", "\\|")
+
+
 def _convert_docx_with_python_docx(file_path: Path) -> str:
     """使用 python-docx 解析 DOCX（Docling 失败时兜底）。"""
     from docx import Document
@@ -180,12 +192,8 @@ def _convert_docx_with_python_docx(file_path: Path) -> str:
             blocks.append(text)
 
     for table in document.tables:
-        rows: list[list[str]] = []
-        for row in table.rows:
-            cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
-            if any(cells):
-                rows.append(cells)
-
+        rows = [[_markdown_cell_text(cell) for cell in row.cells] for row in table.rows]
+        rows = [row for row in rows if any(row)]
         if not rows:
             continue
 
@@ -200,6 +208,25 @@ def _convert_docx_with_python_docx(file_path: Path) -> str:
         blocks.append("")
 
     return "\n\n".join(blocks).strip()
+
+
+def _convert_html_to_markdown(content: str) -> str:
+    soup = BeautifulSoup(content, "html.parser")
+    for table in reversed(soup.find_all("table")):
+        if table.find_parent("table") is None:
+            continue
+        rows = []
+        for row in table.find_all("tr"):
+            if row.find_parent("table") is not table:
+                continue
+            cells = [
+                cell.get_text(" ", strip=True).replace("|", "\\|")
+                for cell in row.find_all(["td", "th"], recursive=False)
+            ]
+            if any(cells):
+                rows.append(" / ".join(cells))
+        table.replace_with("; ".join(rows))
+    return md_convert(str(soup), heading_style="ATX")
 
 
 def _convert_csv_to_markdown(file_path: Path) -> str:
@@ -367,7 +394,7 @@ async def _process_file_to_markdown_core(
         elif file_ext in [".html", ".htm"]:
             async with aiofiles.open(file_path_obj, encoding="utf-8") as f:
                 content = await f.read()
-            text = await asyncio.to_thread(md_convert, content, heading_style="ATX")
+            text = await asyncio.to_thread(_convert_html_to_markdown, content)
             result = f"{text}"
 
         elif file_ext == ".csv":

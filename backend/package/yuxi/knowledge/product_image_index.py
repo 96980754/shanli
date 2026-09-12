@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections, db, utility
 
+from yuxi.knowledge.milvus_utils import escape_milvus_string_literal
 from yuxi.storage.minio.client import MinIOClient
 from yuxi.utils import hashstr, logger
 
@@ -166,7 +167,7 @@ class ProductImageIndex:
             await asyncio.to_thread(collection.load)
         except Exception:
             pass
-        expr = f'kb_id == "{kb_id}"' if kb_id else None
+        expr = f'kb_id == "{escape_milvus_string_literal(kb_id)}"' if kb_id else None
         results = collection.search(
             data=[vector],
             anns_field="embedding",
@@ -194,19 +195,23 @@ class ProductImageIndex:
             await asyncio.to_thread(collection.load)
         except Exception:
             pass
-        rows = collection.query(expr=f'kb_id == "{kb_id}"', output_fields=["product"])
+        escaped_kb_id = escape_milvus_string_literal(kb_id)
+        rows = collection.query(expr=f'kb_id == "{escaped_kb_id}"', output_fields=["product"])
         return {str(row["product"]) for row in rows}
 
     async def delete_image(self, kb_id: str, product: str) -> None:
         """从索引中删除单个产品参照图的特征向量（产品名在写入前已校验不含引号/反斜杠）。"""
-        expr = f'kb_id == "{kb_id}" and product == "{product}"'
+        escaped_kb_id = escape_milvus_string_literal(kb_id)
+        escaped_product = escape_milvus_string_literal(product)
+        expr = f'kb_id == "{escaped_kb_id}" and product == "{escaped_product}"'
         await asyncio.to_thread(self._collection().delete, expr)
 
     def clear(self, kb_id: str | None = None) -> None:
         """删除索引（可选按 kb_id 过滤）。"""
         collection = self._collection()
-        expr = f'kb_id == "{kb_id}"' if kb_id else ""
-        collection.delete(expr=expr) if expr else None
+        if kb_id:
+            expr = f'kb_id == "{escape_milvus_string_literal(kb_id)}"'
+            collection.delete(expr=expr)
 
 
 async def build_product_image_index(kb_id: str) -> dict[str, int]:

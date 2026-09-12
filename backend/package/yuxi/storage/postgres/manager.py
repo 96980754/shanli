@@ -1318,6 +1318,33 @@ class PostgresManager(metaclass=SingletonMeta):
                 "status VARCHAR(20) NOT NULL DEFAULT 'pending'"
             ),
             "CREATE INDEX IF NOT EXISTS ix_message_feedbacks_status ON message_feedbacks(status)",
+            """
+            WITH ranked_feedbacks AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY message_id, uid
+                        ORDER BY created_at DESC NULLS LAST, id DESC
+                    ) AS feedback_rank
+                FROM message_feedbacks
+            )
+            DELETE FROM message_feedbacks feedback
+            USING ranked_feedbacks ranked
+            WHERE feedback.id = ranked.id
+              AND ranked.feedback_rank > 1
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'uq_message_feedback_message_uid'
+                ) THEN
+                    ALTER TABLE message_feedbacks
+                    ADD CONSTRAINT uq_message_feedback_message_uid UNIQUE (message_id, uid);
+                END IF;
+            END $$
+            """,
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警

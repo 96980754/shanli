@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from langchain.messages import AIMessageChunk
+from yuxi.agents.buildin.chatbot.prompt import KNOWLEDGE_REFUSAL_REPLY_EN, SCOPE_REFUSAL_REPLY_EN
 from yuxi.services import chat_service as svc
 from yuxi.services.global_knowledge_search_service import GlobalKnowledgeSearchService
 from yuxi.services.input_message_service import build_chat_input_message
@@ -209,6 +210,46 @@ async def test_zero_result_preflight_persists_structured_refusal_and_run_output(
     assert assistant["extra_metadata"]["handoff_available"] is True
     assert output_messages == [("run-1", 2)]
     assert any(chunk["status"] == "knowledge_handoff_available" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_english_zero_result_preflight_uses_english_refusal(monkeypatch):
+    async def fake_search_with_status(self, user, query):
+        return [], False
+
+    monkeypatch.setattr(svc.conf, "enable_multilingual", False)
+    monkeypatch.setattr(GlobalKnowledgeSearchService, "search_with_status", fake_search_with_status)
+    _install_harness(monkeypatch)
+
+    chunks = await _run_stream(build_chat_input_message("Unknown product parameter"))
+
+    assistant = _FakeConvRepo.saved_messages[-1]
+    assert assistant["content"] == KNOWLEDGE_REFUSAL_REPLY_EN
+    assert assistant["extra_metadata"]["knowledge_disposition"]["type"] == "knowledge_refusal"
+    assert assistant["extra_metadata"]["handoff_available"] is True
+    assert any(chunk.get("response") == KNOWLEDGE_REFUSAL_REPLY_EN for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_english_off_topic_preflight_uses_english_scope_refusal(monkeypatch):
+    async def fake_scope(_question, _corpus):
+        return "off_topic"
+
+    monkeypatch.setattr(svc.conf, "enable_multilingual", False)
+    _install_harness(monkeypatch)
+    monkeypatch.setattr(svc, "evaluate_scope", fake_scope)
+
+    chunks = await _run_stream(build_chat_input_message("What is the weather today?"))
+
+    assistant = _FakeConvRepo.saved_messages[-1]
+    assert assistant["content"] == SCOPE_REFUSAL_REPLY_EN
+    assert assistant["extra_metadata"]["knowledge_disposition"] == {
+        "schema_version": 2,
+        "type": "scope_refusal",
+        "reason": "off_topic",
+    }
+    assert "handoff_available" not in assistant["extra_metadata"]
+    assert any(chunk.get("response") == SCOPE_REFUSAL_REPLY_EN for chunk in chunks)
 
 
 @pytest.mark.asyncio

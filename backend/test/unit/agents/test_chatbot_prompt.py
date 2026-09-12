@@ -7,7 +7,11 @@ from types import SimpleNamespace
 from yuxi.agents.buildin.chatbot.prompt import (
     HARD_GUARDRAILS_PROMPT,
     IMAGE_RESPONSE_PROMPT,
+    KNOWLEDGE_REFUSAL_REPLY,
+    KNOWLEDGE_REFUSAL_REPLY_EN,
     PRODUCT_RECOGNITION_PROMPT,
+    SYSTEM_ERROR_REPLY,
+    SYSTEM_ERROR_REPLY_EN,
     VISUALIZATION_PROMPT,
     build_prompt_with_context,
 )
@@ -46,8 +50,20 @@ def test_build_prompt_includes_product_recognition_instruction():
     assert "产品图片识别" in prompt
     assert "search_product_image" in prompt
     assert "ask_user_question" in prompt
-    assert "不得仅凭相似度直接断定型号" in prompt
+    assert "不得仅凭相似度" in prompt
+    assert "直接断定型号" in prompt
     assert "不得编造型号" in prompt
+
+
+def test_build_prompt_includes_bilingual_fixed_refusals():
+    prompt = build_prompt_with_context(_empty_context())
+
+    assert KNOWLEDGE_REFUSAL_REPLY in prompt
+    assert KNOWLEDGE_REFUSAL_REPLY_EN in prompt
+    assert SYSTEM_ERROR_REPLY in prompt
+    assert SYSTEM_ERROR_REPLY_EN in prompt
+    assert "中文问题只回复" in prompt
+    assert "英文问题只回复" in prompt
 
 
 def test_product_recognition_section_before_image_and_guardrails():

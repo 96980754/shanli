@@ -38,10 +38,10 @@ def _index_with_collection(collection: FakeCollection) -> ProductImageIndex:
 def test_list_indexed_returns_products_for_kb():
     collection = FakeCollection(query_rows=[{"product": "产品A"}, {"product": "产品B"}])
 
-    result = asyncio.run(_index_with_collection(collection).list_indexed("kb_1"))
+    result = asyncio.run(_index_with_collection(collection).list_indexed('kb\\"1'))
 
     assert result == {"产品A", "产品B"}
-    assert collection.query_expr == 'kb_id == "kb_1"'
+    assert collection.query_expr == 'kb_id == "kb\\\\\\"1"'
     assert collection.query_fields == ["product"]
     assert collection.load_calls == 1
 
@@ -57,6 +57,16 @@ def test_list_indexed_returns_empty_set_when_no_rows():
 def test_delete_image_deletes_by_kb_and_product():
     collection = FakeCollection()
 
-    asyncio.run(_index_with_collection(collection).delete_image("kb_1", "产品A"))
+    asyncio.run(_index_with_collection(collection).delete_image('kb\\"1', '产品\\"A'))
 
-    assert collection.delete_exprs == ['kb_id == "kb_1" and product == "产品A"']
+    assert collection.delete_exprs == ['kb_id == "kb\\\\\\"1" and product == "产品\\\\\\"A"']
+
+
+def test_clear_escapes_kb_id_and_skips_unfiltered_delete():
+    collection = FakeCollection()
+    index = _index_with_collection(collection)
+
+    index.clear('kb\\"1')
+    index.clear()
+
+    assert collection.delete_exprs == ['kb_id == "kb\\\\\\"1"']
