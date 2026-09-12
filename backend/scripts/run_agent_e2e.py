@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """真实 Agent 端到端测试 runner（内部工具）。
 
-逐题调用生产 Agent（POST /api/agent-invocation/eval/runs，阻塞式），采集系统答案与
-实际读取到的正文证据（thread history tool_calls 中 query_kb/query_kbs/find_kb_document/
-open_kb_document 的结果），落盘 JSONL 供后续评分与汇报报告使用。失败题记录 error 不中断。
+每个 worker 独占一条会话线程、串行跑分到的题目，采集系统答案与实际读取到的正文证据
+（thread history tool_calls 中 query_kb/query_kbs/find_kb_document/open_kb_document 的结果），
+落盘 JSONL 供后续评分与汇报报告使用。失败题记录 error 不中断。
+
+为什么是「worker 绑定线程」而不是「逐题发一次调用」：
+- 沙箱按 (uid, thread_id) 分配（sandbox_id_for_thread），固定 worker 数即固定沙箱数上限；
+- 同一线程同时只允许一个 run，并发写同线程会被 run_busy(409) 拒绝；
+- 证据按 run_id 从线程历史切片，同线程多题不会互相污染。
 
 用法（容器内）：
     docker exec api-dev python /app/scripts/run_agent_e2e.py \
         --testset /app/scripts/eval_datasets/synthetic/poc.jsonl \
-        --username <登录账号> --password <密码>
+        --username <登录账号> --password <密码> --concurrency 3
 
 账号密码也可通过环境变量 YUXI_TEST_USER / YUXI_TEST_PASSWORD 传入。
 """
@@ -19,6 +24,7 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -26,6 +32,9 @@ import httpx
 
 BASE_URL_DEFAULT = "http://localhost:5050"
 DEFAULT_OUTPUT = "/app/scripts/eval_datasets/synthetic"
+EVALUATION_SOURCE = "agent_evaluation"
+TERMINAL_STATUSES = {"completed", "failed", "cancelled", "interrupted"}
+POLL_INTERVAL_SECONDS = 3.0
 # 会返回正文证据的检索类工具：query_kb/query_kbs 返回命中片段（SearchOutputSchema.results），
 # find_kb_document 返回命中上下文窗口（FindOutputSchema.windows），open_kb_document 返回整窗正文
 # （OpenOutputSchema.content）。search_file 只返回文件元信息（无正文）、read_file 是沙箱通用
@@ -42,8 +51,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--password", help="登录密码（默认取环境变量 YUXI_TEST_PASSWORD）")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="结果输出目录")
     parser.add_argument("--name", default="", help="结果文件名后缀（默认当日日期）")
-    parser.add_argument("--concurrency", type=int, default=2, help="同时运行的 Agent 数（默认 2，避免超限）")
-    parser.add_argument("--timeout", type=float, default=300.0, help="单题最长等待秒数（默认 300）")
+    parser.add_argument("--concurrency", type=int, default=2, help="worker 数，每个 worker 独占一条会话线程（默认 2）")
+    parser.add_argument("--timeout", type=float, default=1200.0, help="单题最长等待秒数（默认 1200）")
     return parser.parse_args()
 
 
@@ -58,6 +67,27 @@ async def login(base_url: str, username: str, password: str, client: httpx.Async
     if not token:
         raise RuntimeError(f"登录失败，响应中无 access_token: {resp.text[:200]}")
     return token
+
+
+async def create_thread(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    base_url: str,
+    agent_slug: str,
+    title: str,
+) -> str:
+    """为 worker 建立独占会话线程；线程 ID 同时决定该 worker 的沙箱。"""
+    resp = await client.post(
+        f"{base_url}/api/chat/thread",
+        json={"agent_id": agent_slug, "title": title},
+        headers=headers,
+        timeout=60.0,
+    )
+    resp.raise_for_status()
+    thread_id = resp.json().get("id")
+    if not thread_id:
+        raise RuntimeError(f"创建会话失败: {resp.text[:200]}")
+    return thread_id
 
 
 def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
@@ -111,11 +141,16 @@ def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
     return []
 
 
-def extract_retrieved_chunks(history: dict) -> list[dict]:
-    """从 thread history 的 tool_calls 提取 Agent 实际读取到的全部正文证据片段（去重）。"""
+def extract_retrieved_chunks(history: dict, run_id: str) -> list[dict]:
+    """提取本次 run 实际读取到的正文证据片段（去重）。
+
+    只取 run_id 命中的消息：线程被多题复用时，按 run 切片才能保证证据属于本题。
+    """
     seen: set[str] = set()
     chunks: list[dict] = []
     for msg in history.get("history", []):
+        if msg.get("run_id") != run_id:
+            continue
         for tc in msg.get("tool_calls") or []:
             if tc.get("name") not in CONTENT_TOOLS or tc.get("status") != "success":
                 continue
@@ -128,69 +163,122 @@ def extract_retrieved_chunks(history: dict) -> list[dict]:
     return chunks
 
 
+async def start_run(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    base_url: str,
+    agent_slug: str,
+    thread_id: str,
+    query: str,
+    request_id: str,
+) -> str:
+    resp = await client.post(
+        f"{base_url}/api/agent/runs",
+        json={
+            "query": query,
+            "agent_slug": agent_slug,
+            "thread_id": thread_id,
+            "meta": {"source": EVALUATION_SOURCE, "request_id": request_id},
+        },
+        headers=headers,
+        timeout=60.0,
+    )
+    resp.raise_for_status()
+    run_id = resp.json().get("run_id")
+    if not run_id:
+        raise RuntimeError(f"创建 run 失败: {resp.text[:200]}")
+    return run_id
+
+
+async def wait_run(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    base_url: str,
+    run_id: str,
+    timeout: float,
+) -> dict:
+    """轮询 run 直到终态；超时先请求取消并等它落定，避免残留 run 占住线程。"""
+    deadline = time.monotonic() + timeout
+    timed_out = False
+    while True:
+        resp = await client.get(f"{base_url}/api/agent/runs/{run_id}/result", headers=headers, timeout=60.0)
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("status") in TERMINAL_STATUSES:
+            if timed_out:
+                raise TimeoutError(f"run 超时（{timeout:.0f}s），已取消（终态 {payload.get('status')}）")
+            return payload
+        if not timed_out and time.monotonic() >= deadline:
+            timed_out = True
+            cancel_deadline = time.monotonic() + 180
+            await client.post(f"{base_url}/api/agent/runs/{run_id}/cancel", headers=headers, timeout=60.0)
+        elif timed_out and time.monotonic() >= cancel_deadline:
+            raise TimeoutError(f"run 超时（{timeout:.0f}s），取消后仍未落定")
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+
 async def run_one(
     client: httpx.AsyncClient,
     headers: dict[str, str],
     base_url: str,
     agent_slug: str,
+    thread_id: str,
     q: dict,
     timeout: float,
 ) -> dict:
     request_id = f"agent-e2e-{uuid.uuid4().hex}"
+    record: dict = {
+        "query": q["query"],
+        "gold_answer": q.get("gold_answer"),
+        "gold_chunk_ids": q.get("gold_chunk_ids") or [],
+        "section": q.get("section"),
+        "kb_id": q.get("kb_id"),
+        "thread_id": thread_id,
+        "request_id": request_id,
+    }
+    started = time.monotonic()
     try:
-        resp = await client.post(
-            f"{base_url}/api/agent-invocation/eval/runs",
-            json={
-                "query": q["query"],
-                "agent_slug": agent_slug,
-                "meta": {"request_id": request_id},
-                "include_trajectory_summary": False,
-            },
-            headers=headers,
-            timeout=timeout + 15,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-        if payload.get("status") != "completed":
-            return {
-                "query": q["query"],
-                "section": q.get("section"),
-                "kb_id": q.get("kb_id"),
-                "error": f"run 未完成: {payload.get('status')} {payload.get('error', '')}",
-            }
-
-        agent_answer = payload.get("output") or ""
-        thread_id = payload.get("thread_id")
-        retrieved_chunks: list[dict] = []
-        if thread_id:
-            hist_resp = await client.get(
-                f"{base_url}/api/chat/thread/{thread_id}/history", headers=headers, timeout=timeout + 15
-            )
-            if hist_resp.status_code == 200:
-                retrieved_chunks = extract_retrieved_chunks(hist_resp.json())
-
-        record = {
-            "query": q["query"],
-            "gold_answer": q.get("gold_answer"),
-            "gold_chunk_ids": q.get("gold_chunk_ids") or [],
-            "section": q.get("section"),
-            "kb_id": q.get("kb_id"),
-            "agent_answer": agent_answer,
-            "retrieved_chunks": retrieved_chunks,
-            "thread_id": thread_id,
-            "request_id": request_id,
-            "kb_scope": payload.get("knowledge_disposition", {}).get("kb_scope")
-            if isinstance(payload.get("knowledge_disposition"), dict)
-            else None,
-        }
-        return record
+        run_id = await start_run(client, headers, base_url, agent_slug, thread_id, q["query"], request_id)
+        payload = await wait_run(client, headers, base_url, run_id, timeout)
     except Exception as e:
-        return {
-            "query": q["query"],
-            "section": q.get("section"),
-            "kb_id": q.get("kb_id"),
-            "error": f"调用失败: {e}",
-        }
+        record["error"] = f"调用失败: {e}"
+        record["elapsed_s"] = round(time.monotonic() - started, 1)
+        return record
+
+    record["elapsed_s"] = round(time.monotonic() - started, 1)
+    record["run_id"] = run_id
+    record["agent_answer"] = payload.get("output") or ""
+    record["retrieved_chunks"] = []
+    disposition = payload.get("knowledge_disposition")
+    record["kb_scope"] = disposition.get("kb_scope") if isinstance(disposition, dict) else None
+    if payload.get("status") != "completed":
+        error = payload.get("error") or {}
+        record["error"] = f"run 未完成: {payload.get('status')} {error.get('message', '')}"
+
+    hist_resp = await client.get(
+        f"{base_url}/api/chat/thread/{thread_id}/history", headers=headers, timeout=120.0
+    )
+    if hist_resp.status_code == 200:
+        record["retrieved_chunks"] = extract_retrieved_chunks(hist_resp.json(), run_id)
+    return record
+
+
+async def run_worker(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    base_url: str,
+    agent_slug: str,
+    worker_index: int,
+    questions: list[dict],
+    timeout: float,
+    emit,
+) -> None:
+    thread_id = await create_thread(
+        client, headers, base_url, agent_slug, f"Agent Evaluation Run #{worker_index + 1}"
+    )
+    for q in questions:
+        record = await run_one(client, headers, base_url, agent_slug, thread_id, q, timeout)
+        await emit(record)
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -215,7 +303,8 @@ async def run(args: argparse.Namespace) -> int:
     async with httpx.AsyncClient(timeout=60.0) as client:
         token = await login(args.base_url, username, password, client)
         headers = {"Authorization": f"Bearer {token}"}
-        print(f"登录成功，开始运行 {len(questions)} 题（agent: {args.agent_slug}）")
+        worker_count = max(1, min(args.concurrency, len(questions)))
+        print(f"登录成功，开始运行 {len(questions)} 题（agent: {args.agent_slug}，worker/沙箱: {worker_count}）")
 
         Path(args.output).mkdir(parents=True, exist_ok=True)
         safe_name = args.name or ""
@@ -225,25 +314,45 @@ async def run(args: argparse.Namespace) -> int:
             safe_name = date.today().strftime("%Y%m%d")
         out = str(Path(args.output) / f"agent_e2e_{safe_name}.jsonl")
 
-        semaphore = asyncio.Semaphore(max(1, args.concurrency))
+        buckets: list[list[dict]] = [[] for _ in range(worker_count)]
+        for i, q in enumerate(questions):
+            buckets[i % worker_count].append(q)
+
+        done = 0
+        total = len(questions)
+        lock = asyncio.Lock()
 
         # 边跑边写：长跑中断/崩溃时保留已完成结果，并支持实时观察进度
         with open(out, "w", encoding="utf-8") as f:
 
-            async def guarded(q: dict) -> dict:
-                async with semaphore:
-                    r = await run_one(client, headers, args.base_url, args.agent_slug, q, args.timeout)
-                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            async def emit(record: dict) -> None:
+                nonlocal done
+                async with lock:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     f.flush()
-                    return r
+                    done += 1
+                    mark = "✗" if record.get("error") else "✓"
+                    print(
+                        f"[{done}/{total}] {mark} {record['query'][:32]} "
+                        f"({record.get('elapsed_s', 0):.0f}s, {len(record.get('retrieved_chunks') or [])} chunks)"
+                        f"{' → ' + record['error'][:80] if record.get('error') else ''}",
+                        flush=True,
+                    )
 
-            results = list(await asyncio.gather(*[guarded(q) for q in questions]))
+            await asyncio.gather(
+                *[
+                    run_worker(client, headers, args.base_url, args.agent_slug, i, bucket, args.timeout, emit)
+                    for i, bucket in enumerate(buckets)
+                    if bucket
+                ]
+            )
 
-        ok = [r for r in results if "error" not in r]
-        failed = [r for r in results if "error" in r]
+        records = [json.loads(line) for line in Path(out).read_text(encoding="utf-8").splitlines() if line.strip()]
+        ok = [r for r in records if "error" not in r]
+        failed = [r for r in records if "error" in r]
         answered = [r for r in ok if (r.get("agent_answer") or "").strip()]
         print(
-            f"完成：{len(ok)}/{len(results)} 成功，{len(failed)} 失败，其中 {len(answered)} 题有答案，"
+            f"完成：{len(ok)}/{len(records)} 成功，{len(failed)} 失败，其中 {len(answered)} 题有答案，"
             f"{sum(1 for r in ok if r['retrieved_chunks'])} 题检索到上下文"
         )
         for r in failed:
