@@ -893,6 +893,7 @@ export default {
     satisfactionRateTip:
       'Satisfaction counts unreplied answers as satisfied: denominator = settled AI answers in conversations (incl. refusals / human handoff); (likes + unreplied) / evaluable answers',
     participationRate: 'Feedback participation {rate}%',
+    ratedSatisfaction: 'Rated satisfaction {rate}% ({count} ratings)',
     callStatsTitle: 'Call Statistics',
     timeRangeLast14Hours: 'Last 14 Hours',
     timeRangeLast14Days: 'Last 14 Days',

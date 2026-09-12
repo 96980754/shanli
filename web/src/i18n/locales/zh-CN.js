@@ -884,6 +884,7 @@ export default {
     satisfactionRateTip:
       '满意率按「未反馈默认计满意」口径统计：分母为会话内收尾的 AI 终答（含拒答/转人工），(好评+未反馈)/可评价回答数',
     participationRate: '反馈参与率 {rate}%',
+    ratedSatisfaction: '已反馈满意率 {rate}%（{count} 条反馈）',
     callStatsTitle: '调用统计',
     timeRangeLast14Hours: '近14小时',
     timeRangeLast14Days: '近14天',
