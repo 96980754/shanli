@@ -37,8 +37,15 @@ const en = (await import(join(root, 'src/i18n/locales/en-US.js'))).default
 const zhKeys = new Set(collectKeys(zh))
 const enKeys = new Set(collectKeys(en))
 
+// 仅英文覆写词典：这些子树按设计只存在于 en-US。前端只在英文模式下按 key 查它覆写
+// 后端 schema 的原文（后端 schema 以中文为内部规范语），中文界面始终走后端原文，
+// 因此 zh-CN 不该有对应的一份，不参与 key 一致性比较。
+const EN_ONLY_OVERRIDE = ['retrievalConfig']
+const isEnOnlyOverride = (key) =>
+  EN_ONLY_OVERRIDE.some((prefix) => key === prefix || key.startsWith(`${prefix}.`))
+
 const missingEn = [...zhKeys].filter((k) => !enKeys.has(k))
-const missingZh = [...enKeys].filter((k) => !zhKeys.has(k))
+const missingZh = [...enKeys].filter((k) => !zhKeys.has(k) && !isEnOnlyOverride(k))
 
 if (missingEn.length || missingZh.length) {
   console.error('❌ locale key 不一致：')
