@@ -672,6 +672,14 @@ export const graphBuildApi = {
     return apiAdminGet(graphBuildUrl(kbId, 'status'))
   },
 
+  getReminderStatus: async (kbId) => {
+    return apiAdminGet(graphBuildUrl(kbId, 'reminder-status'))
+  },
+
+  dismissReminder: async (kbId) => {
+    return apiAdminPost(graphBuildUrl(kbId, 'reminder-dismiss'), {})
+  },
+
   configure: async (kbId, data) => {
     return apiAdminPost(graphBuildUrl(kbId, 'config'), data)
   },

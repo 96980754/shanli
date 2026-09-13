@@ -215,6 +215,8 @@ def build_graph_payload(normalized_result: dict[str, Any]) -> dict[str, Any]:
         return graph_entity["id"]
 
     relations = []
+    for entity in normalized_result["entities"]:
+        add_entity(entity)
     for relation in normalized_result["relations"]:
         if relation.get("polarity", "positive") != "positive" or relation.get("assertion_kind", "fact") != "fact":
             continue

@@ -577,7 +577,7 @@ export const useDatabaseStore = defineStore('database', () => {
       if (parentId) requestParams.parent_id = parentId
       const data = await documentApi.addUploadedDocuments(kbId.value, items, requestParams)
       if (data.status === 'success' || data.status === 'partial_failed') {
-        message.success(data.message || i18n.global.t('db.messages.fileUploadedAwaitingAdmin'))
+        message.success(data.message || i18n.global.t('db.messages.submittedForProcessing', { type: i18n.global.t('db.fileLabel') }))
         await delayedRefresh()
         return true
       }

@@ -144,13 +144,15 @@ def test_convert_with_docling_reinserts_image_links_in_document_order(
     file_path.write_bytes(b"fake docx")
     first_image = base64.b64encode(b"first image").decode()
     second_image = base64.b64encode(b"second image").decode()
+    converted_markdown = "before\n<!-- image -->\nremote\n<!-- image -->\nbetween\n<!-- image -->\nafter"
     fake_doc = SimpleNamespace(
         pictures=[
             SimpleNamespace(image=SimpleNamespace(uri=f"data:image/png;base64,{first_image}")),
             SimpleNamespace(image=SimpleNamespace(uri="https://example.test/remote.png")),
             SimpleNamespace(image=SimpleNamespace(uri=f"data:image/png;base64,{second_image}")),
         ],
-        export_to_markdown=lambda: "before\n<!-- image -->\nremote\n<!-- image -->\nbetween\n<!-- image -->\nafter",
+        export_to_markdown=lambda **_kwargs: converted_markdown,
+        tables=[],
     )
     fake_result = SimpleNamespace(status=SimpleNamespace(name="SUCCESS"), document=fake_doc)
     uploaded_images: list[bytes] = []
@@ -192,7 +194,8 @@ def test_convert_with_docling_keeps_image_placeholder_when_upload_fails(
     image = base64.b64encode(b"image data").decode()
     fake_doc = SimpleNamespace(
         pictures=[SimpleNamespace(image=SimpleNamespace(uri=f"data:image/png;base64,{image}"))],
-        export_to_markdown=lambda: "before\n<!-- image -->\nafter",
+        export_to_markdown=lambda **_kwargs: "before\n<!-- image -->\nafter",
+        tables=[],
     )
     fake_result = SimpleNamespace(status=SimpleNamespace(name="SUCCESS"), document=fake_doc)
 
@@ -211,6 +214,29 @@ def test_convert_with_docling_keeps_image_placeholder_when_upload_fails(
     markdown = parser_unified._convert_with_docling(file_path)
 
     assert markdown == "before\n[图片: image_1000000.png]\nafter"
+
+
+def test_collapse_horizontal_merges_only_shrinks_column_span() -> None:
+    def _cell(start_row: int, start_col: int, end_row: int, end_col: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            start_row_offset_idx=start_row,
+            start_col_offset_idx=start_col,
+            end_row_offset_idx=end_row,
+            end_col_offset_idx=end_col,
+        )
+
+    merged_title = _cell(0, 0, 1, 8)  # Excel 整行合并标题 A1:H1
+    merged_group = _cell(4, 0, 6, 2)  # 竖向+横向同时合并
+    plain = _cell(1, 0, 2, 1)
+    fake_table = SimpleNamespace(data=SimpleNamespace(table_cells=[merged_title, plain, merged_group]))
+    fake_doc = SimpleNamespace(tables=[fake_table])
+
+    parser_unified._collapse_horizontal_merges(fake_doc)
+
+    assert (merged_title.start_col_offset_idx, merged_title.end_col_offset_idx) == (0, 1)
+    assert (merged_group.start_col_offset_idx, merged_group.end_col_offset_idx) == (0, 1)
+    assert (merged_group.start_row_offset_idx, merged_group.end_row_offset_idx) == (4, 6)
+    assert (plain.start_col_offset_idx, plain.end_col_offset_idx) == (0, 1)
 
 
 def test_parser_parse_png_file_returns_markdown_text_with_mocked_ocr(

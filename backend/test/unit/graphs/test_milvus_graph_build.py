@@ -176,6 +176,7 @@ def test_build_graph_payload_only_publishes_positive_facts():
     assert payload["entities"] == [
         {"id": "e1", "text": "产品", "label": "Entity", "attributes": []},
         {"id": "e2", "text": "在线模式", "label": "Entity", "attributes": []},
+        {"id": "e3", "text": "离线模式", "label": "Entity", "attributes": []},
     ]
     assert payload["relations"] == [{"source": "e1", "target": "e2", "text": "支持", "label": "SUPPORTS"}]
 
@@ -200,7 +201,11 @@ def test_build_graph_payload_drops_entities_without_positive_facts():
 
     payload = build_graph_payload(normalized)
 
-    assert payload["entities"] == []
+    assert payload["entities"] == [
+        {"id": "e1", "text": "产品", "label": "Entity", "attributes": []},
+        {"id": "e2", "text": "离线模式", "label": "Entity", "attributes": []},
+        {"id": "e3", "text": "孤立功能", "label": "Entity", "attributes": []},
+    ]
     assert payload["relations"] == []
     assert normalized["entities"] == [
         {"text": "产品", "label": "Entity", "attributes": []},
@@ -234,9 +239,7 @@ def test_build_graph_payload_keeps_only_positive_relation_endpoints():
 
     payload = build_graph_payload(normalized)
 
-    assert [entity["text"] for entity in payload["entities"]] == ["产品", "在线模式"]
-    assert payload["entities"][0]["attributes"] == [{"text": "正式", "label": "status"}]
-    assert all(entity["text"] != "离线模式" for entity in payload["entities"])
+    assert [entity["text"] for entity in payload["entities"]] == ["产品", "在线模式", "离线模式"]
     assert len(payload["relations"]) == 1
 
 
@@ -876,10 +879,9 @@ def test_milvus_graph_service_skips_empty_formal_projection():
         ),
     )
 
-    assert entities == []
+    assert [entity["name"] for entity in entities] == ["独立实体", "产品", "离线模式"]
     assert triples == []
-    driver.session.assert_not_called()
-    tx.run.assert_not_called()
+    driver.session.assert_called_once()
 
 
 def test_milvus_graph_service_delete_file_graph_uses_scoped_streaming_queries():

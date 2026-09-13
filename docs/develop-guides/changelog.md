@@ -15,6 +15,8 @@
 
 ### 开发记录
 
+- **修复 Docling 转换中合并单元格内容重复与表格填充空格**——Excel 里跨列的整行合并（如标题行、`荣誉/证书` 这类分组行）在入库后会把内容复制到它覆盖的每一列，整行 8 列都是同一个标题；同时 Docling 默认按列宽补空格对齐，同样的内容多出一大截空白。现于 `_convert_with_docling` 导出前把横向合并的跨度收回到锚点格子（纵向合并保持填下，让每行自带分组值），并改用 `compact_tables=True` 导出。以 `MCSTARS产品相关荣誉、证书统计表 V1.0-20260528.xlsx` 为例：标题由 8 次重复变为 1 次，解析结果由 14321 字符降至 1833 字符，表格行列结构与下游 markdown-it 解析均不变。**注意**：已入库文档需重新解析才会生效。**验证**：`test_parser_facade.py` 补横向合并收拢的单测（15 条全绿）；实跑该 xlsx 与含纵向合并的 `MCSTARS 服务等级协议` docx 确认无回归；ruff 通过。
+
 - **知识缺口支持按业务分类筛选**——拒答落库时保存已解析的 `domain`，知识缺口管理接口与页面新增业务分类筛选，并从系统业务线配置生成选项；历史记录无分类时归入「未分类」。
 
 - **人工问答对命中后二次校验启用状态并标注答案来源**——① QA 快答的组装已移入 worker，但 worker 侧按 `curated_qa_id` 取问答对用的是无条件查询（`CuratedQARepository.get`），在「POST 检测命中 → worker 组装」的窗口期里管理员若禁用或删除该问答对，worker 仍会照常输出人工答案。现新增 `get_enabled(qa_id)`（查询同时限定 `enabled=True`）并让 `stream_curated_qa_answer` 改用它；命中已禁用/删除的问答对走既有 `curated_qa_missing` 分支明确报错，不静默回退普通 Agent。② 用户侧低干扰展示答案来源：`AgentMessageComponent` 依 assistant 消息 `extra_metadata` 的 `human_confirmed` 与 `answer_source`，在答案上方以灰色小字显示「答案来源：人工维护问答」（语义召回命中显示「答案来源：人工维护问答（语义匹配）」），不暴露内部 id 与 reason。**验证**：`test_curated_qa_run_service.py` 补 `get_enabled` 替身，15 条单测全绿；`test:frontend` 全绿；i18n 补回被覆盖的 `chat.transferToHuman` 键，新增两键中英文一致（`check-i18n` 其余报错为既有的 `retrievalConfig.*` 缺口，与本次无关）。

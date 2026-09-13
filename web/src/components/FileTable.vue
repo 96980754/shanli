@@ -37,7 +37,7 @@
       :file-id="versionFileId"
       :can-manage="props.canManage"
       @download="handleDownloadFile"
-      @changed="handleRefresh"
+      @changed="handleVersionChanged"
     />
 
     <DocumentCleaningModal
@@ -411,7 +411,7 @@
 
                   <!-- Parse Action -->
                   <a-button
-                    v-if="props.canManage && canParseFile(row)"
+                    v-if="props.canProcess && canParseFile(row)"
                     type="text"
                     block
                     @click="handleParseFile(row)"
@@ -423,7 +423,7 @@
 
                   <!-- Index Action -->
                   <a-button
-                    v-if="props.canManage && getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
+                    v-if="props.canProcess && getFilePrimaryAction(row)?.type === FILE_ACTIONS.INDEX"
                     type="text"
                     block
                     @click="handleIndexFile(row)"
@@ -496,16 +496,6 @@
                     {{ $t('docModal.qaPairs') }}
                   </a-button>
                   <a-button
-                    v-if="props.canManage"
-                    type="text"
-                    block
-                    @click="conflictModalVisible = true"
-                  >
-                    <template #icon><AlertTriangle :size="14" /></template>
-                    {{ $t('fileTable.conflictReview') }}
-                  </a-button>
-
-                  <a-button
                     v-if="props.canDelete"
                     type="text"
                     block
@@ -577,6 +567,7 @@ import {
 
 const props = defineProps({
   canUpload: { type: Boolean, default: true },
+  canProcess: { type: Boolean, default: false },
   canDownload: { type: Boolean, default: true },
   canDelete: { type: Boolean, default: true },
   canManage: { type: Boolean, default: true }
@@ -662,7 +653,7 @@ const getStatusIcon = (status) => {
 }
 
 const hasStatusAction = (record) => {
-  return Boolean(props.canManage && getFilePrimaryAction(record))
+  return Boolean(props.canProcess && getFilePrimaryAction(record))
 }
 
 const getStatusActionTitle = (record) => {
@@ -1003,7 +994,7 @@ const canBatchDelete = computed(() => {
 
 // 计算是否可以批量解析
 const canBatchParse = computed(() => {
-  if (!props.canManage) return false
+  if (!props.canProcess) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canParseFile(file)
@@ -1012,18 +1003,24 @@ const canBatchParse = computed(() => {
 
 // 计算是否可以批量入库
 const canBatchIndex = computed(() => {
-  if (!props.canManage) return false
+  if (!props.canProcess) return false
   return selectedRowKeys.value.some((key) => {
     const file = files.value.find((f) => f.file_id === key)
     return !lock.value && canIndexFile(file)
   })
 })
 
+const emit = defineEmits(['changed'])
+
 const handleRefresh = () => {
   store.getDatabaseInfo(undefined, true, true)
   store.loadDocumentFiles()
 }
 
+const handleVersionChanged = () => {
+  handleRefresh()
+  emit('changed')
+}
 const handleBreadcrumbClick = async (index) => {
   statusFilter.value = 'all'
   await store.goToFolder(index)
@@ -1233,7 +1230,7 @@ const handleParseFile = async (record) => {
 }
 
 const handleStatusAction = async (record) => {
-  if (!props.canManage || lock.value || !hasStatusAction(record)) return
+  if (!props.canProcess || lock.value || !hasStatusAction(record)) return
 
   const action = getFilePrimaryAction(record)
   if (action?.type === FILE_ACTIONS.PARSE) {

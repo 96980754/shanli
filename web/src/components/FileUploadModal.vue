@@ -2089,7 +2089,7 @@ const chunkData = async () => {
       }
       if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
-      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      const addFiles = store.addFiles
       await addFiles({
         items,
         contentType: 'file',
@@ -2172,7 +2172,7 @@ const chunkData = async () => {
       params._preprocessed_map = preprocessedMap
       if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
-      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      const addFiles = store.addFiles
       await addFiles({
         items: items,
         contentType: 'file',
@@ -2327,7 +2327,7 @@ const chunkData = async () => {
       if (Object.keys(replace_file_ids).length > 0) params.replace_file_ids = replace_file_ids
       if (Object.keys(source_paths).length > 0) params.source_paths = source_paths
 
-      const addFiles = props.deferProcessing ? store.addUploadedFiles : store.addFiles
+      const addFiles = store.addFiles
       const added = await addFiles({
         items,
         contentType: 'file',

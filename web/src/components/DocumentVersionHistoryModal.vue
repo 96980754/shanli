@@ -193,11 +193,35 @@
           <a-tag color="red">{{ $t('docModal.reportRemoved', { count: report.removed_count }) }}</a-tag>
           <a-tag color="red">{{ $t('docModal.reportConflict', { count: report.conflict_count }) }}</a-tag>
         </div>
+        <div class="report-filter" :aria-label="$t('docModal.reportFilterAria')">
+          <span>{{ $t('docModal.reportFilterLabel') }}</span>
+          <a-select v-model:value="reportChangeTypeFilter" style="width: 180px">
+            <a-select-option value="">{{ $t('docModal.reportFilterAll', { count: reportItems.length }) }}</a-select-option>
+            <a-select-option value="new">{{ $t('docModal.reportNew', { count: report.new_count }) }}</a-select-option>
+            <a-select-option value="changed">{{ $t('docModal.reportChanged', { count: report.changed_count }) }}</a-select-option>
+            <a-select-option value="removed">{{ $t('docModal.reportRemoved', { count: report.removed_count }) }}</a-select-option>
+            <a-select-option value="conflict">{{ $t('docModal.reportConflict', { count: report.conflict_count }) }}</a-select-option>
+          </a-select>
+        </div>
+        <div v-if="canReviewValidationReport(report, canManage)" class="report-actions report-actions-top">
+          <a-button danger :loading="decisionLoading" @click="rejectReport">{{
+            $t('docModal.rejectNewVersion')
+          }}</a-button>
+          <a-button type="primary" :loading="decisionLoading" @click="acceptReport"
+            >{{ $t('docModal.acceptAndEnable') }}</a-button
+          >
+        </div>
         <a-empty
           v-if="reportItems.length === 0"
           :description="$t('docModal.noStructuredChanges')"
         />
-        <div v-for="item in reportItems" :key="item.item_id" class="report-item">
+        <a-empty
+          v-else-if="filteredReportItems.length === 0"
+          :description="$t('docModal.noMatchingReportChanges')"
+        >
+          <a-button type="link" @click="reportChangeTypeFilter = ''">{{ $t('docModal.showAllReportChanges') }}</a-button>
+        </a-empty>
+        <div v-for="item in filteredReportItems" :key="item.item_id" class="report-item">
           <div class="report-item-title">
             <a-tag :color="getChangeTypeView(item.change_type).color">
               {{ getChangeTypeView(item.change_type).label }}
@@ -222,14 +246,6 @@
               <pre>{{ getEvidenceQuote(item.new_evidence, item.change_type, 'new') }}</pre>
             </section>
           </div>
-        </div>
-        <div v-if="canReviewValidationReport(report, canManage)" class="report-actions">
-          <a-button danger :loading="decisionLoading" @click="rejectReport">{{
-            $t('docModal.rejectNewVersion')
-          }}</a-button>
-          <a-button type="primary" :loading="decisionLoading" @click="acceptReport"
-            >{{ $t('docModal.acceptAndEnable') }}</a-button
-          >
         </div>
       </template>
     </a-spin>
@@ -271,6 +287,12 @@ const reportVisible = ref(false)
 const reportLoading = ref(false)
 const report = ref(null)
 const reportItems = ref([])
+const reportChangeTypeFilter = ref('')
+const filteredReportItems = computed(() =>
+  reportChangeTypeFilter.value
+    ? reportItems.value.filter((item) => item.change_type === reportChangeTypeFilter.value)
+    : reportItems.value
+)
 const reviewedVersion = ref(null)
 const decisionLoading = ref(false)
 
@@ -574,6 +596,16 @@ watch(
   justify-content: flex-end;
   gap: 12px;
   margin-top: 20px;
+}
+
+.report-actions-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 0;
+  margin-top: 12px;
+  background: var(--background-color, #fff);
+  border-bottom: 1px solid var(--gray-150);
 }
 
 // ============ 版本对比 ============

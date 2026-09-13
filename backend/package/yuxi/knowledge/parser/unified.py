@@ -142,6 +142,7 @@ def _convert_with_docling(file_path: Path, params: dict | None = None) -> str:
         raise RuntimeError(f"Docling 转换失败: {result.status}")
 
     doc = result.document
+    _collapse_horizontal_merges(doc)
 
     if hasattr(doc, "pictures") and doc.pictures:
         replacements: list[str] = []
@@ -160,12 +161,25 @@ def _convert_with_docling(file_path: Path, params: dict | None = None) -> str:
             else:
                 replacements.append("")
 
-        markdown = doc.export_to_markdown()
+        markdown = doc.export_to_markdown(compact_tables=True)
         for replacement in replacements:
             markdown = re.sub(r"<!--\s*image\s*-->", replacement, markdown, count=1)
         return markdown
 
-    return doc.export_to_markdown()
+    return doc.export_to_markdown(compact_tables=True)
+
+
+def _collapse_horizontal_merges(doc) -> None:
+    """把横向合并单元格的跨度收回到锚点格子。
+
+    docling 保留了合并信息（col_span），但导出 markdown 时逐格取文本，会把合并内容复制
+    到它覆盖的每一列——Excel 里常见的整行合并标题会变成整行 8 列同一个标题。这里只收拢
+    横向跨度；纵向合并（row_span）保持 docling 的填下行为，让每一行自带分组值。
+    """
+    for table in doc.tables:
+        for cell in table.data.table_cells:
+            if cell.end_col_offset_idx - cell.start_col_offset_idx > 1:
+                cell.end_col_offset_idx = cell.start_col_offset_idx + 1
 
 
 def _markdown_cell_text(cell) -> str:

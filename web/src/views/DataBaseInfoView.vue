@@ -17,7 +17,7 @@
       :mode="addFilesMode"
       :can-upload="kbPermissions.can_upload"
       :can-manage="kbPermissions.can_manage"
-      :defer-processing="!userStore.isAdmin"
+      :defer-processing="false"
       @success="onFileUploadSuccess"
     />
 
@@ -118,19 +118,6 @@
               </div>
               <div class="file-panel-status">
                 <button
-                  v-if="userStore.isAdmin && pendingParseCount > 0"
-                  type="button"
-                  class="file-stat-card file-stat-action file-stat-summary"
-                  :disabled="store.state.chunkLoading"
-                  @click="confirmBatchParse"
-                >
-                  <FileText :size="16" />
-                  <div class="file-stat-inline">
-                    <strong>{{ pendingParseCount }}</strong>
-                    <span>{{ $t('dbInfo.pendingReview') }}</span>
-                  </div>
-                </button>
-                <button
                   v-if="userStore.isAdmin && pendingIndexCount > 0"
                   type="button"
                   class="file-stat-card file-stat-action file-stat-summary"
@@ -195,10 +182,12 @@
             </div>
             <FileTable
               ref="fileTableRef"
-              :can-upload="userStore.isAdmin"
+              :can-upload="kbPermissions.can_upload"
+              :can-process="kbPermissions.can_upload"
               :can-download="kbPermissions.can_download"
               :can-delete="kbPermissions.can_delete"
-              :can-manage="userStore.isAdmin"
+              :can-manage="kbPermissions.can_manage"
+              @changed="graphRevision++"
             />
           </div>
 
@@ -253,6 +242,7 @@
             <KnowledgeGraphSection
               :visible="true"
               :active="activeTab === 'graph'"
+              :refresh-revision="graphRevision"
               @toggle-visible="() => {}"
             />
           </div>
@@ -437,7 +427,7 @@ import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
 import KnowledgePermissionPanel from '@/components/KnowledgePermissionPanel.vue'
 import AiTextarea from '@/components/AiTextarea.vue'
 import ShareConfigForm from '@/components/ShareConfigForm.vue'
-import { databaseApi, categoryApi } from '@/apis/knowledge_api'
+import { databaseApi, categoryApi, graphBuildApi } from '@/apis/knowledge_api'
 import { departmentApi } from '@/apis/department_api'
 import { authApi } from '@/apis/auth_api'
 import { useChunkPresetOptions } from '@/composables/useChunkPresetOptions'
@@ -523,6 +513,7 @@ const tabs = computed(() => {
 
 const visibleTabs = computed(() => tabs.value)
 const activeTab = ref('filetable')
+const graphRevision = ref(0)
 
 watch(
   () => [kbId.value, isMilvus.value],
@@ -537,10 +528,6 @@ watch(visibleTabs, (nextTabs) => {
   if (!nextTabs.some((tab) => tab.key === activeTab.value)) {
     activeTab.value = nextTabs[0]?.key || 'query'
   }
-})
-
-const pendingParseCount = computed(() => {
-  return Number(store.database.stats?.pending_parse_count || 0)
 })
 
 const formatStatNumber = (value) => {
@@ -603,22 +590,6 @@ const repairDatabaseStats = async () => {
 const pendingIndexCount = computed(() => {
   return Number(store.database.stats?.pending_index_count || 0)
 })
-
-const confirmBatchParse = () => {
-  const count = pendingParseCount.value
-  if (count <= 0) {
-    message.info(t('dbInfo.noPendingReviewDocs'))
-    return
-  }
-
-  Modal.confirm({
-    title: t('dbInfo.parsePendingTitle'),
-    content: t('dbInfo.parsePendingContent', { count: formatStatNumber(count) }),
-    okText: t('dbInfo.submitParse'),
-    cancelText: t('common.cancel'),
-    onOk: () => store.parsePendingFiles(count)
-  })
-}
 
 const confirmBatchIndex = () => {
   const count = pendingIndexCount.value
@@ -693,9 +664,41 @@ const folderTree = computed(() => {
   return roots
 })
 
+const reminderChecked = ref(false)
+const reminderCheckedForKb = ref(new Set())
+
+const maybeShowGraphReminder = async (databaseId) => {
+  if (!userStore.isAdmin || !isMilvus.value || reminderCheckedForKb.value.has(databaseId)) return
+  reminderCheckedForKb.value.add(databaseId)
+  try {
+    const status = await graphBuildApi.getReminderStatus(databaseId)
+    if (!status.should_remind || databaseId !== kbId.value) return
+    reminderChecked.value = false
+    Modal.confirm({
+      title: t('graph.reminderTitle'),
+      content: h('div', [
+        h('p', t('graph.reminderDescription', { count: status.pending_chunks })),
+        h('label', { class: 'graph-reminder-option' }, [
+          h('input', { type: 'checkbox', onChange: (event) => { reminderChecked.value = event.target.checked } }),
+          h('span', t('graph.reminderDismissOption'))
+        ])
+      ]),
+      okText: t('graph.openGraph'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        if (reminderChecked.value) await graphBuildApi.dismissReminder(databaseId)
+        activeTab.value = 'graph'
+      }
+    })
+  } catch (error) {
+    console.error('加载图谱提醒状态失败:', error)
+  }
+}
+
 const onFileUploadSuccess = () => {
   taskerStore.loadTasks()
 }
+
 
 const resetFileSelectionState = () => {
   store.selectedRowKeys = []
@@ -715,6 +718,7 @@ watch(
     try {
       await loadDatabaseAccess(nextKbId)
       await store.getDatabaseInfo(nextKbId, !userStore.isAdmin)
+      await maybeShowGraphReminder(nextKbId)
       store.startAutoRefresh()
     } finally {
       detailLoading.value = false

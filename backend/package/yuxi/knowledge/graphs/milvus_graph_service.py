@@ -38,6 +38,7 @@ from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat
 
 GRAPH_CONFIG_KEY = "graph_build_config"
+GRAPH_REMINDER_DISABLED_KEY = "graph_reminder_disabled"
 GRAPH_TASK_TYPE = "knowledge_graph_index"
 NEO4J_QUERY_OFFLOAD_LIMIT = 8
 
@@ -165,6 +166,30 @@ class MilvusGraphService:
             "build_task_completed_at": build_task.completed_at if build_task else None,
         }
 
+    async def get_reminder_status(self, kb_id: str) -> dict[str, Any]:
+        kb = await self._get_milvus_kb(kb_id)
+        params = dict(kb.additional_params or {})
+        status = await self.get_status(kb_id)
+        disabled = bool(params.get(GRAPH_REMINDER_DISABLED_KEY, False))
+        return {
+            "kb_id": kb_id,
+            "configured": status["configured"],
+            "pending_chunks": status["pending_chunks"],
+            "total_chunks": status["total_chunks"],
+            "reminder_disabled": disabled,
+            "should_remind": status["pending_chunks"] > 0 and not disabled,
+        }
+
+    async def set_reminder_disabled(self, kb_id: str, disabled: bool = True) -> dict[str, Any]:
+        kb = await self._get_milvus_kb(kb_id)
+        additional_params = dict(kb.additional_params or {})
+        additional_params[GRAPH_REMINDER_DISABLED_KEY] = disabled
+        updated = await self.kb_repo.update(kb_id, {"additional_params": additional_params})
+        if updated is None:
+            raise ValueError(f"知识库 {kb_id} 不存在")
+        await self._sync_kb_metadata_cache(kb_id, additional_params)
+        return await self.get_reminder_status(kb_id)
+
     async def configure(
         self,
         kb_id: str,
@@ -213,7 +238,14 @@ class MilvusGraphService:
         await self._sync_kb_metadata_cache(kb_id, additional_params)
         return config
 
-    async def extract_file_chunks(self, kb_id: str, file_id: str, *, context=None) -> list[dict[str, Any]]:
+    async def extract_file_chunks(
+        self,
+        kb_id: str,
+        file_id: str,
+        *,
+        context=None,
+        request_limiter: asyncio.Semaphore | None = None,
+    ) -> list[dict[str, Any]]:
         """抽取指定文件的结构化事实，但不发布到 Neo4j 或图向量库。
 
         跨 chunk 合并实体：收集全文所有抽取结果，按强归一化+相似度把同一实体
@@ -229,28 +261,55 @@ class MilvusGraphService:
         chunks = await self.chunk_repo.list_by_file_id(file_id)
         document_entities = []
         if any(not chunk.extraction_result for chunk in chunks):
-            document_entities = await self._extract_document_entities(extractor, file_id, chunks=chunks)
-        results: list[dict[str, Any]] = []
-        for index, chunk in enumerate(chunks, start=1):
-            if context is not None:
-                await context.raise_if_cancelled()
-            extraction_result = await self._get_chunk_extraction_result(
-                kb_id,
-                chunk,
-                extractor,
-                document_entities=document_entities,
+            document_entities = await self._extract_document_entities(
+                extractor, file_id, chunks=chunks, request_limiter=request_limiter
             )
-            results.append(
-                {
-                    "file_id": chunk.file_id,
-                    "chunk_id": chunk.chunk_id,
-                    "chunk_index": chunk.chunk_index,
-                    "content": chunk.content,
-                    "extraction_result": extraction_result,
-                }
-            )
-            if context is not None:
-                await context.set_progress(index / max(len(chunks), 1) * 100.0)
+        worker_count = self._get_worker_count(config)
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        for chunk in chunks:
+            queue.put_nowait(chunk)
+        results_by_id: dict[str, dict[str, Any]] = {}
+        results_lock = asyncio.Lock()
+
+        async def extract_worker() -> None:
+            while True:
+                if context is not None:
+                    await context.raise_if_cancelled()
+                try:
+                    chunk = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                try:
+                    extraction_result = await self._get_chunk_extraction_result(
+                        kb_id,
+                        chunk,
+                        extractor,
+                        document_entities=document_entities,
+                        request_limiter=request_limiter,
+                    )
+                    async with results_lock:
+                        results_by_id[chunk.chunk_id] = {
+                            "file_id": chunk.file_id,
+                            "chunk_id": chunk.chunk_id,
+                            "chunk_index": chunk.chunk_index,
+                            "content": chunk.content,
+                            "extraction_result": extraction_result,
+                        }
+                    if context is not None:
+                        await context.set_progress(len(results_by_id) / max(len(chunks), 1) * 100.0)
+                finally:
+                    queue.task_done()
+
+        workers = [asyncio.create_task(extract_worker()) for _ in range(min(worker_count, len(chunks)))]
+        try:
+            await asyncio.gather(*workers)
+        except BaseException:
+            for worker in workers:
+                if not worker.done():
+                    worker.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+            raise
+        results = [results_by_id[chunk.chunk_id] for chunk in chunks]
 
         # 跨 chunk 实体合并：收集全部实体名，聚类为 canonical，回写结果与缓存
         await self._merge_entities_across_chunks(kb_id, chunks, results)
@@ -515,6 +574,7 @@ class MilvusGraphService:
         file_id: str,
         *,
         chunks: list[Any] | None = None,
+        request_limiter: asyncio.Semaphore | None = None,
     ) -> list[dict[str, str]]:
         """扫描整篇文档，识别文档级主实体（领域无关）。
 
@@ -529,7 +589,10 @@ class MilvusGraphService:
             document_text = "\n\n".join(chunk.content or "" for chunk in chunks)
             if not document_text.strip():
                 return []
-            return await extract_document_entities(document_text)
+            if request_limiter is None:
+                return await extract_document_entities(document_text)
+            async with request_limiter:
+                return await extract_document_entities(document_text)
         except Exception as exc:
             logger.warning(f"文档级主实体扫描失败 file_id={file_id}, error_type={exc.__class__.__name__}")
             return []
@@ -541,6 +604,7 @@ class MilvusGraphService:
         extractor: GraphExtractor,
         *,
         document_entities: list[dict[str, str]] | None = None,
+        request_limiter: asyncio.Semaphore | None = None,
     ) -> dict[str, Any]:
         if chunk.extraction_result:
             try:
@@ -554,16 +618,29 @@ class MilvusGraphService:
                 await self.chunk_repo.clear_extraction_result(chunk.chunk_id)
                 chunk.extraction_result = None
 
-        extraction_result = await extractor.extract(
-            chunk.content,
-            chunk_metadata={
-                "kb_id": kb_id,
-                "chunk_id": chunk.chunk_id,
-                "file_id": chunk.file_id,
-                "chunk_index": chunk.chunk_index,
-                "document_entities": document_entities or [],
-            },
-        )
+        if request_limiter is None:
+            extraction_result = await extractor.extract(
+                chunk.content,
+                chunk_metadata={
+                    "kb_id": kb_id,
+                    "chunk_id": chunk.chunk_id,
+                    "file_id": chunk.file_id,
+                    "chunk_index": chunk.chunk_index,
+                    "document_entities": document_entities or [],
+                },
+            )
+        else:
+            async with request_limiter:
+                extraction_result = await extractor.extract(
+                    chunk.content,
+                    chunk_metadata={
+                        "kb_id": kb_id,
+                        "chunk_id": chunk.chunk_id,
+                        "file_id": chunk.file_id,
+                        "chunk_index": chunk.chunk_index,
+                        "document_entities": document_entities or [],
+                    },
+                )
         normalized_result = extractor.normalize_result(extraction_result)
         await self.chunk_repo.update_extraction_result(chunk.chunk_id, normalized_result)
         return normalized_result
@@ -586,7 +663,7 @@ class MilvusGraphService:
             entity["id"]: record for entity, record in zip(entities, entity_records, strict=True)
         }
         triple_records = self._build_triple_records(kb_id, relations, entity_record_by_local_id, graph_payload)
-        if not relations:
+        if not entities:
             return [], []
         content_preview = (chunk.content or "")[:300]
 

@@ -415,6 +415,10 @@ const props = defineProps({
   active: {
     type: Boolean,
     default: false
+  },
+  refreshRevision: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -912,6 +916,15 @@ const scheduleGraphLoad = (delay = 200) => {
   }, delay)
 }
 
+watch(
+  () => props.refreshRevision,
+  () => {
+    if (props.active && isGraphSupported.value) {
+      loadGraphBuildStatus()
+      scheduleGraphLoad(0)
+    }
+  }
+)
 watch(
   () => props.active,
   (active) => {

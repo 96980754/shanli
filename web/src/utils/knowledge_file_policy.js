@@ -7,7 +7,7 @@ export const FILE_ACTIONS = {
 }
 
 const STATUS_VIEW = {
-  uploaded: { key: 'kbFile.statusUploaded', tone: 'status-warning', icon: 'clock' },
+  uploaded: { key: 'kbFile.statusParsing', tone: 'status-info', icon: 'progress' },
   parsing: { key: 'kbFile.statusParsing', tone: 'status-info', icon: 'progress' },
   parsed: { key: 'kbFile.statusParsed', tone: 'status-primary', icon: 'file' },
   error_parsing: { key: 'kbFile.statusErrorParsing', tone: 'status-error', icon: 'error' },

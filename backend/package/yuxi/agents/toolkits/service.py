@@ -4,6 +4,7 @@ from yuxi.utils import logger
 
 # 工具元数据缓存
 _metadata_cache: list[dict] = []
+_HIDDEN_TOOL_NAMES = frozenset({"search_product_image"})
 
 
 def _extract_tool_info(tool_obj) -> dict:
@@ -50,6 +51,8 @@ def _ensure_metadata_loaded():
 
     for tool in all_tools:
         tool_name = tool.name
+        if tool_name in _HIDDEN_TOOL_NAMES:
+            continue
         runtime_info = _extract_tool_info(tool)
 
         # 合并附加元数据
@@ -87,6 +90,8 @@ def get_tool_instances_by_category(category: str) -> list[Any]:
     extra_meta = get_all_extra_metadata()
     tools = []
     for tool in get_all_tool_instances():
+        if tool.name in _HIDDEN_TOOL_NAMES:
+            continue
         tool_meta = extra_meta.get(tool.name)
         tool_category = tool_meta.category if tool_meta else "buildin"
         if tool_category == category:

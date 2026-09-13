@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from yuxi.knowledge.graphs.milvus_graph_service import GRAPH_CONFIG_KEY, MilvusGraphService
@@ -185,9 +186,16 @@ class DocumentVersionService:
             graph_service = MilvusGraphService()
             if context is not None:
                 await context.set_progress(65, "抽取新旧版本知识断言")
-            old_chunks = await graph_service.extract_file_chunks(kb_id, old_file_id)
-            new_chunks = await graph_service.extract_file_chunks(kb_id, candidate_file_id)
             extractor_options = config.get("extractor_options") or {}
+            try:
+                concurrency_count = int(extractor_options.get("concurrency_count") or 1)
+            except (TypeError, ValueError):
+                concurrency_count = 1
+            request_limiter = asyncio.Semaphore(max(1, min(concurrency_count, 20)))
+            old_chunks, new_chunks = await asyncio.gather(
+                graph_service.extract_file_chunks(kb_id, old_file_id, request_limiter=request_limiter),
+                graph_service.extract_file_chunks(kb_id, candidate_file_id, request_limiter=request_limiter),
+            )
             ontology = load_conflict_ontology(extractor_options)
             analysis = analyze_document_changes(old_chunks, new_chunks, ontology)
             metadata = {

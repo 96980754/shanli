@@ -1056,6 +1056,28 @@ async def delete_database(kb_id: str, current_user: User = Depends(get_admin_use
         raise HTTPException(status_code=400, detail=f"删除数据库失败: {e}")
 
 
+@knowledge.get("/databases/{kb_id}/graph-build/reminder-status")
+async def get_graph_build_reminder_status(kb_id: str, current_user: User = Depends(get_admin_user)):
+    try:
+        return await MilvusGraphService().get_reminder_status(kb_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"获取图谱提醒状态失败 {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"获取图谱提醒状态失败: {e}")
+
+
+@knowledge.post("/databases/{kb_id}/graph-build/reminder-dismiss")
+async def dismiss_graph_build_reminder(kb_id: str, current_user: User = Depends(get_admin_user)):
+    try:
+        return await MilvusGraphService().set_reminder_disabled(kb_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"关闭图谱提醒失败 {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"关闭图谱提醒失败: {e}")
+
+
 @knowledge.get("/databases/{kb_id}/graph-build/status")
 async def get_graph_build_status(kb_id: str, current_user: User = Depends(get_admin_user)):
     try:
@@ -1646,7 +1668,7 @@ async def add_documents(
     kb_id: str, items: list[str] = Body(...), params: dict = Body(...), current_user: User = Depends(get_required_user)
 ):
     """添加文档到知识库（上传 -> 解析 -> 可选入库）"""
-    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _require_kb_permission(current_user, kb_id, "can_upload")
     logger.debug(f"Add documents for kb_id {kb_id}: {items} {params=}")
     await _ensure_database_supports_documents(kb_id, "文档添加/解析/入库")
 
@@ -2261,7 +2283,7 @@ async def _run_index_pending_statuses(
 @knowledge.post("/databases/{kb_id}/documents/parse")
 async def parse_documents(kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_required_user)):
     """手动触发文档解析"""
-    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _require_kb_permission(current_user, kb_id, "can_upload")
     file_ids = _validate_direct_document_action_file_ids(file_ids)
     logger.debug(f"Parse documents for kb_id {kb_id}: {file_ids}")
     await _ensure_database_supports_documents(kb_id, "文档解析")
@@ -2349,7 +2371,7 @@ async def index_documents(
     current_user: User = Depends(get_required_user),
 ):
     """手动触发文档入库（Indexing），支持更新参数"""
-    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _require_kb_permission(current_user, kb_id, "can_upload")
     file_ids = _validate_direct_document_action_file_ids(file_ids)
     params = params or {}
     logger.debug(f"Index documents for kb_id {kb_id}: {file_ids} {params=}")
