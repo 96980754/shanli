@@ -105,7 +105,11 @@ docker/_bak-*/
 docker/volumes.pre-restore-*/
 
 # 甲方提供的原始资料（表格/文档/压缩包，含真实业务数据，绝不入库）
-# 用 docs/**/ 覆盖各层子目录（docs/**/x 同时匹配 docs/x 与 docs/a/b/x）
+# 整个「流程图-word方案案例」目录都是甲方材料（流程图重建的 md/mmd/渲染图 + word
+# 方案样例 + 白皮书 + 压缩包），按目录整体忽略——只按扩展名拦会漏掉 png/mmd/md。
+docs/流程图-word方案案例/
+# 其余甲方资料按扩展名拦，用 docs/**/ 覆盖各层子目录
+# （docs/**/x 同时匹配 docs/x 与 docs/a/b/x）
 docs/**/*.xlsx
 docs/**/*.xls
 docs/**/*.doc
