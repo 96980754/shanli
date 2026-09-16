@@ -251,8 +251,11 @@ const handoffCategory = computed(() => {
 
 const qaSourceLabel = computed(() => {
   const metadata = props.message.extra_metadata || {}
-  if (!metadata.human_confirmed || !String(metadata.answer_source || '').startsWith('curated_qa')) return ''
-  return metadata.answer_source === 'curated_qa_semantic'
+  const source = String(metadata.answer_source || '')
+  // 知识库优先回答：正文以检索证据组织（human_confirmed=false），但仍标来源便于追溯
+  if (source === 'curated_qa_kb_first') return t('chat.curatedQAKbFirstSource')
+  if (!metadata.human_confirmed || !source.startsWith('curated_qa')) return ''
+  return source === 'curated_qa_semantic'
     ? t('chat.curatedQASemanticSource')
     : t('chat.curatedQASource')
 })

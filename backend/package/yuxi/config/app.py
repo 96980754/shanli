@@ -306,6 +306,25 @@ class Config(BaseModel):
     document_qa_question_max_chars: int = Field(default=300, description="QA 问题最大字符数")
     document_qa_answer_max_chars: int = Field(default=2000, description="QA 答案最大字符数")
     document_qa_batch_size: int = Field(default=20, description="文档 QA 批量生成大小")
+    # Udesk 客服记录 LLM 结构化（知识回流链路二第③步）
+    udesk_summarize_model: str | None = Field(default=None, description="Udesk 总结模型 spec（空则回退 default_model）")
+    udesk_summarize_temperature: float = Field(default=0.0, description="Udesk 总结温度")
+    udesk_summarize_timeout_seconds: int = Field(default=60, description="Udesk 总结单次模型调用超时秒数")
+    udesk_summarize_batch_size: int = Field(default=20, description="单轮总结的会话数上限")
+    udesk_summarize_max_pairs: int = Field(default=5, description="单会话最大候选问答数")
+    # Udesk 对接参数（设置页可改、热同步生效）。凭证 UDESK_OPEN_API_TOKEN 是永久
+    # 密钥（A9），只允许存环境变量，绝不进本配置（配置会落 base.toml + Redis 快照）
+    udesk_enabled: bool | None = Field(
+        default=None, description="Udesk 拉取总开关（None=设置页未设置过，回退环境变量 UDESK_ENABLED）"
+    )
+    udesk_subdomain: str = Field(default="", description="Udesk 企业子域名（如 xxx.udesk.cn 的 xxx）")
+    udesk_email: str = Field(default="", description="Udesk 开放接口账号邮箱")
+    udesk_sync_overlap_minutes: int | None = Field(
+        default=None, description="增量拉取重叠窗分钟数；None=设置页未设置，回退 UDESK_SYNC_OVERLAP_MINUTES"
+    )
+    udesk_backfill_start_days: int | None = Field(
+        default=None, description="首次拉取回灌天数；None=设置页未设置，回退 UDESK_BACKFILL_START_DAYS"
+    )
 
     sandbox_provider: str = Field(default="provisioner", description="沙箱提供者")
     sandbox_provisioner_url: str = Field(default="http://sandbox-provisioner:8002", description="沙箱服务地址")
@@ -548,6 +567,9 @@ class Config(BaseModel):
             return _normalize_wecom_customer_services(value)
         if key == "business_lines":
             return _normalize_business_lines(value)
+        if key == "udesk_subdomain":
+            subdomain = str(value or "").strip().rstrip("/").removeprefix("https://").removesuffix(".udesk.cn")
+            return subdomain
         return value
 
 

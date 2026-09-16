@@ -192,19 +192,28 @@ def replace_image_links(markdown_content: str, images: list[dict]) -> str:
         image_map[f"/{path}"] = url
         image_map[img["name"]] = url
 
-    def replace_link(match):
-        alt_text = match.group(1) or ""
-        img_path = match.group(2)
-
+    def resolve(img_path: str) -> str | None:
         for pattern, url in image_map.items():
             if img_path.endswith(pattern) or img_path == pattern:
-                return f"![{alt_text}]({url})"
+                return url
+        return image_map.get(os.path.basename(img_path))
 
-        filename = os.path.basename(img_path)
-        if filename in image_map:
-            return f"![{alt_text}]({image_map[filename]})"
+    def replace_md_link(match):
+        alt_text = match.group(1) or ""
+        url = resolve(match.group(2))
+        return f"![{alt_text}]({url})" if url else match.group(0)
 
-        return match.group(0)
+    def replace_html_img(match):
+        # MinerU 的部分输出用 HTML img 标签引用图片（相对路径 imgs/xxx.jpg），
+        # 只改写 src 值，保留 width/alt 等其余属性
+        url = resolve(match.group(3))
+        if not url:
+            return match.group(0)
+        return f"{match.group(1)}{match.group(2)}{url}{match.group(2)}"
 
-    pattern = r"!\[([^\]]*)\]\(([^)]+)\)"
-    return re.sub(pattern, replace_link, markdown_content)
+    markdown_content = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_md_link, markdown_content)
+    return re.sub(
+        r"(<img\b[^>]*?\bsrc=)([\"'])([^\"']+)\2",
+        replace_html_img,
+        markdown_content,
+    )

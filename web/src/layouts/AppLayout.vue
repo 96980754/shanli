@@ -11,8 +11,7 @@ import {
   PanelLeftOpen,
   X,
   MessageCirclePlus,
-  CircleHelp,
-  ThumbsUp,
+  BookOpenCheck,
   Search,
   FolderOpen
 } from 'lucide-vue-next'
@@ -169,17 +168,12 @@ const mainList = computed(() => {
       icon: BarChart3,
       activeIcon: BarChart3
     })
+    // 知识运营：知识缺口 / 反馈管理 / 问答对 三个 Tab 的统一入口
     items.push({
-      name: t('nav.knowledgeGaps'),
-      path: '/knowledge-gaps',
-      icon: CircleHelp,
-      activeIcon: CircleHelp
-    })
-    items.push({
-      name: t('nav.feedbackManagement'),
-      path: '/feedback',
-      icon: ThumbsUp,
-      activeIcon: ThumbsUp
+      name: t('nav.knowledgeOps'),
+      path: '/knowledge-ops',
+      icon: BookOpenCheck,
+      activeIcon: BookOpenCheck
     })
   }
 

@@ -5,14 +5,22 @@
     <!-- 现代化顶部统计栏 -->
     <div class="modern-stats-header">
       <StatusBar />
-      <!-- 顶部操作区：反馈列表入口独立成显眼按钮，避免只藏在统计卡里 -->
+      <!-- 顶部操作区：反馈列表与知识缺口入口独立成显眼按钮，避免只藏在统计卡里 -->
       <div class="dashboard-toolbar">
+        <a-button type="primary" @click="handleOpenKnowledgeGaps">
+          <template #icon><FileQuestionMark class="toolbar-icon" /></template>
+          {{ t('dash.viewKnowledgeGaps') }}
+        </a-button>
         <a-button type="primary" @click="handleOpenFeedback">
           <template #icon><MessageSquare class="toolbar-icon" /></template>
           {{ t('dash.viewFeedbackList') }}
         </a-button>
       </div>
-      <StatsOverviewComponent :basic-stats="basicStats" @open-feedback="handleOpenFeedback" />
+      <StatsOverviewComponent
+        :basic-stats="basicStats"
+        @open-feedback="handleOpenFeedback"
+        @open-knowledge-gaps="handleOpenKnowledgeGaps"
+      />
     </div>
 
     <FeedbackSummaryComponent />
@@ -67,7 +75,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { MessageSquare } from 'lucide-vue-next'
+import { MessageSquare, FileQuestionMark } from 'lucide-vue-next'
 import { dashboardApi } from '@/apis/dashboard_api'
 
 const { t } = useI18n()
@@ -147,6 +155,11 @@ const handleOpenFeedback = () => {
   router.push('/feedback')
 }
 
+// 打开知识缺口页（拒答明细沉淀在这里）
+const handleOpenKnowledgeGaps = () => {
+  router.push('/knowledge-gaps')
+}
+
 // 清理函数 - 清理所有子组件的图表实例
 const cleanupCharts = () => {
   if (userStatsRef.value?.cleanup) userStatsRef.value.cleanup()
@@ -177,6 +190,7 @@ onUnmounted(() => {
 .dashboard-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   padding: 8px var(--page-padding) 0;
 
   .toolbar-icon {

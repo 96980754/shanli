@@ -13,12 +13,16 @@ const router = useRouter()
 const userStore = useUserStore()
 const { t } = useI18n()
 
+// 「智能体」页签暂隐藏——与 AppLayout.vue 的「全库搜索」同一做法：把这里改为 true 即恢复。
+// 页签、面板、统计条、切换逻辑都原样留着，由这一个开关决定它们出不出现。
+const SHOW_AGENT_TAB = false
+
 const activeTab = ref('agents')
 const agentPanelRef = ref(null)
 const providerPanelRef = ref(null)
 
 const modelManageTabs = computed(() => {
-  const tabs = [{ key: 'agents', label: t('modelMgmt.tabAgents') }]
+  const tabs = SHOW_AGENT_TAB ? [{ key: 'agents', label: t('modelMgmt.tabAgents') }] : []
   if (userStore.isAdmin) tabs.push({ key: 'providers', label: t('modelMgmt.tabProviders') })
   return tabs
 })
@@ -32,6 +36,8 @@ const activeStats = computed(() => activePanel.value?.stats || {})
 
 const normalizeTab = (tab) => {
   if (tab === 'providers' && userStore.isAdmin) return 'providers'
+  // 页签隐藏时，任何指向「智能体」的请求（含 activeTab 的默认值）都落到模型供应商
+  if (!SHOW_AGENT_TAB) return 'providers'
   return 'agents'
 }
 
@@ -86,9 +92,11 @@ watch(activeTab, (tab) => {
     </PageHeader>
 
     <div class="model-manage-content">
-      <div v-show="activeTab === 'agents'" class="tab-panel">
-        <AgentManagePanel ref="agentPanelRef" />
-      </div>
+      <template v-if="SHOW_AGENT_TAB">
+        <div v-show="activeTab === 'agents'" class="tab-panel">
+          <AgentManagePanel ref="agentPanelRef" />
+        </div>
+      </template>
       <div v-if="userStore.isAdmin && activeTab === 'providers'" class="tab-panel">
         <ModelProviderManagePanel ref="providerPanelRef" />
       </div>

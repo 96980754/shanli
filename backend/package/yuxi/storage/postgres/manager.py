@@ -1268,8 +1268,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_agent_seen ON knowledge_gaps(agent_slug, last_seen_at DESC)",
             "ALTER TABLE IF EXISTS knowledge_gaps "
             "ADD COLUMN IF NOT EXISTS domain VARCHAR(64) NOT NULL DEFAULT 'unknown'",
-            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_domain_seen "
-            "ON knowledge_gaps(domain, last_seen_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_gaps_domain_seen ON knowledge_gaps(domain, last_seen_at DESC)",
             # 团队分组：表 + users.team_id + 默认团队种子 + 存量用户回填
             """
             CREATE TABLE IF NOT EXISTS teams (
@@ -1350,6 +1349,91 @@ class PostgresManager(metaclass=SingletonMeta):
                 END IF;
             END $$
             """,
+            # Udesk 客服记录 → 知识回流（docs/vibe/udesk/2026-09-14-udesk-to-knowledge-pipeline-design.md §五）
+            """
+            CREATE TABLE IF NOT EXISTS udesk_conversations (
+                id SERIAL PRIMARY KEY,
+                conversation_id VARCHAR(128) NOT NULL,
+                customer_token_hash VARCHAR(128),
+                started_at TIMESTAMPTZ,
+                ended_at TIMESTAMPTZ,
+                stats_json JSONB,
+                synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_udesk_conversations_conversation_id UNIQUE (conversation_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_udesk_conversations_started_at ON udesk_conversations(started_at)",
+            """
+            CREATE TABLE IF NOT EXISTS udesk_messages (
+                id SERIAL PRIMARY KEY,
+                message_id VARCHAR(128) NOT NULL,
+                conversation_id VARCHAR(128) NOT NULL
+                    REFERENCES udesk_conversations(conversation_id) ON DELETE CASCADE,
+                role VARCHAR(16) NOT NULL,
+                content TEXT NOT NULL,
+                content_type VARCHAR(32),
+                log_type INTEGER,
+                sent_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_udesk_messages_message_id UNIQUE (message_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_udesk_messages_conversation_sent "
+            "ON udesk_messages(conversation_id, sent_at)",
+            """
+            CREATE TABLE IF NOT EXISTS curated_qa_candidates (
+                id SERIAL PRIMARY KEY,
+                source_conversation_id VARCHAR(128) NOT NULL,
+                question TEXT NOT NULL,
+                normalized_question TEXT NOT NULL,
+                question_hash VARCHAR(64) NOT NULL,
+                answer TEXT NOT NULL,
+                domain VARCHAR(32),
+                confidence DOUBLE PRECISION,
+                evidence_quote TEXT,
+                ambiguity_note TEXT,
+                dedup_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                reviewed_by VARCHAR(100),
+                reviewed_at TIMESTAMPTZ,
+                review_note TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                CONSTRAINT uq_curated_qa_candidates_conv_question
+                    UNIQUE (source_conversation_id, question_hash)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_curated_qa_candidates_review_status ON curated_qa_candidates(review_status)",
+            "CREATE INDEX IF NOT EXISTS ix_curated_qa_candidates_domain ON curated_qa_candidates(domain)",
+            # 问答对溯源：Udesk 来源的问答对记录原始会话（不设外键，会话按 TTL 清理后仍可溯源）
+            "ALTER TABLE IF EXISTS curated_qa_pairs ADD COLUMN IF NOT EXISTS source_conversation_id VARCHAR(128)",
+            # LLM 结构化完成标记：NULL = 待总结（筛选判定无价值的会话也会打标，避免反复送 LLM）
+            "ALTER TABLE IF EXISTS udesk_conversations ADD COLUMN IF NOT EXISTS summarized_at TIMESTAMPTZ",
+            # 增量拉取同步状态（单行表）：游标水位 + 防并发租约（D8/D11-D13）
+            """
+            CREATE TABLE IF NOT EXISTS udesk_sync_state (
+                id INTEGER PRIMARY KEY,
+                watermark TIMESTAMPTZ,
+                lease_expires_at TIMESTAMPTZ,
+                last_run_at TIMESTAMPTZ,
+                last_run_status VARCHAR(32),
+                last_error TEXT,
+                last_run_conversations INTEGER NOT NULL DEFAULT 0,
+                last_run_messages INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """,
+            "INSERT INTO udesk_sync_state (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM udesk_sync_state WHERE id = 1)",
+            # 本轮拉取进度：逐会话提交，供页面在一轮数分钟的运行中看到进展
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_done INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_total INTEGER NOT NULL DEFAULT 0",
+            # 总结链路的租约与运行状态：与拉取分开，两者可同时在跑
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_lease_expires_at TIMESTAMPTZ",
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_status VARCHAR(32)",
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_error TEXT",
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_run_at TIMESTAMPTZ",
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警

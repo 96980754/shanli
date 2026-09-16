@@ -1,13 +1,5 @@
 <template>
   <div class="gap-page">
-    <div class="page-header">
-      <div>
-        <h1>{{ $t('gaps.pageTitle') }}</h1>
-        <p>{{ $t('gaps.pageSubtitle') }}</p>
-      </div>
-      <a-button :loading="loading" @click="loadGaps">{{ $t('common.refresh') }}</a-button>
-    </div>
-
     <div class="filters">
       <a-input-search
         v-model:value="filters.query"
@@ -19,6 +11,7 @@
       <a-select v-model:value="filters.status" :options="statusOptions" class="filter-select" @change="applyFilters" />
       <a-select v-model:value="filters.reason" :options="reasonOptions" class="filter-select" @change="applyFilters" />
       <a-select v-model:value="filters.domain" :options="domainOptions" class="filter-select" @change="applyFilters" />
+      <a-button class="refresh-btn" :loading="loading" @click="loadGaps">{{ $t('common.refresh') }}</a-button>
     </div>
 
     <a-table
@@ -306,30 +299,17 @@ onMounted(loadGaps)
 </script>
 
 <style scoped lang="less">
-.gap-page {
-  min-height: 100vh;
-  padding: var(--page-padding);
-  background: var(--gray-25);
-}
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  h1 { margin: 0 0 6px; font-size: 24px; color: var(--gray-1000); }
-  p { margin: 0; color: var(--gray-600); }
-}
 .filters {
   display: flex;
   gap: 12px;
   padding: 16px;
-  margin-bottom: 16px;
   border: 1px solid var(--gray-150);
   border-radius: 8px;
   background: var(--gray-0);
 }
 .query-input { width: 320px; }
 .filter-select { width: 180px; }
+.refresh-btn { margin-left: auto; }
 .question-link { height: auto; padding: 0; text-align: left; white-space: normal; }
 .drawer-actions { width: 100%; margin-top: 20px; }
 .web-search-alert { margin-bottom: 18px; }

@@ -110,7 +110,12 @@
           <div class="cs-line-fields">
             <span class="cs-index">{{ indexLabel(rowIndex(row)) }}</span>
             <div class="cs-field" :class="{ 'has-error': errOn('line', rowIndex(row), 'code') }">
-              <label class="cs-label">{{ $t('settings.businessLineCodeLabel') }}</label>
+              <label class="cs-label">
+                {{ $t('settings.businessLineCodeLabel') }}
+                <a-tooltip :title="$t('settings.businessLineCodeHint')" placement="topLeft" :overlay-style="{ maxWidth: '360px' }">
+                  <Info :size="12" class="cs-help" />
+                </a-tooltip>
+              </label>
               <a-input
                 v-model:value="row.code"
                 :placeholder="$t('settings.businessLineCodePlaceholder')"
@@ -122,7 +127,12 @@
               </div>
             </div>
             <div class="cs-field" :class="{ 'has-error': errOn('line', rowIndex(row), 'name') }">
-              <label class="cs-label">{{ $t('settings.businessLineNameLabel') }}</label>
+              <label class="cs-label">
+                {{ $t('settings.businessLineNameLabel') }}
+                <a-tooltip :title="$t('settings.businessLineNameHint')" placement="topLeft" :overlay-style="{ maxWidth: '360px' }">
+                  <Info :size="12" class="cs-help" />
+                </a-tooltip>
+              </label>
               <a-input
                 v-model:value="row.name"
                 :placeholder="$t('settings.businessLineNamePlaceholder')"
@@ -134,7 +144,12 @@
               </div>
             </div>
             <div class="cs-field">
-              <label class="cs-label">{{ $t('settings.businessLineKeywordsLabel') }}</label>
+              <label class="cs-label">
+                {{ $t('settings.businessLineKeywordsLabel') }}
+                <a-tooltip :title="$t('settings.businessLineKeywordsHint')" placement="topLeft" :overlay-style="{ maxWidth: '360px' }">
+                  <Info :size="12" class="cs-help" />
+                </a-tooltip>
+              </label>
               <a-input
                 v-model:value="row.keywords"
                 :placeholder="$t('settings.businessLineKeywordsPlaceholder')"
@@ -678,6 +693,14 @@ const overviewRows = computed(() => {
     font-size: 12px;
     line-height: 1.4;
     color: var(--color-error-700);
+  }
+
+  // 字段说明改为悬停显示：label 旁小图标，a-tooltip 弹出完整说明
+  .cs-help {
+    margin-left: 4px;
+    color: var(--gray-500);
+    cursor: help;
+    vertical-align: -1px;
   }
 
   .cs-binding {

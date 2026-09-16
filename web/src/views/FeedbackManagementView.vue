@@ -1,13 +1,5 @@
 <template>
   <div class="feedback-page">
-    <div class="page-header">
-      <div>
-        <h1>{{ $t('feedback.pageTitle') }}</h1>
-        <p>{{ $t('feedback.pageSubtitle') }}</p>
-      </div>
-      <a-button :loading="loading" @click="loadFeedbacks">{{ $t('common.refresh') }}</a-button>
-    </div>
-
     <div class="filters">
       <a-select
         v-model:value="filters.rating"
@@ -35,6 +27,7 @@
         class="query-input"
         @search="applyFilters"
       />
+      <a-button class="refresh-btn" :loading="loading" @click="loadFeedbacks">{{ $t('common.refresh') }}</a-button>
     </div>
 
     <a-table
@@ -324,31 +317,18 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
-.feedback-page {
-  min-height: 100vh;
-  padding: var(--page-padding);
-  background: var(--gray-25);
-}
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  h1 { margin: 0 0 6px; font-size: 24px; color: var(--gray-1000); }
-  p { margin: 0; color: var(--gray-600); }
-}
 .filters {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   padding: 16px;
-  margin-bottom: 16px;
   border: 1px solid var(--gray-150);
   border-radius: 8px;
   background: var(--gray-0);
 }
 .filter-select { width: 140px; }
 .query-input { width: 280px; }
+.refresh-btn { margin-left: auto; }
 
 .message-content {
   color: var(--gray-900);

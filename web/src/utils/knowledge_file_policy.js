@@ -109,6 +109,15 @@ export const canReindexFile = (record) =>
       (record.status === 'done' || record.status === 'indexed')
   )
 
+// 有解析结果的文档都可重新解析（覆盖旧 markdown 并重新入库）
+export const canReparseFile = (record) =>
+  Boolean(
+    record &&
+      record.is_current !== false &&
+      !record.is_folder &&
+      INDEXABLE_STATUSES.has(record.status)
+  )
+
 export const canDownloadFile = (record) =>
   Boolean(
     record &&

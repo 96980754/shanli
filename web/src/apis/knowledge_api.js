@@ -470,6 +470,16 @@ export const documentApi = {
   },
 
   /**
+   * 重新解析已有解析结果的文档（覆盖旧 markdown 并自动入库）
+   * @param {string} kbId - 知识库ID
+   * @param {Array} fileIds - 文件ID列表
+   * @returns {Promise} - 解析任务结果
+   */
+  reparseDocuments: async (kbId, fileIds) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/reparse`, fileIds)
+  },
+
+  /**
    * 手动触发全部待解析文档解析
    * @param {string} kbId - 知识库ID
    * @returns {Promise} - 解析任务结果

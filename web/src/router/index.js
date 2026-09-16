@@ -75,31 +75,55 @@ const router = createRouter({
       ]
     },
     {
-      path: '/knowledge-gaps',
-      name: 'knowledge-gaps',
+      path: '/knowledge-ops',
+      name: 'knowledge-ops',
       component: AppLayout,
       children: [
         {
           path: '',
-          name: 'KnowledgeGapsComp',
-          component: () => import('../views/KnowledgeGapsView.vue'),
-          meta: { requiresAuth: true, requiresSuperAdmin: true }
+          name: 'KnowledgeOps',
+          component: () => import('../views/KnowledgeOpsView.vue'),
+          meta: { requiresAuth: true, requiresSuperAdmin: true },
+          children: [
+            { path: '', redirect: '/knowledge-ops/gaps' },
+            {
+              path: 'gaps',
+              name: 'KnowledgeGapsComp',
+              component: () => import('../views/KnowledgeGapsView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'feedback',
+              name: 'FeedbackManagementComp',
+              component: () => import('../views/FeedbackManagementView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'qa-pairs',
+              name: 'QaPairManagementComp',
+              component: () => import('../views/QaPairManagementView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'candidates',
+              name: 'UdeskCandidateReviewComp',
+              component: () => import('../views/UdeskCandidateReviewView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'conversations',
+              name: 'UdeskConversationComp',
+              component: () => import('../views/UdeskConversationView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            }
+          ]
         }
       ]
     },
-    {
-      path: '/feedback',
-      name: 'feedback-management',
-      component: AppLayout,
-      children: [
-        {
-          path: '',
-          name: 'FeedbackManagementComp',
-          component: () => import('../views/FeedbackManagementView.vue'),
-          meta: { requiresAuth: true, requiresSuperAdmin: true }
-        }
-      ]
-    },
+    // 旧路径重定向（DashboardView 等存量跳转与书签兼容）
+    { path: '/knowledge-gaps', redirect: '/knowledge-ops/gaps' },
+    { path: '/feedback', redirect: '/knowledge-ops/feedback' },
+    { path: '/qa-pairs', redirect: '/knowledge-ops/qa-pairs' },
     {
       path: '/knowledge-browser',
       component: AppLayout,

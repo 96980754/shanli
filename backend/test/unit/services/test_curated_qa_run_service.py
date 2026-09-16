@@ -291,7 +291,7 @@ class _GenRunRepo:
 
 
 class _GeneratorHarness:
-    def __init__(self, monkeypatch, *, qa_pair=None, meta=None, retrieve=None, compose=None, attach=None):
+    def __init__(self, monkeypatch, *, qa_pair=None, meta=None, retrieve=None, compose_kb=None, attach=None):
         self.meta = _gen_meta(**(meta or {}))
         self.qa_pair = qa_pair or _qa_pair()
         self.qa_repo = _GenQaRepo(None, self.qa_pair)
@@ -309,8 +309,8 @@ class _GeneratorHarness:
             self.retrieve_calls.append(1)
             return retrieve if retrieve is not None else []
 
-        async def fake_compose(*_args, **_kwargs):
-            return compose or ""
+        async def fake_compose_kb(*_args, **_kwargs):
+            return compose_kb or ""
 
         async def fake_attach(**kwargs):
             self.attach_calls.append(kwargs)
@@ -320,7 +320,7 @@ class _GeneratorHarness:
         monkeypatch.setattr(svc, "AgentRunRepository", lambda db: self.run_repo)
         monkeypatch.setattr(svc, "prepare_agent_run_creation_scope", fake_prepare)
         monkeypatch.setattr(svc, "_retrieve_extra_sources", fake_retrieve)
-        monkeypatch.setattr(svc, "_compose_extra_retrieval_supplement", fake_compose)
+        monkeypatch.setattr(svc, "_compose_answer_from_knowledge", fake_compose_kb)
         monkeypatch.setattr(svc, "_attach_extra_retrieval_tool_call", fake_attach)
 
     async def run(self, content="测试问题"):
@@ -343,20 +343,20 @@ class _GeneratorHarness:
 
 @pytest.mark.asyncio
 async def test_generator_exact_hit_streams_base_then_finished_without_extra(monkeypatch):
-    """无补充时事件流 base→finished，落库恰一行正文=基础答案，mark_hit 恰一次。"""
+    """知识库检索无结果：回落人工答案，事件流 base→finished，mark_hit 恰一次。"""
     harness = _GeneratorHarness(monkeypatch)
     chunks = await harness.run()
 
-    assert [chunk["status"] for chunk in chunks] == ["init", "loading", "stream_event", "finished"]
-    base_delta = chunks[1]["stream_event"]
-    assert base_delta["type"] == "message_delta"
-    assert base_delta["message_id"] == "curated-qa-run-1"
-    assert base_delta["content"] == "人工确认答案"
-
-    pill = chunks[2]["event"]
+    assert [chunk["status"] for chunk in chunks] == ["init", "stream_event", "loading", "finished"]
+    pill = chunks[1]["event"]
     assert pill["method"] == "tools"
     assert pill["data"]["event"] == "tool-started"
     assert pill["data"]["tool_name"] == "query_kbs"
+
+    base_delta = chunks[2]["stream_event"]
+    assert base_delta["type"] == "message_delta"
+    assert base_delta["message_id"] == "curated-qa-run-1"
+    assert base_delta["content"] == "人工确认答案"
 
     assert harness.conv_repo.added["content"] == "人工确认答案"
     meta = harness.conv_repo.added["extra_metadata"]
@@ -373,26 +373,30 @@ async def test_generator_exact_hit_streams_base_then_finished_without_extra(monk
 
 
 @pytest.mark.asyncio
-async def test_generator_supplement_appends_delta_and_combined_row(monkeypatch):
-    """检索有料时在 base 之后追加补充 delta，正文=base+补充段落，工具调用挂来源。"""
+async def test_generator_kb_hit_answers_from_knowledge_first(monkeypatch):
+    """知识库优先（二期反馈 2026-09-14 问答对调优）：检索有依据时以库内最新为准作答。
+
+    回答为知识库组织结果而非人工答案，answer_source=curated_qa_kb_first、
+    human_confirmed=False，检索片段作为来源挂到消息上。
+    """
     harness = _GeneratorHarness(
         monkeypatch,
         retrieve=_EXTRA_SOURCES,
-        compose="补充要点：详见《规格书A.pdf》第 3 章。",
+        compose_kb="以知识库为准的最新答案，详见《规格书A.pdf》第 3 章。",
     )
     chunks = await harness.run()
 
-    assert [chunk["status"] for chunk in chunks] == ["init", "loading", "stream_event", "loading", "finished"]
-    # tool-started 胶囊必须在补充检索增量之前
-    assert chunks[2]["event"]["data"]["event"] == "tool-started"
+    assert [chunk["status"] for chunk in chunks] == ["init", "stream_event", "loading", "finished"]
+    assert chunks[1]["event"]["data"]["event"] == "tool-started"
 
-    supplement_delta = chunks[3]["stream_event"]
-    assert supplement_delta["type"] == "message_delta"
-    assert supplement_delta["message_id"] == "curated-qa-run-1"
-    assert supplement_delta["content"] == "补充要点：详见《规格书A.pdf》第 3 章。"
+    answer_delta = chunks[2]["stream_event"]
+    assert answer_delta["content"] == "以知识库为准的最新答案，详见《规格书A.pdf》第 3 章。"
 
-    combined = harness.conv_repo.added["content"]
-    assert combined.startswith("人工确认答案\n\n补充资料（知识库检索）：\n补充要点")
+    assert harness.conv_repo.added["content"] == "以知识库为准的最新答案，详见《规格书A.pdf》第 3 章。"
+    meta = harness.conv_repo.added["extra_metadata"]
+    assert meta["answer_source"] == "curated_qa_kb_first"
+    assert meta["human_confirmed"] is False  # 类别1：以知识库证据作答
+    assert meta["curated_qa_id"] == 7
     assert harness.attach_calls == [
         {
             "db": harness.db,
@@ -405,8 +409,8 @@ async def test_generator_supplement_appends_delta_and_combined_row(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generator_retrieval_irrelevant_does_not_attach_sources(monkeypatch):
-    """检索有返回但模型判定「无需补充」时，不把无关片段挂成回答来源。
+async def test_generator_retrieval_irrelevant_falls_back_to_curated_answer(monkeypatch):
+    """检索有返回但片段与问题无关（组织不出回答）时：回落人工答案，不挂来源。
 
     回归：曾按 extra_sources 非空就 attach query_kbs，导致对 C++ 这类通用问题补检索
     命中的无关文档（如产品白皮书）被前端当成回答来源展示。
@@ -414,28 +418,29 @@ async def test_generator_retrieval_irrelevant_does_not_attach_sources(monkeypatc
     harness = _GeneratorHarness(
         monkeypatch,
         retrieve=_EXTRA_SOURCES,
-        compose="",  # 归纳模型认为片段与问题无关，未产出补充内容
+        compose_kb="",  # 组织模型认为片段与问题无关，判定「无法回答」
     )
     chunks = await harness.run()
 
-    assert [chunk["status"] for chunk in chunks] == ["init", "loading", "stream_event", "finished"]
+    assert [chunk["status"] for chunk in chunks] == ["init", "stream_event", "loading", "finished"]
     assert harness.conv_repo.added["content"] == "人工确认答案"
+    assert harness.conv_repo.added["extra_metadata"]["answer_source"] == "curated_qa"
     assert harness.attach_calls == []
     assert harness.qa_pair.hit_count == 1
 
 
 @pytest.mark.asyncio
 async def test_generator_retrieval_failure_falls_back_to_base_answer(monkeypatch):
-    """补充检索抛错只影响补充段，基础答案照常落库并正常 finished。"""
+    """检索抛错回落人工答案，照常落库并正常 finished。"""
 
     async def fake_retrieve(**_kwargs):
         raise RuntimeError("检索服务不可用")
 
-    harness = _GeneratorHarness(monkeypatch, retrieve=None, compose="")
+    harness = _GeneratorHarness(monkeypatch, retrieve=None, compose_kb="")
     monkeypatch.setattr(svc, "_retrieve_extra_sources", fake_retrieve)
     chunks = await harness.run()
 
-    assert [chunk["status"] for chunk in chunks] == ["init", "loading", "stream_event", "finished"]
+    assert [chunk["status"] for chunk in chunks] == ["init", "stream_event", "loading", "finished"]
     assert harness.conv_repo.added["content"] == "人工确认答案"
     assert harness.qa_pair.hit_count == 1
 
@@ -466,7 +471,7 @@ async def test_generator_semantic_hit_composes_reference_answer(monkeypatch):
         monkeypatch,
         qa_pair=semantic_pair,
         meta={"curated_qa_id": 9, "answer_source": "curated_qa_semantic"},
-        compose="",
+        compose_kb="",
     )
     monkeypatch.setattr(svc, "_compose_answer_from_reference", fake_compose)
     chunks = await harness.run(content="改述问题")
@@ -476,13 +481,6 @@ async def test_generator_semantic_hit_composes_reference_answer(monkeypatch):
     assert harness.conv_repo.added["content"] == "参考改写后的答案"
     assert harness.conv_repo.added["extra_metadata"]["answer_source"] == "curated_qa_semantic"
     assert semantic_pair.hit_count == 1
-
-
-def test_merge_curated_supplement_joins_with_heading():
-    assert svc._merge_curated_supplement("基础答案", "") == "基础答案"
-    assert svc._merge_curated_supplement("基础答案", "补充要点") == (
-        "基础答案\n\n补充资料（知识库检索）：\n补充要点"
-    )
 
 
 # ---------------------------------------------------------------- 组件级
@@ -520,32 +518,34 @@ async def test_attach_extra_retrieval_tool_call_serializes_sources(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_compose_extra_supplement_pins_citations_and_suppresses_no_extra(monkeypatch):
+async def test_compose_kb_first_pins_citations_and_kb_priority(monkeypatch):
+    """知识库优先组织：提示词要求以检索片段为准（冲突不沿用参考答案），无法回答时返回空。"""
     captured = {}
 
     class _FakeModel:
         async def call(self, messages, **kwargs):
             captured["messages"] = messages
-            return SimpleNamespace(content="补充要点")
+            return SimpleNamespace(content="以知识库为准的答案")
 
     monkeypatch.setattr("yuxi.models.chat.select_model", lambda _spec: _FakeModel())
-    result = await svc._compose_extra_retrieval_supplement(
-        "provider:model", "项目何时发布？", "已有答案", _EXTRA_SOURCES
+    result = await svc._compose_answer_from_knowledge(
+        "provider:model", "项目何时发布？", _EXTRA_SOURCES, _qa_pair()
     )
-    assert result == "补充要点"
+    assert result == "以知识库为准的答案"
     system_content = captured["messages"][0]["content"]
     user_content = captured["messages"][1]["content"]
-    assert "无需补充" in system_content and "原回答" in system_content
-    assert "已有答案" in user_content
+    # 知识库优先的关键约束：冲突以检索片段为准（与旧「以原回答为准」相反）
+    assert "无法回答" in system_content and "以检索片段" in system_content
     assert "《规格书A.pdf》" in user_content
+    assert "人工确认答案" in user_content  # 人工答案仅作参考出现在输入里
 
-    class _NoExtraModel:
+    class _NoAnswerModel:
         async def call(self, messages, **kwargs):
-            return SimpleNamespace(content="无需补充")
+            return SimpleNamespace(content="无法回答")
 
-    monkeypatch.setattr("yuxi.models.chat.select_model", lambda _spec: _NoExtraModel())
-    suppressed = await svc._compose_extra_retrieval_supplement(
-        "provider:model", "项目何时发布？", "已有答案", _EXTRA_SOURCES
+    monkeypatch.setattr("yuxi.models.chat.select_model", lambda _spec: _NoAnswerModel())
+    suppressed = await svc._compose_answer_from_knowledge(
+        "provider:model", "项目何时发布？", _EXTRA_SOURCES, _qa_pair()
     )
     assert suppressed == ""
 

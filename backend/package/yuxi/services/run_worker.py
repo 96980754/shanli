@@ -29,6 +29,8 @@ from yuxi.services.knowledge_conflict_publish_service import (
     process_knowledge_conflict_publish,
     recover_knowledge_conflict_publish_tasks,
 )
+from yuxi.services.udesk.pull_service import run_scheduled_pull, run_scheduled_reconcile
+from yuxi.services.udesk.summarize_service import run_scheduled_summarize
 from yuxi.services.run_queue_service import (
     append_run_stream_event,
     clear_cancel_signal,
@@ -415,8 +417,9 @@ async def process_agent_run(ctx, run_id: str):
                         db=db,
                     )
                 elif run_type == "chat" and payload.get("curated_qa_id"):
-                    # 人工 QA 命中 run：流式组装基础答案 + 补充检索（胶囊感知检索过程），
-                    # 模型调用与知识库检索因此落在 worker，POST 只负责检测与持久化。
+                    # 人工 QA 命中 run：worker 流式检索知识库并组织回答（胶囊感知检索
+                    # 过程；检索不到回落人工答案），模型调用与知识库检索因此落在 worker，
+                    # POST 只负责检测与持久化。
                     meta["curated_qa_id"] = payload.get("curated_qa_id")
                     meta["answer_source"] = payload.get("answer_source")
                     stream = stream_curated_qa_answer(
@@ -640,10 +643,20 @@ class WorkerSettings:
         process_knowledge_graph_index,
         func(process_document_replacement_cleanup, max_tries=REPLACEMENT_CLEANUP_MAX_TRIES),
         process_knowledge_conflict_publish,
+        # Udesk 手动拉取/总结：知识运营页按钮经 arq 队列触发（长任务不入 API 请求）
+        run_scheduled_pull,
+        run_scheduled_summarize,
     ]
     cron_jobs = [
         cron(recover_document_replacement_cleanups, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}, unique=True),
         cron(recover_knowledge_conflict_publish_tasks, minute=set(range(60)), unique=True),
+        # Udesk 增量拉取（每 24 小时）：cron unique 是第一道闸，DB 租约是第二道闸；
+        # 未配置 UDESK_* 时入口函数为空操作；临时拉取走知识运营页手动按钮（worker 任务触发）
+        cron(run_scheduled_pull, hour=2, minute=47, unique=True),
+        # Udesk 每日对账（D16）：比对近 7 天接口 total 与本地计数，缺口回补重拉
+        cron(run_scheduled_reconcile, hour=3, minute=17, unique=True),
+        # Udesk 客服记录 LLM 结构化（每小时，错开拉取整点）：待总结会话为空或模型不可用时为空操作
+        cron(run_scheduled_summarize, minute=23, unique=True),
     ]
     max_tries = 2
     retry_jobs = True

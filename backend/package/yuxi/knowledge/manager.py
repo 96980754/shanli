@@ -460,6 +460,11 @@ class KnowledgeBaseManager:
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.index_file(kb_id, file_id, operator_id, params=params)
 
+    async def reparse_file(self, kb_id: str, file_id: str, operator_id: str | None = None) -> dict:
+        """把已有解析结果的文档标回未解析状态并重新解析"""
+        kb_instance = await self._get_kb_for_database(kb_id)
+        return await kb_instance.reparse_file(kb_id, file_id, operator_id)
+
     async def upload_office_bytes(self, kb_id: str, content_bytes: bytes, filename: str) -> str:
         """将编辑后的 Word/Excel 字节上传 MinIO，返回 file_path（MinIO URL）。"""
         import time

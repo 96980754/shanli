@@ -2114,6 +2114,41 @@ async def _run_parse_file_ids(
     return result_payload
 
 
+async def _run_reparse_file_ids(
+    *,
+    context: TaskContext,
+    kb_id: str,
+    file_ids: list[str],
+    operator_id: str,
+) -> dict:
+    await context.set_message("任务初始化")
+    await context.set_progress(5.0, "准备重新解析文档")
+
+    total = len(file_ids)
+    processed_items = []
+
+    for idx, file_id in enumerate(file_ids, 1):
+        await context.raise_if_cancelled()
+        progress = 5.0 + (idx / total) * 90.0
+        await context.set_progress(progress, f"正在重新解析第 {idx}/{total} 个文档")
+
+        try:
+            await knowledge_base.reparse_file(kb_id, file_id, operator_id=operator_id)
+            # 解析成功后自动入库，检索端才能拿到刷新后的内容
+            result = await knowledge_base.index_file(kb_id, file_id, operator_id=operator_id)
+            processed_items.append(result)
+        except Exception as e:
+            logger.error(f"Reparse failed for {file_id}: {e}")
+            processed_items.append({"file_id": file_id, "status": "failed", "error": str(e)})
+
+    failed_count = len([p for p in processed_items if _is_failed_item(p)])
+    message = f"重新解析完成，失败 {failed_count} 个"
+    result_payload = {"items": processed_items, "processed": len(processed_items), "failed": failed_count}
+    await context.set_result(result_payload)
+    await context.set_progress(100.0, message)
+    return result_payload
+
+
 async def _run_index_file_ids(
     *,
     context: TaskContext,
@@ -2309,6 +2344,41 @@ async def parse_documents(kb_id: str, file_ids: list[str] = Body(...), current_u
             coroutine=run_parse,
         )
         return {"message": "解析任务已提交", "status": "queued", "task_id": task.id}
+    except Exception as e:
+        return {"message": f"提交失败: {e}", "status": "failed"}
+
+
+@knowledge.post("/databases/{kb_id}/documents/reparse")
+async def reparse_documents(
+    kb_id: str, file_ids: list[str] = Body(...), current_user: User = Depends(get_required_user)
+):
+    """重新解析已有解析结果的文档（覆盖旧 markdown 后自动入库）。"""
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    file_ids = _validate_direct_document_action_file_ids(file_ids)
+    logger.debug(f"Reparse documents for kb_id {kb_id}: {file_ids}")
+    await _ensure_database_supports_documents(kb_id, "文档解析")
+
+    async def run_reparse(context: TaskContext):
+        try:
+            return await _run_reparse_file_ids(
+                context=context,
+                kb_id=kb_id,
+                file_ids=file_ids,
+                operator_id=current_user.uid,
+            )
+        except Exception as e:
+            logger.exception(f"Reparse task failed: {e}")
+            raise
+
+    try:
+        database = await knowledge_base.get_database_info(kb_id)
+        task = await tasker.enqueue(
+            name=f"文档重新解析 ({database['name']})",
+            task_type="knowledge_parse",
+            payload={"kb_id": kb_id, "file_ids": file_ids},
+            coroutine=run_reparse,
+        )
+        return {"message": "重新解析任务已提交", "status": "queued", "task_id": task.id}
     except Exception as e:
         return {"message": f"提交失败: {e}", "status": "failed"}
 

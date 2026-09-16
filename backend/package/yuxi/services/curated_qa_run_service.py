@@ -106,12 +106,9 @@ async def try_create_curated_qa_run(
 ) -> dict[str, Any] | None:
     """命中人工 QA 时创建一条流式 run；未命中返回 None 走普通 Agent 流程。
 
-    这里只做轻量命中检测与持久化：精确命中直接输出人工确认的原答案；语义命中
-    （表述相近但字符不同）以人工答案为参考组织回答（answer_source=curated_qa_semantic），
-    避免改述问题得到答非所问的死板复述。
-
-    组装（基础答案/补充检索/事件流）整体由 worker 流式执行（见 stream_curated_qa_answer），
-    模型调用与知识库检索因此落在 worker 容器，且补充检索期间前端能展示「正在查询知识库…」。
+    这里只做轻量命中检测与持久化；组织回答整体由 worker 流式执行（见
+    stream_curated_qa_answer）——知识库优先，检索到依据以库内最新为准，检索不到
+    回落人工确认的答案，模型调用与知识库检索因此落在 worker 容器。
     run 与输入消息落库后投递 worker 队列即返回；终态与输出消息由 worker 在消费完成后标记。
     """
     meta = dict(meta or {})
@@ -182,14 +179,18 @@ async def stream_curated_qa_answer(
     current_user,
     db: AsyncSession,
 ) -> AsyncIterator[bytes]:
-    """worker 流式执行人工 QA 命中 run：先给基础答案，再补检索并归纳补充段落。
+    """worker 流式执行人工 QA 命中 run：先检索知识库，检索到依据以库内最新为准作答。
 
-    事件顺序与普通 agent 流一致：init → message_delta(基础答案) → tool-started(检索胶囊)
-    → message_delta(补充段落) → finished。胶囊在补充检索开始前广播，前端因此在检索与
-    归纳期间持续显示「正在查询知识库…」，这是 QA 快答路径的体验关键。
+    知识库优先（二期反馈 2026-09-14 问答对调优）：问答对答案可能过期，命中后先检索，
+    有依据即以检索片段为准组织回答（answer_source=curated_qa_kb_first，人工答案仅作
+    参考）；检索不到（无库/无结果/失败/片段无关）回落人工确认的答案。
 
-    回答在流末尾一次性落库为单条 assistant 消息（与历史 reload 兼容，正文含补充段落），
-    mark_hit 也只在落库成功后发生；检索或归纳任一步失败都降级为仅基础答案。
+    事件顺序与普通 agent 流一致：init → tool-started(检索胶囊) → message_delta(回答)
+    → finished。胶囊在检索开始前广播，前端因此在检索与组织期间持续显示
+    「正在查询知识库…」，这是 QA 快答路径的体验关键。
+
+    回答在流末尾一次性落库为单条 assistant 消息（与历史 reload 兼容），mark_hit 也
+    只在落库成功后发生；检索或组织任一步失败都回落人工答案。
     """
     meta = dict(meta or {})
     run_id = str(meta.get("run_id") or "")
@@ -235,12 +236,6 @@ async def stream_curated_qa_answer(
         agent_kind="main",
     )
 
-    base_answer = (
-        await _compose_answer_from_reference(model_spec, input_message.content, qa_pair)
-        if answer_source == "curated_qa_semantic"
-        else qa_pair.answer or ""
-    )
-
     yield make_chunk(
         status="init",
         meta=meta,
@@ -252,82 +247,81 @@ async def stream_curated_qa_answer(
             "extra_metadata": {"request_id": request_id},
         },
     )
-    if base_answer:
+
+    # 知识库优先（二期反馈 2026-09-14 问答对调优）：问答对答案可能过期，命中后先检索
+    # 知识库，检索到可用依据即以库内最新内容为准组织回答（人工答案仅作参考）；
+    # 检索不到（无库/无结果/检索失败/片段无关）再回落人工确认的答案。
+    kb_sources: list[dict[str, Any]] = []
+    kb_answer = ""
+    try:
+        # 先广播工具开始，让前端在检索与组织期间显示「正在查询知识库…」胶囊。
         yield make_chunk(
-            content=base_answer,
+            status="stream_event",
+            event={
+                "method": "tools",
+                "data": {
+                    "event": "tool-started",
+                    "tool_name": "query_kbs",
+                    "tool_call_id": f"curated-qa-retrieval-{run_id}",
+                },
+            },
+            namespace=[],
+            meta=meta,
+        )
+        kb_sources = await _retrieve_extra_sources(
+            db=db,
+            current_uid=uid,
+            agent_item=scope.agent_item,
+            agent_backend=scope.agent_backend,
+            question=input_message.content,
+        )
+        if kb_sources:
+            kb_answer = await _compose_answer_from_knowledge(
+                model_spec, input_message.content, kb_sources, qa_pair
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("QA 命中后的知识库检索失败，回落人工答案: %s", exc)
+        kb_sources = []
+        kb_answer = ""
+
+    if kb_answer:
+        final_answer, final_source, human_confirmed = kb_answer, "curated_qa_kb_first", False
+    else:
+        final_answer = (
+            await _compose_answer_from_reference(model_spec, input_message.content, qa_pair)
+            if answer_source == "curated_qa_semantic"
+            else qa_pair.answer or ""
+        )
+        final_source, human_confirmed = answer_source, True
+
+    if final_answer:
+        yield make_chunk(
+            content=final_answer,
             status="loading",
             stream_event={
                 "type": "message_delta",
                 "message_id": stream_message_id,
-                "content": base_answer,
+                "content": final_answer,
                 "thread_id": thread_id,
                 "namespace": [],
             },
             metadata={},
         )
 
-    supplement = ""
-    extra_sources: list[dict[str, Any]] = []
-    if base_answer:
-        try:
-            # 先广播工具开始，让前端在检索与归纳期间显示「正在查询知识库…」胶囊。
-            yield make_chunk(
-                status="stream_event",
-                event={
-                    "method": "tools",
-                    "data": {
-                        "event": "tool-started",
-                        "tool_name": "query_kbs",
-                        "tool_call_id": f"curated-qa-retrieval-{run_id}",
-                    },
-                },
-                namespace=[],
-                meta=meta,
-            )
-            extra_sources = await _retrieve_extra_sources(
-                db=db,
-                current_uid=uid,
-                agent_item=scope.agent_item,
-                agent_backend=scope.agent_backend,
-                question=input_message.content,
-            )
-            if extra_sources:
-                supplement = await _compose_extra_retrieval_supplement(
-                    model_spec, input_message.content, base_answer, extra_sources
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("QA 命中后的知识库补充检索失败，仅返回人工答案: %s", exc)
-            extra_sources = []
-            supplement = ""
-        if supplement:
-            yield make_chunk(
-                content=supplement,
-                status="loading",
-                stream_event={
-                    "type": "message_delta",
-                    "message_id": stream_message_id,
-                    "content": supplement,
-                    "thread_id": thread_id,
-                    "namespace": [],
-                },
-                metadata={},
-            )
-
     try:
-        combined = _merge_curated_supplement(base_answer, supplement)
         answer_metadata = {
             "id": stream_message_id,
             "type": "ai",
             "role": "assistant",
-            "content": combined,
-            "answer_source": answer_source,
+            "content": final_answer,
+            "answer_source": final_source,
             "curated_qa_id": qa_pair.id,
-            "human_confirmed": True,
+            "human_confirmed": human_confirmed,
         }
         assistant_message = await ConversationRepository(db).add_message_by_thread_id(
             thread_id=thread_id,
             role="assistant",
-            content=combined,
+            content=final_answer,
             message_type="text",
             extra_metadata=answer_metadata,
             run_id=run_id,
@@ -335,15 +329,15 @@ async def stream_curated_qa_answer(
         )
         if assistant_message is None:
             raise RuntimeError("人工 QA 命中后保存回答失败")
-        # 只有归纳模型确实从检索片段提炼出新信息（写进补充段落）时，才把片段
-        # 作为回答来源挂到消息上；检索有返回但模型判定「无需补充」时，这些片段
-        # 与问题无关，不应以来源形式展示给用户。
-        if supplement:
+        # 只有回答确实以知识库证据组织出来时，才把片段作为回答来源挂到消息上；
+        # 检索有返回但组织不出回答（片段与问题无关或组织失败）时，片段没有进入
+        # 回答，不应以来源形式展示给用户。
+        if kb_answer:
             await _attach_extra_retrieval_tool_call(
                 db=db,
                 message_id=assistant_message.id,
                 question=input_message.content,
-                sources=extra_sources,
+                sources=kb_sources,
             )
         run_repo = AgentRunRepository(db)
         await run_repo.set_output_message(run_id, assistant_message.id)
@@ -362,15 +356,8 @@ async def stream_curated_qa_answer(
     yield make_chunk(status="finished", meta=meta)
 
 
-def _merge_curated_supplement(base_answer: str, supplement: str) -> str:
-    """把检索补充段落拼到基础答案之后；无补充时原样返回基础答案。"""
-    if not supplement:
-        return base_answer
-    return f"{base_answer}\n\n补充资料（知识库检索）：\n{supplement}"
-
-
-# 补充检索参数：每库最多保留的片段数，与 query_kbs 单库 5 条的量级一致；
-# 跨库合计上限控制补充归纳的输入规模，避免长文本拖慢 QA 命中路径。
+# 检索参数：每库最多保留的片段数，与 query_kbs 单库 5 条的量级一致；
+# 跨库合计上限控制回答组织的输入规模，避免长文本拖慢 QA 命中路径。
 _PER_KB_EXTRA_KEEP = 4
 _SUPPLEMENT_MAX_SNIPPETS = 12
 
@@ -432,13 +419,18 @@ async def _retrieve_extra_sources(
     return merged
 
 
-async def _compose_extra_retrieval_supplement(
+async def _compose_answer_from_knowledge(
     model_spec: str,
     question: str,
-    base_answer: str,
     sources: list[dict[str, Any]],
+    qa_pair: CuratedQAPair,
 ) -> str:
-    """让模型只归纳检索片段中、原答案未覆盖的补充信息；无补充时返回空串。"""
+    """以知识库检索片段为准组织回答，人工问答对仅作参考；组织不出回答时返回空串。
+
+    二期反馈（2026-09-14 问答对调优）：问答对答案可能过期，检索到依据时必须以
+    知识库最新内容为准（冲突不沿用参考答案）。片段与问题无关或不足以回答时让模型
+    回复「无法回答」，调用方据此回落人工答案。
+    """
     from yuxi.models.chat import select_model
 
     snippet_lines: list[str] = []
@@ -451,17 +443,18 @@ async def _compose_extra_retrieval_supplement(
         {
             "role": "system",
             "content": (
-                "你是企业知识库助手。下面有一份人工确认的回答和知识库检索到的候选片段。"
-                "请找出片段中「原回答没提到、且与用户问题直接相关」的补充信息，"
-                "用与用户问题一致的语言写成一小段补充内容，引用片段里的文档时用《文件名》标注。"
-                "不要复述原回答的内容；候选片段若与原回答冲突，以原回答为准；"
-                "若没有可补充的新信息，只回复四个字：无需补充。"
+                "你是企业知识库助手。请以知识库检索片段为主要依据回答用户问题，"
+                "引用片段里的文档时用《文件名》标注。人工问答仅作参考，"
+                "与检索片段冲突时以检索片段（知识库最新内容）为准，不要沿用可能过期的参考答案。"
+                "如果检索片段与问题不相关或不足以回答，只回复四个字：无法回答，不要编造。"
+                "始终使用与用户问题一致的语言回答。"
             ),
         },
         {
             "role": "user",
             "content": (
-                f"用户问题：{question}\n\n已有人工确认的回答：\n{base_answer}\n\n知识库检索到的候选片段：\n{snippets}"
+                f"用户问题：{question}\n\n知识库检索片段：\n{snippets}\n\n"
+                f"参考（管理员人工确认的问答，可能过期）：\n问：{qa_pair.question}\n答：{qa_pair.answer}"
             ),
         },
     ]
@@ -469,9 +462,9 @@ async def _compose_extra_retrieval_supplement(
         response = await select_model(model_spec).call(messages, stream=False)
         text = str((response and response.content) or "").strip()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("QA 命中后的补充内容归纳失败，仅返回人工答案: %s", exc)
+        logger.warning("以知识库为准组织回答失败，回落人工答案: %s", exc)
         return ""
-    if not text or "无需补充" in text:
+    if not text or "无法回答" in text:
         return ""
     return text
 

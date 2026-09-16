@@ -36,7 +36,11 @@
         </div>
       </div>
 
-      <div class="stat-card info" :title="$t('dash.knowledgeGapRateTip')">
+      <div
+        class="stat-card info clickable"
+        :title="$t('dash.knowledgeGapRateTip')"
+        @click="handleKnowledgeGapClick"
+      >
         <div class="stat-icon">
           <Activity class="icon" />
         </div>
@@ -105,13 +109,18 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['open-feedback'])
+const emit = defineEmits(['open-feedback', 'open-knowledge-gaps'])
 
 const feedbackStats = computed(() => props.basicStats?.feedback_stats || null)
 
 // Methods
 const handleFeedbackClick = () => {
   emit('open-feedback')
+}
+
+// 知识缺口明细沉淀在知识缺口页，点卡片直达
+const handleKnowledgeGapClick = () => {
+  emit('open-knowledge-gaps')
 }
 
 // Methods

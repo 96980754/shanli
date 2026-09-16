@@ -42,6 +42,8 @@ class CuratedQAPair(Base):
         nullable=True,
         index=True,
     )
+    # Udesk 客服记录来源的会话溯源；原始会话按 TTL 清理后仍保留字符串可查，不设外键
+    source_conversation_id = Column(String(128), nullable=True, index=True)
 
     created_by = Column(String(100), nullable=False)
     updated_by = Column(String(100), nullable=False)
@@ -60,6 +62,7 @@ class CuratedQAPair(Base):
             "source_type": self.source_type,
             "source_feedback_id": self.source_feedback_id,
             "source_message_id": self.source_message_id,
+            "source_conversation_id": self.source_conversation_id,
             "created_by": self.created_by,
             "updated_by": self.updated_by,
             "hit_count": self.hit_count,

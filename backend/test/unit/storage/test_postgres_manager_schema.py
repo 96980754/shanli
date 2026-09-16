@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex
@@ -58,6 +60,41 @@ def test_message_feedback_has_user_message_unique_constraint():
     )
 
     assert [column.name for column in constraint.columns] == ["message_id", "uid"]
+
+
+def test_udesk_models_unique_keys_and_candidate_review_defaults():
+    from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
+    from yuxi.storage.postgres.models_udesk import CuratedQACandidate, UdeskConversation, UdeskMessage
+
+    conv_constraint = next(
+        constraint
+        for constraint in UdeskConversation.__table__.constraints
+        if constraint.name == "uq_udesk_conversations_conversation_id"
+    )
+    assert [column.name for column in conv_constraint.columns] == ["conversation_id"]
+
+    msg_constraint = next(
+        constraint
+        for constraint in UdeskMessage.__table__.constraints
+        if constraint.name == "uq_udesk_messages_message_id"
+    )
+    assert [column.name for column in msg_constraint.columns] == ["message_id"]
+
+    # 候选知识幂等键：同一会话 + 同一问题只允许一条（增量重拉由唯一键兜底）
+    candidate_constraint = next(
+        constraint
+        for constraint in CuratedQACandidate.__table__.constraints
+        if constraint.name == "uq_curated_qa_candidates_conv_question"
+    )
+    assert [column.name for column in candidate_constraint.columns] == [
+        "source_conversation_id",
+        "question_hash",
+    ]
+    # 候选默认待审 + 待查重（C6：审核前不落启用问答对）
+    assert CuratedQACandidate.__table__.c.review_status.default.arg == "pending"
+    assert CuratedQACandidate.__table__.c.dedup_status.default.arg == "pending"
+    # 问答对可溯源 Udesk 会话
+    assert "source_conversation_id" in CuratedQAPair.__table__.c
 
 
 @pytest.mark.asyncio
@@ -190,6 +227,89 @@ async def test_ensure_business_schema_removes_unbound_api_keys_before_requiring_
     assert statements.index("DELETE FROM api_keys WHERE user_id IS NULL") < statements.index(
         "ALTER TABLE IF EXISTS api_keys ALTER COLUMN user_id SET NOT NULL"
     )
+
+
+@pytest.mark.asyncio
+async def test_ensure_business_schema_creates_udesk_tables_in_dependency_order():
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_business_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    statements = "\n".join(connection.statements)
+
+    assert "CREATE TABLE IF NOT EXISTS udesk_conversations" in statements
+    assert "CREATE TABLE IF NOT EXISTS udesk_messages" in statements
+    assert "CREATE TABLE IF NOT EXISTS curated_qa_candidates" in statements
+    assert "CREATE TABLE IF NOT EXISTS udesk_sync_state" in statements
+    assert "CONSTRAINT uq_udesk_messages_message_id UNIQUE (message_id)" in statements
+    assert "REFERENCES udesk_conversations(conversation_id) ON DELETE CASCADE" in statements
+    assert "CONSTRAINT uq_curated_qa_candidates_conv_question" in statements
+    assert "review_status VARCHAR(32) NOT NULL DEFAULT 'pending'" in statements
+    # 会话表先于消息表（外键依赖）、候选表在最后；问答对溯源列幂等追加
+    assert statements.index("CREATE TABLE IF NOT EXISTS udesk_conversations") < statements.index(
+        "CREATE TABLE IF NOT EXISTS udesk_messages"
+    )
+    assert statements.index("CREATE TABLE IF NOT EXISTS udesk_messages") < statements.index(
+        "CREATE TABLE IF NOT EXISTS curated_qa_candidates"
+    )
+    assert (
+        "ALTER TABLE IF EXISTS curated_qa_pairs ADD COLUMN IF NOT EXISTS source_conversation_id VARCHAR(128)"
+        in statements
+    )
+    # LLM 结构化完成标记：NULL = 待总结（筛选判定无价值的会话也会打标）
+    assert (
+        "ALTER TABLE IF EXISTS udesk_conversations ADD COLUMN IF NOT EXISTS summarized_at TIMESTAMPTZ"
+        in statements
+    )
+    # 同步状态单行表：建表先于单行种子 INSERT（幂等，id 恒为 1）
+    assert statements.index("CREATE TABLE IF NOT EXISTS udesk_sync_state") < statements.index(
+        "INSERT INTO udesk_sync_state (id) SELECT 1 WHERE NOT EXISTS"
+    )
+    # 进度与总结运行状态：老库靠 ADD COLUMN IF NOT EXISTS 补列，不新建表
+    for column_ddl in (
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_done INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_total INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_lease_expires_at TIMESTAMPTZ",
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_status VARCHAR(32)",
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_error TEXT",
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_run_at TIMESTAMPTZ",
+    ):
+        assert column_ddl in statements
+
+
+def test_udesk_datetime_columns_are_timezone_aware():
+    """D 的回归：库内实际类型是 TIMESTAMPTZ，模型若声明成 naive DateTime，
+    SQLAlchemy 会按无时区绑定，Postgres 再按会话时区（Asia/Shanghai）解释，
+    写进去的 UTC 时刻被当成北京时间 → 整体偏 -8 小时。
+    """
+    from yuxi.storage.postgres.models_udesk import (
+        CuratedQACandidate,
+        UdeskConversation,
+        UdeskMessage,
+        UdeskSyncState,
+    )
+
+    for model in (UdeskConversation, UdeskMessage, CuratedQACandidate, UdeskSyncState):
+        for column in model.__table__.columns:
+            if column.type.python_type is datetime:
+                assert column.type.timezone is True, f"{model.__name__}.{column.name} 必须带时区"
+                # 默认值/自动更新同样必须是 aware：naive 一律视为 bug。
+                # ColumnDefault 会把可调用默认值包成接收执行上下文的签名，
+                # 故按 SQLAlchemy 自己的调用方式传一个占位 ctx。
+                for default in (column.default, column.onupdate):
+                    if default is None or not callable(default.arg):
+                        continue
+                    value = default.arg(None)
+                    assert value.tzinfo is not None, f"{model.__name__}.{column.name} 默认值不是 aware"
 
 
 @pytest.mark.asyncio

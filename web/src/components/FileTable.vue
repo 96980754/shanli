@@ -445,6 +445,18 @@
                     {{ $t('fileTable.reindex') }}
                   </a-button>
 
+                  <!-- Reparse Action：解析逻辑升级后刷新存量文档（重新生成 markdown 并入库） -->
+                  <a-button
+                    v-if="props.canManage && canReparseFile(row)"
+                    type="text"
+                    block
+                    @click="handleReparseFile(row)"
+                    :disabled="lock"
+                  >
+                    <template #icon><component :is="h(RefreshCcw)" size="14" /></template>
+                    {{ $t('fileTable.reparse') }}
+                  </a-button>
+
                   <!-- 移动到其它文件夹（后端 PUT /documents/{id}/move，new_parent_id 空值=根目录） -->
                   <a-button v-if="props.canManage" type="text" block @click="openMoveModal(row)">
                     <template #icon><component :is="h(FolderInput)" size="14" /></template>
@@ -533,6 +545,7 @@ import {
   canOpenFileDetail,
   canParseFile,
   canReindexFile,
+  canReparseFile,
   canSelectFile,
   getFilePrimaryAction,
   getFileStatusSortWeight,
@@ -549,6 +562,7 @@ import {
   Trash2,
   Download,
   RotateCw,
+  RefreshCcw,
   Ellipsis,
   FolderPlus,
   FolderInput,
@@ -1296,6 +1310,20 @@ const handleReindexFile = async (record) => {
   resetIndexParams(processingParams)
 
   indexConfigModalVisible.value = true
+}
+
+// 重新解析会覆盖旧解析结果，需确认
+const handleReparseFile = (record) => {
+  closePopover(record.file_id)
+  Modal.confirm({
+    title: t('fileTable.reparse'),
+    content: t('fileTable.reparseConfirm', { name: record.filename }),
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    onOk: async () => {
+      await store.reparseFiles([record.file_id])
+    }
+  })
 }
 
 // 入库确认 (统一处理 Index 和 Reindex)

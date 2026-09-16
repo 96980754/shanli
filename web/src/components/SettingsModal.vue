@@ -52,6 +52,15 @@
           </div>
           <div
             class="sider-item"
+            :class="{ activesec: activeTab === 'udesk' }"
+            @click="activeTab = 'udesk'"
+            v-if="userStore.isAdmin"
+          >
+            <Headset class="icon" :size="18" />
+            <span>{{ $t('settings.udeskTitle') }}</span>
+          </div>
+          <div
+            class="sider-item"
             :class="{ activesec: activeTab === 'user' }"
             @click="activeTab = 'user'"
             v-if="userStore.isAdmin"
@@ -108,6 +117,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: activeTab === 'udesk' }"
+          @click="activeTab = 'udesk'"
+          v-if="userStore.isAdmin"
+        >
+          {{ $t('settings.udeskTitle') }}
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: activeTab === 'user' }"
           @click="activeTab = 'user'"
           v-if="userStore.isAdmin"
@@ -147,6 +164,10 @@
             <CustomerServiceAccessSettings />
           </div>
 
+          <div v-show="activeTab === 'udesk'" v-if="userStore.isAdmin">
+            <UdeskAccessSettings />
+          </div>
+
           <div v-show="activeTab === 'user'" v-if="userStore.isAdmin">
             <UserManagementComponent />
           </div>
@@ -167,10 +188,11 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { CircleUser, Headset, Settings, User, Users, Network } from 'lucide-vue-next'
+import { CircleUser, Headset, Settings, User, Users, Network, X } from 'lucide-vue-next'
 import AccountSettingsComponent from '@/components/AccountSettingsComponent.vue'
 import BasicSettingsSection from '@/components/BasicSettingsSection.vue'
 import CustomerServiceAccessSettings from '@/components/CustomerServiceAccessSettings.vue'
+import UdeskAccessSettings from '@/components/UdeskAccessSettings.vue'
 import UserManagementComponent from '@/components/UserManagementComponent.vue'
 import DepartmentManagementComponent from '@/components/DepartmentManagementComponent.vue'
 import OntologyRegistrySettings from '@/components/OntologyRegistrySettings.vue'
@@ -198,7 +220,7 @@ const visible = computed({
 const availableTabs = computed(() => {
   const tabs = []
   if (userStore.isLoggedIn) tabs.push('account')
-  if (userStore.isAdmin) tabs.push('base', 'csaccess', 'user', 'ontology')
+  if (userStore.isAdmin) tabs.push('base', 'csaccess', 'udesk', 'user', 'ontology')
   if (userStore.isSuperAdmin) tabs.push('department')
   return tabs
 })

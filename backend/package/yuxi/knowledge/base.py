@@ -484,6 +484,49 @@ class KnowledgeBase(ABC):
 
             raise
 
+    async def reparse_file(self, kb_id: str, file_id: str, operator_id: str | None = None) -> dict:
+        """
+        把已有解析结果的文档标回未解析状态并重新解析（用于解析逻辑升级后刷新存量文档）。
+
+        仅允许从 parsed/indexed/done/error_indexing 发起；新解析结果会覆盖旧 markdown，
+        解析失败时文档停在 error_parsing，可走正常重试。
+
+        Args:
+            kb_id: Database ID
+            file_id: File ID
+            operator_id: ID of the user performing the operation
+
+        Returns:
+            Updated file metadata
+        """
+        allowed_statuses = {
+            FileStatus.PARSED,
+            FileStatus.INDEXED,
+            FileStatus.ERROR_INDEXING,
+            "done",  # Legacy status
+        }
+
+        from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+        reset_data = {"status": FileStatus.UPLOADED, "markdown_file": None, "error_message": None}
+        if operator_id:
+            reset_data["updated_by"] = operator_id
+        reset_record = await KnowledgeFileRepository().update_fields_if_status(
+            kb_id=kb_id,
+            file_id=file_id,
+            allowed_statuses=allowed_statuses,
+            data=reset_data,
+        )
+        if reset_record is None:
+            current_meta = await self._load_file_meta(kb_id, file_id)
+            current_status = current_meta.get("status")
+            raise ValueError(
+                f"Cannot reparse file with status '{current_status}'. "
+                f"File must be in one of these states: {', '.join(allowed_statuses)}"
+            )
+
+        return await self.parse_file(kb_id, file_id, operator_id=operator_id)
+
     async def update_file_params(self, kb_id: str, file_id: str, params: dict, operator_id: str | None = None) -> None:
         """Update file processing params"""
         # Skip if no params to update

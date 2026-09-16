@@ -675,6 +675,38 @@ export const useDatabaseStore = defineStore('database', () => {
     }
   }
 
+  async function reparseFiles(fileIds) {
+    if (fileIds.length === 0) return
+    state.chunkLoading = true
+    try {
+      const data = await documentApi.reparseDocuments(kbId.value, fileIds)
+      if (data.status === 'success' || data.status === 'queued') {
+        enableAutoRefresh('auto')
+        message.success(data.message || i18n.global.t('db.messages.reparseSubmitted'))
+        if (data.task_id) {
+          taskerStore.registerQueuedTask({
+            task_id: data.task_id,
+            name: i18n.global.t('db.tasks.documentReparse', { id: kbId.value }),
+            task_type: 'knowledge_parse',
+            message: data.message,
+            payload: { kb_id: kbId.value, count: fileIds.length }
+          })
+        }
+        await delayedRefresh() // 延迟1秒后刷新 // i18n-ignore
+        return true
+      } else {
+        message.error(data.message || i18n.global.t('db.messages.submitFailed'))
+        return false
+      }
+    } catch (error) {
+      console.error(error)
+      message.error(error.message || i18n.global.t('db.messages.requestFailed'))
+      return false
+    } finally {
+      state.chunkLoading = false
+    }
+  }
+
   async function parsePendingFiles(count = 0) {
     state.chunkLoading = true
     try {
@@ -909,6 +941,7 @@ export const useDatabaseStore = defineStore('database', () => {
     addFiles,
     addUploadedFiles,
     parseFiles,
+    reparseFiles,
     parsePendingFiles,
     indexFiles,
     indexPendingFiles,

@@ -9,8 +9,10 @@
           @thread-change="handleThreadChange"
         >
           <template #input-actions-left="{ hasActiveThread }">
+            <!-- 智能体切换 / 智能体编辑入口——暂隐藏（与 AppLayout 的「全库搜索」同一做法：
+                 删掉 v-if 里的 `false && ` 即可恢复） -->
             <a-dropdown
-              v-if="selectedAgentId"
+              v-if="false && selectedAgentId"
               v-model:open="agentDropdownOpen"
               :trigger="['click']"
               placement="topLeft"

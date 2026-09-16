@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -274,6 +275,14 @@ class PaddleOCRVLParser(PaddleOCRAPIParser):
                     uploaded_url = self._upload_markdown_image(str(image_url), str(image_path), params)
                     text = text.replace(f"]({image_path})", f"]({uploaded_url})")
                     text = text.replace(str(image_url), uploaded_url)
+                    # PaddleOCR-VL 的 markdown 里图片也常以 HTML img 标签 + 相对路径引用
+                    # （<img src="imgs/xxx.jpg" .../>），上面两条 replace 都匹配不到，
+                    # 不改写会在预览中裂图；只替换 src 值，保留 width/alt 等属性
+                    text = re.sub(
+                        rf'(<img\b[^>]*?\bsrc=)(["\'])({re.escape(str(image_path))})\2',
+                        rf"\g<1>\g<2>{uploaded_url}\g<2>",
+                        text,
+                    )
 
                 if text.strip():
                     markdown_parts.append(text.strip())
