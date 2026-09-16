@@ -1,5 +1,5 @@
 
-.PHONY: up up-lite down logs lint format seed reset
+.PHONY: up up-lite down logs lint format seed seed-demo reset
 
 PYTEST_ARGS ?=
 BACKEND_PYTHON ?= $(shell cat backend/.python-version)
@@ -41,6 +41,9 @@ logs:
 
 seed:
 	docker compose exec api uv run python scripts/seed_initial_users.py
+
+seed-demo:
+	docker compose exec api uv run python scripts/seed_initial_users.py --with-demo-data
 
 ######################
 # LINTING AND FORMATTING
