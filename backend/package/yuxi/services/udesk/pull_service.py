@@ -518,14 +518,21 @@ class UdeskPullService:
         新插入的元组没被本事务更新过，系统列 xmax 为 0；走 DO UPDATE 分支时
         xmax 记的是当前事务号，非 0。这一点必须和「新增消息」同口径，否则一轮里
         两遍遍历重叠的会话会被计两次，页面上「处理会话 89 条」与累计「会话 58」对不上。
+
+        列清单必须覆盖全部「NOT NULL 且库侧无默认值」的列：这张表由 ORM 的
+        create_all 建出（手写 DDL 里的 DEFAULT NOW() 因表已存在而不生效），而
+        Column(default=...) 是 **Python 侧**默认值、只对 Core/ORM 插入生效；本条是裸
+        text()，拿不到它，漏一列就是生产上的 NotNullViolation，整轮拉取失败。
+        消息侧走 pg_insert，故不受影响。
         """
         result = await session.execute(
             text(
                 """
                 INSERT INTO udesk_conversations
-                    (conversation_id, customer_token_hash, started_at, ended_at, stats_json, synced_at)
+                    (conversation_id, customer_token_hash, started_at, ended_at, stats_json,
+                     synced_at, created_at)
                 VALUES (:conversation_id, :customer_token_hash, :started_at, :ended_at,
-                        CAST(:stats_json AS jsonb), :now)
+                        CAST(:stats_json AS jsonb), :now, :now)
                 ON CONFLICT (conversation_id) DO UPDATE SET
                     customer_token_hash = EXCLUDED.customer_token_hash,
                     ended_at = EXCLUDED.ended_at,

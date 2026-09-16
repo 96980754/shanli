@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import Integer
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex
 
@@ -272,7 +273,7 @@ async def test_ensure_business_schema_creates_udesk_tables_in_dependency_order()
     )
     # 同步状态单行表：建表先于单行种子 INSERT（幂等，id 恒为 1）
     assert statements.index("CREATE TABLE IF NOT EXISTS udesk_sync_state") < statements.index(
-        "INSERT INTO udesk_sync_state (id) SELECT 1 WHERE NOT EXISTS"
+        "INSERT INTO udesk_sync_state (id, last_run_conversations"
     )
     # 进度与总结运行状态：老库靠 ADD COLUMN IF NOT EXISTS 补列，不新建表
     for column_ddl in (
@@ -284,6 +285,12 @@ async def test_ensure_business_schema_creates_udesk_tables_in_dependency_order()
         "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_run_at TIMESTAMPTZ",
     ):
         assert column_ddl in statements
+    # 种子必须在这批 ADD COLUMN **之后**：第五批之前建的库还没有 progress_done，
+    # 种子写在前面会以 UndefinedColumn 失败，而同批共用一个事务，那两条 ADD COLUMN
+    # 会被一起回滚——迁移从此无法自行收敛（全新库因 create_all 建齐全部列而掩盖此问题）。
+    assert statements.index(
+        "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_done INTEGER NOT NULL DEFAULT 0"
+    ) < statements.index("INSERT INTO udesk_sync_state (id, last_run_conversations")
 
 
 def test_udesk_datetime_columns_are_timezone_aware():
@@ -398,6 +405,85 @@ async def test_ensure_knowledge_schema_creates_enterprise_permission_table():
     assert "can_grant BOOLEAN NOT NULL DEFAULT FALSE" in statements
     assert "uq_knowledge_base_permissions_subject" in statements
     assert "ix_knowledge_base_permissions_kb_id" in statements
+
+
+def _required_insert_columns(model) -> set[str]:
+    """裸 SQL INSERT 必须显式提供的列：NOT NULL 且库侧无默认值。
+
+    库侧默认值 = `server_default`，以及单列整型主键（create_all 会把它建成 SERIAL）。
+    `Column(default=...)` 是 **Python 侧**默认值，只对 Core/ORM 插入生效，裸 text()
+    拿不到——恰恰是这一类列最容易被漏掉。
+    """
+    pk_columns = list(model.__table__.primary_key.columns)
+    serial_pk = pk_columns[0].name if len(pk_columns) == 1 and isinstance(pk_columns[0].type, Integer) else None
+    return {
+        column.name
+        for column in model.__table__.columns
+        if not column.nullable and column.server_default is None and column.name != serial_pk
+    }
+
+
+def _missing_insert_columns(insert_sql: str, model) -> list[str]:
+    provided = {
+        name.strip() for name in insert_sql[insert_sql.index("(") + 1 : insert_sql.index(")")].split(",")
+    }
+    return sorted(_required_insert_columns(model) - provided)
+
+
+class _ScalarOnlyResult:
+    def scalar(self):
+        return True
+
+
+class _RecordingSession:
+    """只收语句、不碰真库，用于断言裸 SQL 的列清单。"""
+
+    def __init__(self):
+        self.sql = ""
+
+    async def execute(self, statement, params=None):
+        self.sql = str(statement)
+        return _ScalarOnlyResult()
+
+
+@pytest.mark.asyncio
+async def test_udesk_raw_inserts_list_every_not_null_column_without_db_default():
+    """回归：两处裸 SQL INSERT 都曾在生产上漏列炸 NotNullViolation。
+
+    - `udesk_sync_state` 的单行种子只给 id → worker 启动即崩进 restart 循环；
+    - `udesk_conversations` 的 upsert 漏 created_at → 整轮拉取失败。
+
+    共同成因：表由 ORM 的 create_all 建出（手写 DDL 里的 DEFAULT 因表已存在而不生效），
+    而 ORM 的 default 只是 Python 侧默认值，裸 text() 绕过它。走 pg_insert 的写入点
+    （消息、候选）不受影响，故不在本用例范围内。
+    """
+    from yuxi.services.udesk.pull_service import UdeskPullService
+    from yuxi.storage.postgres.models_udesk import UdeskConversation, UdeskSyncState
+
+    manager = PostgresManager()
+    original_initialized = manager._initialized
+    original_engine = manager.async_engine
+    connection = _RecordingConnection()
+    manager._initialized = True
+    manager.async_engine = _RecordingEngine(connection)
+    try:
+        await manager.ensure_business_schema()
+    finally:
+        manager._initialized = original_initialized
+        manager.async_engine = original_engine
+
+    seed_sql = next(s for s in connection.statements if s.startswith("INSERT INTO udesk_sync_state"))
+    assert _missing_insert_columns(seed_sql, UdeskSyncState) == []
+
+    # client / session_factory 在本用例里都用不到：只取语句文本，不触网不落库
+    service = UdeskPullService(
+        client=None,
+        session_factory=lambda: None,
+        now=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    session = _RecordingSession()
+    await service._upsert_conversation(session, {"conversation_id": "probe-conversation"})
+    assert _missing_insert_columns(session.sql, UdeskConversation) == []
 
 
 @pytest.mark.asyncio
