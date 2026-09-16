@@ -10,10 +10,13 @@ COPY --from=node:24-slim /usr/local/share /usr/local/share
 WORKDIR /app
 
 # 环境变量设置
+# uv 默认 HTTP 超时 30s：本环境拉大包（如 grpcio-tools）会中途超时，拿到截断的 whl 后
+# 在解包阶段报 "I/O operation failed during extraction"，uv 自己的提示就是调大这个值
 ENV TZ=Asia/Shanghai \
     UV_PROJECT_ENVIRONMENT="/usr/local" \
     UV_COMPILE_BYTECODE=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    UV_HTTP_TIMEOUT=300
 
 # 设置 npm 镜像源，为 MCP 和 Skills 安装依赖
 RUN npm config set registry https://registry.npmmirror.com --global \
