@@ -99,6 +99,11 @@ backend/scripts/eval_datasets/*.csv
 backend/scripts/eval_datasets/*.xlsx
 backend/scripts/eval_datasets/*.md
 backend/scripts/eval_datasets/*.zip
+# 例外提醒：该脚本把甲方 100 题验证集以字面量写死（等同数据集本身），已移出仓库，
+# 本地保留。此处显式忽略，避免日后被 git add 带回。
+backend/scripts/eval_datasets/build_validation_datasets.py
+# 甲方业务问答清单（100 题，逐条为真实业务问题并标注知识库归属）
+docs/知识库问答验收测试问题清单-*.md
 
 # docker 运行时数据备份（数据库/模型目录，绝不入库）
 docker/_bak-*/
