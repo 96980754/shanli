@@ -1425,7 +1425,6 @@ class PostgresManager(metaclass=SingletonMeta):
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
             """,
-            "INSERT INTO udesk_sync_state (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM udesk_sync_state WHERE id = 1)",
             # 本轮拉取进度：逐会话提交，供页面在一轮数分钟的运行中看到进展
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_done INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS progress_total INTEGER NOT NULL DEFAULT 0",
@@ -1434,6 +1433,25 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_status VARCHAR(32)",
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_error TEXT",
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_run_at TIMESTAMPTZ",
+            # 单行种子必须放在这批 ADD COLUMN **之后**，两条约束同时成立才行：
+            # ① 必须显式给出全部 NOT NULL 列。这张表同时被 ORM 模型和上面的手写 DDL 定义，
+            #    而 create_tables() 的 create_all 先于本函数执行、且对已存在的表不再改动，
+            #    所以 ORM 建出的表只有 NOT NULL、拿不到 DDL 里写的 DEFAULT 0，只给 id 会在
+            #    NOT NULL 上失败（progress_done 等亦然）。
+            # ② 必须在扩列之后。第五批之前建的库只有最初的列，progress_done/progress_total
+            #    尚不存在；写在这批 ADD COLUMN 之前会以 UndefinedColumn 失败，而同批迁移共用
+            #    一个事务，那两条 ADD COLUMN 会被一起回滚 —— 迁移永远无法自行收敛。
+            # 位置错任一条的后果都不只是这一行插不进去：整批回滚会带走同批的其它迁移
+            # （第五批扩列、curated_qa_pairs.source_conversation_id），表现为保存问答对 500。
+            # 且失败被两层掩埋——api 的 lifespan 接住异常只记日志、健康检查照样通过，
+            # worker 没有接住，启动即崩进 restart: unless-stopped 的重启循环。
+            (
+                "INSERT INTO udesk_sync_state "
+                "(id, last_run_conversations, last_run_messages, progress_done, progress_total,"
+                " created_at, updated_at) "
+                "SELECT 1, 0, 0, 0, 0, NOW(), NOW() "
+                "WHERE NOT EXISTS (SELECT 1 FROM udesk_sync_state WHERE id = 1)"
+            ),
         ]
         async with self.async_engine.begin() as conn:
             # 历史未绑定用户的 API Key 会在下方迁移语句里被静默删除，先计数告警
