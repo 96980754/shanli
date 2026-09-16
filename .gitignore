@@ -86,8 +86,29 @@ docs/测试数据/
 
 # 一键复现验收脚本的运行产物（脚本可随时重跑生成，不入库；人工整理的报告见 docs/）
 backend/scripts/bench/reports/
-backend/scripts/eval_datasets/reports/*.jsonl
+
+# 评估数据集与报告产物：题面与金标答案逐字来自甲方表格（真实客户问答），绝不入库。
+# reports/ final/ synthetic/ 三个目录只放产物、不含脚本，整目录忽略（工具脚本放在
+# eval_datasets/ 根目录，那里按扩展名排除数据、保留 .py）。
+backend/scripts/eval_datasets/reports/
+backend/scripts/eval_datasets/final/
+backend/scripts/eval_datasets/synthetic/
+backend/scripts/eval_datasets/*.jsonl
+backend/scripts/eval_datasets/*.json
+backend/scripts/eval_datasets/*.csv
+backend/scripts/eval_datasets/*.xlsx
+backend/scripts/eval_datasets/*.md
+backend/scripts/eval_datasets/*.zip
 
 # docker 运行时数据备份（数据库/模型目录，绝不入库）
 docker/_bak-*/
 docker/volumes.pre-restore-*/
+
+# 甲方提供的原始资料（表格/文档/压缩包，含真实业务数据，绝不入库）
+# 用 docs/**/ 覆盖各层子目录（docs/**/x 同时匹配 docs/x 与 docs/a/b/x）
+docs/**/*.xlsx
+docs/**/*.xls
+docs/**/*.doc
+docs/**/*.docx
+docs/**/*.zip
+docs/**/*.rar
