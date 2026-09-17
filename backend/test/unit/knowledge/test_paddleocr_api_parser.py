@@ -231,7 +231,8 @@ def test_paddleocr_configured_token_health_does_not_submit_job() -> None:
 
 
 def test_paddleocr_vl_uploads_markdown_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    file_path = _build_file(tmp_path)
+    # PDF 输入保留引擎切出的图块（图片输入才会丢弃，见下一条用例）
+    file_path = _build_file(tmp_path, ".pdf")
     uploaded: dict[str, Any] = {}
 
     monkeypatch.setattr(
@@ -287,3 +288,53 @@ def test_paddleocr_vl_uploads_markdown_images(tmp_path: Path, monkeypatch: pytes
         "object_name": "kb/images/1000000_table.png",
         "data": b"image-bytes",
     }
+
+
+def test_paddleocr_vl_drops_layout_crops_for_image_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """输入本身就是图片时，引擎切出的图块都是这张图的碎片，应整体丢弃且不再上传。"""
+    file_path = _build_file(tmp_path, ".jpg")
+    uploaded: list[str] = []
+
+    monkeypatch.setattr(
+        paddleocr_api.requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(200, {"data": {"jobId": "job-image-input"}}),
+    )
+
+    def fake_get(url, headers=None, timeout=None):
+        if url.endswith("/job-image-input"):
+            return FakeResponse(200, {"data": {"state": "done", "resultUrl": {"jsonUrl": "https://result.test/x"}}})
+        row = {
+            "result": {
+                "layoutParsingResults": [
+                    {
+                        "markdown": {
+                            "text": (
+                                "证书标题\n\n"
+                                '<div style="text-align: center;">'
+                                '<img src="imgs/img_in_seal_box_1_2_3_4.jpg" alt="Image" width="9%" /></div>'
+                            ),
+                            "images": {"imgs/img_in_seal_box_1_2_3_4.jpg": "https://image.test/seal.jpg"},
+                        }
+                    }
+                ]
+            }
+        }
+        return FakeResponse(200, text=json.dumps(row))
+
+    class FakeMinioClient:
+        def ensure_bucket_exists(self, bucket_name):
+            uploaded.append(bucket_name)
+
+        def upload_file(self, bucket_name, object_name, data):
+            uploaded.append(object_name)
+            return type("UploadResult", (), {"url": "minio://public/kb/seal.jpg"})()
+
+    monkeypatch.setattr(paddleocr_api.requests, "get", fake_get)
+    monkeypatch.setattr(paddleocr_api, "get_minio_client", lambda: FakeMinioClient())
+
+    parser = PaddleOCRVLParser(api_token="token")
+    result = parser.process_file(str(file_path), params={"image_bucket": "public", "image_prefix": "kb/images"})
+
+    assert result == "证书标题"
+    assert uploaded == []

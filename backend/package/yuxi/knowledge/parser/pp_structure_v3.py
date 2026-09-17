@@ -5,7 +5,9 @@ PP-Structure-V3 文档解析器
 """
 
 import base64
+import mimetypes
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,7 @@ from typing import Any
 import requests
 
 from yuxi.knowledge.parser.base import BaseDocumentProcessor, DocumentParserException
+from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 
 
@@ -99,7 +102,54 @@ class PPStructureV3Parser(BaseDocumentProcessor):
             except Exception:
                 raise DocumentParserException(f"{error_msg}: {response.text}", self.get_service_name(), "api_error")
 
-    def _parse_api_result(self, api_result: dict[str, Any], file_path: str) -> dict[str, Any]:
+    def _upload_markdown_image(self, image_url: str, image_path: str, params: dict[str, Any]) -> str:
+        """下载 API 返回的图块并转存到公开桶，返回可渲染的 URL。"""
+        response = requests.get(image_url, timeout=60)
+        if response.status_code != 200:
+            raise DocumentParserException(
+                f"下载 PP-Structure-V3 Markdown 图片失败: HTTP {response.status_code}",
+                self.get_service_name(),
+                "image_download_failed",
+            )
+
+        image_bucket = params.get("image_bucket") or "public"
+        image_prefix = str(params.get("image_prefix") or "unknown/kb-images").strip("/") or "unknown/kb-images"
+        filename = Path(image_path).name or "pp_structure_image"
+        suffix = Path(filename).suffix
+        if not suffix:
+            content_type = response.headers.get("Content-Type") or ""
+            suffix = mimetypes.guess_extension(content_type.split(";")[0].strip()) or ".jpg"
+            filename = f"{filename}{suffix}"
+
+        minio_client = get_minio_client()
+        minio_client.ensure_bucket_exists(image_bucket)
+        upload_result = minio_client.upload_file(
+            bucket_name=image_bucket,
+            object_name=f"{image_prefix}/{int(time.time() * 1000000)}_{filename}",
+            data=response.content,
+        )
+        return upload_result.url
+
+    def _rewrite_markdown_images(self, text: str, images: dict[str, str] | None, params: dict[str, Any]) -> str:
+        """把正文里引用的图块转存到公开桶并改写引用。
+
+        markdown["images"] 的 key 是正文中出现的相对路径，value 是 API 侧的临时地址；
+        不改写会留下悬空相对路径，预览时裂图。
+        """
+        for image_path, image_url in (images or {}).items():
+            if not image_path or not image_url:
+                continue
+            uploaded_url = self._upload_markdown_image(str(image_url), str(image_path), params)
+            text = text.replace(f"]({image_path})", f"]({uploaded_url})")
+            text = text.replace(str(image_url), uploaded_url)
+            text = re.sub(
+                rf'(<img\b[^>]*?\bsrc=)(["\'])({re.escape(str(image_path))})\2',
+                rf"\g<1>\g<2>{uploaded_url}\g<2>",
+                text,
+            )
+        return text
+
+    def _parse_api_result(self, api_result: dict[str, Any], file_path: str, params: dict[str, Any]) -> dict[str, Any]:
         """解析API返回结果"""
         # 基本信息
         parsed_result = {
@@ -129,8 +179,9 @@ class PPStructureV3Parser(BaseDocumentProcessor):
             # Markdown内容
             if "markdown" in page_result:
                 markdown = page_result["markdown"]
-                if markdown.get("text"):
-                    all_text_content.append(markdown["text"])
+                text = markdown.get("text")
+                if text:
+                    all_text_content.append(self._rewrite_markdown_images(text, markdown.get("images"), params))
 
             # 详细识别结果
             if "prunedResult" in page_result:
@@ -250,7 +301,7 @@ class PPStructureV3Parser(BaseDocumentProcessor):
                 )
 
             # 解析结果
-            result = self._parse_api_result(api_result, file_path)
+            result = self._parse_api_result(api_result, file_path, params)
             text = result.get("full_text", "")
 
             processing_time = time.time() - start_time

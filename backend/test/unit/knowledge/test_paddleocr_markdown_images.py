@@ -68,3 +68,27 @@ def test_leaves_unknown_html_img_untouched(monkeypatch):
     result = parser._extract_markdown(rows, {})
 
     assert result == text
+
+
+def test_drop_layout_crops_removes_html_img_crop_without_uploading(monkeypatch):
+    # 图片输入：碎片整体丢弃，make_parser 的上传映射取不到 key 就会 KeyError
+    text = (
+        '善理通益信息科技（深圳）有限公司\n\n<div style="text-align: center;">'
+        '<img src="imgs/img_in_seal_box_1_2_3_4.jpg" alt="Image" width="9%" /></div>'
+    )
+    parser = make_parser(monkeypatch, {})
+    rows = make_rows(text, {"imgs/img_in_seal_box_1_2_3_4.jpg": "https://remote/seal.jpg"})
+
+    result = parser._extract_markdown(rows, {}, drop_layout_crops=True)
+
+    assert result == "善理通益信息科技（深圳）有限公司"
+
+
+def test_drop_layout_crops_removes_markdown_image_link(monkeypatch):
+    text = "前文\n\n![Image](imgs/figure_1.jpg)\n\n后文"
+    parser = make_parser(monkeypatch, {})
+    rows = make_rows(text, {"imgs/figure_1.jpg": "https://remote/figure_1.jpg"})
+
+    result = parser._extract_markdown(rows, {}, drop_layout_crops=True)
+
+    assert result == "前文\n\n后文"

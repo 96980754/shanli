@@ -287,6 +287,57 @@ def test_parse_image_uses_ocr_engine_config(tmp_path: Path, monkeypatch: pytest.
     assert captured["params"]["formula_enable"] is False
 
 
+@pytest.mark.asyncio
+async def test_aparse_image_prepends_published_original(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """图片输入：原图转存公开桶后置于识别文本之前（引擎只输出碎片，原图会丢）。"""
+    file_path = tmp_path / "中国通信标准化协会CCSA全权会员证书.jpg"
+    _build_png(file_path)
+    published: list[tuple[bytes, str, str, str]] = []
+
+    async def _fake_parse_image_async(file, params=None):
+        return "善理通益信息科技（深圳）有限公司"
+
+    def _fake_upload_image_to_minio(image_data, filename, bucket_name, object_prefix):
+        published.append((image_data, filename, bucket_name, object_prefix))
+        return "http://localhost:9000/public/kb_x/kb-images/1_cert.jpg"
+
+    monkeypatch.setattr(parser_unified, "parse_image_async", _fake_parse_image_async)
+    monkeypatch.setattr(parser_unified, "_upload_image_to_minio", _fake_upload_image_to_minio)
+
+    markdown = await Parser.aparse(str(file_path), params={"ocr_engine": "rapid_ocr"})
+
+    assert len(published) == 1
+    image_data, filename, bucket_name, object_prefix = published[0]
+    assert image_data == file_path.read_bytes()
+    assert filename == "中国通信标准化协会CCSA全权会员证书.jpg"
+    assert (bucket_name, object_prefix) == ("public", "unknown/kb-images")
+    assert markdown == (
+        '<div style="text-align: center;">'
+        '<img src="http://localhost:9000/public/kb_x/kb-images/1_cert.jpg" '
+        'alt="中国通信标准化协会CCSA全权会员证书.jpg" /></div>'
+        "\n\n善理通益信息科技（深圳）有限公司"
+    )
+
+
+@pytest.mark.asyncio
+async def test_aparse_keeps_ocr_text_when_original_upload_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    file_path = tmp_path / "parser_test.png"
+    _build_png(file_path)
+
+    async def _fake_parse_image_async(file, params=None):
+        return "OCR content"
+
+    def _raise_upload_error(*args, **kwargs):
+        raise RuntimeError("upload failed")
+
+    monkeypatch.setattr(parser_unified, "parse_image_async", _fake_parse_image_async)
+    monkeypatch.setattr(parser_unified, "_upload_image_to_minio", _raise_upload_error)
+
+    assert await Parser.aparse(str(file_path), params={"ocr_engine": "rapid_ocr"}) == "OCR content"
+
+
 def test_parse_image_ignores_enable_ocr(tmp_path: Path) -> None:
     file_path = tmp_path / "parser_test.png"
     _build_png(file_path)

@@ -20,6 +20,7 @@ from docling.document_converter import DocumentConverter
 from langchain_community.document_loaders import PyPDFLoader
 from markdownify import markdownify as md_convert
 
+from yuxi.knowledge.parser.markdown_normalize import find_dangling_image_refs, strip_presentational_html
 from yuxi.knowledge.parser.zip_utils import process_zip_file as _process_zip_file
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
@@ -119,6 +120,27 @@ def _upload_image_to_minio(image_data: bytes, filename: str, bucket_name: str, o
         data=image_data,
     )
     return result.url
+
+
+async def _prepend_original_image(text: str, file_path: Path, display_name: str, params: dict[str, Any] | None) -> str:
+    """把图片输入的原图发布到公开桶，并置于识别文本之前。
+
+    引擎把整张图当文档页处理，只输出它切出的图块（logo、印章等碎片），原图本身会丢；
+    这里补回原图，让图片类文件的解析结果保持"这张图 + 识别出的文字"。
+    原文件在私有的 knowledgebases 桶里（匿名读 403），必须复制一份到公开桶才能被引用。
+    """
+    image_bucket, image_prefix = _resolve_image_storage_params(params)
+    try:
+        image_data = await asyncio.to_thread(file_path.read_bytes)
+        url = await asyncio.to_thread(_upload_image_to_minio, image_data, display_name, image_bucket, image_prefix)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"原图上传失败，解析结果仅保留识别文本: {display_name}, {e}")
+        return text
+
+    # 标签后留一个空行：cleaning._repair_soft_line_breaks 会把不以致句符结尾的行与下一行
+    # 合并，</div> 结尾是 ">"，无标题的图片会被粘连成一行
+    tag = f'<div style="text-align: center;"><img src="{url}" alt="{display_name}" /></div>'
+    return f"{tag}\n\n{text}" if text.strip() else tag
 
 
 def _parse_data_uri(data_uri: str) -> tuple[bytes, str]:
@@ -367,6 +389,7 @@ async def _process_file_to_markdown_core(
             raise ValueError(f"无法从MinIO下载文件: {e}")
     else:
         actual_file_path = file_path
+        original_filename = Path(file_path).name
 
     file_ext: str | None = None
     artifacts: dict[str, Any] = {}
@@ -403,7 +426,7 @@ async def _process_file_to_markdown_core(
 
         elif file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]:
             text = await parse_image_async(str(file_path_obj), params=params)
-            result = f"{text}"
+            result = await _prepend_original_image(text, file_path_obj, original_filename, params)
 
         elif file_ext in [".html", ".htm"]:
             async with aiofiles.open(file_path_obj, encoding="utf-8") as f:
@@ -469,6 +492,15 @@ async def _process_file_to_markdown_core(
 async def parse_source_to_markdown(source: str, params: dict | None = None) -> MarkdownParseResult:
     """统一入口: 将文件解析为 Markdown（URL 解析已废弃）。"""
     markdown, file_ext, artifacts = await _process_file_to_markdown_core(source, params=params)
+
+    markdown = strip_presentational_html(markdown)
+    dangling_refs = find_dangling_image_refs(markdown)
+    if dangling_refs:
+        logger.warning(
+            f"解析结果存在无法渲染的图片引用（{len(dangling_refs)} 处，疑似解析器漏转存/漏改写）: "
+            f"{Path(source).name} - 例如 {dangling_refs[:3]}"
+        )
+
     return MarkdownParseResult(
         markdown=markdown,
         file_ext=file_ext,

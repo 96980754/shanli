@@ -14,11 +14,15 @@ from urllib.parse import urlparse
 import requests
 
 from yuxi.knowledge.parser.base import BaseDocumentProcessor, DocumentParserException
+from yuxi.knowledge.parser.markdown_normalize import strip_image_reference
 from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 
 DEFAULT_PADDLEOCR_API_URL = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs"
 PADDLEOCR_SUPPORTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
+# 输入本身就是图片时，引擎切出的每一块按定义都是这张图的碎片，而原图已由 unified
+# 补回解析结果，因此丢弃这些图块（连下载上传一并省掉）
+PADDLEOCR_IMAGE_EXTENSIONS = [ext for ext in PADDLEOCR_SUPPORTED_EXTENSIONS if ext != ".pdf"]
 
 
 class PaddleOCRAPIParser(BaseDocumentProcessor):
@@ -75,7 +79,7 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
                 max_wait_seconds=float(params.get("max_wait_seconds") or 600),
             )
             rows = self._download_jsonl(result_url)
-            text = self._extract_markdown(rows, params)
+            text = self._extract_markdown(rows, params, drop_layout_crops=file_ext in PADDLEOCR_IMAGE_EXTENSIONS)
 
             processing_time = time.time() - start_time
             logger.info(
@@ -215,7 +219,9 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
 
         return rows
 
-    def _extract_markdown(self, rows: list[dict[str, Any]], params: dict[str, Any]) -> str:
+    def _extract_markdown(
+        self, rows: list[dict[str, Any]], params: dict[str, Any], *, drop_layout_crops: bool = False
+    ) -> str:
         raise NotImplementedError
 
     def _upload_markdown_image(self, image_url: str, image_path: str, params: dict[str, Any]) -> str:
@@ -258,7 +264,9 @@ class PaddleOCRVLParser(PaddleOCRAPIParser):
         "useChartRecognition": False,
     }
 
-    def _extract_markdown(self, rows: list[dict[str, Any]], params: dict[str, Any]) -> str:
+    def _extract_markdown(
+        self, rows: list[dict[str, Any]], params: dict[str, Any], *, drop_layout_crops: bool = False
+    ) -> str:
         markdown_parts: list[str] = []
 
         for row in rows:
@@ -270,7 +278,12 @@ class PaddleOCRVLParser(PaddleOCRAPIParser):
                     continue
 
                 for image_path, image_url in (markdown.get("images") or {}).items():
-                    if not image_path or not image_url:
+                    if not image_path:
+                        continue
+                    if drop_layout_crops:
+                        text = strip_image_reference(text, str(image_path))
+                        continue
+                    if not image_url:
                         continue
                     uploaded_url = self._upload_markdown_image(str(image_url), str(image_path), params)
                     text = text.replace(f"]({image_path})", f"]({uploaded_url})")
@@ -301,7 +314,9 @@ class PaddleOCRPPOCRv6Parser(PaddleOCRAPIParser):
         "useTextlineOrientation": False,
     }
 
-    def _extract_markdown(self, rows: list[dict[str, Any]], params: dict[str, Any]) -> str:
+    def _extract_markdown(
+        self, rows: list[dict[str, Any]], params: dict[str, Any], *, drop_layout_crops: bool = False
+    ) -> str:
         lines: list[str] = []
 
         for row in rows:
