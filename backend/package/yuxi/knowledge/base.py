@@ -1028,7 +1028,7 @@ class KnowledgeBase(ABC):
             raise Exception(f"文件 {file_id} 没有解析后的 Markdown 内容")
 
         content = await self._read_markdown_from_minio(markdown_file)
-        return self._build_find_file_windows(
+        result = self._build_find_file_windows(
             content,
             patterns=patterns,
             use_regex=use_regex,
@@ -1036,6 +1036,8 @@ class KnowledgeBase(ABC):
             max_windows=max_windows,
             window_size=window_size,
         )
+        result["source"] = file_meta.get("filename") or file_meta.get("original_filename") or file_id
+        return result
 
     @abstractmethod
     async def index_file(self, kb_id: str, file_id: str, operator_id: str | None = None) -> dict:

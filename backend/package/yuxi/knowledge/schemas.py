@@ -90,6 +90,7 @@ class FindWindowSchema(BaseModel):
 class FindOutputSchema(BaseModel):
     kb_id: str = Field(description="知识库资源 ID，也就是 kb_id")
     file_id: str = Field(description="文件 ID")
+    source: str = Field(default="", description="文件显示名（文件名或原始文件名），供来源面板归因")
     semantic: bool = Field(default=False, description="是否为语义查找")
     match_mode: Literal["keyword", "regex"] = Field(description="匹配模式")
     total_matches: int = Field(description="匹配到的行数")

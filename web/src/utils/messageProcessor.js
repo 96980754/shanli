@@ -141,12 +141,29 @@ export class MessageProcessor {
         })
       }
     }
+    // 模型也常从 query_kb/query_kbs 检索块拿到 file_id 后直接 find/open，
+    // 检索块的 metadata.source 同为文件名，一并纳入映射（旧会话的工具输出无 source 字段，靠此解析）
+    const collectQueryFileInfo = (parsed) => {
+      if (!parsed || !Array.isArray(parsed.results)) return
+      for (const chunk of parsed.results) {
+        const filename = chunk?.metadata?.source
+        if (!chunk?.file_id || typeof filename !== 'string' || fileInfoMap.has(chunk.file_id)) continue
+        fileInfoMap.set(chunk.file_id, {
+          filename,
+          kb_name: '',
+          kb_id: chunk.kb_id || parsed.kb_id || ''
+        })
+      }
+    }
     for (const msg of conv.messages) {
       if (!msg || msg.type !== 'ai' || !Array.isArray(msg.tool_calls)) continue
       for (const toolCall of msg.tool_calls) {
         const toolName = toolCall?.name || toolCall?.function?.name
-        if (toolName !== 'search_file') continue
-        collectFileInfo(parseToolResultContent(toolCall?.tool_call_result?.content))
+        if (toolName === 'search_file') {
+          collectFileInfo(parseToolResultContent(toolCall?.tool_call_result?.content))
+        } else if (toolName === 'query_kb' || toolName === 'query_kbs') {
+          collectQueryFileInfo(parseToolResultContent(toolCall?.tool_call_result?.content))
+        }
       }
     }
 
@@ -251,11 +268,12 @@ export class MessageProcessor {
           for (const file of parsed.files) appendLocatedFile(file)
         } else if (toolName === 'find_kb_document') {
           // find_kb_document：文件内定位命中的窗口按行区间作为来源块；
-          // 来源文件名由同轮 search_file 结果解析，缺失时回退 file_id，不吞掉已定位内容
+          // 来源名优先取后端返回的 source（文件显示名），缺失时由同轮 search_file/检索块结果解析，
+          // 仍缺失则回退 file_id，不吞掉已定位内容
           if (!parsed || typeof parsed.kb_id !== 'string' || !Array.isArray(parsed.windows))
             continue
           const fileInfo = fileInfoMap.get(parsed.file_id)
-          const source = fileInfo?.filename || parsed.file_id
+          const source = parsed.source || fileInfo?.filename || parsed.file_id
           for (const win of parsed.windows) {
             if (!win || typeof win.content !== 'string') continue
             appendChunk(

@@ -584,6 +584,82 @@ const run = () => {
   assert.equal(fallbackChunks.length, 1)
   assert.equal(fallbackChunks[0].metadata.source, 'file-fb')
 
+  // 来源名解析回归（会话 2e4b5148）：模型从 query_kbs 检索块拿到 file_id 后直接 find_kb_document，
+  // 全程无 search_file；来源名应取检索块 metadata.source 的文件名，而不是裸 file_id
+  const queryThenFindConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'query_kbs',
+            tool_call_result: {
+              content: JSON.stringify({
+                schema_version: 1,
+                status: 'ok',
+                kb_id: 'kb-a,kb-b',
+                results: [
+                  {
+                    id: 'file-x_chunk_1',
+                    kb_id: 'kb-b',
+                    file_id: 'file-x',
+                    content: '终端推荐表',
+                    metadata: {
+                      source: 'POC终端生态库_V2.0.0_0703.xlsx',
+                      file_id: 'file-x',
+                      chunk_id: 'file-x_chunk_1'
+                    }
+                  }
+                ]
+              })
+            }
+          },
+          {
+            name: 'find_kb_document',
+            tool_call_result: {
+              content: JSON.stringify({
+                kb_id: 'kb-b',
+                file_id: 'file-x',
+                match_mode: 'keyword',
+                total_matches: 1,
+                windows: [{ start_line: 1, end_line: 2, matched_lines: [1], content: '1: 行业表' }]
+              })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const queryThenFindChunks = MessageProcessor.extractKnowledgeChunksFromConversation(queryThenFindConv, [])
+  const queryFindWindow = queryThenFindChunks.find((c) => c.content === '1: 行业表')
+  assert.equal(queryFindWindow.metadata.source, 'POC终端生态库_V2.0.0_0703.xlsx')
+
+  // find_kb_document 输出自带 source（文件显示名）时优先采用，无需旁路解析
+  const selfSourceConv = {
+    messages: [
+      {
+        type: 'ai',
+        tool_calls: [
+          {
+            name: 'find_kb_document',
+            tool_call_result: {
+              content: JSON.stringify({
+                kb_id: 'kb-y',
+                file_id: 'file-y',
+                source: '规格书.pdf',
+                match_mode: 'keyword',
+                total_matches: 1,
+                windows: [{ start_line: 1, end_line: 1, matched_lines: [1], content: '1: 内容' }]
+              })
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const selfSourceChunks = MessageProcessor.extractKnowledgeChunksFromConversation(selfSourceConv, [])
+  assert.equal(selfSourceChunks[0].metadata.source, '规格书.pdf')
+
   // hasKnowledgeRetrieval：仅 find_kb_document/search_file（无 query_kb）也算发生过检索，
   // 前端据此保留来源按钮，避免「定位到了文档但不显示来源」
   assert.equal(MessageProcessor.hasKnowledgeRetrieval(locateConv), true)
