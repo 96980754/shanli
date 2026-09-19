@@ -20,6 +20,9 @@ from yuxi.knowledge.parser.registry import PROCESSOR_TYPES
 from yuxi.utils.logging_config import logger
 
 READONLY_CONFIG_FIELDS = frozenset({"save_dir"})
+# 只写字段：设置页可保存（与其它项一样落 base.toml + Redis 快照，worker 进程才能热拿到），
+# 但明文绝不经读取接口回传——dump_config() 一律剔除，接口只回「是否已配置」。
+SECRET_CONFIG_FIELDS = frozenset({"udesk_open_api_token"})
 DEFAULT_OCR_ENGINE = "rapid_ocr"
 
 
@@ -312,13 +315,18 @@ class Config(BaseModel):
     udesk_summarize_timeout_seconds: int = Field(default=60, description="Udesk 总结单次模型调用超时秒数")
     udesk_summarize_batch_size: int = Field(default=20, description="单轮总结的会话数上限")
     udesk_summarize_max_pairs: int = Field(default=5, description="单会话最大候选问答数")
-    # Udesk 对接参数（设置页可改、热同步生效）。凭证 UDESK_OPEN_API_TOKEN 是永久
-    # 密钥（A9），只允许存环境变量，绝不进本配置（配置会落 base.toml + Redis 快照）
+    # Udesk 对接参数（设置页可改、热同步生效）。open_api_token 是永久凭证，原规范 A9
+    # 只允许存环境变量；为让无技术人员的甲方自助配置，现已允许在设置页保存——代价是
+    # 明文进 base.toml + Redis 快照，故列为 SECRET_CONFIG_FIELDS：只写不读，
+    # 任何读取接口都只回 token_configured，环境变量仍作为兜底默认值
     udesk_enabled: bool | None = Field(
         default=None, description="Udesk 拉取总开关（None=设置页未设置过，回退环境变量 UDESK_ENABLED）"
     )
     udesk_subdomain: str = Field(default="", description="Udesk 企业子域名（如 xxx.udesk.cn 的 xxx）")
     udesk_email: str = Field(default="", description="Udesk 开放接口账号邮箱")
+    udesk_open_api_token: str = Field(
+        default="", description="Udesk 开放接口永久 Token（只写：接口不回传明文，仅报告是否已配置）"
+    )
     udesk_sync_overlap_minutes: int | None = Field(
         default=None, description="增量拉取重叠窗分钟数；None=设置页未设置，回退 UDESK_SYNC_OVERLAP_MINUTES"
     )
@@ -487,9 +495,12 @@ class Config(BaseModel):
 
     def dump_config(self) -> dict[str, Any]:
         config_dict = self.model_dump()
+        # 只写字段的明文绝不外泄：本接口任何登录用户可读
+        for field_name in SECRET_CONFIG_FIELDS:
+            config_dict.pop(field_name, None)
         fields_info = {}
         for field_name, field_info in Config.model_fields.items():
-            if field_info.exclude:
+            if field_info.exclude or field_name in SECRET_CONFIG_FIELDS:
                 continue
             fields_info[field_name] = {
                 "des": field_info.description,

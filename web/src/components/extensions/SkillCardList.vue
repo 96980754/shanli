@@ -855,7 +855,7 @@ const isRecommendedSkillInstallDisabled = (source) =>
   isRecommendedSkillInstalling(source)
 
 const navigateToDetail = (skill) => {
-  router.push({ path: `/extensions/skill/${encodeURIComponent(skill.slug)}` })
+  router.push({ path: `/model-manage/skill/${encodeURIComponent(skill.slug)}` })
 }
 
 const closeSkillPreview = () => {

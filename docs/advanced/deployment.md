@@ -38,7 +38,7 @@ cp .env.template .env.prod
 | `YUXI_CORS_ORIGINS` | 跨域部署时浏览器请求被拒绝；同源部署可留空 | 见「跨域（CORS）配置」 |
 | `PADDLEOCR_API_TOKEN` | 仅当把 `default_ocr_engine` 切到 `paddleocr_vl_1_6` 时需要；代码默认 `rapid_ocr`，本地无需 token | 见「文档解析」 |
 | `WECOM_TOKEN` / `WECOM_ENCODING_AES_KEY` / `WECOM_CORP_ID` | 企业微信回调与客服接管不可用 | 需要该功能时填写 |
-| `UDESK_SUBDOMAIN` / `UDESK_EMAIL` / `UDESK_OPEN_API_TOKEN` | 客服记录回流不可用 | token 是永久凭证，**只允许放环境变量**，禁止写入配置文件、数据库或日志 |
+| `UDESK_SUBDOMAIN` / `UDESK_EMAIL` / `UDESK_OPEN_API_TOKEN` | 客服记录回流不可用 | 三项均可在设置页「Udesk 对接」自助填写，保存即生效；环境变量仅作初始默认值。token 是永久凭证，属**只写字段**——保存后落服务器配置文件与 Redis 快照，但任何读取接口都不回传明文，页面只显示是否已配置 |
 
 ::: warning 初始账号
 正常路径是**首次打开网页时的「初始化管理员」引导**：`GET /api/auth/check-first-run` 在 `users` 表为空时返回 `first_run=true`，前端据此显示设置页，由部署者自行设定账号与密码（`POST /api/auth/initialize`，非空库返回 403）。这条路径不需要任何环境变量。

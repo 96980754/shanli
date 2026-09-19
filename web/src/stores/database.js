@@ -196,7 +196,7 @@ export const useDatabaseStore = defineStore('database', () => {
         try {
           const data = await databaseApi.deleteDatabase(kbId.value)
           message.success(data.message || i18n.global.t('common.deleteSuccess'))
-          router.push({ path: '/extensions', query: { tab: 'knowledge' } })
+          router.push({ path: '/extensions' })
         } catch (error) {
           console.error(error)
           message.error(error.message || i18n.global.t('common.deleteFailed'))

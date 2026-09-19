@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import AgentManagePanel from '@/components/model-management/AgentManagePanel.vue'
 import ModelProviderManagePanel from '@/components/model-management/ModelProviderManagePanel.vue'
+import SkillCardList from '@/components/extensions/SkillCardList.vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -20,26 +21,36 @@ const SHOW_AGENT_TAB = false
 const activeTab = ref('agents')
 const agentPanelRef = ref(null)
 const providerPanelRef = ref(null)
+const skillsPanelRef = ref(null)
 
+// Skills 原在知识库页签里，现归到本页（技能是智能体的能力配置，与知识库并列不合适）
 const modelManageTabs = computed(() => {
   const tabs = SHOW_AGENT_TAB ? [{ key: 'agents', label: t('modelMgmt.tabAgents') }] : []
-  if (userStore.isAdmin) tabs.push({ key: 'providers', label: t('modelMgmt.tabProviders') })
+  if (userStore.isAdmin) {
+    tabs.push({ key: 'providers', label: t('modelMgmt.tabProviders') })
+    tabs.push({ key: 'skills', label: t('modelMgmt.tabSkills') })
+  }
   return tabs
 })
 
-const activePanel = computed(() =>
-  activeTab.value === 'providers' ? providerPanelRef.value : agentPanelRef.value
-)
+const activePanel = computed(() => {
+  if (activeTab.value === 'skills') return skillsPanelRef.value
+  return activeTab.value === 'providers' ? providerPanelRef.value : agentPanelRef.value
+})
 
 const activeLoading = computed(() => activePanel.value?.loading || false)
 const activeStats = computed(() => activePanel.value?.stats || {})
 
 const normalizeTab = (tab) => {
-  if (tab === 'providers' && userStore.isAdmin) return 'providers'
+  // 两个管理页签都只对管理员开放，非管理员的任何请求都退回默认页签
+  if (userStore.isAdmin && (tab === 'providers' || tab === 'skills')) return tab
   // 页签隐藏时，任何指向「智能体」的请求（含 activeTab 的默认值）都落到模型供应商
   if (!SHOW_AGENT_TAB) return 'providers'
   return 'agents'
 }
+
+// 详情页由子路由接管整页，隐藏列表页头
+const isDetailPage = computed(() => route.path.startsWith('/model-manage/skill/'))
 
 watch(
   () => [route.query.tab, userStore.isAdmin],
@@ -64,6 +75,7 @@ watch(activeTab, (tab) => {
 <template>
   <div class="model-manage-view">
     <PageHeader
+      v-if="!isDetailPage"
       v-model:active-key="activeTab"
       :title="t('nav.agentManage')"
       :tabs="modelManageTabs"
@@ -80,7 +92,7 @@ watch(activeTab, (tab) => {
           </span>
           <span>{{ t('modelMgmt.manageableCount', { count: activeStats.manageable || 0 }) }}</span>
         </div>
-        <div v-else class="summary-strip">
+        <div v-else-if="activeTab === 'providers'" class="summary-strip">
           <span>{{ t('modelMgmt.providersCount', { count: activeStats.total || 0 }) }}</span>
           <span>{{ t('modelMgmt.enabledCountLabel', { count: activeStats.enabled || 0 }) }}</span>
           <span v-if="activeStats.warning > 0" class="warning-count">
@@ -92,14 +104,21 @@ watch(activeTab, (tab) => {
     </PageHeader>
 
     <div class="model-manage-content">
-      <template v-if="SHOW_AGENT_TAB">
-        <div v-show="activeTab === 'agents'" class="tab-panel">
-          <AgentManagePanel ref="agentPanelRef" />
+      <template v-if="!isDetailPage">
+        <template v-if="SHOW_AGENT_TAB">
+          <div v-show="activeTab === 'agents'" class="tab-panel">
+            <AgentManagePanel ref="agentPanelRef" />
+          </div>
+        </template>
+        <div v-if="userStore.isAdmin && activeTab === 'providers'" class="tab-panel">
+          <ModelProviderManagePanel ref="providerPanelRef" />
+        </div>
+        <div v-if="userStore.isAdmin && activeTab === 'skills'" class="tab-panel">
+          <SkillCardList ref="skillsPanelRef" />
         </div>
       </template>
-      <div v-if="userStore.isAdmin && activeTab === 'providers'" class="tab-panel">
-        <ModelProviderManagePanel ref="providerPanelRef" />
-      </div>
+
+      <router-view v-else />
     </div>
   </div>
 </template>

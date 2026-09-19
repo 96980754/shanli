@@ -45,7 +45,6 @@ export default {
   },
   nav: {
     newChat: 'New Chat',
-    extensions: 'Knowledge Base & Skills',
     knowledgeBase: 'Knowledge Base',
     agentManage: 'Agent Management',
     dashboard: 'Data Overview',
@@ -1358,7 +1357,7 @@ export default {
     pullStatusFailed: 'Failed',
     pullStatusSkipped: 'Another run in progress',
     pullBlocked: 'Sync unavailable, missing configuration: {fields}',
-    pullBlockedHint: 'Fill these in under Settings → Udesk, then retry. The permanent token can only be set in the server .env and is never a settings field.',
+    pullBlockedHint: 'Fill these in under Settings → Udesk, then retry. The permanent token is entered there too and is never shown again once saved.',
     summarizeNow: 'Generate candidates',
     summarizeQueued: 'Summarization triggered; the list refreshes as candidates are generated',
     summarizeFailed: 'Failed to trigger summarization, please retry later',
@@ -1396,7 +1395,12 @@ export default {
     detailFailed: 'Failed to load the conversation, please retry later'
   },
   knowledgeOps: {
-    pageTitle: 'Knowledge Ops'
+    pageTitle: 'Knowledge Ops',
+    pendingSummaryTitle: 'Conversations awaiting summarization',
+    pendingSummaryBody:
+      '{count} pulled UDesk conversations are awaiting summarization. Go to "Candidate Review" to generate candidate Q&A pairs (an hourly job also summarizes them automatically).',
+    pendingSummaryGo: 'Generate Q&A candidates',
+    pendingSummaryDismiss: 'Got it'
   },
   upload: {
     addFileTitle: 'Add Files',
@@ -2309,8 +2313,6 @@ export default {
     searchTools: 'Search tools...',
     tags: 'Tags',
     categoryLabel: 'Category',
-    skillsTab: 'Skills',
-    viewSwitchAria: 'Toggle knowledge base and skills views',
     searchPlaceholder: 'Search...'
   },
   workspace: {
@@ -2414,10 +2416,10 @@ export default {
     csAccessTitle: 'Customer-Service Access',
     udeskTitle: 'Udesk Integration',
     udeskDesc:
-      'Configure Udesk service-record pulling (knowledge backflow): changes take effect immediately after saving, no restart needed. The permanent API token can only be configured at deployment time for security (see note below); all other parameters can be edited on this page.',
+      'Configure Udesk service-record pulling (knowledge backflow): every parameter, the permanent token included, can be edited here and takes effect immediately after saving, with no restart needed.',
     udeskEffectiveTitle: 'Effective configuration',
     udeskEffectiveDesc:
-      'What the server is actually running with (settings page merged with the server .env). The form below only reflects values saved on this page: if a field is empty here but has a value below, it comes from the server .env — no need to re-enter it.',
+      'What the server is actually running with (settings page merged with the server .env). The form below only reflects values saved on this page: if a field is empty here but has a value below, it comes from the server .env — no need to re-enter it. The token only reports whether it is configured; its value is never shown.',
     udeskEffectiveReady: 'Ready',
     udeskEffectiveNotReady: 'Not ready',
     udeskEffectiveOn: 'Enabled',
@@ -2437,9 +2439,11 @@ export default {
     udeskSubdomainPlaceholder: 'e.g. acme (for acme.udesk.cn)',
     udeskEmailLabel: 'API account email',
     udeskEmailPlaceholder: "admin{'@'}example.com",
-    udeskTokenAlertTitle: 'Permanent token is not configured here',
+    udeskTokenPlaceholderSet: 'Already configured — leave empty to keep it',
+    udeskTokenPlaceholderEmpty: 'Enter the open API token from your UDesk console',
+    udeskTokenAlertTitle: 'Write-only field',
     udeskTokenAlertDesc:
-      'UDESK_OPEN_API_TOKEN is a non-expiring permanent credential. For security it may only live in the server .env environment file and must never be written into config files or the database. Ask your deployment engineer to set it on the server and restart the service.',
+      'The token is a non-expiring permanent credential. Once saved it is never shown again — this page only reports whether it is configured, and an empty input means no change. Keep it secret.',
     udeskSyncTitle: 'Pull parameters',
     udeskSyncDesc: 'Window strategy for incremental pulling; defaults are usually fine.',
     udeskOverlapLabel: 'Overlap window (min)',
@@ -2447,6 +2451,8 @@ export default {
     udeskBackfillLabel: 'Backfill days',
     udeskBackfillHint:
       'How far back the first pull backfills historical conversations; UDesk only serves the last month, so the maximum is 30 days',
+    udeskNextRunLabel: 'Next auto pull',
+    udeskNextRunHint: 'Pulls new conversations once a day when enabled; next pull: {time}',
     csAccessDesc:
       'Configure how business lines and WeCom customer service interlink: when a business-line question escalates to a human, it is routed to the team(s) bound to that line (multiple entry URLs of one team rotate). Unbound lines and unclassified "unknown" questions fall back to "General Customer Service". Refusal handoff is unavailable only when no entries and no bindings exist.',
     csServicesTitle: 'Customer-Service Entries',
@@ -2470,7 +2476,7 @@ export default {
     csServicesEmpty: 'No customer-service entries yet. Click the button below to add one.',
     csLinesEmpty: 'No business lines left. Click the button below to add one.',
     csLinesDesc:
-      'Each business line defines a question category (unique code; keywords drive refusal-domain detection) and may bind customer-service teams: handoffs for this line reach the bound teams (multiple allowed, round-robin).',
+      'Each business line defines a question category (keywords drive refusal-domain detection) and may bind customer-service teams: handoffs for this line reach the bound teams (multiple allowed, round-robin).',
     csOverviewTitle: 'Routing Overview',
     csOverviewDesc:
       'See where each business line’s handoffs go: bound lines reach their teams (round-robin); unbound lines fall back to General CS.',
@@ -2484,11 +2490,7 @@ export default {
     csLineBindingLabel: 'Bound customer service',
     csLineBindingPlaceholder: 'Team that receives this line’s handoffs (multiple allowed)',
     csUnboundTip:
-      'Unbound lines (and unclassified "unknown") fall back to "General Customer Service"; bind a team to kefu for a sensible default.',
-    businessLineCodeLabel: 'Code (unique ID)',
-    businessLineCodePlaceholder: 'e.g. terminal / ops, starts with a lowercase letter',
-    businessLineCodeHint:
-      'The internal English identifier of this business line (e.g. diaodutai). Knowledge-gap classification, service-record processing and human handoff all match on it; avoid changing it once in use.',
+      'Unbound lines (and unclassifiable questions) fall back to "General Customer Service"; bind a team to "General Customer Service" for a sensible default.',
     businessLineNameLabel: 'Name',
     businessLineNamePlaceholder: 'e.g. Terminal',
     businessLineNameHint:
@@ -2499,10 +2501,6 @@ export default {
       'When the AI cannot answer, the system checks whether the question contains these words (comma/space separated) to decide which business line it belongs to; that decides which line\'s knowledge gap the question is recorded under and which service team receives the human handoff. The more typical the keywords, the more accurate the classification.',
     addBusinessLine: 'Add business line',
     removeBusinessLine: 'Remove',
-    businessLineInvalidCode:
-      'Code must start with a lowercase letter and contain only lowercase letters, digits, underscores (≤32)',
-    businessLineCodeReserved: 'Code cannot use the reserved value "unknown"',
-    businessLineDuplicateCode: 'Duplicate business line code: {code}',
     businessLineInvalidName: 'Business line name cannot be empty',
     serviceLinks: 'Service Links',
     serviceLinksDesc:
@@ -2633,6 +2631,7 @@ export default {
   modelMgmt: {
     tabAgents: 'Agents',
     tabProviders: 'Model Providers',
+    tabSkills: 'Skills',
     viewSwitchAriaLabel: 'Agent management view switch',
     agentsCount: '{count} agents',
     globalCount: '{count} global',

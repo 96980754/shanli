@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import posixpath
 import re
 import tempfile
 import threading
 import time
+import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -151,6 +154,87 @@ def _parse_data_uri(data_uri: str) -> tuple[bytes, str]:
     return image_data, mime_type
 
 
+# WPS 单元格嵌入图片在单元格里只留公式，导出 markdown 后形如 =DISPIMG("ID_..",1)
+# （Excel 里则显示为 =_xlfn.DISPIMG，两种前缀都要接住）
+_WPS_DISPIMG_FORMULA_RE = re.compile(r'=?(?:_xlfn\.)?DISPIMG\("([^"]+)"\s*,\s*\d+\)')
+_XDR_PIC_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}pic"
+_XDR_CNVPR_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}cNvPr"
+_A_BLIP_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"
+_R_EMBED_ATTR = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+
+
+def _extract_wps_cell_images(file_path: Path) -> dict[str, tuple[bytes, str]]:
+    """提取 WPS「嵌入单元格」图片，返回 DISPIMG ID → (图片字节, 文件名)。
+
+    WPS 把单元格图片存在自定义部件 xl/cellimages.xml（Excel/Docling 都不认识，图片
+    本体在 xl/media/，ID 与 rId 的关系在 cellimages 的 rels 里）；缺少该部件时返回空，
+    非法 zip 等异常也吞掉——提取失败不应让整个文档解析失败。
+    """
+    images: dict[str, tuple[bytes, str]] = {}
+    try:
+        with zipfile.ZipFile(file_path) as zf:
+            names = set(zf.namelist())
+            if "xl/cellimages.xml" not in names:
+                return images
+            rels_root = ET.fromstring(zf.read("xl/_rels/cellimages.xml.rels"))
+            rid_to_target = {
+                rel.get("Id"): rel.get("Target")
+                for rel in rels_root
+                if rel.get("Id") and rel.get("Target")
+            }
+            root = ET.fromstring(zf.read("xl/cellimages.xml"))
+            for pic in root.iter(_XDR_PIC_TAG):
+                name_el = pic.find(f".//{_XDR_CNVPR_TAG}")
+                blip = pic.find(f".//{_A_BLIP_TAG}")
+                if name_el is None or blip is None:
+                    continue
+                image_id, rid = name_el.get("name"), blip.get(_R_EMBED_ATTR)
+                target = rid_to_target.get(rid or "")
+                if not image_id or not target:
+                    continue
+                # Target 相对 xl/ 目录（如 media/image1.png），归一化后取 zip 内路径
+                media = posixpath.normpath(posixpath.join("xl", target))
+                if media in names:
+                    images[image_id] = (zf.read(media), posixpath.basename(media))
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"提取 WPS 单元格图片失败（公式将原样保留）: {file_path.name}, {e}")
+    return images
+
+
+def _inline_wps_cell_images(
+    markdown: str, file_path: Path, image_bucket: str, image_prefix: str
+) -> str:
+    """把 markdown 里漏出的 =DISPIMG 公式替换回它引用的单元格图片。
+
+    Docling 看不到 cellimages.xml，公式文本会以 =DISPIMG("ID_..",1) 形式漏进表格格子
+    （图片与行号完全丢失）。这里按 ID 上传图片本体，以行内 ![](...) 放回原格子——
+    同一 ID 的图片只上传一次、URL 复用；找不到图片的公式残渣清成空串，不给检索留噪声。
+    """
+    if "DISPIMG" not in markdown:
+        return markdown
+    images = _extract_wps_cell_images(file_path)
+    # ID → 行内图片 markdown（未命中/上传失败缓存为空串，重复引用不再重试）
+    resolved: dict[str, str] = {}
+
+    def _replace(match: re.Match) -> str:
+        image_id = match.group(1)
+        if image_id in resolved:
+            return resolved[image_id]
+        replacement = ""
+        entry = images.get(image_id)
+        if entry is not None:
+            data, filename = entry
+            try:
+                url = _upload_image_to_minio(data, filename, image_bucket, image_prefix)
+                replacement = f"![{filename}]({url})"
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"上传 WPS 单元格图片失败 {filename}: {e}")
+        resolved[image_id] = replacement
+        return replacement
+
+    return _WPS_DISPIMG_FORMULA_RE.sub(_replace, markdown)
+
+
 def _convert_with_docling(file_path: Path, params: dict | None = None) -> str:
     """使用 Docling 将 docx/xlsx/pptx 转换为 Markdown。"""
     params = params or {}
@@ -186,9 +270,11 @@ def _convert_with_docling(file_path: Path, params: dict | None = None) -> str:
         markdown = doc.export_to_markdown(compact_tables=True)
         for replacement in replacements:
             markdown = re.sub(r"<!--\s*image\s*-->", replacement, markdown, count=1)
-        return markdown
+    else:
+        markdown = doc.export_to_markdown(compact_tables=True)
 
-    return doc.export_to_markdown(compact_tables=True)
+    # WPS 单元格嵌入图片：Docling 看不到 cellimages.xml，公式残渣在表格格子里，这里换回图片
+    return _inline_wps_cell_images(markdown, file_path, image_bucket, image_prefix)
 
 
 def _collapse_horizontal_merges(doc) -> None:

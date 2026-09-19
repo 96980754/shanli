@@ -134,7 +134,7 @@ const mainList = computed(() => {
   ]
 
   items.push({
-    name: userStore.isAdmin ? t('nav.extensions') : t('nav.knowledgeBase'),
+    name: t('nav.knowledgeBase'),
     path: '/extensions',
     activePaths: ['/extensions'],
     icon: LibraryBig,

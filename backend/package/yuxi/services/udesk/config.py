@@ -1,13 +1,16 @@
 """Udesk 对接配置。
 
-非密参数优先取系统设置（设置页保存、Redis 热同步生效，甲方无技术人员也能自助改），
-环境变量作为默认值兜底；`open_api_token` 是永久凭证（规范 A9：禁止写入配置文件、
-日志、数据库），**只从环境变量读取**。未配置时 `enabled` 为 False，任何 Udesk 调用
+所有参数（含 `open_api_token`）都优先取系统设置（设置页保存、Redis 热同步生效，
+甲方无技术人员也能自助改），环境变量作为默认值兜底。token 是永久凭证，为了让甲方
+自助配置，设置页可写——代价是明文落 base.toml + Redis 快照（规范 A9 的「只从环境
+变量读取」由此放宽），因此它在配置层是**只写字段**：`describe()` 只报告是否已配置、
+绝不返回值，读取接口也拿不到明文。未配置时 `enabled` 为 False，任何 Udesk 调用
 都不会发起（E3/E5）。
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 from typing import Any
 
@@ -15,6 +18,20 @@ from typing import Any
 SOURCE_SETTINGS = "settings"
 SOURCE_ENV = "env"
 SOURCE_UNSET = "unset"
+
+# 增量拉取 cron 时刻：run_worker 的 arq cron 与状态接口的「下次自动拉取」共用同一来源，
+# 改这里即可两边一致。arq 按容器系统时区求值（部署默认 TZ=Asia/Shanghai）。
+PULL_CRON_HOUR = 2
+PULL_CRON_MINUTE = 47
+
+
+def next_pull_run_at(now: dt.datetime | None = None) -> dt.datetime:
+    """下一次自动拉取时刻（当天未到点取今天，已过点取明天同一时刻）。"""
+    now = now or dt.datetime.now().astimezone()
+    target = now.replace(hour=PULL_CRON_HOUR, minute=PULL_CRON_MINUTE, second=0, microsecond=0)
+    if target <= now:
+        target += dt.timedelta(days=1)
+    return target
 
 # 对话记录接口只提供一个月内的数据（2026-09-15 实测）：既决定首次回灌的上限，
 # 也决定单窗最大跨度与日志窗口起点夹取值，故放在配置层作为唯一来源
@@ -89,9 +106,10 @@ class UdeskConfig:
         self.enabled, self.sources["enabled"] = _resolve_enabled()
         self.subdomain, self.sources["subdomain"] = _resolve_str("udesk_subdomain", "UDESK_SUBDOMAIN")
         self.email, self.sources["email"] = _resolve_str("udesk_email", "UDESK_EMAIL")
-        # 永久凭证：只从环境变量读取（A9），绝不经设置页/配置文件流转
-        self.open_api_token = _env("UDESK_OPEN_API_TOKEN")
-        self.sources["open_api_token"] = SOURCE_ENV if self.open_api_token else SOURCE_UNSET
+        # 永久凭证：设置页可写（只写字段），环境变量兜底
+        self.open_api_token, self.sources["open_api_token"] = _resolve_str(
+            "udesk_open_api_token", "UDESK_OPEN_API_TOKEN"
+        )
         # 限流/超时/重试为部署级环境变量项，未迁设置页。默认 24 次/分（间隔 2.5s）：
         # 官方对 im/sessions/search 与 im/sessions/log 各限 1 次/2 秒，全局匀速取最严间隔
         self.rate_limit_per_min = _env_int("UDESK_RATE_LIMIT_PER_MIN", 24)
@@ -114,7 +132,7 @@ class UdeskConfig:
         """生效配置概览（含每项来源），供设置页只读展示。
 
         .env 与设置页存在合并关系，页面表单只反映设置页自己的快照；管理员需要看到
-        实际生效值才知道是否已配置。令牌只报告是否已配置，绝不返回值（A9）。
+        实际生效值才知道是否已配置。令牌只报告是否已配置，绝不返回值。
         """
         return {
             "enabled": self.enabled,

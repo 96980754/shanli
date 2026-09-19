@@ -516,10 +516,10 @@ const navigateToConfigPage = (kind) => {
   setTimeout(() => {
     switch (kind) {
       case 'knowledges':
-        router.push({ path: '/extensions', query: { tab: 'knowledge' } })
+        router.push({ path: '/extensions' })
         break
       case 'skills':
-        router.push({ path: '/extensions', query: { tab: 'skills' } })
+        router.push({ path: '/model-manage', query: { tab: 'skills' } })
         break
       case 'subagents':
         router.push({ path: '/model-manage', query: { tab: 'agents' } })

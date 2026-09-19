@@ -25,11 +25,12 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 def udesk_credentials(monkeypatch):
     """显式给出凭证四项（清空运行时快照 + 设环境变量），不受本机已保存设置影响。
 
-    open_api_token 由各用例单独决定——它正是本文件要验证的那一项。
+    open_api_token 的值由各用例单独决定——它正是本文件要验证的那一项；但**来源**必须
+    先清干净：token 设置页可写（存运行时配置），只 `delenv` 挡不住已保存的那一份。
     """
     from yuxi.config.app import config
 
-    for key in ("udesk_enabled", "udesk_subdomain", "udesk_email"):
+    for key in ("udesk_enabled", "udesk_subdomain", "udesk_email", "udesk_open_api_token"):
         monkeypatch.setattr(config, key, None if key == "udesk_enabled" else "", raising=False)
     for name in ("UDESK_ENABLED", "UDESK_SUBDOMAIN", "UDESK_EMAIL", "UDESK_OPEN_API_TOKEN"):
         monkeypatch.delenv(name, raising=False)
@@ -132,6 +133,8 @@ async def test_status_reports_running_pull_while_lease_is_held(udesk_credentials
     assert payload["pull"]["running"] is True
     assert payload["pull"]["done"] == 3 and payload["pull"]["total"] == 7
     assert payload["pull"]["last_run_status"] == "running"
+    # 本用例未配 token（ready=False）：cron 是空操作，不该给出「下次拉取」
+    assert payload["pull"]["next_run_at"] is None
     # 候选两个口径：累计（采纳/拒绝不删行）与待审（列表默认过滤条件），
     # 只报累计会与下方列表条数对不上。
     assert payload["counts"] == {
@@ -168,3 +171,21 @@ async def test_status_marks_summarize_running_and_surfaces_last_error(udesk_cred
     assert payload["pull"]["last_run_conversations"] == 8
     assert payload["pull"]["last_run_messages"] == 0
     assert payload["summarize"]["pending"] == 0 and payload["summarize"]["done"] == 39
+
+
+async def test_status_reports_next_auto_pull_when_configured(udesk_credentials, monkeypatch):
+    """凭证齐备时给出「下次自动拉取」：与 run_worker 的 cron 同一时刻（换算回容器
+    本地时区应为 02:47），且永远在未来。"""
+    from datetime import datetime
+
+    from yuxi.services.udesk.config import PULL_CRON_HOUR, PULL_CRON_MINUTE
+
+    monkeypatch.setenv("UDESK_OPEN_API_TOKEN", "tok-test")
+    state = UdeskSyncState(id=1)
+    db = _FakeDb(_FakeResult((39, 522, 4, 1, 12)), _FakeResult(state), _FakeResult(state))
+
+    payload = await get_udesk_status(db=db, current_user=None)
+
+    next_run = datetime.fromisoformat(payload["pull"]["next_run_at"]).astimezone()
+    assert (next_run.hour, next_run.minute) == (PULL_CRON_HOUR, PULL_CRON_MINUTE)
+    assert next_run > datetime.now().astimezone()

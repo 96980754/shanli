@@ -262,6 +262,25 @@ def test_dump_config_hides_save_dir(tmp_path):
     assert "save_dir" not in dumped["_config_items"]
 
 
+def test_dump_config_hides_secret_fields_but_save_persists_them(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """token 只写不读：读取接口（任何登录用户可读）拿不到明文，但必须真的落盘并进
+    Redis 快照——否则 worker 进程热同步不到，甲方改完 token 要重启才生效。"""
+    redis = _FakeRedis()
+    _patch_runtime_redis(monkeypatch, redis)
+    cfg = Config(save_dir=str(tmp_path))
+
+    cfg.update({"udesk_open_api_token": "tok-secret"})
+    cfg.save()
+
+    dumped = cfg.dump_config()
+    assert "tok-secret" not in json.dumps(dumped)
+    assert "udesk_open_api_token" not in dumped
+    assert "udesk_open_api_token" not in dumped["_config_items"]
+
+    assert tomli.loads((tmp_path / "config" / "base.toml").read_text())["udesk_open_api_token"] == "tok-secret"
+    assert json.loads(redis.data[RUNTIME_CONFIG_REDIS_KEY])["udesk_open_api_token"] == "tok-secret"
+
+
 def test_resolve_chat_model_spec_reads_runtime_refreshed_default(tmp_path, monkeypatch):
     from yuxi.agents import models
 

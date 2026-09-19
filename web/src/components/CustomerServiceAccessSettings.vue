@@ -1,7 +1,9 @@
 <!-- 客服接入设置：业务线 × 企微客服命名条目（绑定即按线转接）
      拆自 BasicSettingsSection（2026-09-04）：设置页「客服接入设置」独立页签。
      视觉重构（2026-09-04）：两块编辑面板（客服团队 / 业务线与绑定）+ 只读「转接规则总览」，
-     头部自动保存状态 + 字段内联校验错误；保存语义与字段完全不变（失焦/改动即批量保存）。 -->
+     头部自动保存状态 + 字段内联校验错误；保存语义与字段完全不变（失焦/改动即批量保存）。
+     去技术化（2026-09-19）：业务线 code（唯一标识）不再暴露给管理员手填——
+     存量行沿用原 code，新增行保存时按名称拼音自动生成；总览只展示名称。 -->
 
 <template>
   <div class="cs-access-page">
@@ -105,27 +107,10 @@
           v-for="row in businessLines"
           :key="row.clientKey"
           class="cs-row cs-line-row"
-          :class="{ 'cs-row-invalid': rowErrOn('line', rowIndex(row), ['code', 'name']) }"
+          :class="{ 'cs-row-invalid': rowErrOn('line', rowIndex(row), ['name']) }"
         >
           <div class="cs-line-fields">
             <span class="cs-index">{{ indexLabel(rowIndex(row)) }}</span>
-            <div class="cs-field" :class="{ 'has-error': errOn('line', rowIndex(row), 'code') }">
-              <label class="cs-label">
-                {{ $t('settings.businessLineCodeLabel') }}
-                <a-tooltip :title="$t('settings.businessLineCodeHint')" placement="topLeft" :overlay-style="{ maxWidth: '360px' }">
-                  <Info :size="12" class="cs-help" />
-                </a-tooltip>
-              </label>
-              <a-input
-                v-model:value="row.code"
-                :placeholder="$t('settings.businessLineCodePlaceholder')"
-                @input="clearError"
-                @blur="flushAccessSettings"
-              />
-              <div v-if="errOf('line', rowIndex(row), 'code')" class="cs-error">
-                {{ errOf('line', rowIndex(row), 'code') }}
-              </div>
-            </div>
             <div class="cs-field" :class="{ 'has-error': errOn('line', rowIndex(row), 'name') }">
               <label class="cs-label">
                 {{ $t('settings.businessLineNameLabel') }}
@@ -201,7 +186,6 @@
           <div class="cs-route-list">
             <div v-for="r in overviewRows" :key="r.key" class="cs-route-row">
               <div class="cs-route-line" :class="{ unknown: r.isUnknown }">
-                <span class="cs-line-code">{{ r.code }}</span>
                 <span class="cs-line-name">
                   {{ r.isUnknown ? $t('settings.csOverviewUnknown') : r.name }}
                 </span>
@@ -358,9 +342,30 @@ const buildServicesPayload = () => {
 }
 
 // ---- 业务线（拒答分类标签）编辑器：设置页可维护，作为拒答 domain 标签可选值 ----
-// code 校验与服务端一致（小写 snake_case、≤32、unknown 系统保留、清单内唯一）；服务端吞错，
-// 故用户可输入的常见非法值在前端拦截并提示。
-const BUSINESS_LINE_CODE_PATTERN = /^[a-z][a-z0-9_]{0,31}$/
+// code 仍是后端数据库/统计用的稳定英文标识（拒答归类、候选问答 domain、kefu 兜底链都按它），
+// 但不再暴露给管理员手填：已有行沿用存量 code；新增行保存时按名称拼音自动生成，
+// 清单内唯一由生成器保证（拼音库按需动态加载，不进主包）。
+const BUSINESS_LINE_CODE_MAX = 32
+
+// 名称 → code：中文取拼音、英文小写、其余字符丢弃；数字开头补 line_ 前缀，空结果兜底 line。
+// 「通用客服」固定映射 kefu——后端转接兜底链与知识缺口归类按 code=kefu 识别这条线。
+const generateLineCode = async (name, taken) => {
+  const { pinyin } = await import('pinyin-pro')
+  let base = pinyin(name, { toneType: 'none', type: 'array', nonZh: 'consecutive' })
+    .join('')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  if (name === '通用客服') base = 'kefu'
+  if (!base) base = 'line'
+  if (!/^[a-z]/.test(base)) base = `line_${base}`
+  base = base.slice(0, BUSINESS_LINE_CODE_MAX)
+  let code = base
+  for (let n = 2; taken.has(code); n += 1) {
+    const suffix = `_${n}`
+    code = base.slice(0, BUSINESS_LINE_CODE_MAX - suffix.length) + suffix
+  }
+  return code
+}
 
 // 与服务端拆分规则一致：支持中英文逗号/顿号/空白分隔。
 const splitKeywords = (text) => (text || '').split(/[,，、/\s]+/).map((s) => s.trim()).filter(Boolean)
@@ -400,22 +405,20 @@ const removeBusinessLine = (row) => {
   flushAccessSettings()
 }
 
-// 校验并序列化业务线；非法返回 { error }。customer_service_ids 仅在有绑定时带上（与存储语义一致）。
-const buildBusinessLinesPayload = () => {
+// 序列化业务线；名称为空返回 { error }。存量 code 原样保留（统计与候选问答引用不迁移），
+// 新增行的 code 在这里按名称生成。customer_service_ids 仅在有绑定时带上（与存储语义一致）。
+const buildBusinessLinesPayload = async () => {
   const rows = []
-  const seenCodes = new Set()
+  const seenCodes = new Set(['unknown']) // unknown 为系统保留值，生成的 code 也要避开
   for (let index = 0; index < businessLines.value.length; index++) {
     const row = businessLines.value[index]
-    const code = (row.code || '').trim().toLowerCase()
     const name = (row.name || '').trim()
-    const fail = (field, key, params) => ({
-      error: { kind: 'line', index, field, message: t(key, params) }
-    })
-    if (!code && !name) continue // 完全空行（新增未填）不提交
-    if (!BUSINESS_LINE_CODE_PATTERN.test(code)) return fail('code', 'settings.businessLineInvalidCode')
-    if (code === 'unknown') return fail('code', 'settings.businessLineCodeReserved')
-    if (seenCodes.has(code)) return fail('code', 'settings.businessLineDuplicateCode', { code })
-    if (!name) return fail('name', 'settings.businessLineInvalidName')
+    const existingCode = (row.code || '').trim().toLowerCase()
+    if (!existingCode && !name) continue // 完全空行（新增未填）不提交
+    if (!name) {
+      return { error: { kind: 'line', index, field: 'name', message: t('settings.businessLineInvalidName') } }
+    }
+    const code = existingCode || (await generateLineCode(name, seenCodes))
     seenCodes.add(code)
     rows.push({
       code,
@@ -430,7 +433,7 @@ const buildBusinessLinesPayload = () => {
 const flushAccessSettings = async () => {
   const servicesBuilt = buildServicesPayload()
   if (servicesBuilt.error) return flushFailed(servicesBuilt.error)
-  const linesBuilt = buildBusinessLinesPayload()
+  const linesBuilt = await buildBusinessLinesPayload()
   if (linesBuilt.error) return flushFailed(linesBuilt.error)
   fieldError.value = null
   servicesDirty.value = false
@@ -485,14 +488,13 @@ const generalPool = computed(() => {
 
 const overviewRows = computed(() => {
   const rows = businessLines.value
-    .filter((row) => (row.code || '').trim() && (row.name || '').trim())
+    .filter((row) => (row.name || '').trim())
     .map((row) => ({
       key: row.clientKey,
-      code: (row.code || '').trim(),
       name: (row.name || '').trim(),
       direct: resolveNames(row.boundIds)
     }))
-  rows.push({ key: 'unknown', code: 'unknown', name: '', direct: [], isUnknown: true })
+  rows.push({ key: 'unknown', name: '', direct: [], isUnknown: true })
   return rows
 })
 </script>
@@ -645,7 +647,7 @@ const overviewRows = computed(() => {
     display: grid;
     gap: 8px 12px;
     align-items: flex-end;
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto;
   }
 
   .cs-index {
@@ -765,9 +767,8 @@ const overviewRows = computed(() => {
     align-items: center;
     gap: 8px;
 
-    .cs-line-code {
-      flex-shrink: 0;
-      max-width: 110px;
+    // 总览只展示业务线名称（code 是内部标识，不再外显）
+    .cs-line-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -779,23 +780,10 @@ const overviewRows = computed(() => {
       padding: 2px 8px;
     }
 
-    .cs-line-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
-      color: var(--gray-600);
-    }
-
-    &.unknown {
-      .cs-line-code {
-        background: transparent;
-        border: 1px dashed var(--gray-200);
-        color: var(--gray-500);
-      }
-      .cs-line-name {
-        color: var(--gray-500);
-      }
+    &.unknown .cs-line-name {
+      background: transparent;
+      border: 1px dashed var(--gray-200);
+      color: var(--gray-500);
     }
   }
 

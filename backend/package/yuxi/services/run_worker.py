@@ -29,6 +29,7 @@ from yuxi.services.knowledge_conflict_publish_service import (
     process_knowledge_conflict_publish,
     recover_knowledge_conflict_publish_tasks,
 )
+from yuxi.services.udesk.config import PULL_CRON_HOUR, PULL_CRON_MINUTE
 from yuxi.services.udesk.pull_service import run_scheduled_pull, run_scheduled_reconcile
 from yuxi.services.udesk.summarize_service import run_scheduled_summarize
 from yuxi.services.run_queue_service import (
@@ -652,7 +653,12 @@ class WorkerSettings:
         cron(recover_knowledge_conflict_publish_tasks, minute=set(range(60)), unique=True),
         # Udesk 增量拉取（每 24 小时）：cron unique 是第一道闸，DB 租约是第二道闸；
         # 未配置 UDESK_* 时入口函数为空操作；临时拉取走知识运营页手动按钮（worker 任务触发）
-        cron(run_scheduled_pull, hour=2, minute=47, unique=True),
+        cron(
+            run_scheduled_pull,
+            hour=PULL_CRON_HOUR,
+            minute=PULL_CRON_MINUTE,
+            unique=True,
+        ),
         # Udesk 每日对账（D16）：比对近 7 天接口 total 与本地计数，缺口回补重拉
         cron(run_scheduled_reconcile, hour=3, minute=17, unique=True),
         # Udesk 客服记录 LLM 结构化（每小时，错开拉取整点）：待总结会话为空或模型不可用时为空操作

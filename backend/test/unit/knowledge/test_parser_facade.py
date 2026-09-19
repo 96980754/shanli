@@ -216,6 +216,90 @@ def test_convert_with_docling_keeps_image_placeholder_when_upload_fails(
     assert markdown == "before\n[图片: image_1000000.png]\nafter"
 
 
+def test_convert_with_docling_inlines_wps_cell_images(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """WPS 单元格嵌入图片：=DISPIMG 公式漏进表格格子时，按 ID 换回行内图片。"""
+    import zipfile
+
+    file_path = tmp_path / "parser_test.xlsx"
+    cellimages_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<etc:cellImages xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+        ' xmlns:etc="http://www.wps.cn/officeDocument/2017/etCustomData">'
+        "<etc:cellImage><xdr:pic>"
+        '<xdr:nvPicPr><xdr:cNvPr id="2" name="ID_AAA"/></xdr:nvPicPr>'
+        '<xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill>'
+        "</xdr:pic></etc:cellImage>"
+        "<etc:cellImage><xdr:pic>"
+        '<xdr:nvPicPr><xdr:cNvPr id="3" name="ID_BBB"/></xdr:nvPicPr>'
+        '<xdr:blipFill><a:blip r:embed="rId2"/></xdr:blipFill>'
+        "</xdr:pic></etc:cellImage>"
+        "</etc:cellImages>"
+    )
+    rels_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/>'
+        "</Relationships>"
+    )
+    with zipfile.ZipFile(file_path, "w") as zf:
+        zf.writestr("xl/cellimages.xml", cellimages_xml)
+        zf.writestr("xl/_rels/cellimages.xml.rels", rels_xml)
+        zf.writestr("xl/media/image1.png", b"image-a")
+        zf.writestr("xl/media/image2.png", b"image-b")
+
+    converted_markdown = (
+        "| 型号 | 终端样式 |\n"
+        "| - | - |\n"
+        '| S1 | =DISPIMG("ID_AAA",1) |\n'
+        '| S2 | =_xlfn.DISPIMG("ID_BBB",1) |\n'
+        '| S3 | =DISPIMG("ID_AAA",1) |\n'
+        '| S4 | =DISPIMG("ID_MISSING",1) |'
+    )
+    fake_doc = SimpleNamespace(
+        pictures=[],
+        export_to_markdown=lambda **_kwargs: converted_markdown,
+        tables=[],
+    )
+    fake_result = SimpleNamespace(status=SimpleNamespace(name="SUCCESS"), document=fake_doc)
+    uploaded: list[bytes] = []
+
+    class FakeConverter:
+        def convert(self, path: Path):
+            assert path == file_path
+            return fake_result
+
+    def _fake_upload_image_to_minio(image_data, filename, bucket_name, object_prefix):
+        uploaded.append(image_data)
+        return f"https://example.test/{len(uploaded)}.png"
+
+    monkeypatch.setattr(parser_unified, "_get_docling_converter", lambda: FakeConverter())
+    monkeypatch.setattr(parser_unified, "_upload_image_to_minio", _fake_upload_image_to_minio)
+
+    markdown = parser_unified._convert_with_docling(file_path)
+
+    # 两张图各上传一次；ID_AAA 两处引用复用同一 URL
+    assert uploaded == [b"image-a", b"image-b"]
+    assert markdown.count("![image1.png](https://example.test/1.png)") == 2
+    assert "![image2.png](https://example.test/2.png)" in markdown
+    # 找不到图片的公式残渣清成空串，不给检索留噪声
+    assert "DISPIMG" not in markdown
+
+
+def test_inline_wps_cell_images_noop_without_dispimg(tmp_path: Path):
+    """markdown 里没有 DISPIMG 时零开销直通（不碰 zip、不上传）。"""
+    markdown = "| a | b |\n| - | - |\n| 1 | 2 |"
+    assert (
+        parser_unified._inline_wps_cell_images(markdown, tmp_path / "plain.xlsx", "public", "kb-images")
+        == markdown
+    )
+
+
 def test_collapse_horizontal_merges_only_shrinks_column_span() -> None:
     def _cell(start_row: int, start_col: int, end_row: int, end_col: int) -> SimpleNamespace:
         return SimpleNamespace(

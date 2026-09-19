@@ -314,9 +314,7 @@ const props = defineProps({
 const { databases, state: dbState } = storeToRefs(databaseStore)
 
 const knowledgeActiveView = 'documents'
-const knowledgeViewItems = [
-  { key: 'documents', label: t('db.tabs.documents'), path: '/extensions?tab=knowledge' }
-]
+const knowledgeViewItems = [{ key: 'documents', label: t('db.tabs.documents'), path: '/extensions' }]
 
 const kbTypes = computed(() => Object.keys(orderedKbTypes.value))
 const searchQuery = ref('')

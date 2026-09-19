@@ -772,7 +772,7 @@ watch(
 )
 
 const backToDatabase = () => {
-  router.push({ path: '/extensions', query: { tab: 'knowledge' } })
+  router.push({ path: '/extensions' })
 }
 
 const copyDatabaseId = async () => {

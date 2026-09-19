@@ -142,7 +142,7 @@
     <a-modal
       v-model:open="reviewVisible"
       :title="t('candidates.reviewTitle')"
-      width="720"
+      width="720px"
       :footer="null"
       :destroy-on-close="true"
     >

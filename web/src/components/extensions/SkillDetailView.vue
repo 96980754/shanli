@@ -514,7 +514,7 @@ const removeDependency = (group, value) => {
 }
 
 const goBack = () => {
-  router.push({ path: '/extensions', query: { tab: 'skills' } })
+  router.push({ path: '/model-manage', query: { tab: 'skills' } })
 }
 
 const cloneShareConfig = (config) => ({
@@ -675,7 +675,7 @@ const confirmDeleteSkill = () => {
       try {
         await skillApi.deleteSkill(target.slug)
         message.success(t('skill.deleted'))
-        router.push({ path: '/extensions', query: { tab: 'skills' } })
+        router.push({ path: '/model-manage', query: { tab: 'skills' } })
       } catch {
         message.error(t('common.deleteFailed'))
       }

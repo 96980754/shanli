@@ -1,7 +1,7 @@
 """Udesk 配置合并单测（规范 G5：纯 Mock，不依赖真实凭证/真实配置文件）。
 
 覆盖：设置页值优先于环境变量、环境变量兜底、运行时配置子系统不可用时的
-纯环境变量回退、int 合并与下限钳制、token 只从环境变量读取（A9）。
+纯环境变量回退、int 合并与下限钳制、token 设置页可写且环境变量兜底。
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ def runtime_config(monkeypatch):
         "udesk_enabled",
         "udesk_subdomain",
         "udesk_email",
+        "udesk_open_api_token",
         "udesk_sync_overlap_minutes",
         "udesk_backfill_start_days",
     ):
@@ -83,7 +84,7 @@ def test_runtime_unavailable_falls_back_to_pure_env(runtime_config, monkeypatch)
     assert cfg.backfill_start_days == 20
 
 
-def test_token_comes_from_env_only(runtime_config, monkeypatch):
+def test_token_falls_back_to_env(runtime_config, monkeypatch):
     monkeypatch.setenv("UDESK_OPEN_API_TOKEN", "tok-test")
     monkeypatch.setattr(runtime_config, "udesk_enabled", True, raising=False)
     monkeypatch.setattr(runtime_config, "udesk_subdomain", "acme", raising=False)
@@ -91,10 +92,25 @@ def test_token_comes_from_env_only(runtime_config, monkeypatch):
 
     cfg = UdeskConfig()
     assert cfg.open_api_token == "tok-test"
+    assert cfg.sources["open_api_token"] == "env"
     assert cfg.ready is True
 
     monkeypatch.setenv("UDESK_OPEN_API_TOKEN", "")
     assert UdeskConfig().ready is False
+
+
+def test_token_from_settings_page_wins_over_env(runtime_config, monkeypatch):
+    """设置页保存的 token 必须压过 .env：否则甲方在页面上改成新 token 后毫无效果。"""
+    monkeypatch.setattr(runtime_config, "udesk_open_api_token", "tok-page", raising=False)
+    monkeypatch.setenv("UDESK_OPEN_API_TOKEN", "tok-env")
+
+    cfg = UdeskConfig()
+    assert cfg.open_api_token == "tok-page"
+    assert cfg.sources["open_api_token"] == "settings"
+    # 只报告是否已配置，明文绝不出现在概览里
+    described = cfg.describe()
+    assert described["token_configured"] is True
+    assert "tok-page" not in str(described)
 
 
 def test_int_merge_clamps_to_minimum(runtime_config, monkeypatch):

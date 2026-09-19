@@ -259,11 +259,12 @@ async def get_udesk_status(
     """Udesk 配置生效概览（含每项来源）+ 拉取/总结运行状态 + 累计量，供设置页/审核页只读展示。
 
     设置页表单只反映设置页自己的快照，而实际生效值是「设置页 + 服务器 .env」合并结果；
-    不回传令牌值，只回传是否已配置（A9）。
+    不回传令牌值，只回传是否已配置。
     """
     del current_user
-    from yuxi.services.udesk.config import UdeskConfig
+    from yuxi.services.udesk.config import UdeskConfig, next_pull_run_at
 
+    config = UdeskConfig()
     counts = (
         await db.execute(
             select(
@@ -283,7 +284,7 @@ async def get_udesk_status(
     ).one()
     conversations, messages, candidates, candidates_pending, summarize_pending = (int(value or 0) for value in counts)
     return {
-        **UdeskConfig().describe(),
+        **config.describe(),
         "counts": {
             "conversations": conversations,
             "messages": messages,
@@ -292,7 +293,11 @@ async def get_udesk_status(
             # 故累计的 candidates 与列表条数天然不等——两个口径都给出，避免对不上。
             "candidates_pending": candidates_pending,
         },
-        "pull": await _load_pull_state(db),
+        "pull": {
+            **await _load_pull_state(db),
+            # 凭证不齐时 cron 是空操作，谈不上「下次拉取」，置 None 由前端隐藏
+            "next_run_at": format_utc_datetime(next_pull_run_at()) if config.ready else None,
+        },
         "summarize": {
             "done": conversations - summarize_pending,
             "total": conversations,

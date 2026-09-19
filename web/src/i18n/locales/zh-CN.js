@@ -45,7 +45,6 @@ export default {
   },
   nav: {
     newChat: '创建新对话',
-    extensions: '知识库与skills',
     knowledgeBase: '知识库',
     agentManage: '智能体管理',
     dashboard: '数据总览',
@@ -1330,7 +1329,7 @@ export default {
     pullStatusFailed: '失败',
     pullStatusSkipped: '已有任务在跑',
     pullBlocked: '暂不可同步，缺少配置：{fields}',
-    pullBlockedHint: '请在「系统设置 → Udesk 对接」补齐后重试；永久 Token 只能改服务器 .env，不进设置页',
+    pullBlockedHint: '请在「系统设置 → Udesk 对接」补齐后重试；永久 Token 在该页填写，保存后不再回显',
     summarizeNow: '生成候选问答',
     summarizeQueued: '已触发总结，候选生成过程中列表会自动刷新',
     summarizeFailed: '触发总结失败，请稍后重试',
@@ -1366,7 +1365,12 @@ export default {
     detailFailed: '加载会话详情失败，请稍后重试'
   },
   knowledgeOps: {
-    pageTitle: '知识运营'
+    pageTitle: '知识运营',
+    pendingSummaryTitle: '待总结客服会话提醒',
+    pendingSummaryBody:
+      'UDesk 拉取到 {count} 条待总结的客服会话记录，可前往「候选知识审核」生成候选问答（每小时也会自动总结一轮）。',
+    pendingSummaryGo: '去生成候选问答',
+    pendingSummaryDismiss: '知道了'
   },
   upload: {
     addFileTitle: '添加文件',
@@ -2248,8 +2252,6 @@ export default {
     searchTools: '搜索工具...',
     tags: '标签',
     categoryLabel: '分类',
-    skillsTab: 'Skills',
-    viewSwitchAria: '知识库与skills视图切换',
     searchPlaceholder: '搜索...'
   },
   workspace: {
@@ -2346,10 +2348,10 @@ export default {
     csAccessTitle: '客服接入设置',
     udeskTitle: 'Udesk 对接',
     udeskDesc:
-      '配置 Udesk 客服记录拉取（知识回流）：保存后立即生效，无需重启。接口凭证中的永久 Token 出于安全只允许在部署时配置（见下方说明），其余参数均可在本页自助修改。',
+      '配置 Udesk 客服记录拉取（知识回流）：全部参数含永久 Token 均可在本页自助修改，保存后立即生效、无需重启。',
     udeskEffectiveTitle: '当前生效值',
     udeskEffectiveDesc:
-      '服务器实际生效的配置（设置页与服务器 .env 合并结果）。下方表单只反映设置页自己的取值，若某项在页面为空但此处有值，说明它来自服务器 .env——无需重复填写。',
+      '服务器实际生效的配置（设置页与服务器 .env 合并结果）。下方表单只反映设置页自己的取值，若某项在页面为空但此处有值，说明它来自服务器 .env——无需重复填写。Token 只显示是否已配置，不回显内容。',
     udeskEffectiveReady: '已就绪',
     udeskEffectiveNotReady: '未就绪',
     udeskEffectiveOn: '已启用',
@@ -2368,15 +2370,19 @@ export default {
     udeskSubdomainPlaceholder: '例如 acme（对应 acme.udesk.cn）',
     udeskEmailLabel: '接口账号邮箱',
     udeskEmailPlaceholder: "admin{'@'}example.com",
-    udeskTokenAlertTitle: '永久 Token 不在本页配置',
+    udeskTokenPlaceholderSet: '已配置，留空则不修改',
+    udeskTokenPlaceholderEmpty: '填写 UDesk 后台的开放接口 Token',
+    udeskTokenAlertTitle: 'Token 只写不读',
     udeskTokenAlertDesc:
-      'UDESK_OPEN_API_TOKEN 是不会过期的永久凭证，按安全规范只允许存放在服务器的 .env 环境变量中，禁止写入配置文件或数据库。请联系部署人员在服务器上配置后重启服务。',
+      'Token 是不会过期的永久凭证，保存后不会再回显，只显示是否已配置；输入框留空表示不修改。请按密钥保管，不要外传。',
     udeskSyncTitle: '拉取参数',
     udeskSyncDesc: '增量拉取的窗口策略，一般保持默认即可。',
     udeskOverlapLabel: '重叠窗（分钟）',
     udeskOverlapHint: '每轮多拉一段重叠时间，防止边界消息漏读',
     udeskBackfillLabel: '回灌天数',
     udeskBackfillHint: '首次拉取从多少天前开始回灌历史会话；UDesk 只提供一个月内的数据，上限 30 天',
+    udeskNextRunLabel: '下次自动拉取',
+    udeskNextRunHint: '开启后每日自动拉取一次增量会话，下次：{time}',
     csAccessDesc:
       '配置业务线与企微客服的转接关系：业务线问题触发转人工时，转给该线绑定的客服团队（同一条目多个企微入口时轮替接单）；未绑定客服的业务线与无法归类的问题回落到「通用客服」；客服条目与绑定全为空时转人工不可用。',
     csServicesTitle: '客服条目',
@@ -2399,7 +2405,7 @@ export default {
     csServicesEmpty: '还没有客服条目，点击下方按钮新增。',
     csLinesEmpty: '还没有业务线（已全部删除），点击下方按钮新增。',
     csLinesDesc:
-      '每条业务线定义一种问题分类（code 唯一，识别关键词用于拒答时判定所属线），并可选绑定客服团队：该线问题触发转人工时转给所绑团队（可多选，轮替接单）。',
+      '每条业务线定义一种问题分类（识别关键词用于拒答时判定所属线），并可选绑定客服团队：该线问题触发转人工时转给所绑团队（可多选，轮替接单）。',
     csOverviewTitle: '转接规则总览',
     csOverviewDesc:
       '预览每条业务线触发转人工时的去向：已绑定的线转给所绑客服团队（轮替接单）；未绑定的线回落「通用客服」。',
@@ -2411,11 +2417,7 @@ export default {
     csLineBindingLabel: '绑定客服',
     csLineBindingPlaceholder: '该线转人工时转给的客服（可多选）',
     csUnboundTip:
-      '未绑定客服的业务线（含无法归类的 unknown）转人工会回落「通用客服」；建议给「通用客服(kefu)」绑定一个客服条目兜底。',
-    businessLineCodeLabel: 'code（唯一标识）',
-    businessLineCodePlaceholder: '如 terminal / ops，小写字母开头',
-    businessLineCodeHint:
-      '系统内部识别这条业务线用的英文编号（如 diaodutai）。知识缺口归类、客服记录整理、转人工接单都按它对应；一旦投入使用不建议修改。',
+      '未绑定客服的业务线（含无法归类的提问）转人工会回落「通用客服」；建议给「通用客服」绑定一个客服条目兜底。',
     businessLineNameLabel: '名称',
     businessLineNamePlaceholder: '如：终端',
     businessLineNameHint: '业务线的显示名称（如：调度台），只在界面展示和筛选时用，给管理员看的。',
@@ -2425,9 +2427,6 @@ export default {
       '当 AI 答不上用户问题时，系统检查提问里是否包含这些词（多个词用逗号或空格分隔），从而判断问题属于哪条业务线；判断结果决定这条提问记到哪条线的知识缺口、转人工时转给哪组客服。写得越典型，归类越准。',
     addBusinessLine: '添加业务线',
     removeBusinessLine: '删除',
-    businessLineInvalidCode: 'code 需为小写字母开头，仅含小写字母/数字/下划线（≤32 位）',
-    businessLineCodeReserved: 'code 不能使用系统保留值 unknown',
-    businessLineDuplicateCode: '业务线 code 重复：{code}',
     businessLineInvalidName: '业务线名称不能为空',
     serviceLinks: '服务链接',
     serviceLinksDesc: '快速访问系统相关的外部服务，需要将 localhost 替换为实际的 IP 地址。',
@@ -2554,6 +2553,7 @@ export default {
   modelMgmt: {
     tabAgents: '智能体',
     tabProviders: '模型供应商',
+    tabSkills: 'Skills',
     viewSwitchAriaLabel: '智能体管理视图切换',
     agentsCount: '{count} 个智能体',
     globalCount: '{count} 个全局',

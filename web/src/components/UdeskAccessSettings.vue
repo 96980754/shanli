@@ -1,6 +1,6 @@
-<!-- Udesk 对接设置：非密参数（开关/子域名/账号/接口地址/签名算法/拉取参数）在设置页
-     自助配置、保存即热同步生效；open_api_token 是永久凭证，只允许部署时写入 .env，
-     本页不做 token 输入（避免凭证进配置文件/数据库，A9）。 -->
+<!-- Udesk 对接设置：全部参数（含永久 Token）在设置页自助配置、保存即热同步生效。
+     Token 是只写字段——后端落盘但读取接口一律剔除明文，故本页只有输入框、不回显，
+     占位符按 describe() 的 token_configured 提示是否已配置；留空表示不修改。 -->
 
 <template>
   <div class="udesk-access-page">
@@ -77,6 +77,19 @@
           />
         </div>
 
+        <div class="udesk-field">
+          <label class="cs-label">{{ $t('settings.udeskTokenLabel') }}</label>
+          <a-input-password
+            v-model:value="tokenInput"
+            :placeholder="
+              status?.token_configured
+                ? $t('settings.udeskTokenPlaceholderSet')
+                : $t('settings.udeskTokenPlaceholderEmpty')
+            "
+            @blur="flush"
+          />
+        </div>
+
         <a-alert
           type="info"
           show-icon
@@ -117,6 +130,10 @@
           />
           <span class="udesk-hint">{{ $t('settings.udeskBackfillHint') }}</span>
         </div>
+        <div v-if="nextPullRunAt" class="udesk-field">
+          <label class="cs-label">{{ $t('settings.udeskNextRunLabel') }}</label>
+          <span class="udesk-hint">{{ $t('settings.udeskNextRunHint', { time: nextPullRunAt }) }}</span>
+        </div>
       </div>
     </section>
   </div>
@@ -129,6 +146,7 @@ import { Activity, AlertTriangle, Check, Headset, LoaderCircle, RefreshCw } from
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
 import { dashboardApi } from '@/apis/dashboard_api'
+import { formatFullDateTime } from '@/utils/time'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -142,6 +160,12 @@ const SOURCE_LABEL_KEY = {
 }
 
 const status = ref(null)
+
+// 下次自动拉取：凭证齐备时后端按 cron 时刻算好返回；未配置时为空、整行不展示
+const nextPullRunAt = computed(() => {
+  const value = status.value?.pull?.next_run_at
+  return value ? formatFullDateTime(value) : ''
+})
 
 // 只读展示服务器实际生效值：设置页表单只反映设置页快照，与 .env 合并后的结果需单独查
 async function loadStatus() {
@@ -208,6 +232,10 @@ const saveState = ref('')
 const lastSavedAt = ref('')
 const loaded = ref(false)
 
+// Token 只写不读：后端不回传明文，输入框每次加载必为空，仅在用户填了新值时才随载荷提交。
+// 保存在组件里（不进 form）是为了让「留空=不修改」与其它字段的显式取值语义分开。
+const tokenInput = ref('')
+
 // 配置到达后回填表单（仅一次；之后以用户编辑为准，保存走显式 flush）
 function fillForm(configData) {
   form.udesk_enabled = Boolean(configData.udesk_enabled)
@@ -222,7 +250,7 @@ if (configStore.config && configStore.config.udesk_enabled !== undefined) {
   fillForm(configStore.config)
 }
 
-// token 永不出现在提交载荷（A9）：只提交本页可见字段。
+// 只提交本页可见字段 + 用户新填的 token（留空则不带该键，避免把已配的值清掉）。
 // 开关未被用户操作过时不提交：避免改其它字段时把「跟随 .env」的状态覆盖成显式 false。
 let enabledTouched = false
 const onEnabledChange = () => {
@@ -235,9 +263,12 @@ const flush = async () => {
   saveState.value = 'saving'
   const payload = { ...form }
   if (!enabledTouched) delete payload.udesk_enabled
+  const token = tokenInput.value.trim()
+  if (token) payload.udesk_open_api_token = token
   const { ok } = await configStore.setConfigValues(payload)
   saveState.value = ok ? 'saved' : 'error'
   if (ok) {
+    tokenInput.value = '' // 保存成功即清空：明文不回显，失败则保留待重试
     lastSavedAt.value = dayjs().format('HH:mm:ss')
     await loadStatus() // 保存后同步刷新生效值面板
   }

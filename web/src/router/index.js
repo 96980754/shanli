@@ -145,7 +145,18 @@ const router = createRouter({
           path: '',
           name: 'ModelManageComp',
           component: () => import('../views/ModelManageView.vue'),
-          meta: { requiresAuth: true }
+          meta: { requiresAuth: true },
+          children: [
+            {
+              path: 'skill/:slug',
+              name: 'ModelManageSkillDetail',
+              component: () => import('../components/extensions/SkillDetailView.vue'),
+              meta: {
+                requiresAuth: true,
+                requiresAdmin: true
+              }
+            }
+          ]
         }
       ]
     },
@@ -168,15 +179,6 @@ const router = createRouter({
               component: () => import('../views/DataBaseInfoView.vue'),
               meta: {
                 requiresAuth: true
-              }
-            },
-            {
-              path: 'skill/:slug',
-              name: 'ExtensionSkillDetail',
-              component: () => import('../components/extensions/SkillDetailView.vue'),
-              meta: {
-                requiresAuth: true,
-                requiresAdmin: true
               }
             }
           ]
