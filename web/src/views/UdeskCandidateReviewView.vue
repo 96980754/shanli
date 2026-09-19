@@ -59,37 +59,13 @@
     <div v-else class="pull-status-lines">
       <div class="status-row">
         <span class="pull-status-text">{{ pullSummary }}</span>
-        <template v-if="pullProgress">
-          <a-progress
-            class="status-progress"
-            :percent="pullProgress.percent"
-            :stroke-width="4"
-            :show-info="false"
-          />
-          <span class="pull-status-text">
-            {{
-              pullProgress.total
-                ? t('candidates.pullProgress', pullProgress)
-                : t('candidates.pullPreparing')
-            }}
-          </span>
-        </template>
         <a-tag v-if="pullStatusTag" :color="pullStatusTag.color">{{ pullStatusTag.text }}</a-tag>
         <a-tooltip v-if="pullError" :title="pullError">
           <span class="pull-status-error">{{ pullError }}</span>
         </a-tooltip>
       </div>
-      <div class="status-row">
+      <div v-if="summarizeSummary" class="status-row">
         <span class="pull-status-text">{{ summarizeSummary }}</span>
-        <template v-if="summarizeProgress">
-          <a-progress
-            class="status-progress"
-            :percent="summarizeProgress.percent"
-            :stroke-width="4"
-            :show-info="false"
-          />
-          <span class="pull-status-text">{{ t('candidates.summarizeProgress', summarizeProgress) }}</span>
-        </template>
         <a-tooltip v-if="summarizeError" :title="summarizeError">
           <span class="pull-status-error">{{ summarizeError }}</span>
         </a-tooltip>
@@ -104,7 +80,7 @@
       :pagination="pagination"
       :locale="{ emptyText: t('candidates.noData') }"
       row-key="id"
-      :scroll="{ x: 1300 }"
+      :scroll="{ x: 1200 }"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -150,44 +126,48 @@
         </template>
 
         <template v-else-if="column.key === 'actions'">
-          <a-space size="small">
-            <a-button type="link" size="small" @click="openContext(record)">
-              {{ $t('candidates.viewContext') }}
-            </a-button>
-            <a-button
-              v-if="record.review_status === 'pending'"
-              type="link"
-              size="small"
-              @click="openAccept(record)"
-            >
-              {{ $t('candidates.acceptAction') }}
-            </a-button>
-            <a-popconfirm
-              :title="t('candidates.rejectConfirmTitle')"
-              :ok-text="t('candidates.rejectAction')"
-              @confirm="rejectOne(record)"
-            >
-              <a-button
-                v-if="record.review_status === 'pending'"
-                type="link"
-                size="small"
-                danger
-              >
-                {{ $t('candidates.rejectAction') }}
-              </a-button>
-            </a-popconfirm>
-          </a-space>
+          <a-button
+            v-if="record.review_status === 'pending'"
+            type="link"
+            size="small"
+            @click="openReview(record)"
+          >
+            {{ $t('candidates.reviewAction') }}
+          </a-button>
         </template>
       </template>
     </a-table>
 
-    <!-- 来源会话上下文（脱敏消息，核对 evidence_quote 用） -->
-    <a-drawer
-      v-model:open="contextVisible"
-      :title="t('candidates.contextTitle')"
-      width="560"
+    <!-- 审核弹窗：候选问答（可微调）+ 客服原话 + 来源会话，采纳/拒绝都收在这里 -->
+    <a-modal
+      v-model:open="reviewVisible"
+      :title="t('candidates.reviewTitle')"
+      width="720"
+      :footer="null"
       :destroy-on-close="true"
     >
+      <p class="accept-hint">{{ t('candidates.acceptHint') }}</p>
+      <a-form layout="vertical">
+        <a-form-item :label="t('qaPairs.agentColumn')" required>
+          <a-select
+            v-model:value="acceptForm.agent_slug"
+            :options="agentOptions"
+            :placeholder="t('candidates.agentPlaceholder')"
+          />
+        </a-form-item>
+        <a-form-item :label="t('qaPairs.questionColumn')">
+          <a-textarea v-model:value="acceptForm.question" :rows="2" :maxlength="300" show-count />
+        </a-form-item>
+        <a-form-item :label="t('qaPairs.answerColumn')">
+          <a-textarea v-model:value="acceptForm.answer" :rows="5" :maxlength="2000" show-count />
+        </a-form-item>
+        <a-form-item :label="t('candidates.evidenceColumn')">
+          <div class="evidence-quote">{{ acceptTarget?.evidence_quote }}</div>
+        </a-form-item>
+      </a-form>
+
+      <!-- 来源会话记录（脱敏消息，核对 evidence_quote 用） -->
+      <div class="review-context-title">{{ t('candidates.contextTitle') }}</div>
       <a-spin :spinning="contextLoading">
         <div v-if="contextError" class="context-error">{{ contextError }}</div>
         <template v-else-if="contextConversation">
@@ -205,33 +185,23 @@
           </div>
         </template>
       </a-spin>
-    </a-drawer>
 
-    <!-- 采纳入库弹窗：选择目标智能体，可微调问答 -->
-    <a-modal
-      v-model:open="acceptVisible"
-      :title="t('candidates.acceptTitle')"
-      :ok-text="t('candidates.acceptConfirm')"
-      :confirm-loading="accepting"
-      :ok-button-props="{ disabled: !acceptForm.agent_slug }"
-      @ok="confirmAccept"
-    >
-      <p class="accept-hint">{{ t('candidates.acceptHint') }}</p>
-      <a-form layout="vertical">
-        <a-form-item :label="t('qaPairs.agentColumn')" required>
-          <a-select
-            v-model:value="acceptForm.agent_slug"
-            :options="agentOptions"
-            :placeholder="t('candidates.agentPlaceholder')"
-          />
-        </a-form-item>
-        <a-form-item :label="t('qaPairs.questionColumn')">
-          <a-textarea v-model:value="acceptForm.question" :rows="2" :maxlength="300" show-count />
-        </a-form-item>
-        <a-form-item :label="t('qaPairs.answerColumn')">
-          <a-textarea v-model:value="acceptForm.answer" :rows="5" :maxlength="2000" show-count />
-        </a-form-item>
-      </a-form>
+      <div class="review-footer">
+        <a-button :disabled="accepting" @click="reviewVisible = false">
+          {{ t('common.cancel') }}
+        </a-button>
+        <a-button danger :loading="rejecting" @click="confirmReject">
+          {{ t('candidates.rejectAction') }}
+        </a-button>
+        <a-button
+          type="primary"
+          :loading="accepting"
+          :disabled="!acceptForm.agent_slug"
+          @click="confirmAccept"
+        >
+          {{ t('candidates.acceptAction') }}
+        </a-button>
+      </div>
     </a-modal>
   </div>
 </template>
@@ -274,7 +244,7 @@ const columns = computed(() => [
   { title: t('candidates.dedupColumn'), key: 'dedup_status', width: 100 },
   { title: t('common.status'), key: 'review_status', width: 100 },
   { title: t('qaPairs.timeColumn'), key: 'created_at', width: 170 },
-  { title: t('qaPairs.actionsColumn'), key: 'actions', width: 200, fixed: 'right' }
+  { title: t('qaPairs.actionsColumn'), key: 'actions', width: 100, fixed: 'right' }
 ])
 
 const loading = ref(false)
@@ -360,43 +330,41 @@ async function loadAgents() {
   }
 }
 
-// ------------------------------------------------------------- 上下文抽屉
-const contextVisible = ref(false)
+// ------------------------------------------------------------- 审核弹窗（采纳/拒绝/会话记录）
+const reviewVisible = ref(false)
+const accepting = ref(false)
+const rejecting = ref(false)
+const acceptTarget = ref(null)
+const acceptForm = reactive({ agent_slug: '', question: '', answer: '' })
 const contextLoading = ref(false)
 const contextConversation = ref(null)
 const contextMessages = ref([])
 const contextError = ref('')
 
-async function openContext(record) {
-  contextVisible.value = true
-  contextLoading.value = true
-  contextConversation.value = null
-  contextMessages.value = []
-  contextError.value = ''
-  try {
-    const response = await dashboardApi.getQaCandidateContext(record.id)
-    contextConversation.value = response.conversation
-    contextMessages.value = response.messages || []
-  } catch (error) {
-    console.error('加载来源会话失败', error)
-    contextError.value = error?.message || t('candidates.contextLoadFailed')
-  } finally {
-    contextLoading.value = false
-  }
-}
-
-// ------------------------------------------------------------- 采纳/拒绝
-const acceptVisible = ref(false)
-const accepting = ref(false)
-const acceptTarget = ref(null)
-const acceptForm = reactive({ agent_slug: '', question: '', answer: '' })
-
-function openAccept(record) {
+// 打开审核弹窗：带出候选问答与默认归属，并加载来源会话供核对客服原话
+function openReview(record) {
   acceptTarget.value = record
   acceptForm.agent_slug = defaultAgentSlug.value
   acceptForm.question = record.question
   acceptForm.answer = record.answer
-  acceptVisible.value = true
+  contextConversation.value = null
+  contextMessages.value = []
+  contextError.value = ''
+  reviewVisible.value = true
+  contextLoading.value = true
+  dashboardApi
+    .getQaCandidateContext(record.id)
+    .then((response) => {
+      contextConversation.value = response.conversation
+      contextMessages.value = response.messages || []
+    })
+    .catch((error) => {
+      console.error('加载来源会话失败', error)
+      contextError.value = error?.message || t('candidates.contextLoadFailed')
+    })
+    .finally(() => {
+      contextLoading.value = false
+    })
 }
 
 async function confirmAccept() {
@@ -408,9 +376,9 @@ async function confirmAccept() {
       answer: acceptForm.answer.trim()
     })
     message.success(t('candidates.acceptSuccess'))
-    acceptVisible.value = false
+    reviewVisible.value = false
     await loadCandidates()
-    await loadUdeskStatus() // 待审数变了，累计行要跟着走，否则与列表条数对不上
+    await loadUdeskStatus() // 待审数变了，计数行要跟着走，否则与列表条数对不上
   } catch (error) {
     console.error('采纳候选失败', error)
     message.error(error?.message || t('candidates.acceptFailed'))
@@ -419,15 +387,19 @@ async function confirmAccept() {
   }
 }
 
-async function rejectOne(record) {
+async function confirmReject() {
+  rejecting.value = true
   try {
-    await dashboardApi.rejectQaCandidate(record.id, {})
+    await dashboardApi.rejectQaCandidate(acceptTarget.value.id, {})
     message.success(t('candidates.rejectSuccess'))
+    reviewVisible.value = false
     await loadCandidates()
     await loadUdeskStatus() // 同上：拒绝同样只改审核态、不删行
   } catch (error) {
     console.error('拒绝候选失败', error)
     message.error(error?.message || t('candidates.rejectFailed'))
+  } finally {
+    rejecting.value = false
   }
 }
 
@@ -471,19 +443,11 @@ const pullState = computed(() => udeskStatus.value?.pull || null)
 const summarize = computed(() => udeskStatus.value?.summarize || {})
 const counts = computed(() => udeskStatus.value?.counts || {})
 
-// 本轮进度。分母是「本轮已发现的会话数」，翻页时还会继续长，故它是处理次数口径；
-// 分母尚为 0 时不画进度条（0/0 没有意义），只显示「正在准备」。
-function progressOf(state) {
-  if (!state?.running) return null
-  const done = state.done || 0
-  const total = state.total || 0
-  return { done, total, percent: total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0 }
-}
-
-const pullProgress = computed(() => progressOf(pullState.value))
+// 状态区只给甲方看结论不给过程：同步中只说「同步中...」，平时只留上次时间（带数量原文案已删）；
+// 失败仍给出状态标签与错误信息，否则故障不可见。
 const pullStatusTag = computed(() => {
   const status = pullState.value?.last_run_status
-  // 运行中由进度行本身表达，再挂个「拉取中」标签只是重复
+  // 运行中由状态文案本身表达，再挂个标签只是重复
   if (status === 'running') return null
   const tag = PULL_STATUS_TAG[status]
   return tag ? { color: tag.color, text: t(tag.key) } : null
@@ -495,11 +459,7 @@ const pullSummary = computed(() => {
   const state = pullState.value
   if (!state?.last_run_status) return t('candidates.pullNever')
   if (state.last_run_status === 'running') return t('candidates.pullRunning')
-  return t('candidates.pullLastRun', {
-    time: formatFullDateTime(state.last_run_at),
-    conversations: state.last_run_conversations,
-    messages: state.last_run_messages
-  })
+  return t('candidates.pullLastRun', { time: formatFullDateTime(state.last_run_at) })
 })
 
 async function loadUdeskStatus() {
@@ -571,21 +531,19 @@ let lastPending = null
 const summarizePending = computed(() => summarize.value.pending ?? 0)
 const summarizeBusy = computed(() => summarizeTriggering.value || summarizePolling.value)
 const summarizeBlocked = computed(() => summarizePending.value === 0)
-const summarizeProgress = computed(() => progressOf(summarize.value))
+// 总结行与拉取行同口径：不带数量与进度，生成中只说「生成中...」；
+// 没有待总结时整行不显示（按钮的禁用 tooltip 已说明原因）
 const summarizeSummary = computed(() => {
   if (summarize.value.running) return t('candidates.summarizeRunning')
-  if (summarizePending.value > 0) {
-    return t('candidates.summarizePending', { count: summarizePending.value })
-  }
-  return t('candidates.summarizeDone')
+  if (summarizePending.value > 0) return t('candidates.summarizePending')
+  return ''
 })
 const summarizeError = computed(() =>
   summarize.value.last_run_status === 'failed' ? summarize.value.last_error || '' : ''
 )
-// 累计量：用户真正想看的「有没有在长」。候选给两个口径——`candidates` 是历史累计
-// （采纳/拒绝不删行），列表默认只看待审，只报累计会与下方条数对不上。
+// 计数行只报待审数：累计口径（采纳/拒绝不删行）与列表默认的待审过滤对不上，甲方只关心还有多少要审
 const countsLine = computed(() =>
-  t('candidates.countsLine', { ...counts.value, pending: counts.value.candidates_pending ?? 0 })
+  t('candidates.countsLine', { pending: counts.value.candidates_pending ?? 0 })
 )
 
 function stopSummarizePoll() {
@@ -736,6 +694,8 @@ onUnmounted(() => {
   font-size: 13px;
   border-bottom: 1px solid var(--gray-150);
 }
+// 弹窗内长会话独立滚动，避免把弹窗撑出屏幕
+.context-messages { max-height: 320px; overflow-y: auto; }
 .context-msg {
   display: flex;
   gap: 8px;
@@ -759,5 +719,32 @@ onUnmounted(() => {
   margin: 0 0 12px;
   color: var(--gray-600);
   font-size: 13px;
+}
+
+.evidence-quote {
+  color: var(--gray-700);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--gray-50);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.review-context-title {
+  margin: 4px 0 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gray-900);
+  border-top: 1px solid var(--gray-150);
+  padding-top: 16px;
+}
+
+.review-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  border-top: 1px solid var(--gray-150);
+  padding-top: 12px;
 }
 </style>
