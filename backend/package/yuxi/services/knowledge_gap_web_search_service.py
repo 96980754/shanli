@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from tavily import AsyncTavilyClient
 
+from yuxi.config.app import is_usable_api_token, resolve_tavily_api_key
 from yuxi.repositories.curated_qa_repository import CuratedQARepository
 from yuxi.repositories.knowledge_gap_repository import KnowledgeGapRepository
 from yuxi.services.curated_qa_service import CuratedQAService
@@ -22,14 +22,16 @@ class KnowledgeGapWebSearchService:
 
     @staticmethod
     def _build_client() -> AsyncTavilyClient:
-        api_key = str(os.getenv("TAVILY_API_KEY") or "").strip()
+        api_key = resolve_tavily_api_key()
         if not api_key:
             raise ValueError("未配置 TAVILY_API_KEY，暂时无法联网补答")
         # 占位注释（如 "# 获取搜索服务的 api key 请访问 ..."）能通过“非空”判断，但会作为
         # Authorization: Bearer 头触发 httpx 的 ascii 编码错误，把 500 误报成联网失败。
-        # 校验 key 必须是单个纯 ASCII token，否则给出清晰配置错误。
-        if api_key.startswith("#") or not api_key.isascii() or any(ch.isspace() for ch in api_key):
-            raise ValueError("TAVILY_API_KEY 配置无效（疑似占位或含非 ASCII/空白），请在 .env 配置真实 API Key")
+        # 判定与工具注册共用 is_usable_api_token，避免两处规则漂移。
+        if not is_usable_api_token(api_key):
+            raise ValueError(
+                "TAVILY_API_KEY 配置无效（疑似占位或含非 ASCII/空白），请在设置页「外部服务」或 .env 配置真实 API Key"
+            )
         return AsyncTavilyClient(api_key=api_key)
 
     @staticmethod

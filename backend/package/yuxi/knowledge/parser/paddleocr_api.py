@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from yuxi.config.app import resolve_paddleocr_api_token, resolve_paddleocr_api_url
 from yuxi.knowledge.parser.base import BaseDocumentProcessor, DocumentParserException
 from yuxi.knowledge.parser.markdown_normalize import strip_image_reference
 from yuxi.storage.minio import get_minio_client
@@ -33,8 +34,20 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
     default_optional_payload: dict[str, bool] = {}
 
     def __init__(self, api_token: str | None = None, api_url: str | None = None):
-        self.api_token = api_token or os.getenv("PADDLEOCR_API_TOKEN")
-        self.api_url = (api_url or os.getenv("PADDLEOCR_API_URL") or DEFAULT_PADDLEOCR_API_URL).rstrip("/")
+        # 显式参数仅供调用方/测试覆盖，生产走 _resolve_credentials() 的读取期解析
+        self._api_token_override = api_token
+        self._api_url_override = api_url
+
+    def _resolve_credentials(self) -> tuple[str, str]:
+        """本次调用的凭证快照：构造参数 > 设置页 > 环境变量 > 内置默认地址。
+
+        解析器实例是进程级单例（`DocumentProcessorFactory` 按 processor_type 缓存），单次
+        解析可能跨分钟、轮询上百次，故在入口取一次快照穿参下去——否则中途改配置会出现
+        「提交用旧 token、轮询用新 token」，轮询 401 把整轮解析跑丢。
+        """
+        token = self._api_token_override or resolve_paddleocr_api_token()
+        url = (self._api_url_override or resolve_paddleocr_api_url() or DEFAULT_PADDLEOCR_API_URL).rstrip("/")
+        return token, url
 
     def get_service_name(self) -> str:
         return self.service_name
@@ -43,17 +56,18 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
         return PADDLEOCR_SUPPORTED_EXTENSIONS
 
     def check_health(self) -> dict[str, Any]:
-        if not self.api_token:
+        api_token, api_url = self._resolve_credentials()
+        if not api_token:
             return {
                 "status": "unavailable",
                 "message": "PADDLEOCR_API_TOKEN 未配置",
-                "details": {"api_url": self.api_url, "model": self.model},
+                "details": {"api_url": api_url, "model": self.model},
             }
 
         return {
             "status": "configured",
             "message": "PaddleOCR API token 已配置，将在解析时验证",
-            "details": {"api_url": self.api_url, "model": self.model},
+            "details": {"api_url": api_url, "model": self.model},
         }
 
     def process_file(self, file_path: str, params: dict[str, Any] | None = None) -> str:
@@ -66,15 +80,19 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
                 f"不支持的文件类型: {file_ext}", self.get_service_name(), "unsupported_file_type"
             )
 
-        self._require_api_token()
+        api_token, api_url = self._resolve_credentials()
+
+        self._require_api_token(api_token)
         params = params or {}
         start_time = time.time()
 
         try:
             logger.info(f"PaddleOCR API 开始处理: {Path(file_path).name} ({self.model})")
-            job_id = self._submit_job(file_path, params)
+            job_id = self._submit_job(file_path, params, api_token, api_url)
             result_url = self._poll_job_result(
                 job_id=job_id,
+                api_token=api_token,
+                api_url=api_url,
                 poll_interval_seconds=float(params.get("poll_interval_seconds") or 5),
                 max_wait_seconds=float(params.get("max_wait_seconds") or 600),
             )
@@ -95,12 +113,12 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
             logger.error(f"{error_msg} ({processing_time:.2f}s)")
             raise DocumentParserException(error_msg, self.get_service_name(), "processing_failed") from exc
 
-    def _require_api_token(self) -> None:
-        if not self.api_token:
+    def _require_api_token(self, api_token: str) -> None:
+        if not api_token:
             raise DocumentParserException("PADDLEOCR_API_TOKEN 未配置", self.get_service_name(), "missing_api_token")
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"bearer {self.api_token}"}
+    def _headers(self, api_token: str) -> dict[str, str]:
+        return {"Authorization": f"bearer {api_token}"}
 
     def _file_extension(self, file_path: str) -> str:
         if file_path.startswith(("http://", "https://")):
@@ -116,13 +134,13 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
                     payload[key] = overrides[key]
         return payload
 
-    def _submit_job(self, file_path: str, params: dict[str, Any]) -> str:
+    def _submit_job(self, file_path: str, params: dict[str, Any], api_token: str, api_url: str) -> str:
         optional_payload = self._resolve_optional_payload(params)
-        headers = self._headers()
+        headers = self._headers(api_token)
 
         if file_path.startswith(("http://", "https://")):
             response = requests.post(
-                self.api_url,
+                api_url,
                 headers={**headers, "Content-Type": "application/json"},
                 json={"fileUrl": file_path, "model": self.model, "optionalPayload": optional_payload},
                 timeout=60,
@@ -130,7 +148,7 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
         else:
             with open(file_path, "rb") as file:
                 response = requests.post(
-                    self.api_url,
+                    api_url,
                     headers=headers,
                     data={"model": self.model, "optionalPayload": json.dumps(optional_payload, ensure_ascii=False)},
                     files={"file": file},
@@ -162,11 +180,13 @@ class PaddleOCRAPIParser(BaseDocumentProcessor):
 
         return str(job_id)
 
-    def _poll_job_result(self, job_id: str, poll_interval_seconds: float, max_wait_seconds: float) -> str:
+    def _poll_job_result(
+        self, job_id: str, api_token: str, api_url: str, poll_interval_seconds: float, max_wait_seconds: float
+    ) -> str:
         start_time = time.time()
 
         while time.time() - start_time < max_wait_seconds:
-            response = requests.get(f"{self.api_url}/{job_id}", headers=self._headers(), timeout=30)
+            response = requests.get(f"{api_url}/{job_id}", headers=self._headers(api_token), timeout=30)
             if response.status_code != 200:
                 raise DocumentParserException(
                     f"查询 PaddleOCR 任务失败: HTTP {response.status_code} {response.text}",

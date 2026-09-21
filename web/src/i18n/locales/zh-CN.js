@@ -2346,6 +2346,26 @@ export default {
     selectTranscriptionModel: '请选择语音转写模型',
     contentGuardTitle: '内容审查配置',
     csAccessTitle: '客服接入设置',
+    integrationsTitle: '外部服务',
+    integrationsDesc:
+      '配置外部服务的访问凭证：设置页填了值就优先用它，留空则回退服务器 .env；保存后立即生效，无需重启。',
+    integrationsEffectiveTitle: '当前生效值',
+    integrationsEffectiveDesc:
+      '服务器实际生效的取值（设置页与服务器 .env 合并结果）。下方表单只反映设置页自己的取值：若某项在页面为空但此处有值，说明它来自服务器 .env，无需重复填写。',
+    integrationsFormTitle: '凭证配置',
+    integrationsFormDesc: '留空表示不使用设置页的值，回退服务器 .env。',
+    integrationsTavilyLabel: 'Tavily API Key',
+    integrationsTavilyPlaceholder: 'tvly-...',
+    integrationsTavilyHint: '联网搜索；知识缺口「联网补答」立即生效',
+    integrationsPaddleTokenLabel: 'PaddleOCR API Token',
+    integrationsPaddleTokenPlaceholder: 'PaddleOCR 控制台的 API Token',
+    integrationsPaddleTokenHint: 'PaddleOCR 云 API 鉴权，文档解析使用',
+    integrationsPaddleUrlLabel: 'PaddleOCR API 地址',
+    integrationsPaddleUrlPlaceholder: 'https://.../api/v2/ocr/jobs',
+    integrationsPaddleUrlHint: '留空则回退服务器 .env，都没有时用内置默认地址',
+    integrationsRestartTitle: 'Tavily Key 的生效范围',
+    integrationsRestartDesc:
+      '改 Tavily API Key 立即对「知识缺口联网补答」生效；Agent 的 tavily_search 工具在服务启动时注册，需重启 api 与 worker 才换用新 Key。',
     udeskTitle: 'Udesk 对接',
     udeskDesc:
       '配置 Udesk 客服记录拉取（知识回流）：全部参数含永久 Token 均可在本页自助修改，保存后立即生效、无需重启。',

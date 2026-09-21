@@ -5,6 +5,7 @@ import aiofiles
 import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException
 from yuxi import config, get_version
+from yuxi.config.app import describe_integration_credentials
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils.logging_config import logger
 
@@ -83,6 +84,16 @@ async def update_config_batch(items: dict = Body(...), current_user: User = Depe
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config.save()
     return config.dump_config()
+
+
+@system.get("/integrations/status")
+async def get_integrations_status(current_user: User = Depends(get_admin_user)) -> dict:
+    """外部服务凭证的生效值与来源（设置页「生效值」面板）。
+
+    设置页表单只反映设置页自己的快照，管理员需要看到实际生效值来自哪一侧，才能判断
+    刚改的那一项到底有没有生效。权限与设置页签一致取 admin。
+    """
+    return {"items": describe_integration_credentials()}
 
 
 @system.get("/logs")

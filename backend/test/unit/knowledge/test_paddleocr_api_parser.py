@@ -207,9 +207,10 @@ def test_paddleocr_failed_job_raises_parser_exception(tmp_path: Path, monkeypatc
         parser.process_file(str(file_path))
 
 
-def test_paddleocr_missing_token_health_and_parse_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_paddleocr_missing_token_health_and_parse_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paddleocr_runtime_config
+) -> None:
     file_path = _build_file(tmp_path)
-    monkeypatch.delenv("PADDLEOCR_API_TOKEN", raising=False)
     parser = PaddleOCRVLParser()
 
     health = parser.check_health()
@@ -338,3 +339,75 @@ def test_paddleocr_vl_drops_layout_crops_for_image_input(tmp_path: Path, monkeyp
 
     assert result == "证书标题"
     assert uploaded == []
+
+
+# =============================================================================
+# === 凭证来源：设置页优先、回退环境变量、每次解析取一次快照 ===
+# =============================================================================
+
+
+@pytest.fixture()
+def paddleocr_runtime_config(monkeypatch: pytest.MonkeyPatch):
+    """清空运行时配置的 PaddleOCR 两项与同名环境变量：本机 base.toml / .env 存过值时不会串味。"""
+    from yuxi.config.app import config
+
+    for field in ("paddleocr_api_token", "paddleocr_api_url"):
+        monkeypatch.setattr(config, field, "", raising=False)
+    for env_name in ("PADDLEOCR_API_TOKEN", "PADDLEOCR_API_URL"):
+        monkeypatch.delenv(env_name, raising=False)
+    return config
+
+
+def _stub_job_requests(monkeypatch: pytest.MonkeyPatch, submitted: dict[str, Any]) -> None:
+    def fake_post(url, headers=None, data=None, files=None, json=None, timeout=None):  # noqa: A002
+        submitted["url"] = url
+        submitted["headers"] = headers
+        return FakeResponse(200, {"data": {"jobId": "job-cred"}})
+
+    def fake_get(url, headers=None, timeout=None):
+        if url.endswith("/job-cred"):
+            return FakeResponse(200, {"data": {"state": "done", "resultUrl": {"jsonUrl": "https://result.test/cred"}}})
+        row = {"result": {"ocrResults": [{"prunedResult": {"rec_texts": ["ok"]}}]}}
+        return FakeResponse(200, text=json.dumps(row))
+
+    monkeypatch.setattr(paddleocr_api.requests, "post", fake_post)
+    monkeypatch.setattr(paddleocr_api.requests, "get", fake_get)
+
+
+def test_paddleocr_reads_credentials_at_parse_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paddleocr_runtime_config
+) -> None:
+    """解析器是进程级单例；构造之后改设置页的值，下一次解析即生效（凭证不在构造时冻结）。"""
+    submitted: dict[str, Any] = {}
+    _stub_job_requests(monkeypatch, submitted)
+    parser = PaddleOCRPPOCRv6Parser()  # 构造时两项均为空
+
+    paddleocr_runtime_config.paddleocr_api_token = "token-from-settings"
+    paddleocr_runtime_config.paddleocr_api_url = "https://settings.test/api/v2/ocr/jobs/"
+
+    assert parser.process_file(str(_build_file(tmp_path))) == "ok"
+    assert submitted["url"] == "https://settings.test/api/v2/ocr/jobs"
+    assert submitted["headers"]["Authorization"] == "bearer token-from-settings"
+
+
+def test_paddleocr_falls_back_to_env_and_builtin_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paddleocr_runtime_config
+) -> None:
+    submitted: dict[str, Any] = {}
+    _stub_job_requests(monkeypatch, submitted)
+    monkeypatch.setenv("PADDLEOCR_API_TOKEN", "token-from-env")
+
+    assert PaddleOCRPPOCRv6Parser().process_file(str(_build_file(tmp_path))) == "ok"
+    assert submitted["url"] == paddleocr_api.DEFAULT_PADDLEOCR_API_URL
+    assert submitted["headers"]["Authorization"] == "bearer token-from-env"
+
+
+def test_paddleocr_health_reports_runtime_api_url(paddleocr_runtime_config) -> None:
+    """管理员的 OCR 健康检查要能反映设置页刚改的地址，无需重启。"""
+    paddleocr_runtime_config.paddleocr_api_token = "token-from-settings"
+    paddleocr_runtime_config.paddleocr_api_url = "https://settings.test/api/v2/ocr/jobs"
+
+    health = PaddleOCRVLParser().check_health()
+
+    assert health["status"] == "configured"
+    assert health["details"]["api_url"] == "https://settings.test/api/v2/ocr/jobs"

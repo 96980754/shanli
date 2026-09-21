@@ -333,6 +333,18 @@ class Config(BaseModel):
     udesk_backfill_start_days: int | None = Field(
         default=None, description="首次拉取回灌天数；None=设置页未设置，回退 UDESK_BACKFILL_START_DAYS"
     )
+    # 外部服务凭证（设置页可改、热同步生效）。与 udesk_* 同一套优先级：设置页有值即用、
+    # 空串回退环境变量——优先级只落在 resolve_* 读取期解析器里，**不进** _handle_environment()，
+    # 否则环境变量会被写进内存配置并被 save() 持久化，运维此后改 .env 重启就再也不生效。
+    # 两个 token 按甲方要求可读回显（未列入 SECRET_CONFIG_FIELDS）：明文会出现在
+    # GET /api/system/config 的返回与 Redis 快照里，取舍见 docs/develop-guides/changelog.md。
+    tavily_api_key: str = Field(default="", description="Tavily 联网搜索 API Key（设置页优先，回退 TAVILY_API_KEY）")
+    paddleocr_api_token: str = Field(
+        default="", description="PaddleOCR API Token（设置页优先，回退 PADDLEOCR_API_TOKEN）"
+    )
+    paddleocr_api_url: str = Field(
+        default="", description="PaddleOCR API 地址（空则回退 PADDLEOCR_API_URL，再回退内置默认地址）"
+    )
 
     sandbox_provider: str = Field(default="provisioner", description="沙箱提供者")
     sandbox_provisioner_url: str = Field(default="http://sandbox-provisioner:8002", description="沙箱服务地址")
@@ -644,3 +656,65 @@ def resolve_embedding_model(spec: str | None = None) -> str:
 def resolve_reranker_model(spec: str | None = None) -> str:
     """知识库未显式指定重排序模型时，跟随设置-基本设置的全局默认 reranker。"""
     return spec or config.reranker
+
+
+# 外部服务凭证的来源标签（与 udesk 的 sources 取值一致，前端按同一套标签渲染）
+SOURCE_SETTINGS = "settings"
+SOURCE_ENV = "env"
+SOURCE_UNSET = "unset"
+
+
+def _resolve_credential(field: str, env_name: str) -> tuple[str, str]:
+    """外部服务凭证取值与来源：设置页有值即用，否则环境变量，都没有则空值。
+
+    空串一律视为「设置页未设置」（与 udesk 同一口径），所以清空设置页的值即可退回
+    环境变量——这也是凭证配错后唯一的自救路径。
+    """
+    value = str(getattr(config, field, "") or "").strip()
+    if value:
+        return value, SOURCE_SETTINGS
+    env_value = (os.getenv(env_name) or "").strip()
+    return (env_value, SOURCE_ENV) if env_value else ("", SOURCE_UNSET)
+
+
+def resolve_tavily_api_key() -> str:
+    """Tavily API Key 生效值（设置页优先，回退 TAVILY_API_KEY）。"""
+    return _resolve_credential("tavily_api_key", "TAVILY_API_KEY")[0]
+
+
+def resolve_paddleocr_api_token() -> str:
+    """PaddleOCR API Token 生效值（设置页优先，回退 PADDLEOCR_API_TOKEN）。"""
+    return _resolve_credential("paddleocr_api_token", "PADDLEOCR_API_TOKEN")[0]
+
+
+def resolve_paddleocr_api_url() -> str:
+    """PaddleOCR API 地址生效值；三处都没有时返回空，由解析器兜内置默认地址。"""
+    return _resolve_credential("paddleocr_api_url", "PADDLEOCR_API_URL")[0]
+
+
+def is_usable_api_token(value: str) -> bool:
+    """凭据能否直接用于请求：拒绝占位注释与非 ASCII/夹带空白的值。
+
+    模板示例行曾被整串抄进 `.env`，使 TAVILY_API_KEY 变成注释原文——非空检查能过、
+    请求必失败（见 changelog 的 ascii 编码事故）。注册工具与联网补答共用本判定，
+    避免「非空」与「可用」两套规则漂移。
+    """
+    return bool(value) and value.isascii() and not value.startswith("#") and not any(ch.isspace() for ch in value)
+
+
+def describe_integration_credentials() -> dict[str, dict[str, str]]:
+    """三项外部服务凭证的生效值与来源，供设置页「生效值」面板只读展示。
+
+    `.env` 与设置页存在合并关系，页面表单只反映设置页自己的快照；管理员要看到实际生效
+    值与它来自哪一侧，才能判断自己刚改的那一项到底有没有生效。
+    """
+    env_names = {
+        "tavily_api_key": "TAVILY_API_KEY",
+        "paddleocr_api_token": "PADDLEOCR_API_TOKEN",
+        "paddleocr_api_url": "PADDLEOCR_API_URL",
+    }
+    items: dict[str, dict[str, str]] = {}
+    for field, env_name in env_names.items():
+        value, source = _resolve_credential(field, env_name)
+        items[field] = {"value": value, "source": source}
+    return items

@@ -119,9 +119,17 @@ async def test_compose_chinese_draft_forces_chinese_and_uses_sources(monkeypatch
     assert "正文 A" in user_content
 
 
-def test_build_client_requires_tavily_api_key(monkeypatch):
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+@pytest.fixture()
+def tavily_runtime_config(monkeypatch):
+    """清空运行时配置里的 Tavily Key 与同名环境变量：本机 base.toml / .env 存过值时不会串味。"""
+    from yuxi.config.app import config
 
+    monkeypatch.setattr(config, "tavily_api_key", "", raising=False)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    return config
+
+
+def test_build_client_requires_tavily_api_key(tavily_runtime_config):
     with pytest.raises(ValueError, match="TAVILY_API_KEY"):
         KnowledgeGapWebSearchService._build_client()
 
@@ -134,19 +142,33 @@ def test_build_client_requires_tavily_api_key(monkeypatch):
         "tvly-abc def",
     ],
 )
-def test_build_client_rejects_placeholder_or_non_ascii_key(monkeypatch, bad_key):
+def test_build_client_rejects_placeholder_or_non_ascii_key(tavily_runtime_config, monkeypatch, bad_key):
     monkeypatch.setenv("TAVILY_API_KEY", bad_key)
 
     with pytest.raises(ValueError, match="配置无效"):
         KnowledgeGapWebSearchService._build_client()
 
 
-def test_build_client_accepts_real_ascii_key(monkeypatch):
+def test_build_client_accepts_real_ascii_key(tavily_runtime_config, monkeypatch):
     monkeypatch.setenv("TAVILY_API_KEY", "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")
 
     client = KnowledgeGapWebSearchService._build_client()
 
     assert client is not None
+
+
+def test_build_client_uses_settings_page_key_over_env(tavily_runtime_config, monkeypatch):
+    """设置页填的 Key 无需重启即对联网补答生效（_build_client 每次调用都重新解析）。"""
+    captured = {}
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-from-env")
+    tavily_runtime_config.tavily_api_key = "tvly-from-settings"
+    monkeypatch.setattr(
+        "yuxi.services.knowledge_gap_web_search_service.AsyncTavilyClient",
+        lambda api_key: captured.update(api_key=api_key) or "client",
+    )
+
+    assert KnowledgeGapWebSearchService._build_client() == "client"
+    assert captured["api_key"] == "tvly-from-settings"
 
 
 @pytest.mark.asyncio

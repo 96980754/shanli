@@ -48,7 +48,7 @@ cd AI知识库
 脚本会引导你完成以下配置：
 - 创建 `.env` 配置文件
 - 设置 `SILICONFLOW_API_KEY`（必需，用于调用大模型）
-- 设置 `TAVILY_API_KEY`（可选，用于搜索服务）
+- 设置 `TAVILY_API_KEY`（可选，用于搜索服务；也可部署后在管理端「设置 - 外部服务」填写，设置页优先）
 - 自动拉取必需的 Docker 镜像
 
 ::: tip API Key 获取

@@ -2414,6 +2414,26 @@ export default {
     selectTranscriptionModel: 'Select transcription model',
     contentGuardTitle: 'Content Guard Configuration',
     csAccessTitle: 'Customer-Service Access',
+    integrationsTitle: 'External Services',
+    integrationsDesc:
+      'Credentials for external services: a value set here takes priority, and an empty field falls back to the server .env. Changes take effect immediately, with no restart.',
+    integrationsEffectiveTitle: 'Effective configuration',
+    integrationsEffectiveDesc:
+      'What the server is actually running with (this page merged with the server .env). The form below only reflects values saved on this page: if a field is empty here but has a value below, it comes from the server .env — no need to re-enter it.',
+    integrationsFormTitle: 'Credentials',
+    integrationsFormDesc: 'Leave a field empty to fall back to the server .env.',
+    integrationsTavilyLabel: 'Tavily API Key',
+    integrationsTavilyPlaceholder: 'tvly-...',
+    integrationsTavilyHint: 'Web search; takes effect immediately for knowledge-gap web answers',
+    integrationsPaddleTokenLabel: 'PaddleOCR API Token',
+    integrationsPaddleTokenPlaceholder: 'API token from your PaddleOCR console',
+    integrationsPaddleTokenHint: 'Authenticates the PaddleOCR cloud API used for document parsing',
+    integrationsPaddleUrlLabel: 'PaddleOCR API URL',
+    integrationsPaddleUrlPlaceholder: 'https://.../api/v2/ocr/jobs',
+    integrationsPaddleUrlHint: 'Empty falls back to the server .env, then to the built-in default URL',
+    integrationsRestartTitle: 'Where the Tavily key applies',
+    integrationsRestartDesc:
+      'A new Tavily API Key takes effect immediately for knowledge-gap web answers; the agent tool tavily_search is registered at startup, so the api and worker services must be restarted before it picks up the new key.',
     udeskTitle: 'Udesk Integration',
     udeskDesc:
       'Configure Udesk service-record pulling (knowledge backflow): every parameter, the permanent token included, can be edited here and takes effect immediately after saving, with no restart needed.',

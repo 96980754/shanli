@@ -36,7 +36,7 @@ cp .env.template .env.prod
 | `NEO4J_PASSWORD` | 沿用 compose 默认弱密码 | 强随机值 |
 | `SILICONFLOW_API_KEY` 等模型密钥 | 无法调用模型，问答不可用 | 至少配置一个 provider |
 | `YUXI_CORS_ORIGINS` | 跨域部署时浏览器请求被拒绝；同源部署可留空 | 见「跨域（CORS）配置」 |
-| `PADDLEOCR_API_TOKEN` | 仅当把 `default_ocr_engine` 切到 `paddleocr_vl_1_6` 时需要；代码默认 `rapid_ocr`，本地无需 token | 见「文档解析」 |
+| `PADDLEOCR_API_TOKEN` | 仅当把 `default_ocr_engine` 切到 `paddleocr_vl_1_6` 时需要；代码默认 `rapid_ocr`，本地无需 token | 见「文档解析」；也可在设置页「外部服务」填写，保存即生效，环境变量仅作初始默认值 |
 | `WECOM_TOKEN` / `WECOM_ENCODING_AES_KEY` / `WECOM_CORP_ID` | 企业微信回调与客服接管不可用 | 需要该功能时填写 |
 | `UDESK_SUBDOMAIN` / `UDESK_EMAIL` / `UDESK_OPEN_API_TOKEN` | 客服记录回流不可用 | 三项均可在设置页「Udesk 对接」自助填写，保存即生效；环境变量仅作初始默认值。token 是永久凭证，属**只写字段**——保存后落服务器配置文件与 Redis 快照，但任何读取接口都不回传明文，页面只显示是否已配置 |
 

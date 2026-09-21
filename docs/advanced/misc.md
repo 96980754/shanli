@@ -39,20 +39,21 @@ LLM 检测会增加用户交互的延迟，请根据实际需求选择是否启�
 ### 配置步骤
 
 1. 访问 [Tavily 官网](https://app.tavily.com/) 注册并创建 API Key
-2. 在 `.env` 文件中添加：
-   ```env
-   TAVILY_API_KEY=sk-xxxxxxxxxxxxxxxx
-   ```
-3. 重启服务：
-   ```bash
-   docker compose up -d api-dev web-dev
-   ```
+2. 以管理员身份进入「设置 - 外部服务」，填入 `Tavily API Key` 并保存
+
+也可以在 `.env` 中配置 `TAVILY_API_KEY` 作为初始默认值（填入 `tvly-` 开头的真实 Key；把模板里那行注释整串抄进去会被判定为占位值，等同于未配置）：
+
+```env
+TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxx
+```
+
+设置页有值即优先使用，留空才回退 `.env`，两边的关系与来源可在设置页的「当前生效值」面板逐项核对。
 
 ### 使用方式
 
 配置完成后，在智能体的工具配置区域会看到 Tavily 搜索工具。模型会自动判断何时需要调用搜索来获取最新信息。
 
-如需关闭，删除或清空 `TAVILY_API_KEY` 后重启服务即可。
+改设置页的 Key 立即对「知识缺口联网补答」生效；智能体的 `tavily_search` 工具在服务启动时注册，需 `docker compose restart api worker` 后才换用新 Key。如需关闭，把设置页该字段清空（并清掉 `.env` 里的值）后重启服务即可。
 
 ## 服务端口
 

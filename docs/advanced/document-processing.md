@@ -118,19 +118,21 @@ PaddleOCR API 使用百度 AI Studio 的 Access Token。获取方式：
 
 1. 登录 [百度 AI Studio Access Token 页面](https://aistudio.baidu.com/account/accessToken)
 2. 在页面中复制 Access Token
-3. 在 `.env` 中配置为 `PADDLEOCR_API_TOKEN`
+3. 以管理员身份进入「设置 - 外部服务」，填入 `PaddleOCR API Token` 并保存，无需重启
+
+也可以在 `.env` 中配置 `PADDLEOCR_API_TOKEN` 作为初始默认值：
 
 ```env
 PADDLEOCR_API_TOKEN=your-access-token-here
 ```
 
-如需使用自定义 PaddleOCR API 地址，可额外配置：
+如需使用自定义 PaddleOCR API 地址，在同一设置页填写 `PaddleOCR API URL`（留空则回退 `.env` 的 `PADDLEOCR_API_URL`，再回退内置默认地址 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`）：
 
 ```env
 PADDLEOCR_API_URL=https://paddleocr.aistudio-app.com/api/v2/ocr/jobs
 ```
 
-配置完成后，重启后端服务，在上传文件或解析临时附件时可以选择：
+设置页有值即优先使用，留空才回退 `.env`，两边的关系与来源可在设置页的「当前生效值」面板逐项核对。解析器在每次解析开始时读取一次凭证，因此改完保存后下一次解析即生效。在上传文件或解析临时附件时可以选择：
 
 - `PaddleOCR-VL-1.6`：对应 `paddleocr_vl_1_6`，用于文档版面解析，返回 Markdown
 - `PP-OCRv6`：对应 `paddleocr_pp_ocrv6`，用于基础 OCR，返回按行拼接的纯文本
