@@ -1,4 +1,3 @@
-import os
 import re
 from pathlib import Path
 from typing import Annotated
@@ -10,6 +9,7 @@ from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
 from yuxi.agents.toolkits.registry import ToolExtraMetadata, _all_tool_instances, _extra_registry, tool
+from yuxi.config.app import is_usable_api_token, resolve_tavily_api_key
 from yuxi.utils import logger
 from yuxi.utils.paths import (
     CONVERSATION_HISTORY_DIR_NAME,
@@ -33,21 +33,23 @@ _OCR_PREVIEW_LIMIT = 1200
 _SAFE_OUTPUT_STEM_RE = re.compile(r"[^A-Za-z0-9._\-\u4e00-\u9fff]+")
 
 
-def _create_tavily_search():
+def _create_tavily_search(api_key: str):
     """Create and register TavilySearch tool with metadata."""
     global _tavily_search_instance
     if _tavily_search_instance is None:
         from langchain_tavily import TavilySearch
 
-        _tavily_search_instance = TavilySearch()
+        # 必须显式传 key：不传时 langchain_tavily 只从 os.environ 取，
+        # key 来自设置页（base.toml / Redis 快照）时会直接构造失败
+        _tavily_search_instance = TavilySearch(tavily_api_key=api_key)
 
     return _tavily_search_instance
 
 
 # 注册 TavilySearch 工具（延迟初始化）
-def _register_tavily_tool():
+def _register_tavily_tool(api_key: str):
     """Register TavilySearch tool with extra metadata."""
-    tavily_instance = _create_tavily_search()
+    tavily_instance = _create_tavily_search(api_key)
     # 手动注册到全局注册表
     _extra_registry["tavily_search"] = ToolExtraMetadata(
         category="buildin",
@@ -58,10 +60,12 @@ def _register_tavily_tool():
     _all_tool_instances.append(tavily_instance)
 
 
-# 模块加载时注册
-if os.getenv("TAVILY_API_KEY"):
+# 模块加载时注册，取「设置页优先、回退环境变量」的生效 key；占位值视为未配置
+# （is_usable_api_token），不注册一个必然失败的搜索工具。
+_tavily_api_key = resolve_tavily_api_key()
+if is_usable_api_token(_tavily_api_key):
     try:
-        _register_tavily_tool()
+        _register_tavily_tool(_tavily_api_key)
     except Exception as e:
         logger.warning(f"Failed to register TavilySearch tool: {e}")
 
@@ -119,12 +123,13 @@ def _normalize_presented_artifact_path(filepath: str, runtime: ToolRuntime) -> s
 
 
 PRESENT_ARTIFACTS_DESCRIPTION = f"""
-将已经生成好的结果文件展示给用户。
+将已经生成好的结果文件登记给用户，使其在对话结束后以文件卡片形式展示。
 
-使用场景：
-1. 你已经在 `{VIRTUAL_PATH_OUTPUTS}` 下写好了最终结果文件
-2. 你希望前端在对话结束后显示这些结果文件卡片
-3. 这些文件需要支持下载或预览
+必须使用：
+1. 你已经在 `{VIRTUAL_PATH_OUTPUTS}` 下写好了要交付给用户的最终结果文件
+2. 这些文件需要支持下载或预览
+
+未登记的文件不会出现在对话中，用户只能自行到文件面板查找。
 
 注意事项：
 1. 只能传入 `{VIRTUAL_PATH_OUTPUTS}` 下的文件
