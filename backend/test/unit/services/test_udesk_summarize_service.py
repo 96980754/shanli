@@ -10,6 +10,7 @@ from sqlalchemy.sql.elements import TextClause
 
 from yuxi.repositories.curated_qa_repository import hash_qa_question, normalize_qa_question
 from yuxi.services.udesk.summarize_service import (
+    UnparsableModelOutputError,
     UdeskSummarizeService,
     build_prompt,
     extract_candidates,
@@ -44,10 +45,12 @@ def test_extract_candidates_tolerates_fences_and_rejects_garbage():
     assert extract_candidates('[{"question": "q"}]') == [{"question": "q"}]  # 容忍裸数组
     assert extract_candidates('{"candidates": ["x", {"question": "q"}]}') == [{"question": "q"}]  # 非法项剔除
 
+    # 异常类型是契约：run_batch 靠它把「确定性失败」与「瞬时失败」分开——
+    # 前者打标跳过，后者下轮重试。退化成普通 ValueError 会静默恢复成无限重试。
     for garbage in ("不是 JSON", "{}", '{"candidates": 1}', ""):
         try:
             extract_candidates(garbage)
-        except ValueError:
+        except UnparsableModelOutputError:
             continue
         raise AssertionError(f"应拒绝无效输出: {garbage!r}")
 
@@ -371,6 +374,28 @@ async def test_run_batch_llm_failure_leaves_unsummarized_for_retry():
     assert not session.sqls("UPDATE udesk_conversations")  # 未打标，下轮重试
     assert not session.sqls("curated_qa_candidates")
     assert session.sqls("<ROLLBACK>")
+
+
+async def test_run_batch_marks_conversation_when_model_output_unparsable():
+    """输出解析不了是确定性失败，必须打标——与瞬时失败的处理相反。
+
+    token 在模型答完的那一刻就花掉了，输出再解析不了等于白花。若照旧不打标，
+    这条会话会按 started_at 排在队首，每小时 cron 拿同一份输入反复烧一遍，
+    占满批次额度后新会话再也进不来（页面表现为「总结一直在跑但没有新候选」）。
+    """
+    session = FakeSession(
+        conversations=[conversation()],
+        messages={"c1": [message(m["role"], m["content"]) for m in SUBSTANTIVE_MESSAGES]},
+    )
+    # 模型带前后缀输出（真实里最常见的形态）：不是纯 JSON，解析必然失败
+    generate = make_generate(['好的，整理结果如下：\n{"candidates": []}'])
+
+    totals = await make_service(session, generate).run_batch(limit=10)
+
+    assert totals == {"status": "failed", "processed": 1, "candidates": 0, "skipped_filtered": 0, "failed": 1}
+    assert session.sqls("<ROLLBACK>")
+    assert session.sqls("UPDATE udesk_conversations")  # 打标，不再重试
+    assert session.sqls("<COMMIT>")
 
 
 async def test_run_batch_invalid_candidates_still_marks_summarized():

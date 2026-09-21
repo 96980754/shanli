@@ -8,8 +8,10 @@
   逐字摘自会话记录（核对时忽略空白差异）；违反即丢弃该条候选，不放行到审核页。
 - **幂等**（D17）：候选写入 ON CONFLICT (source_conversation_id, question_hash)
   DO NOTHING；问题归一化口径与 curated_qa_repository 一致，采纳时可直接迁移。
-- **断点续跑**：每会话处理完成即打 summarized_at 并提交；LLM 失败不打标，
-  下一轮重试（重试产生的重复候选由唯一键吸收）。
+- **断点续跑**：每会话处理完成即打 summarized_at 并提交。**瞬时**失败（网络/超时/DB）
+  不打标，下一轮重试（重试产生的重复候选由唯一键吸收）；**确定性**失败
+  （模型输出解析不了）重试同样的输入不会自愈，打标跳过，理由见
+  UnparsableModelOutputError。
 - 入库内容已在拉取侧脱敏（C3/C1），送模型的不含客户标识。
 """
 
@@ -46,6 +48,15 @@ _URL_RE = re.compile(r"https?://[^\s)>]+")
 _MODEL_RE = re.compile(r"\b[A-Z][A-Z0-9]*(?:[-_/][A-Za-z0-9.]+)+\b")
 
 GenerateFn = Callable[[list[dict[str, str]]], Awaitable[str]]
+
+
+class UnparsableModelOutputError(ValueError):
+    """模型输出解析不出候选数组——确定性失败，重试没有意义。
+
+    与网络/超时/DB 这类瞬时故障分开：那类重试会自愈，这类不会。而重试的代价是
+    真金白银——模型已经答完，token 已经花掉，结果整条丢弃。若照旧每小时重试，
+    同一条会话会按 started_at 排在队首反复占用批次额度，占满后新会话再也进不来。
+    """
 
 
 def _without_whitespace(value: str) -> str:
@@ -120,11 +131,11 @@ def extract_candidates(raw_text: str) -> list[dict[str, Any]]:
     try:
         parsed = json.loads(payload)
     except (TypeError, ValueError) as exc:
-        raise ValueError("模型输出不是有效 JSON") from exc
+        raise UnparsableModelOutputError("模型输出不是有效 JSON") from exc
     if isinstance(parsed, dict):
         parsed = parsed.get("candidates")
     if not isinstance(parsed, list):
-        raise ValueError("模型输出必须包含 candidates 数组")
+        raise UnparsableModelOutputError("模型输出必须包含 candidates 数组")
     return [item for item in parsed if isinstance(item, dict)]
 
 
@@ -256,28 +267,27 @@ class UdeskSummarizeService:
                     totals["processed"] += 1
                     if not has_substantive_qa(message_dicts):
                         # 筛掉即打标：寒暄/纯转接/未答复不再反复送 LLM（P5-1）
-                        await session.execute(
-                            update(UdeskConversation)
-                            .where(UdeskConversation.id == conversation_pk)
-                            .values(summarized_at=self._now())
-                        )
-                        await session.commit()
+                        await self._mark_summarized(session, conversation_pk)
                         totals["skipped_filtered"] += 1
                         continue
                     try:
                         inserted = await self._summarize_conversation(session, conversation_id, message_dicts)
+                    except UnparsableModelOutputError as exc:
+                        # 确定性失败：输出解析不了，同样的输入再送一次还是解析不了，
+                        # 而 token 已经花掉了。打标跳过，否则每小时 cron 反复烧同一条。
+                        await session.rollback()
+                        totals["failed"] += 1
+                        last_error = f"{conversation_id}: {type(exc).__name__}: {exc}"[:500]
+                        logger.warning(f"udesk summarize unparsable conversation={conversation_id} reason={last_error}")
+                        await self._mark_summarized(session, conversation_pk)
+                        continue
                     except Exception as exc:  # noqa: BLE001 - 单会话失败不阻塞整批，下轮重试
                         await session.rollback()
                         totals["failed"] += 1
                         last_error = f"{conversation_id}: {type(exc).__name__}: {exc}"[:500]
                         logger.warning(f"udesk summarize failed conversation={conversation_id} reason={last_error}")
                         continue
-                    await session.execute(
-                        update(UdeskConversation)
-                        .where(UdeskConversation.id == conversation_pk)
-                        .values(summarized_at=self._now())
-                    )
-                    await session.commit()
+                    await self._mark_summarized(session, conversation_pk)
                     totals["candidates"] += inserted
             except Exception as exc:  # noqa: BLE001 - 整批中断也要落状态，不能永久停在 running
                 await session.rollback()
@@ -330,6 +340,13 @@ class UdeskSummarizeService:
         )
         result = await session.execute(statement)
         return result.rowcount if result.rowcount and result.rowcount > 0 else 0
+
+    async def _mark_summarized(self, session: AsyncSession, conversation_pk: int) -> None:
+        """打标并提交：本条不再进入后续批次（筛掉的、总结完的、确定性失败的共用）。"""
+        await session.execute(
+            update(UdeskConversation).where(UdeskConversation.id == conversation_pk).values(summarized_at=self._now())
+        )
+        await session.commit()
 
     async def _existing_hashes(self, session: AsyncSession, hashes: list[str]) -> set[str]:
         result = await session.execute(
