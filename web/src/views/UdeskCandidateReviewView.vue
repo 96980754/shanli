@@ -110,7 +110,9 @@
         <template v-else-if="column.key === 'confidence'">
           <span v-if="record.confidence != null">{{ (record.confidence * 100).toFixed(0) }}%</span>
           <span v-else class="muted">-</span>
-          <div v-if="record.ambiguity_note" class="ambiguity-note">{{ record.ambiguity_note }}</div>
+          <a-tooltip v-if="record.ambiguity_note" :title="record.ambiguity_note" placement="topLeft">
+            <div class="ambiguity-note">{{ record.ambiguity_note }}</div>
+          </a-tooltip>
         </template>
 
         <template v-else-if="column.key === 'dedup_status'">
