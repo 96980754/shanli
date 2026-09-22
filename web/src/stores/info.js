@@ -1,18 +1,54 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { brandApi } from '@/apis/system_api'
+import { useLocaleStore } from '@/stores/locale'
+
+// 品牌文案里需要双语的字段：在 info.template.yaml 中以 `<字段>_en` 声明英文值。
+// 英文界面下用它覆盖基准字段，未配置 `_en` 时回退中文——品牌配置来自静态
+// yaml 而非语言包，所以英文只能由配置方提供，这里只负责按语言挑选。
+const LOCALIZED_TEXT_KEYS = {
+  organization: ['name'],
+  branding: ['name', 'title', 'subtitle', 'subtitles'],
+  footer: ['copyright']
+}
+
+function withEnglishText(section, keys) {
+  if (!section) return section
+  const localized = { ...section }
+  for (const key of keys) {
+    const english = section[`${key}_en`]
+    if (Array.isArray(english) ? english.length > 0 : english) {
+      localized[key] = english
+    }
+  }
+  return localized
+}
 
 export const useInfoStore = defineStore('info', () => {
+  const localeStore = useLocaleStore()
+
   // 状态
   const infoConfig = ref({})
   const isLoading = ref(false)
   const isLoaded = ref(false)
   const debugMode = ref(false)
 
+  // 按当前语言挑好文案的配置，下面三个计算属性都从它取值
+  const localizedInfo = computed(() => {
+    const config = infoConfig.value || {}
+    if (localeStore.locale !== 'en-US') return config
+    return {
+      ...config,
+      organization: withEnglishText(config.organization, LOCALIZED_TEXT_KEYS.organization),
+      branding: withEnglishText(config.branding, LOCALIZED_TEXT_KEYS.branding),
+      footer: withEnglishText(config.footer, LOCALIZED_TEXT_KEYS.footer)
+    }
+  })
+
   // 计算属性 - 组织信息
   const organization = computed(
     () =>
-      infoConfig.value.organization || {
+      localizedInfo.value.organization || {
         name: '',
         logo: '',
         avatar: ''
@@ -22,7 +58,7 @@ export const useInfoStore = defineStore('info', () => {
   // 计算属性 - 品牌信息
   const branding = computed(
     () =>
-      infoConfig.value.branding || {
+      localizedInfo.value.branding || {
         name: '',
         title: '',
         subtitle: '',
@@ -35,7 +71,7 @@ export const useInfoStore = defineStore('info', () => {
     copyright: '',
     user_agreement_url: '',
     privacy_policy_url: '',
-    ...(infoConfig.value.footer || {})
+    ...(localizedInfo.value.footer || {})
   }))
 
   // 动作方法

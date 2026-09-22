@@ -32,6 +32,33 @@ YUXI_BRAND_FILE_PATH=backend/package/yuxi/config/static/info.local.yaml
 `info.local.yaml` > `info.template.yaml`（默认）
 :::
 
+## 英文界面文案
+
+界面切到 English 时，品牌文案取自同名的 `<字段>_en`；该字段缺省或为空则回退中文，因此**只配中文也能正常工作**。
+
+需要双语的字段（定义见 `web/src/stores/info.js` 的 `LOCALIZED_TEXT_KEYS`）：
+
+| 配置项 | 英文键 | 显示位置 |
+| :--- | :--- | :--- |
+| `organization.name` | `organization.name_en` | 登录页、首页、侧栏 |
+| `branding.name` | `branding.name_en` | 登录页、状态栏 |
+| `branding.title` | `branding.title_en` | 首页主标题 |
+| `branding.subtitle` | `branding.subtitle_en` | 状态栏副标题 |
+| `branding.subtitles` | `branding.subtitles_en` | 首页轮播副标题（数组，需整体提供） |
+| `footer.copyright` | `footer.copyright_en` | 页脚 |
+
+```yaml
+organization:
+  name: "AI知识库"
+  name_en: "AI Knowledge Base"
+
+branding:
+  subtitle: "开源智能体平台套件，融合 RAG 与知识图谱"
+  subtitle_en: "An open-source agent platform suite with RAG and knowledge graphs"
+```
+
+`footer.copyright` 与 `copyright_en` 都支持 `{{YUXI_VERSION}}` 版本占位符。
+
 ## 登录协议配置
 
 登录页支持从品牌配置中读取用户协议与隐私协议链接。

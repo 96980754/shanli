@@ -110,7 +110,8 @@ const emit = defineEmits([
 const inputRef = ref(null)
 const currentImage = ref(null)
 const { t } = useI18n()
-const placeholder = t('msgInput.askPlaceholder')
+// 必须用 computed：setup 期把 t() 的结果存成字符串，切换语言后不会重算
+const placeholder = computed(() => t('msgInput.askPlaceholder'))
 
 const previewAttachments = computed(() => normalizeAttachmentPreviews(props.attachments))
 

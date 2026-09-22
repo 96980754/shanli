@@ -413,7 +413,7 @@ provide('settingsModal', {
       <div class="foo">
         <!-- 语言切换 -->
         <div class="nav-item user-info" @click.stop>
-          <LanguageToggle />
+          <LanguageToggle :show-label="!sidebarCollapsed" />
         </div>
         <!-- 用户信息组件 -->
         <div class="nav-item user-info" @click.stop>

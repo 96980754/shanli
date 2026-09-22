@@ -6,9 +6,7 @@
         <template v-if="userStore.isSuperAdmin">
           <div class="setting-row two-cols">
             <div class="col-item">
-              <div class="setting-label">
-                {{ items?.default_model?.des || $t('settings.defaultChatModel') }}
-              </div>
+              <div class="setting-label">{{ $t('settings.defaultChatModel') }}</div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   @select-model="handleChatModelSelect"
@@ -18,7 +16,7 @@
               </div>
             </div>
             <div class="col-item">
-              <div class="setting-label">{{ items?.fast_model?.des }}</div>
+              <div class="setting-label">{{ $t('settings.fastModel') }}</div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   @select-model="handleFastModelSelect"
@@ -30,7 +28,7 @@
           </div>
           <div class="setting-row two-cols">
             <div class="col-item">
-              <div class="setting-label">{{ items?.embed_model?.des }}</div>
+              <div class="setting-label">{{ $t('settings.embedModel') }}</div>
               <div class="setting-content">
                 <EmbeddingModelSelector
                   :value="configStore.config?.embed_model"
@@ -40,7 +38,7 @@
               </div>
             </div>
             <div class="col-item">
-              <div class="setting-label">{{ items?.reranker?.des }}</div>
+              <div class="setting-label">{{ $t('settings.rerankerModel') }}</div>
               <div class="setting-content">
                 <RerankModelSelector
                   :value="configStore.config?.reranker"
@@ -52,9 +50,7 @@
           </div>
           <div class="setting-row two-cols">
             <div class="col-item">
-              <div class="setting-label">
-                {{ items?.default_ocr_engine?.des || $t('settings.defaultOcrEngine') }}
-              </div>
+              <div class="setting-label">{{ $t('settings.defaultOcrEngine') }}</div>
               <div class="setting-content">
                 <a-select
                   :value="configStore.config?.default_ocr_engine || 'rapid_ocr'"
@@ -72,9 +68,7 @@
               </div>
             </div>
             <div class="col-item">
-              <div class="setting-label">
-                {{ items?.transcription_model?.des || $t('settings.defaultTranscriptionModel') }}
-              </div>
+              <div class="setting-label">{{ $t('settings.defaultTranscriptionModel') }}</div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   :model_spec="configStore.config?.transcription_model"
