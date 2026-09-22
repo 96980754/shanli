@@ -1433,6 +1433,7 @@ class PostgresManager(metaclass=SingletonMeta):
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_status VARCHAR(32)",
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_error TEXT",
             "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_run_at TIMESTAMPTZ",
+            "ALTER TABLE IF EXISTS udesk_sync_state ADD COLUMN IF NOT EXISTS summarize_last_candidates INTEGER",
             # 单行种子必须放在这批 ADD COLUMN **之后**，两条约束同时成立才行：
             # ① 必须显式给出全部 NOT NULL 列。这张表同时被 ORM 模型和上面的手写 DDL 定义，
             #    而 create_tables() 的 create_all 先于本函数执行、且对已存在的表不再改动，

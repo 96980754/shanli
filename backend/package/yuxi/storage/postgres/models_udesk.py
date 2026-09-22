@@ -123,7 +123,8 @@ class CuratedQACandidate(Base):
     ambiguity_note = Column(Text, nullable=True)
     # 查重结论：pending / duplicate / conflict / unique
     dedup_status = Column(String(32), nullable=False, default="pending")
-    # 审核状态：pending / accepted / rejected（C6：审核通过前绝不写入启用问答对）
+    # 审核状态：pending / accepted（C6：审核通过前绝不写入启用问答对）。
+    # 不采纳就是删除行，不再落 rejected；历史行仍可能是 rejected，前端按只读标签渲染。
     review_status = Column(String(32), nullable=False, default="pending")
     reviewed_by = Column(String(100), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
@@ -188,6 +189,10 @@ class UdeskSyncState(Base):
     summarize_status = Column(String(32), nullable=True)
     summarize_last_error = Column(Text, nullable=True)
     summarize_last_run_at = Column(DateTime(timezone=True), nullable=True)
+    # 本轮真实新增的候选问答条数。页面要落一句「新生成 N 条候选问答对」，
+    # 而 run_batch 的计数原先只返回给 arq 就丢了——这里存下来，累计口径
+    # （候选表总行数）与单轮口径才分得开
+    summarize_last_candidates = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -207,5 +212,6 @@ class UdeskSyncState(Base):
             "summarize_status": self.summarize_status,
             "summarize_last_error": self.summarize_last_error,
             "summarize_last_run_at": format_utc_datetime(self.summarize_last_run_at),
+            "summarize_last_candidates": self.summarize_last_candidates,
             "updated_at": format_utc_datetime(self.updated_at),
         }

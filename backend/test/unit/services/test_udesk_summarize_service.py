@@ -234,6 +234,11 @@ class FakeSession:
         return [sql for sql, _ in self.executed if needle in sql]
 
 
+def outcome_params(session):
+    """回写状态表那条 UPDATE 的绑定参数。"""
+    return next(params for sql, params in session.executed if "summarize_status = :status" in sql)
+
+
 class _SessionContext:
     def __init__(self, session):
         self._session = session
@@ -292,6 +297,8 @@ async def test_run_batch_marks_filtered_conversation_without_llm():
     assert generate.calls == []  # 未送 LLM
     assert session.sqls("UPDATE udesk_conversations")
     assert session.sqls("<COMMIT>")
+    # 0 与「没跑过」在页面上是两句话，跑到但没产出必须落 0 而不是 NULL
+    assert outcome_params(session)["candidates"] == 0
 
 
 async def test_run_batch_inserts_candidates_and_marks_summarized():
@@ -327,6 +334,8 @@ async def test_run_batch_inserts_candidates_and_marks_summarized():
     assert "unique" in session.insert_params.values()
     assert "c1" in session.insert_params.values()  # 来源会话随行落库，不再是 NULL
     assert session.sqls("UPDATE udesk_conversations") and session.sqls("<COMMIT>")
+    # 本轮真实新增条数落状态表，页面才显示得出「新生成 N 条候选问答对」
+    assert outcome_params(session)["candidates"] == 1
     # 提示词带业务域代码与消息内容
     system = generate.calls[0][0]["content"]
     user = generate.calls[0][1]["content"]
@@ -454,8 +463,7 @@ async def test_run_batch_continues_after_one_conversation_fails():
     assert len(session.sqls("UPDATE udesk_conversations")) == 1
     assert len(session.sqls("curated_qa_candidates")) == 1
     # 真实原因写进状态表，而不是被二次异常顶掉后无声无息
-    recorded = [params.get("error") for sql, params in session.executed if "summarize_status = :status" in sql]
-    assert any(error and "model down" in error for error in recorded)
+    assert "model down" in outcome_params(session)["error"]
     # 租约无论成败都要释放，否则下一轮永远抢不到
     assert session.sqls("summarize_lease_expires_at = NULL")
 
@@ -473,3 +481,5 @@ async def test_run_batch_skips_when_summarize_lease_held():
     # 被租约挡下也留痕，页面才分得清「没跑」和「被挡了」
     assert any("summarize_status = :status" in sql for sql, _ in session.executed)
     assert not session.sqls("summarize_lease_expires_at = NULL")  # 不能释放别人的租约
+    # 被挡下的不算一轮，candidates 传 NULL 让 COALESCE 留住上一轮的数字
+    assert outcome_params(session)["candidates"] is None

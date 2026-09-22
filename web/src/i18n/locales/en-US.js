@@ -1353,13 +1353,10 @@ export default {
     reviewAction: 'Review',
     reviewTitle: 'Review candidate',
     acceptAction: 'Accept',
-    rejectAction: 'Reject',
     acceptHint: 'Accepted items go to QA pair management (disabled by default; enable to take effect)',
-    agentPlaceholder: 'Select target agent',
+    agentUnavailable: 'Agent list unavailable, cannot accept right now; please refresh the page',
     acceptSuccess: 'Accepted; enable it in QA pair management',
     acceptFailed: 'Failed to accept, please retry later',
-    rejectSuccess: 'Rejected',
-    rejectFailed: 'Failed to reject, please retry later',
     contextTitle: 'Source conversation',
     contextConversation: 'Conversation',
     contextStartedAt: 'Started at',
@@ -1385,6 +1382,9 @@ export default {
     summarizeRunning: 'Generating...',
     summarizePending: 'Candidate QA to generate',
     summarizeNoPending: 'No conversations to summarize; sync records first',
+    summarizeGenerated: '{count} new candidate QA pairs generated',
+    syncScope:
+      'Sync scope: first sync goes back {days} days; later syncs cover what is new since the last one (with {minutes} minutes of overlap)',
     countsLine: '{pending} pending review'
   },
   udeskConversations: {

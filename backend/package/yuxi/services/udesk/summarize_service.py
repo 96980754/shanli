@@ -234,6 +234,7 @@ class UdeskSummarizeService:
         totals = {"processed": 0, "candidates": 0, "skipped_filtered": 0, "failed": 0}
         async with self._session_factory() as session:
             if not await self._acquire_lease(session):
+                # 被租约挡下时不算一轮，candidates 传 None 保持上一轮的数字
                 await self._record_outcome(session, last_error=None, skipped=True)
                 await session.commit()
                 return {"status": "skipped_lease", **totals}
@@ -295,7 +296,7 @@ class UdeskSummarizeService:
                 logger.warning(f"udesk summarize aborted reason={last_error}")
             finally:
                 await self._release_lease(session)
-                await self._record_outcome(session, last_error=last_error)
+                await self._record_outcome(session, last_error=last_error, candidates=totals["candidates"])
                 await session.commit()
         return {"status": "failed" if last_error else "succeeded", **totals}
 
@@ -376,9 +377,20 @@ class UdeskSummarizeService:
     async def _release_lease(self, session: AsyncSession) -> None:
         await session.execute(text("UPDATE udesk_sync_state SET summarize_lease_expires_at = NULL WHERE id = 1"))
 
-    async def _record_outcome(self, session: AsyncSession, *, last_error: str | None, skipped: bool = False) -> None:
+    async def _record_outcome(
+        self,
+        session: AsyncSession,
+        *,
+        last_error: str | None,
+        skipped: bool = False,
+        candidates: int | None = None,
+    ) -> None:
         """落本轮状态。有失败原因就记 failed——「整批跑完但每个会话都失败」对外
         不能显示成成功，否则页面看着一切正常而候选一条都没多。
+
+        candidates 是本轮真实新增的候选条数（页面上的「新生成 N 条候选问答对」）。
+        传 None 表示这不算一轮（被租约挡下），用 COALESCE 保留上一轮的数字，
+        否则「已有任务在跑」会把页面上刚生成的条数抹成空。
         """
         if skipped:
             status = "skipped_lease"
@@ -388,11 +400,13 @@ class UdeskSummarizeService:
             text(
                 """
                 UPDATE udesk_sync_state
-                SET summarize_status = :status, summarize_last_error = :error, updated_at = :now
+                SET summarize_status = :status, summarize_last_error = :error,
+                    summarize_last_candidates = COALESCE(CAST(:candidates AS INTEGER), summarize_last_candidates),
+                    updated_at = :now
                 WHERE id = 1
                 """
             ),
-            {"status": status, "error": last_error, "now": self._now()},
+            {"status": status, "error": last_error, "candidates": candidates, "now": self._now()},
         )
 
 

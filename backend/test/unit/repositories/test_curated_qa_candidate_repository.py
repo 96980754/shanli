@@ -81,6 +81,25 @@ async def test_set_review_updates_status_with_operator_and_note():
     assert "review_status" in sql and "reviewed_by" in sql and "review_note" in sql
 
 
+async def test_delete_removes_rows_by_id_and_returns_rowcount():
+    session = FakeSession([FakeResult(rowcount=2)])
+    repo = CuratedQACandidateRepository(session)
+
+    assert await repo.delete([5, 6]) == 2
+
+    sql = str(session.executed[0])
+    assert sql.startswith("DELETE FROM curated_qa_candidates") and "id IN" in sql
+
+
+async def test_delete_with_empty_ids_skips_query():
+    """空列表不该下发一条 `WHERE id IN ()` 的空删除。"""
+    session = FakeSession([])
+    repo = CuratedQACandidateRepository(session)
+
+    assert await repo.delete([]) == 0
+    assert session.executed == []
+
+
 async def test_existing_question_hashes_queries_curated_pairs():
     session = FakeSession([FakeResult(rows=[("abc",)])])
     repo = CuratedQACandidateRepository(session)

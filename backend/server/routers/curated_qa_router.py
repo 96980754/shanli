@@ -49,10 +49,6 @@ class QaCandidateAcceptRequest(BaseModel):
     answer: str | None = Field(default=None, max_length=20_000)
 
 
-class QaCandidateRejectRequest(BaseModel):
-    note: str | None = Field(default=None, max_length=2000)
-
-
 @curated_qa_dashboard.get("/feedbacks/{feedback_id}/tuning-context")
 async def get_feedback_tuning_context(
     feedback_id: int,
@@ -232,23 +228,19 @@ async def accept_qa_candidate(
     return {"item": qa_pair.to_dict()}
 
 
-@curated_qa_dashboard.post("/qa-candidates/{candidate_id}/reject")
-async def reject_qa_candidate(
+@curated_qa_dashboard.delete("/qa-candidates/{candidate_id}")
+async def delete_qa_candidate(
     candidate_id: int,
-    payload: QaCandidateRejectRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_superadmin_user),
 ):
-    """拒绝候选：记录原因（review_note），不做其他副作用。"""
-    candidate_repo = CuratedQACandidateRepository(db)
-    candidate = await candidate_repo.get(candidate_id)
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="候选记录不存在")
-    updated = await candidate_repo.set_review(
-        [candidate.id], review_status="rejected", reviewed_by=str(current_user.uid), note=payload.note
-    )
+    """删除候选：不可恢复，前端须二次确认（与问答对管理的删除同一语义）。"""
+    del current_user
+    deleted = await CuratedQACandidateRepository(db).delete([candidate_id])
     await db.commit()
-    return {"updated": updated}
+    if not deleted:
+        raise HTTPException(status_code=404, detail="候选记录不存在")
+    return {"deleted": deleted}
 
 
 @curated_qa_dashboard.get("/udesk-status")
@@ -289,8 +281,9 @@ async def get_udesk_status(
             "conversations": conversations,
             "messages": messages,
             "candidates": candidates,
-            # 采纳/拒绝只改 review_status、不删候选行，而审核列表默认只看 pending，
-            # 故累计的 candidates 与列表条数天然不等——两个口径都给出，避免对不上。
+            # 采纳只改 review_status、不删行，而审核列表默认只看 pending，故累计的
+            # candidates 与列表条数天然不等——两个口径都给出，避免对不上。
+            # （删除是真删行，已删的不会再计入累计。）
             "candidates_pending": candidates_pending,
         },
         "pull": {
@@ -380,12 +373,20 @@ async def _load_summarize_state(db: AsyncSession) -> dict[str, Any]:
     """总结链路的运行状态；进度不另设计数器，由会话总数与待总结数现算。"""
     state = (await db.execute(select(UdeskSyncState).where(UdeskSyncState.id == 1))).scalar_one_or_none()
     if state is None:
-        return {"running": False, "last_run_at": None, "last_run_status": None, "last_error": None}
+        return {
+            "running": False,
+            "last_run_at": None,
+            "last_run_status": None,
+            "last_error": None,
+            "last_candidates": None,
+        }
     return {
         "running": bool(state.summarize_lease_expires_at and state.summarize_lease_expires_at > utc_now()),
         "last_run_at": format_utc_datetime(state.summarize_last_run_at),
         "last_run_status": state.summarize_status,
         "last_error": state.summarize_last_error,
+        # None = 还没跑过任何一轮；0 是有效值（跑了但没产出新候选），前端要区分
+        "last_candidates": state.summarize_last_candidates,
     }
 
 

@@ -1,5 +1,6 @@
 import {
   apiAdminGet,
+  apiSuperAdminDelete,
   apiSuperAdminGet,
   apiSuperAdminPatch,
   apiSuperAdminPost,
@@ -172,13 +173,12 @@ export const dashboardApi = {
     apiSuperAdminPost(`/api/dashboard/qa-candidates/${candidateId}/accept`, data),
 
   /**
-   * 拒绝候选（记录原因）
+   * 删除候选（不可恢复，前端须二次确认）
    * @param {number} candidateId - 候选 ID
-   * @param {Object} data - { note? }
-   * @returns {Promise<Object>} - { updated }
+   * @returns {Promise<Object>} - { deleted }
    */
-  rejectQaCandidate: (candidateId, data) =>
-    apiSuperAdminPost(`/api/dashboard/qa-candidates/${candidateId}/reject`, data),
+  deleteQaCandidate: (candidateId) =>
+    apiSuperAdminDelete(`/api/dashboard/qa-candidates/${candidateId}`),
 
   /**
    * 客服会话只读列表（含被确定性筛掉、从未产出候选的会话）

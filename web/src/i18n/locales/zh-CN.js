@@ -1320,13 +1320,10 @@ export default {
     reviewAction: '审核',
     reviewTitle: '审核候选知识',
     acceptAction: '采纳',
-    rejectAction: '拒绝',
     acceptHint: '采纳后进入问答对管理（默认停用，启用后生效）',
-    agentPlaceholder: '选择目标智能体',
+    agentUnavailable: '未取到智能体列表，暂时无法采纳，请刷新页面重试',
     acceptSuccess: '已采纳入库，可在问答对管理中启用',
     acceptFailed: '采纳失败，请稍后重试',
-    rejectSuccess: '已拒绝',
-    rejectFailed: '拒绝失败，请稍后重试',
     contextTitle: '来源会话',
     contextConversation: '会话',
     contextStartedAt: '开始时间',
@@ -1352,6 +1349,9 @@ export default {
     summarizeRunning: '生成中...',
     summarizePending: '待生成候选问答',
     summarizeNoPending: '没有待总结的会话，请先「同步客服记录」',
+    summarizeGenerated: '新生成 {count} 条候选问答对',
+    syncScope:
+      '同步范围：首次回溯 {days} 天，之后每轮同步上次之后的新记录（含 {minutes} 分钟重叠）',
     countsLine: '待审核 {pending} 条'
   },
   udeskConversations: {

@@ -70,7 +70,9 @@
           <span class="pull-status-error">{{ summarizeError }}</span>
         </a-tooltip>
       </div>
+      <div v-if="summarizeGeneratedLine" class="status-row">{{ summarizeGeneratedLine }}</div>
       <div class="status-row status-counts">{{ countsLine }}</div>
+      <div class="status-row status-counts">{{ syncScopeLine }}</div>
     </div>
 
     <a-table
@@ -140,7 +142,7 @@
       </template>
     </a-table>
 
-    <!-- 审核弹窗：候选问答（可微调）+ 客服原话 + 来源会话，采纳/拒绝都收在这里 -->
+    <!-- 审核弹窗：候选问答（可微调）+ 客服原话 + 来源会话，采纳/删除都收在这里 -->
     <a-modal
       v-model:open="reviewVisible"
       :title="t('candidates.reviewTitle')"
@@ -150,13 +152,6 @@
     >
       <p class="accept-hint">{{ t('candidates.acceptHint') }}</p>
       <a-form layout="vertical">
-        <a-form-item :label="t('qaPairs.agentColumn')" required>
-          <a-select
-            v-model:value="acceptForm.agent_slug"
-            :options="agentOptions"
-            :placeholder="t('candidates.agentPlaceholder')"
-          />
-        </a-form-item>
         <a-form-item :label="t('qaPairs.questionColumn')">
           <a-textarea v-model:value="acceptForm.question" :rows="2" :maxlength="300" show-count />
         </a-form-item>
@@ -192,17 +187,25 @@
         <a-button :disabled="accepting" @click="reviewVisible = false">
           {{ t('common.cancel') }}
         </a-button>
-        <a-button danger :loading="rejecting" @click="confirmReject">
-          {{ t('candidates.rejectAction') }}
-        </a-button>
-        <a-button
-          type="primary"
-          :loading="accepting"
-          :disabled="!acceptForm.agent_slug"
-          @click="confirmAccept"
+        <a-popconfirm
+          :title="t('qaPairs.deleteConfirmTitle')"
+          :ok-text="t('qaPairs.deleteConfirmOk')"
+          @confirm="confirmDelete"
         >
-          {{ t('candidates.acceptAction') }}
-        </a-button>
+          <a-button danger :loading="deleting">{{ t('qaPairs.deleteAction') }}</a-button>
+        </a-popconfirm>
+        <a-tooltip :title="acceptForm.agent_slug ? '' : t('candidates.agentUnavailable')">
+          <span>
+            <a-button
+              type="primary"
+              :loading="accepting"
+              :disabled="!acceptForm.agent_slug"
+              @click="confirmAccept"
+            >
+              {{ t('candidates.acceptAction') }}
+            </a-button>
+          </span>
+        </a-tooltip>
       </div>
     </a-modal>
   </div>
@@ -221,11 +224,17 @@ import { formatFullDateTime } from '@/utils/time'
 const { t } = useI18n()
 const configStore = useConfigStore()
 
+// 审核态显示名。rejected 只对历史遗留行有意义——现在的「删除」是真删行，
+// 不再产生该状态，故它只出现在显示映射里、不进筛选器（选了必然是空列表）
+const REVIEW_LABEL_KEYS = {
+  pending: 'candidates.reviewPending',
+  accepted: 'candidates.reviewAccepted',
+  rejected: 'candidates.reviewRejected'
+}
 const reviewOptions = computed(() => [
   { label: t('candidates.reviewAll'), value: '' },
-  { label: t('candidates.reviewPending'), value: 'pending' },
-  { label: t('candidates.reviewAccepted'), value: 'accepted' },
-  { label: t('candidates.reviewRejected'), value: 'rejected' }
+  { label: t(REVIEW_LABEL_KEYS.pending), value: 'pending' },
+  { label: t(REVIEW_LABEL_KEYS.accepted), value: 'accepted' }
 ])
 const dedupOptions = computed(() => [
   { label: t('candidates.dedupAll'), value: '' },
@@ -255,9 +264,9 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const filters = reactive({ review_status: 'pending', dedup_status: '', domain: '', keyword: '' })
-const agentOptions = ref([])
-// 采纳弹窗的默认归属：内置智能体（智能助手）。客服知识只对它生效，
-// 默认选中省掉一次必选操作，也避免选错智能体导致这条知识永远命不中。
+// 采纳时的归属智能体：固定为内置智能体（智能助手），弹窗里不再让用户选——
+// 系统里非子智能体只有它一个，客服知识也只对它生效，一个只有单一选项的下拉框
+// 只会让人以为「不选就不能提交」。取不到列表时采纳按钮保持禁用（带 tooltip 说明）。
 const defaultAgentSlug = ref('')
 
 const pagination = computed(() => ({
@@ -270,7 +279,7 @@ const pagination = computed(() => ({
 
 const domainLabel = (domain) => domainOptions.value.find((item) => item.value === domain)?.label || domain
 const dedupLabel = (status) => dedupOptions.value.find((item) => item.value === status)?.label || status
-const reviewLabel = (status) => reviewOptions.value.find((item) => item.value === status)?.label || status
+const reviewLabel = (status) => (REVIEW_LABEL_KEYS[status] ? t(REVIEW_LABEL_KEYS[status]) : status)
 const dedupColor = (status) =>
   ({ pending: 'default', duplicate: 'orange', conflict: 'red', unique: 'green' })[status] || 'default'
 const reviewColor = (status) => ({ pending: 'default', accepted: 'green', rejected: 'red' })[status] || 'default'
@@ -318,16 +327,10 @@ async function loadAgents() {
   try {
     const response = await agentApi.getAgents()
     const agents = response.agents || []
-    agentOptions.value = agents.map((agent) => ({
-      label: agent.name || agent.agent_id || agent.slug || agent.id,
-      value: agent.agent_id || agent.slug || agent.id
-    }))
     const builtin = agents.find((agent) => isBuiltinAgent(agent))
     defaultAgentSlug.value = builtin ? builtin.agent_id || builtin.slug || builtin.id : ''
   } catch (error) {
     console.error('加载智能体列表失败', error)
-    agentOptions.value = []
-    // 取不到列表就退回「必选」：宁可让甲方点一下，也不默认写进一个错的门下
     defaultAgentSlug.value = ''
   }
 }
@@ -335,7 +338,7 @@ async function loadAgents() {
 // ------------------------------------------------------------- 审核弹窗（采纳/拒绝/会话记录）
 const reviewVisible = ref(false)
 const accepting = ref(false)
-const rejecting = ref(false)
+const deleting = ref(false)
 const acceptTarget = ref(null)
 const acceptForm = reactive({ agent_slug: '', question: '', answer: '' })
 const contextLoading = ref(false)
@@ -389,19 +392,19 @@ async function confirmAccept() {
   }
 }
 
-async function confirmReject() {
-  rejecting.value = true
+async function confirmDelete() {
+  deleting.value = true
   try {
-    await dashboardApi.rejectQaCandidate(acceptTarget.value.id, {})
-    message.success(t('candidates.rejectSuccess'))
+    const response = await dashboardApi.deleteQaCandidate(acceptTarget.value.id)
+    message.success(t('qaPairs.deleteSuccess', { count: response.deleted || 0 }))
     reviewVisible.value = false
     await loadCandidates()
-    await loadUdeskStatus() // 同上：拒绝同样只改审核态、不删行
+    await loadUdeskStatus() // 候选行少了一条，累计数要跟着走
   } catch (error) {
-    console.error('拒绝候选失败', error)
-    message.error(error?.message || t('candidates.rejectFailed'))
+    console.error('删除候选失败', error)
+    message.error(error?.message || t('qaPairs.deleteFailed'))
   } finally {
-    rejecting.value = false
+    deleting.value = false
   }
 }
 
@@ -543,10 +546,24 @@ const summarizeSummary = computed(() => {
 const summarizeError = computed(() =>
   summarize.value.last_run_status === 'failed' ? summarize.value.last_error || '' : ''
 )
-// 计数行只报待审数：累计口径（采纳/拒绝不删行）与列表默认的待审过滤对不上，甲方只关心还有多少要审
+// 计数行只报待审数：累计口径（采纳不删行）与列表默认的待审过滤对不上，甲方只关心还有多少要审
 const countsLine = computed(() =>
   t('candidates.countsLine', { pending: counts.value.candidates_pending ?? 0 })
 )
+// 新生成条数是**单轮**口径，由后端在总结收尾时落库；null 表示还没跑过任何一轮，
+// 0 是有效值（跑了但一条新候选都没产出），两者要分开
+const summarizeGeneratedLine = computed(() => {
+  const generated = summarize.value.last_candidates
+  return generated == null ? '' : t('candidates.summarizeGenerated', { count: generated })
+})
+// 同步范围：首次回灌多少天 + 之后每轮往前多回看多久。甲方问过「同步的是多久的记录」，
+// 写在页面上省得再问——两个值都取自后端生效配置，不是前端写死的文案
+const syncScopeLine = computed(() => {
+  const backfillDays = udeskStatus.value?.backfill_start_days
+  const overlapMinutes = udeskStatus.value?.sync_overlap_minutes
+  if (backfillDays == null || overlapMinutes == null) return ''
+  return t('candidates.syncScope', { days: backfillDays, minutes: overlapMinutes })
+})
 
 function stopSummarizePoll() {
   if (summarizeTimer) clearInterval(summarizeTimer)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
@@ -68,7 +68,7 @@ class CuratedQACandidateRepository:
         reviewed_by: str,
         note: str | None = None,
     ) -> int:
-        """审核状态流转（accepted/rejected）；拒绝原因等备注写入 review_note。"""
+        """审核状态流转（当前只有采纳走这里，落 accepted）；备注写入 review_note。"""
         if not candidate_ids:
             return 0
         result = await self.session.execute(
@@ -83,6 +83,20 @@ class CuratedQACandidateRepository:
             )
         )
         return result.rowcount or 0
+
+    async def delete(self, candidate_ids: list[int]) -> int:
+        """硬删除候选行。
+
+        审核页上的「删除」就是真删除，不留 rejected 状态：候选是待审的**草稿**，
+        采纳后内容已迁进 curated_qa_pairs，被否掉的草稿没有任何下游消费者，
+        留着只会让「已删除」的记录还能在列表里被翻出来。
+        """
+        if not candidate_ids:
+            return 0
+        result = await self.session.execute(
+            delete(CuratedQACandidate).where(CuratedQACandidate.id.in_([int(cid) for cid in candidate_ids]))
+        )
+        return int(result.rowcount or 0)
 
     async def existing_question_hashes(self, question_hashes: list[str]) -> set[str]:
         """候选查重（C12 精确口径）：哪些问题哈希已存在于启用问答对。"""
