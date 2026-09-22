@@ -1085,9 +1085,13 @@ const detachVersion = (record) => {
     okText: t('common.confirm'),
     cancelText: t('common.cancel'),
     onOk: async () => {
-      await documentApi.detachDocumentVersion(store.kbId, record.file_id)
-      await store.loadDocumentFiles({ isBackground: true })
-      message.success(t('fileTable.detachVersionSuccess'))
+      try {
+        await documentApi.detachDocumentVersion(store.kbId, record.file_id)
+        await store.loadDocumentFiles({ isBackground: true })
+        message.success(t('fileTable.detachVersionSuccess'))
+      } catch (error) {
+        message.error(error.message)
+      }
     }
   })
 }

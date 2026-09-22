@@ -10,7 +10,12 @@ async function parseErrorDetail(response, fallbackMessage) {
 
   if (contentType.includes('application/json')) {
     const error = await response.json()
-    return error?.detail || fallbackMessage
+    const detail = error?.detail
+    // detail 可能是字符串，也可能是 {code, message} 结构，取可读文案（否则 Error 消息成了 "[object Object]"）
+    if (typeof detail === 'string' && detail) {
+      return detail
+    }
+    return detail?.message || fallbackMessage
   }
 
   const text = (await response.text()).trim()

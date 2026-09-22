@@ -1,6 +1,7 @@
 import { useUserStore, checkAdminPermission, checkSuperAdminPermission } from '@/stores/user'
 import { message } from 'ant-design-vue'
 import { i18n } from '@/i18n'
+import { resolveErrorCodeText as errorCodeText } from '@/utils/errorHandler'
 
 // 英文模式下，后端返回的中文错误详情无法在纯前端翻译，统一替换为通用英文提示
 const CJK = /[一-鿿]/
@@ -50,6 +51,7 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       // 尝试解析错误信息
       let errorMessage = t('common.requestFailed', { code: response.status, text: response.statusText })
       let errorData = null
+      let errorCode = null
 
       console.log('API请求失败:', { // i18n-ignore
         url,
@@ -60,7 +62,7 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
 
       try {
         errorData = await response.json()
-        // detail 可能是字符串，也可能是结构化对象（如 { error, message }），后者需取出可读文案，
+        // detail 可能是字符串，也可能是结构化对象（如 { code, message }），后者需取出可读文案，
         // 否则直接拼接会得到 "[object Object]"。
         const detail = errorData.detail
         if (Array.isArray(detail)) {
@@ -74,7 +76,8 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
             .filter(Boolean)
             .join('; ')
         } else if (detail && typeof detail === 'object') {
-          errorMessage = detail.message || detail.error || errorMessage
+          errorCode = typeof detail.code === 'string' ? detail.code : null
+          errorMessage = errorCodeText(errorCode) || detail.message || detail.error || errorMessage
         } else {
           errorMessage = detail || errorData.message || errorMessage
         }
@@ -96,9 +99,15 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       }
 
       // 英文模式下，后端返回的中文错误详情改为通用英文提示（纯前端无法逐条翻译）
-      const rawDetail = errorMessage
       if (isEnglishUI() && errorMessage && CJK.test(errorMessage)) {
         errorMessage = t('common.operationFailed')
+      }
+
+      // 各组件普遍把 error.response.data.detail 当文案直接显示，这里把 detail 换成上面解析好的
+      // 可读文案：否则结构化 detail（{code, message}）会被渲染成 "[object Object]"，
+      // 字符串 detail 又会绕过上面的英文兜底漏出中文（422 的字段错误数组保留结构供逐条展示）。
+      if (errorData?.detail !== undefined && !Array.isArray(errorData.detail)) {
+        errorData.detail = errorMessage
       }
 
       // 特殊处理401和403错误
@@ -113,8 +122,8 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
         // 如果是认证失败，可能需要重新登录
         const userStore = useUserStore()
 
-        // 检查是否是token过期（用替换前的原始 detail 判断，英文模式下不会被通用文案覆盖）// i18n-ignore
-        const isTokenExpired = rawDetail?.includes('令牌已过期') || rawDetail?.includes('token expired') // i18n-ignore
+        // 令牌过期与凭证无效都是 401，靠后端错误码区分，不再嗅探中文文案
+        const isTokenExpired = errorCode === 'token_expired'
 
         message.error(isTokenExpired ? t('common.sessionExpired') : t('common.authFailed'))
 
@@ -130,7 +139,10 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
 
         throw error
       } else if (response.status === 403) {
-        error.message = t('common.noPermission')
+        // 带码的 403（如账户已注销）上面已取到专属文案，不要被通用无权限盖掉
+        if (!errorCodeText(errorCode)) {
+          error.message = t('common.noPermission')
+        }
         throw error
       } else if (response.status === 500) {
         error.message = t('common.serverError')

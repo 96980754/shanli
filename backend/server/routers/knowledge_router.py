@@ -118,6 +118,19 @@ MAX_DIRECT_DOCUMENT_ACTION_FILE_IDS = 1000
 PENDING_PARSE_STATUSES = ["uploaded"]
 PENDING_INDEX_STATUSES = ["parsed", "error_indexing"]
 
+# 版本链路的业务错误码：detail.code 供前端本地化，detail.message 是给非界面调用方的可读说明。
+# 键同时充当「哪些码该回 409」的白名单——码即说明，两者不能分开维护。
+VERSION_ERROR_MESSAGES = {
+    "SAME_CONTENT": "新文件与当前版本内容完全相同，无需更新",
+    "VERSION_NOT_NEWER": "新文件名里的版本号不高于当前版本，请确认后再上传",
+    "VERSION_CHANGED": "当前版本已被更新，请刷新页面后重试",
+    "UPDATE_IN_PROGRESS": "该文档已有一次版本更新正在进行，请等它完成后再提交",
+    "CONFLICT_REVIEW_REQUIRED": "新版本存在未确认的知识冲突，请先在变更报告中确认冲突处理结果",
+    "VERSION_NOT_FOUND": "该版本不存在，请刷新页面后重试",
+    "CANNOT_DETACH_CURRENT_VERSION": "当前生效版本不能拆分，请选择历史版本",
+    "VERSION_FAMILY_HAS_NO_CURRENT": "拆分后该文档将失去生效版本，操作已取消",
+}
+
 
 class UpdateDatabaseRequest(BaseModel):
     name: str
@@ -1372,8 +1385,8 @@ async def create_document_version(
         )
     except ValueError as exc:
         code = str(exc)
-        if code in {"SAME_CONTENT", "UPDATE_IN_PROGRESS", "VERSION_CHANGED", "VERSION_NOT_NEWER"}:
-            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        if code in VERSION_ERROR_MESSAGES:
+            raise HTTPException(status_code=409, detail={"code": code, "message": VERSION_ERROR_MESSAGES[code]})
         raise HTTPException(status_code=400, detail=code)
 
     async def run_version_update(context: TaskContext):
@@ -1431,7 +1444,8 @@ async def detach_document_version(
     try:
         record = await KnowledgeFileRepository().detach_history_version(kb_id=kb_id, file_id=file_id)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail={"code": str(exc), "message": str(exc)}) from exc
+        code = str(exc)
+        raise HTTPException(status_code=409, detail={"code": code, "message": VERSION_ERROR_MESSAGES[code]}) from exc
     return {
         "file_id": record.file_id,
         "logical_document_id": record.logical_document_id,
@@ -1658,8 +1672,8 @@ async def activate_document_version(
         )
     except ValueError as exc:
         code = str(exc)
-        if code in {"VERSION_CHANGED", "CONFLICT_REVIEW_REQUIRED"}:
-            raise HTTPException(status_code=409, detail={"code": code, "message": code})
+        if code in VERSION_ERROR_MESSAGES:
+            raise HTTPException(status_code=409, detail={"code": code, "message": VERSION_ERROR_MESSAGES[code]})
         raise HTTPException(status_code=400, detail=code)
 
 

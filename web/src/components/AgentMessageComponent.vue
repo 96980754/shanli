@@ -81,15 +81,7 @@
       </div>
 
       <!-- 错误提示块 -->
-      <div v-if="displayError" class="error-hint">
-        <span v-if="getErrorMessage">{{ getErrorMessage }}</span>
-        <span v-else-if="message.error_type === 'interrupted'">{{ $t('chat.errorInterrupted') }}</span>
-        <span v-else-if="message.error_type === 'unexpect'">{{ $t('chat.errorUnexpected') }}</span>
-        <span v-else-if="message.error_type === 'content_guard_blocked'">{{
-          $t('chat.errorContentBlocked')
-        }}</span>
-        <span v-else>{{ message.error_type || $t('chat.errorUnknown') }}</span>
-      </div>
+      <div v-if="errorText" class="error-hint">{{ errorText }}</div>
 
       <ToolCallsGroupComponent
         v-if="!hideToolCalls && validToolCalls.length > 0"
@@ -182,6 +174,7 @@ import { buildMentionDisplayLabels } from '@/utils/mention_utils'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import { enrichTaskToolCalls } from '@/components/ToolCallingResult/toolRegistry'
 import { queryApi } from '@/apis/knowledge_api'
+import { resolveChatErrorText } from '@/utils/errorHandler'
 
 const { t } = useI18n()
 
@@ -347,36 +340,14 @@ const copyToClipboard = async (text) => {
 // 推理面板展开状态
 const reasoningActiveKey = ref(['hide'])
 
-// 错误消息处理
-const displayError = computed(() => {
-  // 简化错误判断：只检查明确的错误类型标识
-  return !!(props.message.error_type || props.message.extra_metadata?.error_type)
-})
+// 错误消息处理：流式过程中 error_type 在消息顶层，从库里读回的历史消息在 extra_metadata 里
+const resolveErrorField = (field) =>
+  props.message[field] || props.message.extra_metadata?.[field] || null
 
-const getErrorMessage = computed(() => {
-  // 优先使用直接的 error_message 字段
-  if (props.message.error_message) {
-    return props.message.error_message
-  }
-
-  // 其次从 extra_metadata 中获取具体的错误信息
-  if (props.message.extra_metadata?.error_message) {
-    return props.message.extra_metadata.error_message
-  }
-
-  // 对于已知的错误类型，返回默认提示
-  switch (props.message.error_type) {
-    case 'interrupted':
-      return t('chat.errorInterrupted')
-    case 'content_guard_blocked':
-      return t('chat.errorContentBlocked')
-    case 'unexpect':
-      return t('chat.errorUnexpected')
-    case 'agent_error':
-      return t('chat.agentFetchFailed')
-    default:
-      return null
-  }
+const errorText = computed(() => {
+  const errorType = resolveErrorField('error_type')
+  if (!errorType) return null
+  return resolveChatErrorText(errorType, resolveErrorField('error_message'))
 })
 
 // 引入智能体 store

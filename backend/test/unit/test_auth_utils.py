@@ -8,7 +8,13 @@ import jwt
 import pytest
 from yuxi.utils.datetime_utils import utc_now
 
-from yuxi.utils.auth_utils import JWT_ALGORITHM, JWT_AUDIENCE, AuthUtils
+from yuxi.utils.auth_utils import (
+    JWT_ALGORITHM,
+    JWT_AUDIENCE,
+    AuthUtils,
+    InvalidTokenError,
+    TokenExpiredError,
+)
 
 
 def test_generate_api_key_returns_secret_hash_and_prefix():
@@ -125,3 +131,47 @@ def test_verify_access_token_requires_claims(monkeypatch):
 
     with pytest.raises(ValueError, match="无效的令牌"):
         AuthUtils.verify_access_token(token)
+
+
+def test_verify_access_token_raises_expired_error_for_expired_token(monkeypatch):
+    """过期与无效分开报错，上层才能映射成不同的错误码提示用户重新登录的原因。"""
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-with-enough-randomness")
+    monkeypatch.setenv("YUXI_INSTANCE_ID", "pytest-instance")
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "exp": utc_now() - timedelta(minutes=5),
+            "iss": "yuxi-know:pytest-instance",
+            "aud": JWT_AUDIENCE,
+        },
+        "test-secret-key-with-enough-randomness",
+        algorithm=JWT_ALGORITHM,
+    )
+
+    with pytest.raises(TokenExpiredError):
+        AuthUtils.verify_access_token(token)
+
+
+def test_verify_access_token_raises_invalid_error_for_bad_signature(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-with-enough-randomness")
+    monkeypatch.setenv("YUXI_INSTANCE_ID", "pytest-instance")
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "exp": utc_now() + timedelta(minutes=5),
+            "iss": "yuxi-know:pytest-instance",
+            "aud": JWT_AUDIENCE,
+        },
+        "another-secret-key",
+        algorithm=JWT_ALGORITHM,
+    )
+
+    with pytest.raises(InvalidTokenError):
+        AuthUtils.verify_access_token(token)
+
+
+def test_token_errors_keep_value_error_compatibility():
+    """既有调用方与测试按 ValueError 捕获，两种新异常必须仍是 ValueError 子类。"""
+    assert issubclass(TokenExpiredError, ValueError)
+    assert issubclass(InvalidTokenError, ValueError)
+    assert not issubclass(TokenExpiredError, InvalidTokenError)

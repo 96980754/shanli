@@ -714,10 +714,12 @@ async def save_partial_message(
     request_id: str | None = None,
 ):
     try:
+        # error_message 是给用户看的说明，没有就留空——不要让前端拿 error_type 当文案兜底，
+        # 那是内部枚举，用户看不懂。前端按 error_type 取本地化文案（见 AgentMessageComponent.vue）。
         extra_metadata = {
             "error_type": error_type,
             "is_error": True,
-            "error_message": error_message or f"发生错误: {error_type}",
+            "error_message": error_message,
         }
         if full_msg:
             msg_dict = full_msg.model_dump() if hasattr(full_msg, "model_dump") else {}
@@ -1557,7 +1559,9 @@ async def stream_agent_chat(
     except Exception as e:
         logger.exception(f"Error streaming messages: {e}")
 
-        error_msg = f"Error streaming messages: {e}"
+        # 原始异常只进日志（上面的 logger.exception），不进任何用户可见字段：
+        # 拿到这里的可能是 NoneType 属性错误、GraphRecursionError、连接超时等，
+        # 对用户既看不懂也没有可执行动作，前端按 error_type 显示本地化文案。
         error_type = "unexpected_error"
 
         full_msg = _ensure_full_msg(full_msg, accumulated_content)
@@ -1568,14 +1572,13 @@ async def stream_agent_chat(
                 new_conv_repo,
                 thread_id,
                 full_msg=full_msg,
-                error_message=error_msg,
                 error_type=error_type,
                 trace_info=trace_info,
                 run_id=meta.get("run_id"),
                 request_id=meta.get("request_id"),
             )
 
-        yield make_chunk(status="error", error_type=error_type, error_message=error_msg, meta=meta)
+        yield make_chunk(status="error", error_type=error_type, meta=meta)
     finally:
         flush_langfuse()
 
@@ -1791,14 +1794,13 @@ async def stream_agent_resume(
             await save_partial_message(
                 new_conv_repo,
                 thread_id,
-                error_message=f"Error during resume: {e}",
                 error_type="resume_error",
                 trace_info=trace_info,
                 run_id=meta.get("run_id"),
                 request_id=meta.get("request_id"),
             )
 
-        yield make_resume_chunk(message=f"Error during resume: {e}", status="error")
+        yield make_resume_chunk(status="error", error_type="resume_error")
     finally:
         flush_langfuse()
 

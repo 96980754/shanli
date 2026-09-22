@@ -8,7 +8,7 @@ from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import APIKey, User
 from yuxi.utils.datetime_utils import utc_now_naive
 
-from yuxi.utils.auth_utils import AuthUtils
+from yuxi.utils.auth_utils import AuthUtils, InvalidTokenError, TokenExpiredError
 
 # 定义OAuth2密码承载器，指定token URL
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
@@ -83,10 +83,18 @@ async def get_current_user(
         user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except ValueError as e:
+    except TokenExpiredError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            # code 供前端按码取本地化文案（web/src/i18n/locales/*.js 的 errorCodes 段），
+            # message 是无码时的兜底与日志排查线索
+            detail={"code": "token_expired", "message": "登录已过期，请重新登录"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "invalid_token", "message": "登录状态无效，请重新登录"},
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -113,9 +121,10 @@ async def get_required_user(user: User | None = Depends(get_current_user)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not user.department_id:
+        # 400 里什么原因都可能，光看状态码前端分不出这一条，故带码
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="当前用户未绑定部门",
+            detail={"code": "user_not_bound_to_department", "message": "当前用户未绑定部门"},
         )
     return user
 

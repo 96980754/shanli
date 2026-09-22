@@ -39,9 +39,30 @@ export default {
     sessionExpired: 'Session expired, please log in again',
     authFailed: 'Authentication failed, please log in again',
     noPermission: 'No permission to perform this action',
-    serverError: 'Server internal error, please check docker logs api-dev for details',
+    serverError: 'Server internal error, please try again later or contact an administrator',
     moreActions: 'More actions',
     unknownError: 'Unknown error'
+  },
+  // 后端错误码文案（detail={"code": ...}），键名即后端给的 code，见 backend/server/utils/auth_middleware.py
+  errorCodes: {
+    token_expired: 'Your session has expired, please log in again',
+    invalid_token: 'Your login is no longer valid, please log in again',
+    account_deactivated: 'This account has been deactivated, please contact an administrator',
+    user_not_bound_to_department:
+      'Your account is not assigned to a department, please contact an administrator',
+    // 版本链路（backend/server/routers/knowledge_router.py 的 VERSION_ERROR_MESSAGES）
+    SAME_CONTENT: 'The uploaded file is identical to the current version, no update needed',
+    VERSION_NOT_NEWER: 'The version number in the filename is not newer than the current version',
+    VERSION_CHANGED: 'The current version has changed, please refresh and try again',
+    UPDATE_IN_PROGRESS:
+      'A version update for this document is already in progress, please wait for it to finish',
+    CONFLICT_REVIEW_REQUIRED:
+      'The new version has unconfirmed knowledge conflicts, please review them in the change report first',
+    VERSION_NOT_FOUND: 'This version no longer exists, please refresh and try again',
+    CANNOT_DETACH_CURRENT_VERSION:
+      'The active version cannot be detached, please pick a historical version',
+    VERSION_FAMILY_HAS_NO_CURRENT:
+      'The document would be left without an active version, the operation was cancelled'
   },
   nav: {
     newChat: 'New Chat',

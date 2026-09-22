@@ -257,6 +257,7 @@ import {
   AlertCircle as ExclamationCircleIcon
 } from 'lucide-vue-next'
 import { tryAutoStartOIDC, sanitizeRedirect } from '@/utils/oidcAutoStart'
+import { resolveLoginFailure } from '@/utils/errorHandler'
 import LanguageToggle from '@/components/LanguageToggle.vue'
 
 const router = useRouter()
@@ -475,33 +476,13 @@ const handleLogin = async () => {
   } catch (error) {
     console.error('登录失败:', error) // i18n-ignore
 
-    // 检查是否是锁定错误（HTTP 423）
-    if (error.status === 423) {
-      // 尝试从响应头中获取剩余时间
-      let remainingTime = 0
-      if (error.headers && error.headers.get) {
-        const lockRemainingHeader = error.headers.get('X-Lock-Remaining')
-        if (lockRemainingHeader) {
-          remainingTime = parseInt(lockRemainingHeader)
-        }
-      }
-
-      // 如果没有从头中获取到，尝试从错误消息中解析
-      if (remainingTime === 0) {
-        const lockTimeMatch = error.message.match(/(\d+)\s*秒/) // i18n-ignore
-        if (lockTimeMatch) {
-          remainingTime = parseInt(lockTimeMatch[1])
-        }
-      }
-
-      if (remainingTime > 0) {
-        startLockCountdown(remainingTime)
-        errorMessage.value = t('login.locked', { time: formatTime(remainingTime) })
-      } else {
-        errorMessage.value = error.message || t('login.errors.lockedMessage')
-      }
+    // 失败形状到文案的判定见 resolveLoginFailure；锁定时还要起倒计时
+    const { lockSeconds, text } = resolveLoginFailure(error)
+    if (lockSeconds > 0) {
+      startLockCountdown(lockSeconds)
+      errorMessage.value = t('login.locked', { time: formatTime(lockSeconds) })
     } else {
-      errorMessage.value = error.message || t('login.errors.badCredentials')
+      errorMessage.value = text
     }
   } finally {
     loading.value = false

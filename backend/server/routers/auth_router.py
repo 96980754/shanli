@@ -238,9 +238,10 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
     # 检查用户是否已被删除
     if user.is_deleted:
+        # 「账户已注销」与「权限不足」「需要管理员权限」共用 403，只看状态码前端分不出来，故带码
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="该账户已注销",
+            detail={"code": "account_deactivated", "message": "该账户已注销"},
             headers={"WWW-Authenticate": "Bearer"},
         )
 

@@ -17,6 +17,19 @@ PUBLIC_DEFAULT_JWT_SECRET_KEY = "yuxi_know_secure_key"
 PASSWORD_HASHER = PasswordHasher()
 
 
+class TokenExpiredError(ValueError):
+    """访问令牌已过期。
+
+    与 InvalidTokenError 分开，是为了让上层能把「过期」和「无效」映射成不同的错误码
+    （前端据此提示「登录已过期，请重新登录」而不是泛化的「认证失败」），
+    而不是靠匹配异常文本里的字面量。继承 ValueError 以兼容既有调用方。
+    """
+
+
+class InvalidTokenError(ValueError):
+    """访问令牌无效（签名不符、签发方/受众不匹配、缺必需声明等）。"""
+
+
 def _is_production_env() -> bool:
     return os.environ.get("YUXI_ENV", "development").strip().lower() in {"prod", "production"}
 
@@ -101,6 +114,6 @@ class AuthUtils:
                 options={"require": ["exp", "sub", "iss", "aud"]},
             )
         except jwt.ExpiredSignatureError:
-            raise ValueError("令牌已过期")
+            raise TokenExpiredError("令牌已过期")
         except jwt.InvalidTokenError:
-            raise ValueError("无效的令牌")
+            raise InvalidTokenError("无效的令牌")

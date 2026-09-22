@@ -5,8 +5,10 @@ Integration tests for authentication-related API routes.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 
 import pytest
+from yuxi.utils.auth_utils import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -77,6 +79,56 @@ async def test_login_with_invalid_credentials(test_client):
     response = await test_client.post("/api/auth/token", data={"username": "invalid", "password": "invalid"})
     assert response.status_code == 401
     assert "detail" in response.json()
+
+
+async def test_expired_token_returns_error_code(test_client):
+    """令牌过期与令牌无效都是 401，前端要靠 detail.code 决定提示「重新登录」还是「登录状态无效」。
+    过期在查库之前就抛出，所以 sub 指向哪个用户无关紧要。"""
+    expired_token = AuthUtils.create_access_token({"sub": "1"}, expires_delta=timedelta(seconds=-1))
+
+    response = await test_client.get("/api/auth/me", headers={"Authorization": f"Bearer {expired_token}"})
+
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"]["code"] == "token_expired"
+
+
+async def test_invalid_token_returns_error_code(test_client):
+    response = await test_client.get("/api/auth/me", headers={"Authorization": "Bearer not-a-token"})
+
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"]["code"] == "invalid_token"
+
+
+async def test_deactivated_account_login_returns_error_code(test_client, admin_headers):
+    """账户已注销与「权限不足」共用 403，前端要靠 detail.code 区分，否则只会提示「没有权限」。"""
+    dept_response = await test_client.get("/api/departments", headers=admin_headers)
+    assert dept_response.status_code == 200, dept_response.text
+    department_id = dept_response.json()[0]["id"]
+
+    password = f"Pw!{uuid.uuid4().hex[:8]}"
+    created = await test_client.post(
+        "/api/auth/users",
+        json={
+            "username": f"pytest_deactivated_{uuid.uuid4().hex[:8]}",
+            "password": password,
+            "role": "user",
+            "department_id": department_id,
+        },
+        headers=admin_headers,
+    )
+    assert created.status_code == 200, created.text
+    created_user = created.json()
+
+    deleted = await test_client.delete(f"/api/auth/users/{created_user['id']}", headers=admin_headers)
+    assert deleted.status_code == 200, deleted.text
+
+    response = await test_client.post(
+        "/api/auth/token",
+        data={"username": created_user["uid"], "password": password},
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "account_deactivated"
 
 
 async def test_user_is_locked_after_repeated_failed_logins(test_client, standard_user):

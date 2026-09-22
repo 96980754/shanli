@@ -39,9 +39,25 @@ export default {
     sessionExpired: '登录已过期，请重新登录',
     authFailed: '认证失败，请重新登录',
     noPermission: '没有权限执行此操作',
-    serverError: '服务器内部错误，请使用 docker logs api-dev 查看详细日志',
+    serverError: '服务器内部错误，请稍后重试或联系管理员',
     moreActions: '更多操作',
     unknownError: '未知错误'
+  },
+  // 后端错误码文案（detail={"code": ...}），键名即后端给的 code，见 backend/server/utils/auth_middleware.py
+  errorCodes: {
+    token_expired: '登录已过期，请重新登录',
+    invalid_token: '登录状态无效，请重新登录',
+    account_deactivated: '该账户已注销，请联系管理员',
+    user_not_bound_to_department: '当前账号未绑定部门，请联系管理员',
+    // 版本链路（backend/server/routers/knowledge_router.py 的 VERSION_ERROR_MESSAGES）
+    SAME_CONTENT: '新文件与当前版本内容完全相同，无需更新',
+    VERSION_NOT_NEWER: '新文件名里的版本号不高于当前版本，请确认后再上传',
+    VERSION_CHANGED: '当前版本已被更新，请刷新页面后重试',
+    UPDATE_IN_PROGRESS: '该文档已有一次版本更新正在进行，请等它完成后再提交',
+    CONFLICT_REVIEW_REQUIRED: '新版本存在未确认的知识冲突，请先在变更报告中确认冲突处理结果',
+    VERSION_NOT_FOUND: '该版本不存在，请刷新页面后重试',
+    CANNOT_DETACH_CURRENT_VERSION: '当前生效版本不能拆分，请选择历史版本',
+    VERSION_FAMILY_HAS_NO_CURRENT: '拆分后该文档将失去生效版本，操作已取消'
   },
   nav: {
     newChat: '创建新对话',

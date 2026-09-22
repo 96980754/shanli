@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { i18n } from '@/i18n'
+import { resolveErrorCodeText } from '@/utils/errorHandler'
 import { useAgentStore } from './agent'
+
+// 后端 detail 可能是字符串，也可能是 {code, message} 结构（见 backend/server/utils/auth_middleware.py）。
+// 带码的优先按码取本地化文案，其次用后端原文，都没有才退回本地化兜底。
+const backendText = (detail, fallbackKey) =>
+  resolveErrorCodeText(detail?.code) ||
+  (typeof detail === 'string' ? detail : '') ||
+  i18n.global.t(fallbackKey)
 
 export const useUserStore = defineStore('user', () => {
   // 状态
@@ -36,16 +44,15 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
+        const detail = error?.detail
 
-        // 如果是423锁定状态码，抛出包含状态码的错误
-        if (response.status === 423) {
-          const lockError = new Error(error.detail || i18n.global.t('errors.accountLocked'))
-          lockError.status = 423
-          lockError.headers = response.headers
-          throw lockError
-        }
-
-        throw new Error(error.detail || i18n.global.t('auth.loginFailed'))
+        // 后端 detail 是中文写死的，不能直出给英文界面，故登录失败只带判据（状态码 / 错误码 /
+        // 锁定剩余时间头），文案由 LoginView 按这些判据取本地化文本
+        const loginError = new Error(i18n.global.t('auth.loginFailed'))
+        loginError.status = response.status
+        loginError.code = typeof detail === 'object' ? detail?.code : null
+        loginError.headers = response.headers
+        throw loginError
       }
 
       const data = await response.json()
@@ -103,7 +110,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.initAdminFailed'))
+        throw new Error(backendText(error.detail, 'errors.initAdminFailed'))
       }
 
       const data = await response.json()
@@ -198,7 +205,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.createUserFailed'))
+        throw new Error(backendText(error.detail, 'errors.createUserFailed'))
       }
 
       return await response.json()
@@ -221,7 +228,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.updateUserFailed'))
+        throw new Error(backendText(error.detail, 'errors.updateUserFailed'))
       }
 
       return await response.json()
@@ -242,7 +249,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.deleteUserFailed'))
+        throw new Error(backendText(error.detail, 'errors.deleteUserFailed'))
       }
 
       return await response.json()
@@ -266,7 +273,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.validateUsernameFailed'))
+        throw new Error(backendText(error.detail, 'errors.validateUsernameFailed'))
       }
 
       return await response.json()
@@ -292,7 +299,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.uploadAvatarFailed'))
+        throw new Error(backendText(error.detail, 'errors.uploadAvatarFailed'))
       }
 
       const data = await response.json()
@@ -353,7 +360,7 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || i18n.global.t('errors.updateProfileFailed'))
+        throw new Error(backendText(error.detail, 'errors.updateProfileFailed'))
       }
 
       const userData = await response.json()

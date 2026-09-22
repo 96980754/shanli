@@ -231,7 +231,12 @@ export function useAgentStreamHandler({
 
       case 'error':
         streamSmoother?.flushThread(threadId)
-        handleChatError({ message: chunkMessage }, 'stream')
+        // 后端错误块的字段是 error_type / error_message（不是 message），
+        // 带上它们才能显示「内容被拦截」「智能体不存在」这类具体原因，而不是笼统的「流式处理失败」
+        handleChatError(
+          { error_type: chunk.error_type, error_message: chunk.error_message },
+          'stream'
+        )
         // Stop the loading indicator
         if (threadState) {
           threadState.isStreaming = false
