@@ -9,6 +9,7 @@ import { rewriteMinioImageUrls } from '@/utils/minioUrl'
 import { normalizeCodeLanguage } from '@/utils/file_preview'
 import { renderSvgBlocks } from './svgRenderer'
 import { renderHtmlPreviewBlocks } from './htmlPreviewRenderer'
+import { markdownItImageSize } from './markdownImageSize'
 import { i18n } from '@/i18n'
 
 const markdownKatexPlugin = markdownItKatex.default || markdownItKatex
@@ -186,6 +187,7 @@ const createRenderer = ({ themeName, highlighter }) =>
   })
     .use(markdownKatexPlugin, { throwOnError: false, errorColor: '#cc0000', trust: false })
     .use(taskLists, { enabled: false, label: false, labelAfter: false })
+    .use(markdownItImageSize)
     .use(markdownItFrontmatterCard)
 
 const getRenderer = async (theme, needsHighlight) => {

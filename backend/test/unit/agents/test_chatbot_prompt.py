@@ -29,6 +29,9 @@ def test_build_prompt_includes_image_response_instruction():
     assert "以 Markdown 图片形式" in prompt
     assert "只能使用检索结果中出现的原始图片 URL" in prompt
     assert "不要虚构图片链接" in prompt
+    # 尺寸写法必须与前端解析保持一致（web/src/utils/markdownImageSize.js），改坏了两边就对不上
+    assert "`![说明=宽度](图片URL)`" in prompt
+    assert "120–720" in prompt
 
 
 def test_image_response_section_before_hard_guardrails():
