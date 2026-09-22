@@ -121,3 +121,6 @@ docs/**/*.doc
 docs/**/*.docx
 docs/**/*.zip
 docs/**/*.rar
+
+# 配置改动前的备份副本（准备改 docker-compose/nginx 时留下的 .repo 快照，正式文件才是要保留的版本）
+*.repo
