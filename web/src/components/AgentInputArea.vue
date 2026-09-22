@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MessageInputComponent from '@/components/MessageInputComponent.vue'
 import ImagePreviewComponent from '@/components/ImagePreviewComponent.vue'
@@ -103,7 +103,8 @@ const emit = defineEmits([
   'send',
   'keydown',
   'upload-attachment',
-  'remove-attachment'
+  'remove-attachment',
+  'image-change'
 ])
 
 const inputRef = ref(null)
@@ -112,6 +113,9 @@ const { t } = useI18n()
 const placeholder = t('msgInput.askPlaceholder')
 
 const previewAttachments = computed(() => normalizeAttachmentPreviews(props.attachments))
+
+// 图片是本组件的局部状态，而「发送按钮是否可点」由父组件判断，故变更时同步一份上去
+watch(currentImage, (image) => emit('image-change', image))
 
 const updateValue = (val) => {
   emit('update:modelValue', val)

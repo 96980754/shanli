@@ -156,6 +156,7 @@
                 @send="handleSendOrStop"
                 @upload-attachment="handleAttachmentUpload"
                 @remove-attachment="handleAttachmentRemove"
+                @image-change="pendingInputImage = $event"
               >
                 <template #actions-left-extra>
                   <IndustrySolutionButton
@@ -657,6 +658,8 @@ const { threads, currentThreadId, currentThread } = storeToRefs(chatThreadsStore
 // ==================== LOCAL CHAT & UI STATE ====================
 const userInput = ref('')
 const agentInputAreaRef = ref(null)
+// 输入区已上传的图片：只有图片没有文字时同样可以发送
+const pendingInputImage = ref(null)
 // 「行业方案」按钮为开关：开启后发送内容作为行业方案请求，再次点击关闭
 const industrySolutionMode = ref(false)
 const sendCooldownActive = ref(false)
@@ -1842,10 +1845,11 @@ const replyLoadingText = computed(() => {
   return t('chat.reply.generating')
 })
 const isSendButtonDisabled = computed(() => {
+  const hasInput = Boolean(userInput.value || pendingInputImage.value)
   return (
     sendCooldownActive.value ||
     (props.sendDisabled && !isProcessing.value) ||
-    ((!userInput.value || !currentAgent.value) && !isProcessing.value)
+    ((!hasInput || !currentAgent.value) && !isProcessing.value)
   )
 })
 
