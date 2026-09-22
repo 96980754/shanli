@@ -4,28 +4,7 @@
       <p>{{ $t('chunk.intro') }}</p>
     </div>
     <a-form :model="localParams" name="chunkConfig" autocomplete="off" layout="vertical">
-      <a-form-item v-if="showPreset" name="chunk_preset_id">
-        <template #label>
-          <span class="chunk-preset-label">
-            {{ $t('chunk.presetLabel') }}
-            <a-tooltip :title="presetDescription">
-              <QuestionCircleOutlined class="chunk-preset-help-icon" />
-            </a-tooltip>
-          </span>
-        </template>
-        <a-select
-          v-model:value="localParams.chunk_preset_id"
-          :options="presetOptions"
-          :loading="chunkPresetLoading"
-          style="width: 100%"
-        />
-        <p class="param-description">
-          {{ $t('chunk.presetDescription') }}
-          <span v-if="allowPresetFollowDefault">{{ $t('chunk.presetFollowDefault') }}</span>
-        </p>
-      </a-form-item>
-
-      <div v-if="showChunkSizeOverlap || showQaSplit" class="advanced-toggle">
+      <div v-if="showPreset || showChunkSizeOverlap || showQaSplit" class="advanced-toggle">
         <a-button
           type="link"
           size="small"
@@ -38,56 +17,79 @@
         </a-button>
       </div>
 
-      <div v-show="showAdvanced" class="chunk-row">
-        <a-form-item v-if="showChunkSizeOverlap" name="chunk_token_num">
+      <div v-show="showAdvanced" class="advanced-panel">
+        <a-form-item v-if="showPreset" name="chunk_preset_id">
           <template #label>
             <span class="chunk-preset-label">
-              {{ $t('chunk.maxTokenLabel') }}
-              <a-tooltip :title="$t('chunk.maxTokenTip')">
+              {{ $t('chunk.presetLabel') }}
+              <a-tooltip :title="presetDescription">
                 <QuestionCircleOutlined class="chunk-preset-help-icon" />
               </a-tooltip>
             </span>
           </template>
-          <a-input-number
-            v-model:value="parserConfig.chunk_token_num"
-            :min="100"
-            :max="10000"
-            :placeholder="$t('chunk.maxTokenPlaceholder')"
+          <a-select
+            v-model:value="localParams.chunk_preset_id"
+            :options="presetOptions"
+            :loading="chunkPresetLoading"
             style="width: 100%"
           />
+          <p class="param-description">
+            {{ $t('chunk.presetDescription') }}
+            <span v-if="allowPresetFollowDefault">{{ $t('chunk.presetFollowDefault') }}</span>
+          </p>
         </a-form-item>
-        <a-form-item v-if="showChunkSizeOverlap" name="overlapped_percent">
-          <template #label>
-            <span class="chunk-preset-label">
-              {{ $t('chunk.overlapPercentLabel') }}
-              <a-tooltip :title="$t('chunk.overlapPercentTip')">
-                <QuestionCircleOutlined class="chunk-preset-help-icon" />
-              </a-tooltip>
-            </span>
-          </template>
-          <a-input-number
-            v-model:value="parserConfig.overlapped_percent"
-            :min="0"
-            :max="99"
-            :placeholder="$t('chunk.overlapPercentPlaceholder')"
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item v-if="showQaSplit" name="delimiter">
-          <template #label>
-            <span class="chunk-preset-label">
-              {{ $t('chunk.delimiterLabel') }}
-              <a-tooltip :title="$t('chunk.delimiterTip')">
-                <QuestionCircleOutlined class="chunk-preset-help-icon" />
-              </a-tooltip>
-            </span>
-          </template>
-          <a-input
-            v-model:value="parserConfig.delimiter"
-            :placeholder="$t('chunk.delimiterPlaceholder')"
-            style="width: 100%"
-          />
-        </a-form-item>
+
+        <div class="chunk-row">
+          <a-form-item v-if="showChunkSizeOverlap" name="chunk_token_num">
+            <template #label>
+              <span class="chunk-preset-label">
+                {{ $t('chunk.maxTokenLabel') }}
+                <a-tooltip :title="$t('chunk.maxTokenTip')">
+                  <QuestionCircleOutlined class="chunk-preset-help-icon" />
+                </a-tooltip>
+              </span>
+            </template>
+            <a-input-number
+              v-model:value="parserConfig.chunk_token_num"
+              :min="100"
+              :max="10000"
+              :placeholder="$t('chunk.maxTokenPlaceholder')"
+              style="width: 100%"
+            />
+          </a-form-item>
+          <a-form-item v-if="showChunkSizeOverlap" name="overlapped_percent">
+            <template #label>
+              <span class="chunk-preset-label">
+                {{ $t('chunk.overlapPercentLabel') }}
+                <a-tooltip :title="$t('chunk.overlapPercentTip')">
+                  <QuestionCircleOutlined class="chunk-preset-help-icon" />
+                </a-tooltip>
+              </span>
+            </template>
+            <a-input-number
+              v-model:value="parserConfig.overlapped_percent"
+              :min="0"
+              :max="99"
+              :placeholder="$t('chunk.overlapPercentPlaceholder')"
+              style="width: 100%"
+            />
+          </a-form-item>
+          <a-form-item v-if="showQaSplit" name="delimiter">
+            <template #label>
+              <span class="chunk-preset-label">
+                {{ $t('chunk.delimiterLabel') }}
+                <a-tooltip :title="$t('chunk.delimiterTip')">
+                  <QuestionCircleOutlined class="chunk-preset-help-icon" />
+                </a-tooltip>
+              </span>
+            </template>
+            <a-input
+              v-model:value="parserConfig.delimiter"
+              :placeholder="$t('chunk.delimiterPlaceholder')"
+              style="width: 100%"
+            />
+          </a-form-item>
+        </div>
       </div>
     </a-form>
   </div>
