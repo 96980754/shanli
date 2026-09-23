@@ -144,7 +144,9 @@ const activeRange = computed(() => {
 
 const disableFutureDate = (current) => current && current > dayjs().endOf('day')
 
-const handleQuickRangeChange = () => {
+const handleQuickRangeChange = (e) => {
+  // 单选组是单向绑定，必须自己把选中值写回，否则 activeRange 永远停在「全部」
+  quickRange.value = e.target.value
   customRange.value = null
   loadBasicStats()
 }
