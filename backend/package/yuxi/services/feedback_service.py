@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 
 from fastapi import HTTPException
 from sqlalchemy import exists, func, select, text
@@ -92,8 +93,14 @@ _EVALUABLE_ANSWERS_WHERE = """
 """
 
 
-async def count_evaluable_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
-    """统计可评价基数：会话内收尾 AI 终答消息条数。"""
+async def count_evaluable_answers(
+    *,
+    db: AsyncSession,
+    agent_id: str | None = None,
+    start_at: dt.datetime | None = None,
+    end_at: dt.datetime | None = None,
+) -> int:
+    """统计可评价基数：会话内收尾 AI 终答消息条数。start_at/end_at 为 naive UTC 时间界。"""
     agent_scope = ""
     params: dict = {}
     if agent_id:
@@ -102,13 +109,27 @@ async def count_evaluable_answers(*, db: AsyncSession, agent_id: str | None = No
             "             WHERE c.id = m.conversation_id AND c.agent_id = :agent_id)"
         )
         params["agent_id"] = agent_id
-    sql = text(f"SELECT COUNT(*) FROM messages m WHERE {_EVALUABLE_ANSWERS_WHERE}{agent_scope}")
+    time_clauses = []
+    if start_at is not None:
+        time_clauses.append("m.created_at >= :start_at")
+        params["start_at"] = start_at
+    if end_at is not None:
+        time_clauses.append("m.created_at < :end_at")
+        params["end_at"] = end_at
+    time_scope = (" AND " + " AND ".join(time_clauses)) if time_clauses else ""
+    sql = text(f"SELECT COUNT(*) FROM messages m WHERE {_EVALUABLE_ANSWERS_WHERE}{agent_scope}{time_scope}")
     result = await db.execute(sql, params)
     return result.scalar() or 0
 
 
-async def count_knowledge_gap_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
-    """统计知识库依据不足的收尾回答，不包含范围或策略拒答。"""
+async def count_knowledge_gap_answers(
+    *,
+    db: AsyncSession,
+    agent_id: str | None = None,
+    start_at: dt.datetime | None = None,
+    end_at: dt.datetime | None = None,
+) -> int:
+    """统计知识库依据不足的收尾回答，不包含范围或策略拒答。start_at/end_at 为 naive UTC 时间界。"""
     next_message = aliased(Message)
     next_message_id = (
         select(func.min(next_message.id))
@@ -129,6 +150,10 @@ async def count_knowledge_gap_answers(*, db: AsyncSession, agent_id: str | None 
         ),
         Message.extra_metadata["knowledge_disposition"]["type"].as_string() == "knowledge_refusal",
     )
+    if start_at is not None:
+        query = query.where(Message.created_at >= start_at)
+    if end_at is not None:
+        query = query.where(Message.created_at < end_at)
     if agent_id:
         query = query.where(
             exists(
@@ -147,8 +172,14 @@ def build_knowledge_gap_stats(*, evaluable_count: int, knowledge_gap_count: int)
     return {"knowledge_gap_count": knowledge_gap_count, "knowledge_gap_rate": rate}
 
 
-async def count_refusal_answers(*, db: AsyncSession, agent_id: str | None = None) -> int:
-    """统计收尾 AI 终答中的结构化拒答消息数。"""
+async def count_refusal_answers(
+    *,
+    db: AsyncSession,
+    agent_id: str | None = None,
+    start_at: dt.datetime | None = None,
+    end_at: dt.datetime | None = None,
+) -> int:
+    """统计收尾 AI 终答中的结构化拒答消息数。start_at/end_at 为 naive UTC 时间界。"""
     next_message = aliased(Message)
     next_message_id = (
         select(func.min(next_message.id))
@@ -170,6 +201,10 @@ async def count_refusal_answers(*, db: AsyncSession, agent_id: str | None = None
         ),
         Message.extra_metadata["knowledge_disposition"]["type"].as_string().in_(REFUSAL_DISPOSITION_TYPES),
     )
+    if start_at is not None:
+        query = query.where(Message.created_at >= start_at)
+    if end_at is not None:
+        query = query.where(Message.created_at < end_at)
     if agent_id:
         query = query.where(
             exists(

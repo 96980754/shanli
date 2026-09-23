@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -10,6 +12,7 @@ from yuxi.services.feedback_service import (
     build_refusal_stats,
     build_satisfaction_stats,
     count_evaluable_answers,
+    count_knowledge_gap_answers,
     count_refusal_answers,
 )
 from yuxi.storage.postgres.models_business import (
@@ -161,3 +164,57 @@ async def test_satisfaction_stats_no_feedback_counts_as_satisfied(satisfaction_s
     assert stats["evaluable_count"] == 3
     assert stats["silent_count"] == 2
     assert stats["satisfaction_rate"] == round(2 / 3 * 100, 2)
+
+
+async def test_count_helpers_respect_time_bounds_over_beijing_days(satisfaction_session):
+    """时间界按 naive UTC 比较，北京日界换算后的边界由路由层负责（见 test_dashboard_time_bounds）。
+
+    三条终答：
+      - convT1：北京 2026-09-01 00:00 整（= UTC 2026-08-31 16:00，左界含）
+      - convT2：北京 2026-09-01 23:30（= UTC 2026-09-01 15:30，界内），knowledge_refusal
+      - convT3：北京 2026-09-02 00:30（= UTC 2026-09-01 16:30，右界外），knowledge_refusal
+    """
+    db = satisfaction_session
+
+    def terminal(thread_id, created_at, disposition=None):
+        conversation = Conversation(
+            thread_id=thread_id,
+            uid="user-1",
+            agent_id="agent-a",
+            title=thread_id,
+            status="active",
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        extra = {"knowledge_disposition": {"type": disposition}} if disposition else None
+        conversation.messages = [
+            Message(role="user", content="Q", created_at=created_at),
+            Message(role="assistant", content="A", created_at=created_at, extra_metadata=extra),
+        ]
+        return conversation
+
+    t1 = dt.datetime(2026, 8, 31, 16, 0)
+    t2 = dt.datetime(2026, 9, 1, 15, 30)
+    t3 = dt.datetime(2026, 9, 1, 16, 30)
+    db.add_all(
+        [
+            terminal("thread-t1", t1),
+            terminal("thread-t2", t2, "knowledge_refusal"),
+            terminal("thread-t3", t3, "knowledge_refusal"),
+        ]
+    )
+    await db.commit()
+
+    start_at = dt.datetime(2026, 8, 31, 16, 0)
+    end_at = dt.datetime(2026, 9, 1, 16, 0)
+    # fixture 既有数据 created_at=now（晚于固定日期），界内只剩新增三条终答中的 T1、T2
+    assert await count_evaluable_answers(db=db, start_at=start_at, end_at=end_at) == 2
+    assert await count_refusal_answers(db=db, start_at=start_at, end_at=end_at) == 1
+    assert await count_knowledge_gap_answers(db=db, start_at=start_at, end_at=end_at) == 1
+
+    # 仅下界：fixture 三条（now ≥ start_at）与 T1/T2/T3 全部计入
+    assert await count_evaluable_answers(db=db, start_at=start_at) == 6
+    # 仅上界：T1、T2 计入
+    assert await count_evaluable_answers(db=db, end_at=end_at) == 2
+    # 无时间界：fixture 3 条 + 新增 3 条
+    assert await count_evaluable_answers(db=db) == 6

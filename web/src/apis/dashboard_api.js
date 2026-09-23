@@ -45,10 +45,17 @@ export const dashboardApi = {
 
   /**
    * 获取Dashboard统计信息
+   * @param {Object} params - 查询参数
+   * @param {string} params.start_date - 起始日（北京日期 YYYY-MM-DD，含当日）
+   * @param {string} params.end_date - 结束日（北京日期 YYYY-MM-DD，含当日）
    * @returns {Promise<Object>} - 统计信息
    */
-  getStats: () => {
-    return apiAdminGet('/api/dashboard/stats')
+  getStats: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.start_date) queryParams.append('start_date', params.start_date)
+    if (params.end_date) queryParams.append('end_date', params.end_date)
+    const query = queryParams.toString()
+    return apiAdminGet(`/api/dashboard/stats${query ? `?${query}` : ''}`)
   },
 
   /**

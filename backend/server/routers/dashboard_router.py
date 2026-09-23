@@ -29,7 +29,14 @@ from yuxi.services.feedback_service import (
 )
 from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
 from yuxi.storage.postgres.models_business import User
-from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
+from yuxi.utils.datetime_utils import (
+    SHANGHAI_TZ,
+    UTC,
+    ensure_shanghai,
+    ensure_utc,
+    shanghai_now,
+    utc_now,
+)
 from yuxi.utils.logging_config import logger
 
 
@@ -618,41 +625,95 @@ async def get_agent_analytics(
 # =============================================================================
 
 
+def _beijing_day_bounds(start_date: str | None, end_date: str | None) -> tuple[datetime | None, datetime | None]:
+    """把北京日期（YYYY-MM-DD）换算成 naive UTC 时间界（左闭右开，end 为次日零点）。
+
+    数据库时间列为 UTC naive，与时间序列分组（INTERVAL '8 hours'）同口径按北京日界切分。
+    """
+    try:
+        start_utc = (
+            ensure_utc(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=SHANGHAI_TZ))
+            .replace(tzinfo=None)
+            if start_date
+            else None
+        )
+        end_utc = (
+            ensure_utc(
+                (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=SHANGHAI_TZ)
+            )
+            .replace(tzinfo=None)
+            if end_date
+            else None
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date/end_date must be YYYY-MM-DD") from None
+    if start_utc and end_utc and start_utc > end_utc:
+        raise HTTPException(status_code=400, detail="start_date must not be later than end_date")
+    return start_utc, end_utc
+
+
 @dashboard.get("/stats")
 async def get_dashboard_stats(
+    start_date: str | None = Query(None, description="统计起始日（北京日期 YYYY-MM-DD，含当日）"),
+    end_date: str | None = Query(None, description="统计结束日（北京日期 YYYY-MM-DD，含当日）"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_superadmin_user),
 ):
-    """获取基础统计（超级管理员权限）"""
+    """获取基础统计（超级管理员权限）。带 start_date/end_date 时按北京日界过滤时段内数据。"""
     from yuxi.storage.postgres.models_business import Conversation, Message, MessageFeedback
+
+    start_at, end_at = _beijing_day_bounds(start_date, end_date)
+
+    def within(column: Any) -> list:
+        filters = []
+        if start_at is not None:
+            filters.append(column >= start_at)
+        if end_at is not None:
+            filters.append(column < end_at)
+        return filters
 
     try:
         # Basic counts
-        total_conversations_result = await db.execute(select(func.count(Conversation.id)))
+        total_conversations_result = await db.execute(
+            select(func.count(Conversation.id)).filter(*within(Conversation.created_at))
+        )
         total_conversations = total_conversations_result.scalar() or 0
 
         active_conversations_result = await db.execute(
-            select(func.count(Conversation.id)).filter(Conversation.status == "active")
+            select(func.count(Conversation.id)).filter(
+                Conversation.status == "active", *within(Conversation.created_at)
+            )
         )
         active_conversations = active_conversations_result.scalar() or 0
 
-        total_messages_result = await db.execute(select(func.count(Message.id)))
+        total_messages_result = await db.execute(
+            select(func.count(Message.id)).filter(*within(Message.created_at))
+        )
         total_messages = total_messages_result.scalar() or 0
 
-        total_users_result = await db.execute(select(func.count(User.id)).filter(User.is_deleted == 0))
+        total_users_result = await db.execute(
+            select(func.count(User.id)).filter(User.is_deleted == 0, *within(User.created_at))
+        )
         total_users = total_users_result.scalar() or 0
 
-        # Feedback statistics（满意度口径：未反馈默认计满意）
-        total_feedbacks_result = await db.execute(select(func.count(MessageFeedback.id)))
+        # Feedback statistics（满意度口径：未反馈默认计满意）。
+        # 反馈按被评价消息的 created_at 过滤，与满意度分母同口径，避免窗口错位导致率值越界。
+        total_feedbacks_result = await db.execute(
+            select(func.count(MessageFeedback.id))
+            .join(Message, MessageFeedback.message_id == Message.id)
+            .filter(*within(Message.created_at))
+        )
         total_feedbacks = total_feedbacks_result.scalar() or 0
 
         like_count_result = await db.execute(
-            select(func.count(MessageFeedback.id)).filter(MessageFeedback.rating == "like")
+            select(func.count(MessageFeedback.id))
+            .join(Message, MessageFeedback.message_id == Message.id)
+            .filter(MessageFeedback.rating == "like", *within(Message.created_at))
         )
         like_count = like_count_result.scalar() or 0
         dislike_count = total_feedbacks - like_count
 
-        evaluable_count = await count_evaluable_answers(db=db)
+        evaluable_count = await count_evaluable_answers(db=db, start_at=start_at, end_at=end_at)
         satisfaction_stats = build_satisfaction_stats(
             evaluable_count=evaluable_count,
             like_count=like_count,
@@ -660,9 +721,9 @@ async def get_dashboard_stats(
         )
         refusal_stats = build_refusal_stats(
             evaluable_count=evaluable_count,
-            refusal_count=await count_refusal_answers(db=db),
+            refusal_count=await count_refusal_answers(db=db, start_at=start_at, end_at=end_at),
         )
-        knowledge_gap_count = await count_knowledge_gap_answers(db=db)
+        knowledge_gap_count = await count_knowledge_gap_answers(db=db, start_at=start_at, end_at=end_at)
         refusal_stats["knowledge_gap_count"] = knowledge_gap_count
         refusal_stats["knowledge_gap_rate"] = (
             round(knowledge_gap_count / evaluable_count * 100, 2) if evaluable_count else 0.0

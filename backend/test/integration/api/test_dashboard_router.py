@@ -146,3 +146,34 @@ async def test_update_feedback_status_missing_returns_404(test_client, admin_hea
         json={"status": "processed"},
     )
     assert response.status_code == 404
+
+
+async def test_admin_stats_rejects_invalid_date_params(test_client, admin_headers):
+    """时段参数格式错误或 start > end 返回 400。"""
+    for query in ("start_date=2026/09/01", "end_date=20260901", "start_date=not-a-date"):
+        response = await test_client.get(f"/api/dashboard/stats?{query}", headers=admin_headers)
+        assert response.status_code == 400, f"{query} should be rejected: {response.text}"
+
+    response = await test_client.get(
+        "/api/dashboard/stats?start_date=2026-09-10&end_date=2026-09-01", headers=admin_headers
+    )
+    assert response.status_code == 400
+
+
+async def test_admin_stats_with_date_range_filters_counts(test_client, admin_headers):
+    """带时段时各计数为全量口径的子集，率值仍在合法区间。"""
+    full_response = await test_client.get("/api/dashboard/stats", headers=admin_headers)
+    assert full_response.status_code == 200, full_response.text
+    ranged_response = await test_client.get(
+        "/api/dashboard/stats?start_date=2026-09-01&end_date=2026-09-22", headers=admin_headers
+    )
+    assert ranged_response.status_code == 200, ranged_response.text
+
+    full, ranged = full_response.json(), ranged_response.json()
+    for key in ("total_conversations", "active_conversations", "total_messages", "total_users"):
+        assert ranged[key] <= full[key], f"{key} with date range should be a subset of full"
+    full_feedback, ranged_feedback = full["feedback_stats"], ranged["feedback_stats"]
+    assert ranged_feedback["total_feedbacks"] <= full_feedback["total_feedbacks"]
+    assert ranged_feedback["evaluable_count"] <= full_feedback["evaluable_count"]
+    assert 0 <= ranged_feedback["satisfaction_rate"] <= 100
+    assert 0 <= ranged_feedback["knowledge_gap_rate"] <= 100

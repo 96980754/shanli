@@ -5,19 +5,37 @@
     <!-- 现代化顶部统计栏 -->
     <div class="modern-stats-header">
       <StatusBar />
-      <!-- 顶部操作区：反馈列表与知识缺口入口独立成显眼按钮，避免只藏在统计卡里 -->
+      <!-- 顶部操作区：时段筛选（day 级别）作用于统计栏；右侧为反馈列表与知识缺口入口 -->
       <div class="dashboard-toolbar">
-        <a-button type="primary" @click="handleOpenKnowledgeGaps">
-          <template #icon><FileQuestionMark class="toolbar-icon" /></template>
-          {{ t('dash.viewKnowledgeGaps') }}
-        </a-button>
-        <a-button type="primary" @click="handleOpenFeedback">
-          <template #icon><MessageSquare class="toolbar-icon" /></template>
-          {{ t('dash.viewFeedbackList') }}
-        </a-button>
+        <div class="toolbar-filter">
+          <a-radio-group :value="quickRange" size="small" @change="handleQuickRangeChange">
+            <a-radio-button value="all">{{ t('dash.rangeAll') }}</a-radio-button>
+            <a-radio-button value="7d">{{ t('dash.range7d') }}</a-radio-button>
+            <a-radio-button value="30d">{{ t('dash.range30d') }}</a-radio-button>
+          </a-radio-group>
+          <a-range-picker
+            v-model:value="customRange"
+            value-format="YYYY-MM-DD"
+            :disabled-date="disableFutureDate"
+            :placeholder="[t('dash.rangeStartPlaceholder'), t('dash.rangeEndPlaceholder')]"
+            size="small"
+            @change="handleCustomRangeChange"
+          />
+        </div>
+        <div class="toolbar-actions">
+          <a-button type="primary" @click="handleOpenKnowledgeGaps">
+            <template #icon><FileQuestionMark class="toolbar-icon" /></template>
+            {{ t('dash.viewKnowledgeGaps') }}
+          </a-button>
+          <a-button type="primary" @click="handleOpenFeedback">
+            <template #icon><MessageSquare class="toolbar-icon" /></template>
+            {{ t('dash.viewFeedbackList') }}
+          </a-button>
+        </div>
       </div>
       <StatsOverviewComponent
         :basic-stats="basicStats"
+        :range-active="!!activeRange"
         @open-feedback="handleOpenFeedback"
         @open-knowledge-gaps="handleOpenKnowledgeGaps"
       />
@@ -71,11 +89,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { MessageSquare, FileQuestionMark } from 'lucide-vue-next'
+import dayjs from '@/utils/time'
 import { dashboardApi } from '@/apis/dashboard_api'
 
 const { t } = useI18n()
@@ -102,6 +121,45 @@ const allStatsData = ref({
 
 // 对话列表
 const loading = ref(false)
+
+// 时段筛选（day 级别，仅作用于顶部统计栏）：快捷段与自定义范围互斥
+const quickRange = ref('all')
+const customRange = ref(null)
+
+// 当前生效的时段（null = 全部）。日期按用户本地日历取值，与后端北京日界一致。
+const activeRange = computed(() => {
+  if (customRange.value?.[0] && customRange.value?.[1]) {
+    return { start_date: customRange.value[0], end_date: customRange.value[1] }
+  }
+  if (quickRange.value === '7d' || quickRange.value === '30d') {
+    const days = quickRange.value === '7d' ? 7 : 30
+    const today = dayjs()
+    return {
+      start_date: today.subtract(days - 1, 'day').format('YYYY-MM-DD'),
+      end_date: today.format('YYYY-MM-DD')
+    }
+  }
+  return null
+})
+
+const disableFutureDate = (current) => current && current > dayjs().endOf('day')
+
+const handleQuickRangeChange = () => {
+  customRange.value = null
+  loadBasicStats()
+}
+
+const handleCustomRangeChange = (value) => {
+  // 选满两日才生效；清空则回到「全部」
+  if (!value || !value[0] || !value[1]) {
+    customRange.value = null
+    quickRange.value = 'all'
+    loadBasicStats()
+    return
+  }
+  quickRange.value = null
+  loadBasicStats()
+}
 
 // 调用统计子组件引用
 const callStatsRef = ref(null)
@@ -150,6 +208,16 @@ const loadAllStats = async () => {
   }
 }
 
+// 时段变化后只重拉顶部统计栏，明细卡保持全量口径
+const loadBasicStats = async () => {
+  try {
+    basicStats.value = await dashboardApi.getStats(activeRange.value || {})
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+    message.error(t('dash.loadStatsFailed'))
+  }
+}
+
 // 打开反馈管理全页
 const handleOpenFeedback = () => {
   router.push('/feedback')
@@ -189,9 +257,22 @@ onUnmounted(() => {
 
 .dashboard-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 8px;
   padding: 8px var(--page-padding) 0;
+
+  .toolbar-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 8px;
+  }
 
   .toolbar-icon {
     width: 16px;
