@@ -1,21 +1,6 @@
 <template>
   <div class="stats-overview-container">
     <div class="stats-grid">
-      <div class="stat-card primary">
-        <div class="stat-icon">
-          <MessageCircle class="icon" />
-        </div>
-        <div class="stat-content" :title="$t(rangeActive ? 'dash.periodConversationsTip' : 'dash.totalConversationsTip')">
-          <div class="stat-value">{{ basicStats?.total_conversations || 0 }}</div>
-          <div class="stat-label">{{ $t(rangeActive ? 'dash.periodConversations' : 'dash.totalConversations') }}</div>
-          <div class="stat-trend" v-if="basicStats?.conversation_trend">
-            <TrendingUp v-if="basicStats.conversation_trend > 0" class="trend-icon up" />
-            <TrendingDown v-else-if="basicStats.conversation_trend < 0" class="trend-icon down" />
-            <span class="trend-text">{{ Math.abs(basicStats.conversation_trend) }}%</span>
-          </div>
-        </div>
-      </div>
-
       <div class="stat-card success">
         <div class="stat-icon">
           <Activity class="icon" />
@@ -26,13 +11,27 @@
         </div>
       </div>
 
+      <div
+        class="stat-card secondary clickable"
+        :title="$t(rangeActive ? 'dash.periodQaCountTip' : 'dash.qaCountTip')"
+        @click="handleQaRecordsClick"
+      >
+        <div class="stat-icon">
+          <MessagesSquare class="icon" />
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ basicStats?.qa_count || 0 }}</div>
+          <div class="stat-label">{{ $t(rangeActive ? 'dash.periodQaCount' : 'dash.qaCount') }}</div>
+        </div>
+      </div>
+
       <div class="stat-card info">
         <div class="stat-icon">
-          <Mail class="icon" />
+          <UserCheck class="icon" />
         </div>
-        <div class="stat-content" :title="$t(rangeActive ? 'dash.periodMessagesTip' : 'dash.totalMessagesTip')">
-          <div class="stat-value">{{ basicStats?.total_messages || 0 }}</div>
-          <div class="stat-label">{{ $t(rangeActive ? 'dash.periodMessages' : 'dash.totalMessages') }}</div>
+        <div class="stat-content" :title="$t(rangeActive ? 'dash.periodQaUsersTip' : 'dash.qaUsersTip')">
+          <div class="stat-value">{{ basicStats?.qa_user_count || 0 }}</div>
+          <div class="stat-label">{{ $t(rangeActive ? 'dash.periodQaUsers' : 'dash.qaUsers') }}</div>
         </div>
       </div>
 
@@ -90,14 +89,12 @@
 <script setup>
 import { computed } from 'vue'
 import {
-  MessageCircle,
   Activity,
-  Mail,
   Users,
   BarChart3,
   Heart,
-  TrendingUp,
-  TrendingDown
+  MessagesSquare,
+  UserCheck
 } from 'lucide-vue-next'
 
 // Props
@@ -114,7 +111,7 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['open-feedback', 'open-knowledge-gaps'])
+const emit = defineEmits(['open-feedback', 'open-knowledge-gaps', 'open-qa-records'])
 
 const feedbackStats = computed(() => props.basicStats?.feedback_stats || null)
 
@@ -126,6 +123,11 @@ const handleFeedbackClick = () => {
 // 知识缺口明细沉淀在知识缺口页，点卡片直达
 const handleKnowledgeGapClick = () => {
   emit('open-knowledge-gaps')
+}
+
+// 问答明细：点问答次数卡片直达知识运营-问答明细
+const handleQaRecordsClick = () => {
+  emit('open-qa-records')
 }
 
 // Methods
@@ -167,13 +169,6 @@ const getSatisfactionClass = () => {
       &:hover {
         border-color: var(--gray-200);
         box-shadow: 0 1px 3px 0 var(--shadow-1);
-      }
-
-      &.primary {
-        .stat-icon {
-          background-color: var(--color-primary-50);
-          color: var(--main-color);
-        }
       }
 
       &.success {
@@ -271,32 +266,6 @@ const getSatisfactionClass = () => {
           color: var(--gray-500);
           line-height: 1.3;
           margin-top: -4px;
-        }
-
-        .stat-trend {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          margin-top: 4px;
-
-          .trend-icon {
-            width: 14px;
-            height: 14px;
-
-            &.up {
-              color: var(--color-success-700);
-            }
-
-            &.down {
-              color: var(--color-error-700);
-            }
-          }
-
-          .trend-text {
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--gray-600);
-          }
         }
       }
     }

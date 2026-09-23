@@ -341,5 +341,28 @@ export const dashboardApi = {
     apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/web-search`, {}),
 
   saveKnowledgeGapQaPair: (gapId, data) =>
-    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/save-qa`, data)
+    apiSuperAdminPost(`/api/dashboard/knowledge-gaps/${gapId}/save-qa`, data),
+
+  /**
+   * 分页查询问答明细（产品线口径：拒答沿用判定域，正常回答按业务线关键词分类）
+   * @param {Object} params - start_date/end_date/domain/keyword/limit/offset
+   */
+  getQaRecords: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiSuperAdminGet(`/api/dashboard/qa-records?${query.toString()}`)
+  },
+
+  /**
+   * 按当前筛选条件导出问答明细 CSV（UTF-8 BOM）
+   */
+  exportQaRecords: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiSuperAdminGet(`/api/dashboard/qa-records/export?${query.toString()}`, {}, 'blob')
+  }
 }

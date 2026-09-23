@@ -4,6 +4,9 @@ Integration tests for dashboard router endpoints.
 
 from __future__ import annotations
 
+import csv
+import io
+
 import pytest
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -177,3 +180,96 @@ async def test_admin_stats_with_date_range_filters_counts(test_client, admin_hea
     assert ranged_feedback["evaluable_count"] <= full_feedback["evaluable_count"]
     assert 0 <= ranged_feedback["satisfaction_rate"] <= 100
     assert 0 <= ranged_feedback["knowledge_gap_rate"] <= 100
+
+
+async def test_admin_stats_includes_qa_counters(test_client, admin_headers):
+    """stats 返回问答次数/人数，且时段口径为全量子集。"""
+    full_response = await test_client.get("/api/dashboard/stats", headers=admin_headers)
+    assert full_response.status_code == 200, full_response.text
+    full = full_response.json()
+    for key in ("qa_count", "qa_user_count"):
+        assert key in full, f"stats missing {key}"
+        assert full[key] >= 0
+
+    ranged_response = await test_client.get(
+        "/api/dashboard/stats?start_date=2026-09-01&end_date=2026-09-22", headers=admin_headers
+    )
+    assert ranged_response.status_code == 200, ranged_response.text
+    ranged = ranged_response.json()
+    assert ranged["qa_count"] <= full["qa_count"]
+    assert ranged["qa_user_count"] <= full["qa_user_count"]
+
+
+async def test_admin_can_fetch_qa_records(test_client, admin_headers):
+    """问答明细返回行结构完整：问题/回答/产品线/回答类型/用户/会话。"""
+    response = await test_client.get("/api/dashboard/qa-records?limit=5", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "total" in data and isinstance(data["items"], list)
+    for item in data["items"][:5]:
+        for key in (
+            "id",
+            "created_at",
+            "question",
+            "answer",
+            "domain",
+            "answer_type",
+            "uid",
+            "agent_id",
+            "thread_id",
+        ):
+            assert key in item, f"qa record missing {key}"
+        # 终答条件已排除空正文，回答正文不应为空
+        assert item["answer"], "qa record answer should not be empty"
+
+
+async def test_qa_records_filters_and_pagination(test_client, admin_headers):
+    """domain/keyword 过滤与分页：子集关系与 offset 翻页不重叠。"""
+    base = await test_client.get("/api/dashboard/qa-records", headers=admin_headers)
+    assert base.status_code == 200, base.text
+    total_all = base.json()["total"]
+    if total_all == 0:
+        pass  # 空库时仅验证 200 与结构，跳过子集断言
+
+    filtered = await test_client.get("/api/dashboard/qa-records?domain=unknown&limit=200", headers=admin_headers)
+    assert filtered.status_code == 200, filtered.text
+    assert filtered.json()["total"] <= total_all
+    for item in filtered.json()["items"]:
+        assert item["domain"] == "unknown"
+
+    keyworded = await test_client.get(
+        "/api/dashboard/qa-records?keyword=%E4%B8%8D%E5%AD%98%E5%9C%A8", headers=admin_headers
+    )
+    assert keyworded.status_code == 200, keyworded.text
+    assert keyworded.json()["total"] == 0
+
+    page1 = await test_client.get("/api/dashboard/qa-records?limit=2&offset=0", headers=admin_headers)
+    page2 = await test_client.get("/api/dashboard/qa-records?limit=2&offset=2", headers=admin_headers)
+    ids1 = {item["id"] for item in page1.json()["items"]}
+    ids2 = {item["id"] for item in page2.json()["items"]}
+    assert not (ids1 & ids2), "分页 offset 之间不应重叠"
+
+
+async def test_qa_records_export_csv(test_client, admin_headers):
+    """导出返回带 BOM 的 CSV，表头与行数和明细接口一致。"""
+    list_response = await test_client.get("/api/dashboard/qa-records", headers=admin_headers)
+    assert list_response.status_code == 200, list_response.text
+
+    export_response = await test_client.get("/api/dashboard/qa-records/export", headers=admin_headers)
+    assert export_response.status_code == 200, export_response.text
+    assert export_response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in export_response.headers.get("content-disposition", "")
+
+    content = export_response.text
+    assert content.startswith("﻿"), "CSV 应带 UTF-8 BOM 以便 Excel 直接打开"
+    # 回答正文含换行（markdown），按行 split 会把一条记录拆成多行，须用 csv 解析
+    rows = [row for row in csv.reader(io.StringIO(content.lstrip("﻿"))) if row]
+    assert rows[0] == ["时间", "用户", "问题", "回答", "产品线", "回答类型", "智能体", "会话ID"]
+    assert len(rows) - 1 == list_response.json()["total"]
+
+    # 带筛选导出：行数与带筛选的明细一致
+    filtered_list = await test_client.get("/api/dashboard/qa-records?domain=unknown", headers=admin_headers)
+    filtered_export = await test_client.get("/api/dashboard/qa-records/export?domain=unknown", headers=admin_headers)
+    assert filtered_export.status_code == 200
+    filtered_rows = [row for row in csv.reader(io.StringIO(filtered_export.text.lstrip("﻿"))) if row]
+    assert len(filtered_rows) - 1 == filtered_list.json()["total"]

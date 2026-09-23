@@ -91,7 +91,7 @@ function goCandidates() {
 
 <style scoped lang="less">
 .knowledge-ops-page {
-  min-height: 100vh;
+  min-height: 100%;
   padding: var(--page-padding);
   background: var(--gray-25);
 }

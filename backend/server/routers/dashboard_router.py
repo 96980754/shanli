@@ -6,15 +6,20 @@ Provides centralized dashboard APIs for monitoring system-wide statistics.
 提供系统级统计和监控的API接口，用于监控系统运行状态、用户活动、工具调用、知识库使用等。
 """
 
+import csv
+import io
 import traceback
 from datetime import datetime, timedelta
 from typing import Any, Literal
+from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
-from sqlalchemy import Integer, String, cast, distinct, func, or_, select, text
+from sqlalchemy import Integer, String, and_, cast, distinct, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
+
+from yuxi.config.app import resolve_business_lines, sanitize_business_domain
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
 from yuxi.repositories.agent_repository import AgentRepository
@@ -27,8 +32,9 @@ from yuxi.services.feedback_service import (
     count_knowledge_gap_answers,
     count_refusal_answers,
 )
+from yuxi.services.knowledge_answer_disposition import classify_domain_by_keywords
 from yuxi.services.knowledge_gap_service import KnowledgeGapAdminService
-from yuxi.storage.postgres.models_business import User
+from yuxi.storage.postgres.models_business import Message, User
 from yuxi.utils.datetime_utils import (
     SHANGHAI_TZ,
     UTC,
@@ -729,11 +735,28 @@ async def get_dashboard_stats(
             round(knowledge_gap_count / evaluable_count * 100, 2) if evaluable_count else 0.0
         )
 
+        # 问答统计（口径：每轮收尾的 AI 终答且正文非空，含拒答；与满意度分母同基准）
+        terminal_answer = _terminal_answer_condition()
+        qa_count_result = await db.execute(
+            select(func.count(Message.id)).where(terminal_answer, *within(Message.created_at))
+        )
+        qa_count = qa_count_result.scalar() or 0
+
+        qa_user_count_result = await db.execute(
+            select(func.count(distinct(Conversation.uid)))
+            .select_from(Message)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(terminal_answer, *within(Message.created_at))
+        )
+        qa_user_count = qa_user_count_result.scalar() or 0
+
         return {
             "total_conversations": total_conversations,
             "active_conversations": active_conversations,
             "total_messages": total_messages,
             "total_users": total_users,
+            "qa_count": qa_count,
+            "qa_user_count": qa_user_count,
             "feedback_stats": {
                 "total_feedbacks": total_feedbacks,
                 **satisfaction_stats,
@@ -744,6 +767,195 @@ async def get_dashboard_stats(
         logger.error(f"Error getting dashboard stats: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard stats: {str(e)}")
+
+
+# =============================================================================
+# 问答明细（超级管理员权限）
+# =============================================================================
+
+# CSV 导出的回答类型/产品线展示文案；JSON 接口返回 code，由前端 i18n 翻译。
+_QA_ANSWER_TYPE_LABELS = {
+    "answered": "正常回答",
+    "knowledge_refusal": "知识缺口",
+    "scope_refusal": "业务外",
+    "policy_refusal": "策略拦截",
+    "system_error": "系统错误",
+}
+
+
+def _terminal_answer_condition() -> Any:
+    """终答条件：会话内每轮收尾的 AI 消息且正文非空（tool 消息同样以 assistant 角色落库）。
+
+    tool 消息靠「紧邻下一条不是 assistant」排除；与满意度分母
+    `_EVALUABLE_ANSWERS_WHERE`（feedback_service）同基准，额外排除空 content
+    的澄清轮收尾——这类行没有可读的回答，不计入一问一答。
+    """
+    next_msg = aliased(Message)
+    next_message_id = (
+        select(func.min(next_msg.id))
+        .where(next_msg.conversation_id == Message.conversation_id, next_msg.id > Message.id)
+        .correlate(Message)
+        .scalar_subquery()
+    )
+    return and_(
+        Message.role == "assistant",
+        Message.content != "",
+        ~exists(select(next_msg.id).where(next_msg.id == next_message_id, next_msg.role == "assistant")),
+    )
+
+
+def _resolve_qa_domain(disposition: dict | None, question: str, lines: list) -> str:
+    """明细产品线口径：拒答已判定的 domain 优先；answered/unknown 按问题关键词现场分类。"""
+    domain = sanitize_business_domain((disposition or {}).get("domain"))
+    if domain == "unknown":
+        domain = classify_domain_by_keywords(question, lines)
+    return domain
+
+
+async def _load_qa_record_rows(
+    db: AsyncSession, start_at: datetime | None, end_at: datetime | None
+) -> list[dict]:
+    """全量拉取时段内的问答明细行并解析产品线（量级为单机客服库的千级以内，可内存过滤分页）。"""
+    from yuxi.storage.postgres.models_business import Conversation, Message, User
+
+    prior_msg = aliased(Message)
+    prior_question = (
+        select(prior_msg.content)
+        .where(
+            prior_msg.conversation_id == Message.conversation_id,
+            prior_msg.role == "user",
+            prior_msg.id < Message.id,
+        )
+        .order_by(prior_msg.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
+    conditions = [_terminal_answer_condition()]
+    if start_at is not None:
+        conditions.append(Message.created_at >= start_at)
+    if end_at is not None:
+        conditions.append(Message.created_at < end_at)
+
+    stmt = (
+        select(
+            Message.id,
+            Message.created_at,
+            Message.content,
+            Message.extra_metadata,
+            prior_question.label("prior_question"),
+            Conversation.uid,
+            Conversation.agent_id,
+            Conversation.thread_id,
+            User.username,
+        )
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .outerjoin(User, Conversation.uid == User.uid)
+        .where(*conditions)
+        .order_by(Message.created_at.desc(), Message.id.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    lines = resolve_business_lines()
+    records = []
+    for row in rows:
+        metadata = row.extra_metadata or {}
+        disposition = metadata.get("knowledge_disposition") or {}
+        question = str(metadata.get("knowledge_question") or row.prior_question or "")
+        records.append(
+            {
+                "id": row.id,
+                "created_at": row.created_at.isoformat(),
+                "question": question,
+                "answer": row.content,
+                "domain": _resolve_qa_domain(disposition, question, lines),
+                "answer_type": disposition.get("type") or "answered",
+                "uid": row.uid,
+                "username": row.username,
+                "agent_id": row.agent_id,
+                "thread_id": row.thread_id,
+            }
+        )
+    return records
+
+
+def _filter_qa_records(records: list[dict], domain: str | None, keyword: str | None) -> list[dict]:
+    """产品线/关键词过滤：domain 在加载时解析（含关键词分类兜底），只能行级过滤。"""
+    if domain:
+        records = [record for record in records if record["domain"] == domain]
+    if keyword and keyword.strip():
+        pattern = keyword.strip().casefold()
+        records = [record for record in records if pattern in record["question"].casefold()]
+    return records
+
+
+@dashboard.get("/qa-records")
+async def get_qa_records(
+    start_date: str | None = Query(None, description="起始日（北京日期 YYYY-MM-DD，含当日）"),
+    end_date: str | None = Query(None, description="结束日（北京日期 YYYY-MM-DD，含当日）"),
+    domain: str | None = Query(None, description="产品线筛选（业务线 code 或 unknown）"),
+    keyword: str | None = Query(None, description="问题关键词"),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """分页查询问答明细（超级管理员权限）。产品线口径见 _resolve_qa_domain。"""
+    del current_user
+    start_at, end_at = _beijing_day_bounds(start_date, end_date)
+    try:
+        records = _filter_qa_records(await _load_qa_record_rows(db, start_at, end_at), domain, keyword)
+        return {"total": len(records), "items": records[offset : offset + limit]}
+    except Exception as e:
+        logger.error(f"Error getting qa records: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to get qa records: {str(e)}")
+
+
+@dashboard.get("/qa-records/export")
+async def export_qa_records(
+    start_date: str | None = Query(None, description="起始日（北京日期 YYYY-MM-DD，含当日）"),
+    end_date: str | None = Query(None, description="结束日（北京日期 YYYY-MM-DD，含当日）"),
+    domain: str | None = Query(None, description="产品线筛选（业务线 code 或 unknown）"),
+    keyword: str | None = Query(None, description="问题关键词"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """按当前筛选条件导出问答明细 CSV（UTF-8 带 BOM，Excel 可直接打开）。"""
+    del current_user
+    start_at, end_at = _beijing_day_bounds(start_date, end_date)
+    try:
+        records = _filter_qa_records(await _load_qa_record_rows(db, start_at, end_at), domain, keyword)
+        line_names = {line.code: line.name for line in resolve_business_lines()}
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["时间", "用户", "问题", "回答", "产品线", "回答类型", "智能体", "会话ID"])
+        for record in records:
+            created_at = ensure_shanghai(ensure_utc(datetime.fromisoformat(record["created_at"])))
+            writer.writerow(
+                [
+                    created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    record["username"] or record["uid"] or "",
+                    record["question"],
+                    record["answer"],
+                    line_names.get(record["domain"], "未分类" if record["domain"] == "unknown" else record["domain"]),
+                    _QA_ANSWER_TYPE_LABELS.get(record["answer_type"], record["answer_type"]),
+                    record["agent_id"] or "",
+                    record["thread_id"],
+                ]
+            )
+
+        filename = f"qa_records_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        return Response(
+            content=buffer.getvalue().encode("utf-8-sig"),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        )
+    except Exception as e:
+        logger.error(f"Error exporting qa records: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to export qa records: {str(e)}")
 
 
 # =============================================================================

@@ -38,6 +38,7 @@
         :range-active="!!activeRange"
         @open-feedback="handleOpenFeedback"
         @open-knowledge-gaps="handleOpenKnowledgeGaps"
+        @open-qa-records="handleOpenQaRecords"
       />
     </div>
 
@@ -228,6 +229,11 @@ const handleOpenFeedback = () => {
 // 打开知识缺口页（拒答明细沉淀在这里）
 const handleOpenKnowledgeGaps = () => {
   router.push('/knowledge-gaps')
+}
+
+// 打开问答明细页，携带总览当前时段作为初始筛选
+const handleOpenQaRecords = () => {
+  router.push({ path: '/dashboard/qa-records', query: activeRange.value || {} })
 }
 
 // 清理函数 - 清理所有子组件的图表实例
