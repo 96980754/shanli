@@ -62,6 +62,7 @@ export default defineConfig({
           { text: '品牌自定义', link: '/advanced/branding' },
           { text: '其他配置', link: '/advanced/misc' },
           { text: '生产部署', link: '/advanced/deployment' },
+          { text: '移动端打包', link: '/advanced/mobile-app-packaging' },
           { text: 'API Key 外部集成', link: '/advanced/api-key-integration' }
         ]
       },
