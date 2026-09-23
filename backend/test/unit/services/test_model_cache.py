@@ -109,3 +109,18 @@ def test_model_cache_save_writes_redis_json(monkeypatch: pytest.MonkeyPatch):
 
     payload = json.loads(redis.data[REDIS_CACHE_KEY])
     assert payload[info.spec]["base_url"] == "https://example.com/v1"
+
+
+def test_model_capability_survives_cache_roundtrip():
+    info = ModelInfo(
+        provider_id="domestic",
+        model_id="vision",
+        model_type="chat",
+        display_name="Vision",
+        api_key="sk-test",
+        base_url="https://example.com/v1",
+        provider_type="openai",
+        input_modalities=("text", "image"),
+    )
+
+    assert ModelInfo.from_dict(info.to_dict()).input_modalities == ("text", "image")

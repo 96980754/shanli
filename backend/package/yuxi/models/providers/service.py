@@ -212,7 +212,7 @@ def _normalize_remote_model(raw_model: dict[str, Any], model_type: str = "chat")
         "description": raw_model.get("description"),
         "context_length": raw_model.get("context_length") or top_provider.get("context_length"),
         "max_completion_tokens": top_provider.get("max_completion_tokens"),
-        "input_modalities": architecture.get("input_modalities") or [],
+        "input_modalities": architecture.get("input_modalities") or raw_model.get("input_modalities") or [],
         "output_modalities": architecture.get("output_modalities") or [],
         "supported_parameters": raw_model.get("supported_parameters") or [],
         "pricing": raw_model.get("pricing") or {},

@@ -40,6 +40,10 @@ class FileStatus:
     CONFIRMED = "confirmed"
     ERROR_CLEANING = "error_cleaning"
     ERROR_REPLACEMENT_CLEANUP = "error_replacement_cleanup"
+    FLOWCHART_PARSING = "flowchart_parsing"
+    FLOWCHART_WAITING_CONFIRMATION = "flowchart_waiting_confirmation"
+    FLOWCHART_CONFIRMING = "flowchart_confirming"
+    ERROR_FLOWCHART_PARSING = "error_flowchart_parsing"
 
 
 INDEXED_STATS_STATUSES = {FileStatus.INDEXED, "done", FileStatus.ERROR_REPLACEMENT_CLEANUP}
