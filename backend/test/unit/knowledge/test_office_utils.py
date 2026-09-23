@@ -147,7 +147,7 @@ async def test_extract_office_content_docx(monkeypatch):
 
     blocks = [
         {"kind": "heading", "text": "标题"},
-        {"kind": "para", "text": "段落"},
+        {"kind": "para", "text": "段落", "runs": [{"text": "段落", "bold": True, "italic": False}]},
     ]
     docx_bytes = write_docx(blocks)
 
@@ -167,3 +167,27 @@ async def test_extract_office_content_docx(monkeypatch):
     assert result["type"] == "docx"
     assert any(b.get("text") == "标题" for b in result["blocks"])
     assert any(b.get("text") == "段落" for b in result["blocks"])
+    assert any(b.get("runs", [{}])[0].get("bold") for b in result["blocks"])
+
+
+@pytest.mark.asyncio
+async def test_extract_office_content_xlsx(monkeypatch):
+    from yuxi.knowledge import runtime as kb_runtime
+    from yuxi.knowledge.utils.office_content import extract_office_content
+
+    xlsx_bytes = write_xlsx([{"name": "指标", "rows": [["项目", "值"], ["容量", 42]]}])
+
+    class _Kb:
+        async def _read_minio_bytes(self, file_path):
+            return xlsx_bytes
+
+    class _Manager:
+        async def _get_kb_for_database(self, kb_id):
+            return _Kb()
+
+    monkeypatch.setattr(kb_runtime, "knowledge_base", _Manager())
+    result = await extract_office_content("kb-1", "minio://kb/x.xlsx", "x.xlsx")
+    assert result == {
+        "type": "xlsx",
+        "sheets": [{"name": "指标", "rows": [["项目", "值"], ["容量", "42"]]}],
+    }

@@ -30,7 +30,7 @@ def _docx_blocks(file_path: str) -> list[dict]:
             # 依据样式粗判标题（Heading 1-6）
             style_name = _para_style(document, child)
             kind = "heading" if style_name and style_name.lower().startswith("heading") else "para"
-            blocks.append({"kind": kind, "text": text})
+            blocks.append({"kind": kind, **_para_value(document, child)})
         elif tag == "tbl":
             rows = _table_rows(document, child)
             if rows:
@@ -50,6 +50,23 @@ def _docx_blocks(file_path: str) -> list[dict]:
                 blocks.append({"kind": "table", "rows": rows})
 
     return blocks
+
+
+def _para_value(document, p) -> dict:
+    """提取段落文字及首期支持的粗体/斜体行内标记。"""
+    from docx.text.paragraph import Paragraph
+
+    paragraph = Paragraph(p, document)
+    runs = []
+    for run in paragraph.runs:
+        text = run.text or ""
+        if text:
+            runs.append({"text": text, "bold": bool(run.bold), "italic": bool(run.italic)})
+    if not runs:
+        return {"text": ""}
+    if not any(run["bold"] or run["italic"] for run in runs):
+        return {"text": "".join(run["text"] for run in runs).strip()}
+    return {"text": "".join(run["text"] for run in runs).strip(), "runs": runs}
 
 
 def _para_text(document, p) -> str:

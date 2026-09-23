@@ -21,6 +21,15 @@
       @success="onFileUploadSuccess"
     />
 
+    <OfficeEditModal
+      v-model:visible="createOfficeVisible"
+      :kb-id="kbId"
+      :create-type="createOfficeType"
+      :filename="createOfficeFilename"
+      :parent-id="currentFolderId"
+      @success="handleCreatedOffice"
+    />
+
     <div v-if="detailLoading" class="database-detail-loading">
       <a-spin :tip="t('dbInfo.loadingKbInfo')" />
     </div>
@@ -96,6 +105,24 @@
             <div class="file-management-info">
               <div class="file-info-title">
                 <div class="file-info-title-row">
+                  <button
+                    v-if="kbPermissions.can_upload"
+                    type="button"
+                    class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
+                    @click="openCreateOffice('docx')"
+                  >
+                    <FileText :size="14" />
+                    <span>{{ $t('dbInfo.newWord') }}</span>
+                  </button>
+                  <button
+                    v-if="kbPermissions.can_upload"
+                    type="button"
+                    class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
+                    @click="openCreateOffice('xlsx')"
+                  >
+                    <FileText :size="14" />
+                    <span>{{ $t('dbInfo.newExcel') }}</span>
+                  </button>
                   <button
                     v-if="kbPermissions.can_upload"
                     type="button"
@@ -410,6 +437,7 @@ import { message, Modal } from 'ant-design-vue'
 import FileTable from '@/components/FileTable.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 import FileUploadModal from '@/components/FileUploadModal.vue'
+import OfficeEditModal from '@/components/OfficeEditModal.vue'
 // 图谱区重（g6/sigma/graphology），懒加载：仅在打开「图谱」Tab 时才拉取渲染，
 // 避免进入知识库详情页就同步解析大 chunk 造成切换卡顿。
 const KnowledgeGraphSection = defineAsyncComponent({
@@ -627,6 +655,9 @@ const currentFolderId = ref(null)
 const currentPathPrefix = ref('')
 const isFolderUploadMode = ref(false)
 const addFilesMode = ref('file')
+const createOfficeVisible = ref(false)
+const createOfficeType = ref('docx')
+const createOfficeFilename = ref('新建文档.docx')
 const isInitialLoad = ref(true)
 const detailLoading = ref(true)
 const fileTableRef = ref(null)
@@ -640,6 +671,17 @@ const showAddFilesModal = (options = {}) => {
     fileTableRef.value?.getCurrentFolderId?.() || store.fileBrowser.parentId || null
   // 路径型虚拟目录：无 parent_id，上传时透传 path_prefix 避免落到根目录
   currentPathPrefix.value = store.fileBrowser.pathPrefix || ''
+}
+
+const openCreateOffice = (type) => {
+  createOfficeType.value = type
+  createOfficeFilename.value = type === 'xlsx' ? '新建表格.xlsx' : '新建文档.docx'
+  currentFolderId.value = fileTableRef.value?.getCurrentFolderId?.() || store.fileBrowser.parentId || null
+  createOfficeVisible.value = true
+}
+
+const handleCreatedOffice = () => {
+  fileTableRef.value?.refresh?.()
 }
 
 const showCreateFolderModal = () => {

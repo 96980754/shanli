@@ -384,6 +384,15 @@ export const documentApi = {
   },
 
   /**
+   * 创建平台轻量在线 Word/Excel 文档并立即解析入库
+   * @param {string} kbId - 知识库 ID
+   * @param {Object} data - { content_type, blocks|sheets, filename, parent_id }
+   */
+  createOfficeDocument: async (kbId, data) => {
+    return apiAdminPost(`/api/knowledge/databases/${kbId}/documents/create-office`, data)
+  },
+
+  /**
    * 保存编辑后的 Word/Excel 并重新入库（删旧版）
    * @param {string} kbId - 知识库ID
    * @param {string} docId - 文档ID
