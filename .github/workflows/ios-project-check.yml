@@ -1,0 +1,64 @@
+name: iOS 工程检查
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/ios-project-check.yml"
+  push:
+    paths:
+      - "web/**"
+      - ".github/workflows/ios-project-check.yml"
+
+jobs:
+  build-simulator-app:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.11.0
+
+      - name: 安装前端依赖
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端并同步 iOS 工程
+        working-directory: web
+        run: |
+          pnpm run build
+          pnpm exec cap sync ios
+
+      - name: 构建无签名模拟器应用
+        run: |
+          xcodebuild \
+            -project web/ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: 打包检查产物
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/App.app" \
+            "$RUNNER_TEMP/AI知识库-iOS模拟器版.zip"
+
+      - name: 上传检查产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI知识库-iOS模拟器版
+          path: ${{ runner.temp }}/AI知识库-iOS模拟器版.zip
+          if-no-files-found: error
