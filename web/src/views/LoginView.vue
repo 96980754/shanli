@@ -665,7 +665,8 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   width: 100%;
-  padding: 32px 0;
+  /* App 外壳下状态栏/刘海叠加在 WebView 顶部，需让开安全区 */
+  padding: calc(32px + var(--safe-top)) 0 32px;
   z-index: 10;
 
   .navbar-content {
@@ -743,7 +744,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  padding-top: 80px; /* Add space for navbar */
+  /* Add space for navbar；叠加 safe-top 与 .login-navbar 保持一致，否则 App 外壳里表单会被导航栏压住 */
+  padding-top: calc(80px + var(--safe-top));
 }
 
 .login-card {

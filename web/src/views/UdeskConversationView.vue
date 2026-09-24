@@ -71,7 +71,7 @@
     <a-drawer
       v-model:open="detailVisible"
       :title="t('udeskConversations.detailTitle')"
-      width="560"
+      width="min(560px, 100vw)"
       :destroy-on-close="true"
     >
       <a-spin :spinning="detailLoading">

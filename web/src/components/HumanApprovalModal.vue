@@ -385,7 +385,8 @@ const handleCancel = () => {
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
   margin: 0 auto 8px;
   max-width: 800px;
-  min-width: 360px;
+  /* 用 min() 而不是死值：容器窄于 360px 时（如 375px 视口的聊天区）不再顶破输入框 */
+  min-width: min(360px, 100%);
   width: fit-content;
   border: 1px solid var(--gray-200);
 }

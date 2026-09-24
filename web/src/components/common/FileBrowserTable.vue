@@ -381,9 +381,15 @@ const handleTableChange = (pagination, filters, sorter, extra) => {
 }
 
 .file-browser-ant-table :deep(.ant-table-container),
-.file-browser-ant-table :deep(.ant-table-content),
-.file-browser-ant-table :deep(table) {
+.file-browser-ant-table :deep(.ant-table-content) {
   min-width: 100%;
+}
+
+// 窄屏下不压缩列宽，改为表格自身横向滚动。
+// 不用 antd 的 scroll.x：它会把 overflow 加到 .ant-table-content 上，令粘性表头失去滚动容器。
+// 桌面端容器宽于 520px，此规则不生效，行为与之前一致。
+.file-browser-ant-table :deep(table) {
+  min-width: max(100%, 520px);
 }
 
 .file-browser-ant-table :deep(.ant-table-thead > tr > th) {

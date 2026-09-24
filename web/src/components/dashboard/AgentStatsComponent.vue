@@ -52,6 +52,7 @@
         :data-source="topPerformers"
         size="small"
         :pagination="false"
+        :scroll="{ x: 420 }"
       >
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'rank'">

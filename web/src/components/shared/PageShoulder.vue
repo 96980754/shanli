@@ -37,22 +37,27 @@ defineProps({
   justify-content: space-between;
   gap: 16px;
   padding: 16px var(--page-padding) 0;
+  flex-wrap: wrap; // 窄屏放不下时整块换行，否则左侧搜索框+筛选器会顶出视口
 
   &-left {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
   }
 
   &-right {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
   }
 }
 
 .search-input {
   width: 280px;
+  max-width: 100%;
   display: flex;
   align-items: center;
 

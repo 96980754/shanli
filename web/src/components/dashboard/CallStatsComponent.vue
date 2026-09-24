@@ -417,4 +417,30 @@ onUnmounted(() => {
   height: 16px;
   background-color: var(--gray-200);
 }
+
+// 窄屏：7 个筛选项塞在卡片 #extra 里必然撑破卡片，改为整行换行 + 加大触控目标
+@media (max-width: 768px) {
+  :deep(.ant-card-head-wrapper) {
+    flex-wrap: wrap;
+  }
+
+  :deep(.ant-card-extra) {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .simple-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .simple-toggle {
+    padding: 8px 10px;
+  }
+}
 </style>

@@ -269,6 +269,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px var(--page-padding) 0;
+  flex-wrap: wrap; // 窄屏放不下时整块换行；否则会被 .dashboard-container 的 overflow-x: hidden 直接裁掉
 
   .toolbar-filter {
     display: flex;
@@ -280,6 +281,7 @@ onUnmounted(() => {
   .toolbar-actions {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .toolbar-icon {

@@ -1386,6 +1386,23 @@ onUnmounted(() => {
   }
 }
 
+// 窄屏：300px 的统计列 + 24px 间距 + 固定宽度按钮会顶出卡片，改为纵向排列
+@media (max-width: 767px) {
+  .progress-info {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .progress-stats {
+    min-width: 0;
+    margin-right: 0;
+  }
+
+  .progress-actions {
+    padding-top: 0;
+  }
+}
+
 .query-text {
   font-size: 12px;
   line-height: 1.5;

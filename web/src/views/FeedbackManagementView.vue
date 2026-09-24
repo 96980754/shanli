@@ -122,7 +122,7 @@
     <a-drawer
       v-model:open="conversationOpen"
       :title="t('feedback.conversationDrawerTitle')"
-      width="560"
+      width="min(560px, 100vw)"
     >
       <a-spin v-if="conversationLoading" />
       <template v-else-if="conversation">

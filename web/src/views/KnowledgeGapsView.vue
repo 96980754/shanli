@@ -20,6 +20,7 @@
       :loading="loading"
       :pagination="pagination"
       row-key="id"
+      :scroll="{ x: 1140 }"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -49,7 +50,7 @@
       </template>
     </a-table>
 
-    <a-drawer v-model:open="detailOpen" :title="t('gaps.detailTitle')" width="520">
+    <a-drawer v-model:open="detailOpen" :title="t('gaps.detailTitle')" width="min(520px, 100vw)">
       <a-descriptions v-if="detail" :column="1" bordered size="small">
         <a-descriptions-item :label="t('eval.questionColumn')">{{ detail.question }}</a-descriptions-item>
         <a-descriptions-item :label="t('common.status')">{{ statusLabel(detail.status) }}</a-descriptions-item>
@@ -306,6 +307,7 @@ onMounted(loadGaps)
   border: 1px solid var(--gray-150);
   border-radius: 8px;
   background: var(--gray-0);
+  flex-wrap: wrap; // 320px 搜索框 + 3 个 180px 下拉约需 980px，窄屏必须换行
 }
 .query-input { width: 320px; }
 .filter-select { width: 180px; }
