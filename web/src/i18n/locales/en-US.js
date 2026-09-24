@@ -1436,10 +1436,11 @@ export default {
     summarizeRunning: 'Generating...',
     summarizePending: 'Candidate QA to generate',
     summarizeNoPending: 'No conversations to summarize; sync records first',
-    summarizeGenerated: '{count} new candidate QA pairs generated',
     syncScope:
-      'Sync scope: first sync goes back {days} days; later syncs cover what is new since the last one (with {minutes} minutes of overlap)',
-    countsLine: '{pending} pending review'
+      'Sync scope: first sync goes back {days} days; later syncs cover what is new since the last one',
+    syncScopeSynced:
+      'Sync scope: earliest synced conversation {date}; later syncs cover what is new since the last one',
+    countsLine: '{pending} new QA pairs'
   },
   udeskConversations: {
     pageTitle: 'Udesk Service Conversations',

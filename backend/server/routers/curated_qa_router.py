@@ -271,10 +271,14 @@ async def get_udesk_status(
                 .select_from(UdeskConversation)
                 .where(UdeskConversation.summarized_at.is_(None))
                 .scalar_subquery(),
+                select(func.min(UdeskConversation.started_at)).scalar_subquery(),
             )
         )
     ).one()
-    conversations, messages, candidates, candidates_pending, summarize_pending = (int(value or 0) for value in counts)
+    *counter_values, earliest_started_at = counts
+    conversations, messages, candidates, candidates_pending, summarize_pending = (
+        int(value or 0) for value in counter_values
+    )
     return {
         **config.describe(),
         "counts": {
@@ -285,6 +289,9 @@ async def get_udesk_status(
             # candidates 与列表条数天然不等——两个口径都给出，避免对不上。
             # （删除是真删行，已删的不会再计入累计。）
             "candidates_pending": candidates_pending,
+            # 已入库会话里最早的开始时间：页面用它回答甲方那句「同步的是多久的记录」。
+            # 一条都没同步过时为 None，由前端退回「首次回溯 N 天」的说法。
+            "earliest_conversation_at": format_utc_datetime(earliest_started_at),
         },
         "pull": {
             **await _load_pull_state(db),

@@ -70,7 +70,6 @@
           <span class="pull-status-error">{{ summarizeError }}</span>
         </a-tooltip>
       </div>
-      <div v-if="summarizeGeneratedLine" class="status-row">{{ summarizeGeneratedLine }}</div>
       <div class="status-row status-counts">{{ countsLine }}</div>
       <div class="status-row status-counts">{{ syncScopeLine }}</div>
     </div>
@@ -219,7 +218,7 @@ import { dashboardApi } from '@/apis/dashboard_api'
 import { agentApi } from '@/apis/agent_api'
 import { isBuiltinAgent } from '@/stores/agent'
 import { useConfigStore } from '@/stores/config'
-import { formatFullDateTime } from '@/utils/time'
+import { formatDateTime, formatFullDateTime } from '@/utils/time'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -546,23 +545,20 @@ const summarizeSummary = computed(() => {
 const summarizeError = computed(() =>
   summarize.value.last_run_status === 'failed' ? summarize.value.last_error || '' : ''
 )
-// 计数行只报待审数：累计口径（采纳不删行）与列表默认的待审过滤对不上，甲方只关心还有多少要审
+// 计数行只报待审数：累计口径（采纳不删行）与列表默认的待审过滤对不上，甲方只关心还有多少要审。
+// 文案上按甲方要求叫「新增 N 条问答对」（不再叫「待审核」），数字口径没变，仍是 candidates_pending
 const countsLine = computed(() =>
   t('candidates.countsLine', { pending: counts.value.candidates_pending ?? 0 })
 )
-// 新生成条数是**单轮**口径，由后端在总结收尾时落库；null 表示还没跑过任何一轮，
-// 0 是有效值（跑了但一条新候选都没产出），两者要分开
-const summarizeGeneratedLine = computed(() => {
-  const generated = summarize.value.last_candidates
-  return generated == null ? '' : t('candidates.summarizeGenerated', { count: generated })
-})
-// 同步范围：首次回灌多少天 + 之后每轮往前多回看多久。甲方问过「同步的是多久的记录」，
-// 写在页面上省得再问——两个值都取自后端生效配置，不是前端写死的文案
+// 同步范围：已同步到的最早会话。甲方问过「同步的是多久的记录」，写在页面上省得再问——
+// 取值来自后端生效配置与已入库数据，不是前端写死的文案。
+// 一条会话都没同步过时没有日期可报，退回「首次回溯 N 天」，那仍是当前生效的规则。
 const syncScopeLine = computed(() => {
   const backfillDays = udeskStatus.value?.backfill_start_days
-  const overlapMinutes = udeskStatus.value?.sync_overlap_minutes
-  if (backfillDays == null || overlapMinutes == null) return ''
-  return t('candidates.syncScope', { days: backfillDays, minutes: overlapMinutes })
+  if (backfillDays == null) return ''
+  const earliest = counts.value.earliest_conversation_at
+  if (!earliest) return t('candidates.syncScope', { days: backfillDays })
+  return t('candidates.syncScopeSynced', { date: formatDateTime(earliest, 'YYYY-MM-DD') })
 })
 
 function stopSummarizePoll() {

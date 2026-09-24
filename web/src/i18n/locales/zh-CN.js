@@ -1403,10 +1403,9 @@ export default {
     summarizeRunning: '生成中...',
     summarizePending: '待生成候选问答',
     summarizeNoPending: '没有待总结的会话，请先「同步客服记录」',
-    summarizeGenerated: '新生成 {count} 条候选问答对',
-    syncScope:
-      '同步范围：首次回溯 {days} 天，之后每轮同步上次之后的新记录（含 {minutes} 分钟重叠）',
-    countsLine: '待审核 {pending} 条'
+    syncScope: '同步范围：首次回溯 {days} 天，之后每轮同步上次之后的新记录',
+    syncScopeSynced: '同步范围：已同步最早会话 {date}，之后每轮同步上次之后的新记录',
+    countsLine: '新增 {pending} 条问答对'
   },
   udeskConversations: {
     pageTitle: 'Udesk客服会话记录',
