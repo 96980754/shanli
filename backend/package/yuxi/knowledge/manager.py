@@ -606,7 +606,8 @@ class KnowledgeBaseManager:
             "document_version": getattr(record, "document_version", None),
             "version_label": getattr(record, "version_label", None),
             "is_current": bool(getattr(record, "is_current", True)),
-            "ingestion_type": ((getattr(record, "processing_params", None) or {}).get("ingestion_type")),
+            "ingestion_type": getattr(record, "ingestion_type", None)
+            or ((getattr(record, "processing_params", None) or {}).get("ingestion_type")),
             "confirmed_at": (
                 utc_isoformat(getattr(record, "confirmed_at")) if getattr(record, "confirmed_at", None) else None
             ),

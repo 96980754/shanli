@@ -471,3 +471,20 @@ async def test_directory_listing_carries_logical_document_id(monkeypatch):
 
     joined_sql = " ".join(sql.lower() for sql in session.compiled)
     assert "logical_document_id" in joined_sql, "目录列表投影应包含 logical_document_id（供文件行待审核提示）"
+
+
+@pytest.mark.asyncio
+async def test_directory_listing_carries_flowchart_ingestion_type(monkeypatch):
+    """默认目录列表也要带出流程图标识，否则刷新后会落入普通文档详情。"""
+    session = _RecordingSession()
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", fake_session_context)
+
+    await KnowledgeFileRepository().list_documents(kb_id="kb-1")
+
+    joined_sql = " ".join(sql.lower() for sql in session.compiled)
+    assert "ingestion_type" in joined_sql

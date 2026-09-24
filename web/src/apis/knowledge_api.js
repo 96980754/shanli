@@ -1114,3 +1114,25 @@ export const knowledgeConflictApi = {
     return apiGet(`/api/knowledge/databases/${kbId}/entity-link-candidates`)
   }
 }
+
+export const flowchartApi = {
+  createFlowchart: (kbId, filePath, params = {}) =>
+    apiPost(`/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts`, {
+      file_path: filePath,
+      params
+    }),
+  getFlowchartPreview: (kbId, fileId) =>
+    apiGet(
+      `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/preview`
+    ),
+  updateFlowchartDraft: (kbId, fileId, expectedRevision, semanticMarkdown) =>
+    apiPut(
+      `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/draft`,
+      { expected_revision: expectedRevision, semantic_markdown: semanticMarkdown }
+    ),
+  reparseFlowchart: (kbId, fileId, expectedRevision) =>
+    apiPost(
+      `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/reparse`,
+      { expected_revision: expectedRevision }
+    )
+}

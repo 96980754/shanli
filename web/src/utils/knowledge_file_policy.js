@@ -130,13 +130,14 @@ export const getFileStatusView = (status) => {
 
 export const getFilePrimaryAction = (record) => {
   if (!record || record.is_folder) return null
+  if (isFlowchart(record)) return null
   const action = STATUS_ACTION[record.status]
   if (!action) return null
   return { type: action.type, label: i18n.global.t(action.key) }
 }
 
 export const canParseFile = (record) =>
-  Boolean(record && record.is_current !== false && !record.is_folder && PARSEABLE_STATUSES.has(record.status))
+  Boolean(record && record.is_current !== false && !record.is_folder && !isFlowchart(record) && PARSEABLE_STATUSES.has(record.status))
 
 export const canIndexFile = (record) =>
   Boolean(
@@ -150,9 +151,10 @@ export const canIndexFile = (record) =>
 export const canReindexFile = (record) =>
   Boolean(
     record &&
-      record.is_current !== false &&
-      !record.is_folder &&
-      (record.status === 'done' || record.status === 'indexed')
+    record.is_current !== false &&
+    !record.is_folder &&
+    !isFlowchart(record) &&
+    (record.status === 'done' || record.status === 'indexed')
   )
 
 // 有解析结果的文档都可重新解析（覆盖旧 markdown 并重新入库）

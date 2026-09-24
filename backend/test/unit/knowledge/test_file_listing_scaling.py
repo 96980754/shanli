@@ -30,7 +30,15 @@ class FakeKnowledgeBaseRepository:
             mindmap=None,
             sample_questions=[],
             created_at=None,
+            category_id=1,
         )
+
+    async def get_by_kb_id_with_category(self, kb_id):
+        kb = await self.get_by_kb_id(kb_id)
+        if kb is None:
+            return None
+        category = SimpleNamespace(id=1, name="默认", sort_order=0, is_default=True, is_protected=True)
+        return kb, category
 
 
 class FakeKnowledgeFileRepository:
@@ -205,6 +213,20 @@ async def test_list_document_files_keeps_virtual_folder_contract():
     assert item["path_prefix"] == "资料/"
     assert item["has_children"] is True
     assert item["children_count"] == 3
+
+
+async def test_file_list_item_preserves_flowchart_discriminator_from_directory_projection():
+    manager = KnowledgeBaseManager("/tmp/yuxi-test")
+    record = SimpleNamespace(
+        file_id="file-flowchart",
+        filename="flow.pdf",
+        status="flowchart_waiting_confirmation",
+        ingestion_type="flowchart",
+    )
+
+    item = manager._file_record_list_item(record)
+
+    assert item["ingestion_type"] == "flowchart"
 
 
 async def test_list_document_files_passes_files_only_and_can_omit_stats():

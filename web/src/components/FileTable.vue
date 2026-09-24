@@ -399,6 +399,15 @@
                 </template>
                 <template v-else>
                   <a-button
+                    v-if="row.ingestion_type === 'flowchart'"
+                    type="text"
+                    block
+                    @click="openFileDetail(row)"
+                  >
+                    <template #icon><component :is="h(FileText)" size="14" /></template>
+                    {{ $t('flowchart.reviewTitle') }}
+                  </a-button>
+                  <a-button
                     v-if="props.canDownload"
                     type="text"
                     block
@@ -458,13 +467,13 @@
                   </a-button>
 
                   <!-- 移动到其它文件夹（后端 PUT /documents/{id}/move，new_parent_id 空值=根目录） -->
-                  <a-button v-if="props.canManage" type="text" block @click="openMoveModal(row)">
+                  <a-button v-if="props.canManage && row.ingestion_type !== 'flowchart'" type="text" block @click="openMoveModal(row)">
                     <template #icon><component :is="h(FolderInput)" size="14" /></template>
                     {{ $t('fileTable.moveTo') }}
                   </a-button>
 
                   <!-- 重命名（后端 PUT /documents/{id}/rename，只传叶子名） -->
-                  <a-button v-if="props.canManage" type="text" block @click="openRenameModal(row)">
+                  <a-button v-if="props.canManage && row.ingestion_type !== 'flowchart'" type="text" block @click="openRenameModal(row)">
                     <template #icon><component :is="h(Pencil)" size="14" /></template>
                     {{ $t('conversation.rename') }}
                   </a-button>
@@ -491,7 +500,7 @@
 
                   <!-- 清洗预览 / 信息增强 / QA 知识对（PR12 吸收） -->
                   <a-button
-                    v-if="props.canManage"
+                    v-if="props.canManage && row.ingestion_type !== 'flowchart'"
                     type="text"
                     block
                     @click="openCleaningPreview(row)"
@@ -499,11 +508,11 @@
                     <template #icon><Sparkles :size="14" /></template>
                     {{ $t('fileTable.cleaningPreview') }}
                   </a-button>
-                  <a-button v-if="props.canManage" type="text" block @click="openEnrichment(row)">
+                  <a-button v-if="props.canManage && row.ingestion_type !== 'flowchart'" type="text" block @click="openEnrichment(row)">
                     <template #icon><FileText :size="14" /></template>
                     {{ $t('fileTable.enrichment') }}
                   </a-button>
-                  <a-button v-if="props.canManage" type="text" block @click="openDocumentQA(row)">
+                  <a-button v-if="props.canManage && row.ingestion_type !== 'flowchart'" type="text" block @click="openDocumentQA(row)">
                     <template #icon><HelpCircle :size="14" /></template>
                     {{ $t('docModal.qaPairs') }}
                   </a-button>
@@ -574,7 +583,6 @@ import {
   History,
   Sparkles,
   HelpCircle,
-  AlertTriangle,
   Pencil,
   Unlink
 } from 'lucide-vue-next'
@@ -1024,7 +1032,7 @@ const canBatchIndex = computed(() => {
   })
 })
 
-const emit = defineEmits(['changed'])
+const emit = defineEmits(['changed', 'open-flowchart'])
 
 const handleRefresh = () => {
   store.getDatabaseInfo(undefined, true, true)
@@ -1175,6 +1183,11 @@ const startPendingIndex = (count = 0) => {
 }
 
 const openFileDetail = (record) => {
+  if (record.ingestion_type === 'flowchart') {
+    closePopover(record.file_id)
+    emit('open-flowchart', record.file_id)
+    return
+  }
   if (!canOpenFileDetail(record)) {
     message.error(t('fileTable.fileNotReady'))
     return

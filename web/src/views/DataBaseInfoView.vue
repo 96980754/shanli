@@ -21,6 +21,21 @@
       @success="onFileUploadSuccess"
     />
 
+    <FlowchartUploadModal
+      v-model:open="flowchartUploadVisible"
+      :kb-id="kbId"
+      :can-upload="kbPermissions.can_upload"
+      @created="onFlowchartCreated"
+    />
+    <FlowchartReviewModal
+      ref="flowchartReviewRef"
+      v-model:open="flowchartReviewVisible"
+      :kb-id="kbId"
+      :file-id="flowchartReviewFileId"
+      :can-manage="kbPermissions.can_manage"
+      @changed="onFlowchartChanged"
+    />
+
     <div v-if="detailLoading" class="database-detail-loading">
       <a-spin :tip="t('dbInfo.loadingKbInfo')" />
     </div>
@@ -106,6 +121,15 @@
                     <span>{{ $t('common.upload') }}</span>
                   </button>
                   <button
+                    v-if="kbPermissions.can_upload"
+                    type="button"
+                    class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
+                    @click="flowchartUploadVisible = true"
+                  >
+                    <FileUp :size="14" />
+                    <span>{{ $t('flowchart.uploadTitle') }}</span>
+                  </button>
+                  <button
                     v-if="userStore.isAdmin"
                     type="button"
                     class="lucide-icon-btn extension-panel-action extension-panel-action-secondary"
@@ -188,6 +212,7 @@
               :can-delete="kbPermissions.can_delete"
               :can-manage="kbPermissions.can_manage"
               @changed="graphRevision++"
+              @open-flowchart="openFlowchartReview"
             />
           </div>
 
@@ -385,7 +410,7 @@
 <script setup>
 import { computed, defineAsyncComponent, h, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useDatabaseStore } from '@/stores/database'
 import { useTaskerStore } from '@/stores/tasker'
 import { useUserStore } from '@/stores/user'
@@ -410,6 +435,8 @@ import { message, Modal } from 'ant-design-vue'
 import FileTable from '@/components/FileTable.vue'
 import FileDetailModal from '@/components/FileDetailModal.vue'
 import FileUploadModal from '@/components/FileUploadModal.vue'
+import FlowchartUploadModal from '@/components/FlowchartUploadModal.vue'
+import FlowchartReviewModal from '@/components/FlowchartReviewModal.vue'
 // 图谱区重（g6/sigma/graphology），懒加载：仅在打开「图谱」Tab 时才拉取渲染，
 // 避免进入知识库详情页就同步解析大 chunk 造成切换卡顿。
 const KnowledgeGraphSection = defineAsyncComponent({
@@ -623,6 +650,10 @@ const handleInlineSearchConfigSave = async () => {
 }
 
 const addFilesModalVisible = ref(false)
+const flowchartUploadVisible = ref(false)
+const flowchartReviewVisible = ref(false)
+const flowchartReviewFileId = ref('')
+const flowchartReviewRef = ref(null)
 const currentFolderId = ref(null)
 const currentPathPrefix = ref('')
 const isFolderUploadMode = ref(false)
@@ -698,6 +729,28 @@ const maybeShowGraphReminder = async (databaseId) => {
 const onFileUploadSuccess = () => {
   taskerStore.loadTasks()
 }
+
+const openFlowchartReview = (fileId) => {
+  flowchartReviewFileId.value = fileId
+  flowchartReviewVisible.value = true
+}
+
+const onFlowchartCreated = (fileId) => {
+  flowchartUploadVisible.value = false
+  openFlowchartReview(fileId)
+  onFlowchartChanged()
+}
+
+const onFlowchartChanged = () => {
+  fileTableRef.value?.refresh?.()
+  store.getDatabaseInfo()
+}
+
+const confirmReviewNavigation = async () =>
+  !flowchartReviewVisible.value || (await flowchartReviewRef.value?.confirmDiscard?.()) !== false
+
+onBeforeRouteLeave(confirmReviewNavigation)
+onBeforeRouteUpdate(confirmReviewNavigation)
 
 
 const resetFileSelectionState = () => {
