@@ -3,8 +3,12 @@
   <head>
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.svg">
-    <!-- viewport-fit=cover：iOS 上 env(safe-area-inset-*) 才有值，否则恒为 0，App 外壳的刘海/状态栏适配无从谈起 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- viewport-fit=cover：iOS 上 env(safe-area-inset-*) 才有值，否则恒为 0，App 外壳的刘海/状态栏适配无从谈起
+         maximum-scale/user-scalable：App 外壳里页面本身就是完整一屏，缩放只会让内容溢出屏幕、出现上下左右都能拖动的错觉 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    >
     <title>AI知识库</title>
   </head>
   <body>

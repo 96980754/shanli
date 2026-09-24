@@ -19,6 +19,14 @@
   font-weight: normal;
 }
 
+/* iOS 忽略 viewport 的 user-scalable=no，双击缩放与双指缩放只有 touch-action 能禁掉。
+   touch-action 沿祖先链取交集，挂在 html 上即可覆盖整页，且不影响正常滚动。
+   注意本文件是纯 CSS，注释必须用这种形式：多个组件的 <style lang="less"> 会 @import 它，
+   写成 // 会被一并带进样式块并导致构建期 CSS 解析失败。 */
+html {
+  touch-action: pan-x pan-y;
+}
+
 body {
   display: flow-root;
   min-height: 100vh;
