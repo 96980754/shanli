@@ -1,0 +1,71 @@
+name: iOS 未签名 IPA（自测侧载用）
+
+# 用途：在 macOS Runner 上产出**未签名** IPA，供开发者用免费 Apple ID 自行签名装到真机自测。
+# 与 ios-signed-ipa.yml 的区别：那条走甲方证书 + app-store-connect 导出（只能上 TestFlight），
+# 这条不碰任何签名素材，产出的是可被 AltServer/SideStore 之类工具重签的裸包。
+#
+# 自测包不要用 com.yuxi.knowledge：免费个人团队注册的 App ID 会占用全局命名空间，
+# 一旦注册，甲方之后可能就无法再用这个 Bundle ID 了。默认值已避开。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: "自测包的 Bundle ID（勿使用 com.yuxi.knowledge）"
+        required: true
+        default: "com.yuxi.knowledge.selftest"
+        type: string
+
+jobs:
+  build-unsigned-ipa:
+    runs-on: macos-26
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.11.0
+
+      - name: 安装前端依赖
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端并同步 iOS 工程
+        working-directory: web
+        run: |
+          pnpm run build
+          pnpm exec cap sync ios
+
+      - name: 归档真机产物（禁用签名）
+        run: |
+          xcodebuild archive \
+            -project web/ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ inputs.bundle_id }}" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: 打包成未签名 IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "AI知识库-iOS-未签名.ipa" Payload
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI知识库-iOS-未签名IPA
+          path: ${{ runner.temp }}/AI知识库-iOS-未签名.ipa
+          if-no-files-found: error
