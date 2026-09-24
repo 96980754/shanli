@@ -411,10 +411,6 @@ provide('settingsModal', {
         />
       </div>
       <div class="foo">
-        <!-- 语言切换 -->
-        <div class="nav-item user-info" @click.stop>
-          <LanguageToggle :show-label="!sidebarCollapsed" />
-        </div>
         <!-- 用户信息组件 -->
         <div class="nav-item user-info" @click.stop>
           <UserInfoComponent :show-role="!sidebarCollapsed">
@@ -452,11 +448,19 @@ provide('settingsModal', {
       <X v-if="mobileSidebarOpen" size="22" />
       <PanelLeftOpen v-else size="22" />
     </button>
-    <router-view v-slot="{ Component }" id="app-router-view">
-      <keep-alive :include="KEEP_ALIVE_VIEWS">
-        <component :is="Component" />
-      </keep-alive>
-    </router-view>
+    <div class="main-area">
+      <!-- 应用级顶栏：内容区右上角，承载语言切换（埋在侧栏底部时不易被注意到） -->
+      <div class="app-topbar">
+        <LanguageToggle />
+      </div>
+      <div id="app-router-view">
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="KEEP_ALIVE_VIEWS">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
+      </div>
+    </div>
 
     <ConversationSearchModal
       v-model:open="conversationSearchOpen"
@@ -520,17 +524,41 @@ provide('settingsModal', {
   flex-direction: row;
   width: 100%;
   height: 100vh;
+  height: 100dvh; // 手机 Safari 的地址栏会算进 100vh，导致底部被裁；不支持 dvh 的浏览器回退到上一行
   min-width: var(--min-width);
 }
 
-div.header,
-#app-router-view {
+div.header {
   height: 100%;
   max-width: 100%;
 }
 
-#app-router-view {
+// 内容区：顶栏固定高度，页面区域吃掉剩余高度并自行滚动
+.main-area {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  height: calc(48px + var(--safe-top));
+  padding: var(--safe-top) var(--page-padding) 0;
+  background-color: var(--gray-0);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+#app-router-view {
+  flex: 1 1 0;
+  min-height: 0;
+  max-width: 100%;
+  // 预留 Home Indicator 手势区；浏览器下 env() 为 0，不产生任何影响
+  padding-bottom: var(--safe-bottom);
   overflow-y: auto;
 }
 
@@ -953,21 +981,24 @@ div.header,
 
 @media (max-width: 768px) {
   .app-layout { min-width: 0; }
-  #app-router-view { width: 100%; min-width: 0; }
+  .main-area { width: 100%; min-width: 0; }
+  #app-router-view { min-width: 0; }
   .header {
     position: fixed; z-index: 1001; top: 0; bottom: 0; left: 0;
-    width: min(82vw, 320px); flex-basis: min(82vw, 320px); padding: 12px 10px; gap: 14px;
+    width: min(82vw, 320px); flex-basis: min(82vw, 320px); gap: 14px;
+    padding: calc(12px + var(--safe-top)) 10px calc(12px + var(--safe-bottom));
     box-shadow: 8px 0 24px rgba(0, 0, 0, 0.16); transform: translateX(-105%); transition: transform 0.2s ease;
   }
   .mobile-sidebar-open .header { transform: translateX(0); }
   .app-layout.sidebar-collapsed .header {
-    width: min(82vw, 320px); flex-basis: min(82vw, 320px); padding: 12px 10px;
+    width: min(82vw, 320px); flex-basis: min(82vw, 320px);
+    padding: calc(12px + var(--safe-top)) 10px calc(12px + var(--safe-bottom));
     .sidebar-brand { justify-content: space-between; }
     .brand-expand-button, .sidebar-toggle { display: none; }
     .nav-item { padding: 0 @sidebar-item-padding-x; .nav-text { max-width: 140px; margin-left: 8px; opacity: 1; pointer-events: auto; } }
   }
   .mobile-sidebar-trigger {
-    display: inline-flex; position: fixed; z-index: 1000; top: 10px; left: 10px; align-items: center; justify-content: center;
+    display: inline-flex; position: fixed; z-index: 1000; top: calc(10px + var(--safe-top)); left: 10px; align-items: center; justify-content: center;
     width: 38px; height: 38px; padding: 0; border: 1px solid var(--gray-150); border-radius: 10px;
     background: var(--gray-0); color: var(--gray-700); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
