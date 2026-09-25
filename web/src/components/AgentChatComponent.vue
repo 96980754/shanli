@@ -3116,6 +3116,8 @@ watch(currentChatId, (threadId, oldThreadId) => {
 
 .chat {
   --header-height: 40px;
+  /* 会话内容区与输入框的统一最大宽度，宽屏下由下方媒体查询放宽 */
+  --chat-max-width: 800px;
 
   position: relative;
   flex: 1;
@@ -3454,7 +3456,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
 
 .chat-box {
   width: 100%;
-  max-width: 800px;
+  max-width: var(--chat-max-width);
   margin: 0 auto;
   flex-grow: 1;
   padding: 1rem var(--page-padding);
@@ -3487,7 +3489,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
 
   .message-input-wrapper {
     width: 100%;
-    max-width: 800px;
+    max-width: var(--chat-max-width);
     margin: 0 auto;
 
     .bottom-actions {
@@ -3520,7 +3522,7 @@ watch(currentChatId, (threadId, oldThreadId) => {
     left: 50%;
     transform: translate(-50%, -50%);
     bottom: auto;
-    max-width: 800px;
+    max-width: var(--chat-max-width);
     width: 90%;
     background: transparent;
     padding: 0;
@@ -3667,6 +3669,19 @@ watch(currentChatId, (threadId, oldThreadId) => {
         display: none;
       }
     }
+  }
+}
+
+// 大屏适配：800px 的上限在小屏上合适，但显示器越宽越显得中间会话区窄，按断点逐级放宽
+@media (min-width: 1440px) {
+  .chat {
+    --chat-max-width: 960px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .chat {
+    --chat-max-width: 1120px;
   }
 }
 
