@@ -243,13 +243,16 @@ async function loadData() {
     ])
     stats.value = statsResponse
     trend.value = trendResponse
-    await nextTick()
-    renderAll()
   } catch (error) {
     console.error('加载运营总览失败', error)
     message.error(error?.message || t('opsOverview.loadFailed'))
   } finally {
     loading.value = false
+  }
+  // a-card 的 loading 骨架会替换卡片内容，图表容器须在 loading 结束、容器恢复渲染后才能 init
+  if (stats.value) {
+    await nextTick()
+    renderAll()
   }
 }
 
