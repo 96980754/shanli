@@ -259,7 +259,8 @@ onUnmounted(() => {
 <style scoped lang="less">
 .dashboard-container {
   background-color: var(--gray-25);
-  min-height: calc(100vh - 64px);
+  // 顶栏 64px + 数据总览 Tab 栏 ~62px；作为 Tab 子页后扣除二者，避免整页多出一段空滚动
+  min-height: calc(100vh - 126px);
   overflow-x: hidden;
 }
 

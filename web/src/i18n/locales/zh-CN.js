@@ -881,6 +881,7 @@ export default {
     unavailable: '不可用'
   },
   dash: {
+    tabMain: '数据总览',
     loadSuccess: '数据加载成功',
     loadStatsFailed: '加载统计数据失败',
     loadDetailedFailedFallback: '详细数据加载失败，仅显示基础统计',
@@ -1443,7 +1444,6 @@ export default {
   },
   opsOverview: {
     pageTitle: '运营总览',
-    pageSubtitle: '按产品线聚合的问答量、拒答率与分类覆盖率，口径与问答明细一致。',
     cardTotal: '总问答数',
     cardClassified: '已分类',
     cardUnclassified: '未分类',

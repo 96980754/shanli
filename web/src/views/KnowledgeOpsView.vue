@@ -8,7 +8,6 @@
     </div>
 
     <a-tabs :active-key="activeTab" @change="switchTab">
-      <a-tab-pane key="overview" :tab="t('opsOverview.pageTitle')" />
       <a-tab-pane key="gaps" :tab="t('gaps.pageTitle')" />
       <a-tab-pane key="feedback" :tab="t('feedback.pageTitle')" />
       <a-tab-pane key="qa-pairs" :tab="t('qaPairs.pageTitle')" />
@@ -49,7 +48,6 @@ const router = useRouter()
 
 // Tab 与子路由一一对应：切换即跳转，可分享/收藏各 Tab 地址
 const TAB_SUBTITLE_KEYS = {
-  overview: 'opsOverview.pageSubtitle',
   gaps: 'gaps.pageSubtitle',
   feedback: 'feedback.pageSubtitle',
   'qa-pairs': 'qaPairs.pageSubtitle',

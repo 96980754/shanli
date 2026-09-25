@@ -1,5 +1,5 @@
 <template>
-  <div class="ops-overview-page">
+  <div class="dashboard-overview-page">
     <div class="filters">
       <a-range-picker
         v-model:value="customRange"
@@ -101,7 +101,8 @@ let charts = { domain: null, refusal: null, trend: null }
 
 function baseChartOption() {
   return {
-    grid: { left: '3%', right: '4%', top: 40, bottom: 8, containLabel: true },
+    // bottom 预留两档：x 轴类目标签 + 底部图例（图例紧贴 bottom:5，二者不挤同一行）
+    grid: { left: '3%', right: '4%', top: 40, bottom: 50, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: getCSSVariable('--gray-0'),
@@ -110,7 +111,9 @@ function baseChartOption() {
       textStyle: { color: getCSSVariable('--gray-600'), fontSize: 12 }
     },
     legend: {
-      bottom: 0,
+      // 趋势图图例多达业务线数，窄屏换行会顶进 x 轴标签区，滚动图例恒为一行
+      type: 'scroll',
+      bottom: 5,
       textStyle: { color: getCSSVariable('--gray-500'), fontSize: 12 },
       itemWidth: 14,
       itemHeight: 14
@@ -135,6 +138,15 @@ function splitLineStyle() {
   return { lineStyle: { color: getCSSVariable('--gray-100') } }
 }
 
+// 业务线类目仅个位数，强制显示全部标签，避免 interval 自动抽稀漏掉中间业务线（趋势图日期密集，不适用）
+function domainXAxis(rows) {
+  return {
+    ...baseChartOption().xAxis,
+    data: rows.map((row) => domainLabel(row.domain)),
+    axisLabel: { ...axisLabelStyle(), interval: 0 }
+  }
+}
+
 // 图 a：各业务线问答数（柱，左轴）+ 拒答率（折线，右轴）
 function renderDomainChart() {
   const container = domainChartRef.value
@@ -145,7 +157,7 @@ function renderDomainChart() {
   const rows = domainRows.value
   charts.domain.setOption({
     ...baseChartOption(),
-    xAxis: { ...baseChartOption().xAxis, data: rows.map((row) => domainLabel(row.domain)) },
+    xAxis: domainXAxis(rows),
     yAxis: [
       { type: 'value', name: t('opsOverview.yAxisCount'), nameTextStyle: axisLabelStyle(), axisLabel: axisLabelStyle(), axisLine: { show: false }, axisTick: { show: false }, splitLine: splitLineStyle() },
       { type: 'value', name: t('opsOverview.yAxisRate'), nameTextStyle: axisLabelStyle(), axisLabel: axisLabelStyle(), axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, max: 100 }
@@ -181,7 +193,7 @@ function renderRefusalChart() {
   const rows = domainRows.value
   charts.refusal.setOption({
     ...baseChartOption(),
-    xAxis: { ...baseChartOption().xAxis, data: rows.map((row) => domainLabel(row.domain)) },
+    xAxis: domainXAxis(rows),
     yAxis: { type: 'value', axisLabel: axisLabelStyle(), axisLine: { show: false }, axisTick: { show: false }, splitLine: splitLineStyle() },
     series: REFUSAL_TYPES.map((type, index) => ({
       name: t(type.labelKey),
@@ -266,6 +278,12 @@ watch(
   () => nextTick().then(renderAll)
 )
 
+// business_lines 由 AppLayout 挂载后 refreshConfig 异步到达；晚于首次渲染时重绘，x 轴才显示业务线名而非原始 code
+watch(
+  () => configStore.config.business_lines,
+  () => nextTick().then(renderAll)
+)
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize, resizeListenerOptions)
   Object.values(charts).forEach((chart) => chart?.dispose())
@@ -274,10 +292,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="less">
-.ops-overview-page {
+.dashboard-overview-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  // 自持页面内边距（数据总览 Tab 壳只提供页头与 Tab 栏）；上方间距由 Tab 栏自带 margin 提供
+  padding: 0 var(--page-padding) var(--page-padding);
 }
 .filters {
   display: flex;
@@ -311,6 +331,8 @@ onUnmounted(() => {
   border: 1px solid var(--gray-150);
   border-radius: 8px;
   background: var(--gray-0);
+  // 网格项默认 min-width:auto 会被 canvas 固定像素宽撑开，窄屏时卡片横向溢出
+  min-width: 0;
 }
 .chart {
   width: 100%;

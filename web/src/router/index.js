@@ -69,8 +69,22 @@ const router = createRouter({
         {
           path: '',
           name: 'DashboardComp',
-          component: () => import('../views/DashboardView.vue'),
-          meta: { requiresAuth: true, requiresSuperAdmin: true }
+          component: () => import('../views/DashboardShellView.vue'),
+          meta: { requiresAuth: true, requiresSuperAdmin: true },
+          children: [
+            {
+              path: '',
+              name: 'DashboardMainComp',
+              component: () => import('../views/DashboardView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'overview',
+              name: 'DashboardOverviewComp',
+              component: () => import('../views/DashboardOverviewView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            }
+          ]
         },
         {
           path: 'qa-records',
@@ -92,12 +106,6 @@ const router = createRouter({
           meta: { requiresAuth: true, requiresSuperAdmin: true },
           children: [
             { path: '', redirect: '/knowledge-ops/gaps' },
-            {
-              path: 'overview',
-              name: 'KnowledgeOpsOverviewComp',
-              component: () => import('../views/KnowledgeOpsOverviewView.vue'),
-              meta: { requiresAuth: true, requiresSuperAdmin: true }
-            },
             {
               path: 'gaps',
               name: 'KnowledgeGapsComp',

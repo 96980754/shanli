@@ -895,6 +895,7 @@ export default {
     unavailable: 'Unavailable'
   },
   dash: {
+    tabMain: 'Data Overview',
     loadSuccess: 'Data loaded successfully',
     loadStatsFailed: 'Failed to load statistics',
     loadDetailedFailedFallback: 'Failed to load detailed data, showing basic statistics only',
@@ -1480,7 +1481,6 @@ export default {
   },
   opsOverview: {
     pageTitle: 'Operations Overview',
-    pageSubtitle: 'Q&A volume, refusal rate and classification coverage by product line, consistent with Q&A records.',
     cardTotal: 'Total Q&A',
     cardClassified: 'Classified',
     cardUnclassified: 'Unclassified',
