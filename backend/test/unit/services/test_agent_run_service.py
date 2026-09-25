@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import yuxi.services.agent_run_service as agent_run_service
+import yuxi.services.question_routing as question_routing
 from yuxi.services.input_message_service import (
     build_chat_input_message,
     build_chat_input_message_from_openai_content,
@@ -216,6 +217,7 @@ async def test_get_agent_run_progress_extracts_tool_call_events(monkeypatch: pyt
 class _FakeContext:
     def __init__(self):
         self.model = "agent-default-model"
+        self.model_simple = ""
 
     def update_from_dict(self, data: dict):
         for key, value in data.items():
@@ -1369,6 +1371,261 @@ async def test_create_chat_run_persists_validated_model_spec(monkeypatch: pytest
     )
 
     assert db.created_run_kwargs["input_payload"]["model_spec"] == "claude-x"
+
+
+class _NoRouteHistoryRepo:
+    """question_routing 视角的仓储桩：thread 无历史 run，惯性不触发。"""
+
+    def __init__(self, db):
+        del db
+
+    async def get_latest_run_by_thread_for_user(self, thread_id: str, uid: str):
+        del thread_id, uid
+        return None
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_routes_simple_question_to_model_simple(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+    monkeypatch.setattr(question_routing, "AgentRunRepository", _NoRouteHistoryRepo)
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        agent_config_json={"context": {"model_simple": "fast-1"}},
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("hello"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-1"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    payload = db.created_run_kwargs["input_payload"]
+    assert payload["model_spec"] == "fast-1"
+    assert payload["route"] == {"complexity": "simple", "tier": "rule", "reason": "短问题且无复杂信号"}
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_routes_complex_question_to_agent_model(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+    monkeypatch.setattr(question_routing, "AgentRunRepository", _NoRouteHistoryRepo)
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        agent_config_json={"context": {"model_simple": "fast-1"}},
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("hello"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-1", "attachment_file_ids": [7]},
+        current_uid="user-1",
+        db=db,
+    )
+
+    payload = db.created_run_kwargs["input_payload"]
+    assert payload["model_spec"] == "agent-default-model"
+    assert payload["route"] == {"complexity": "complex", "tier": "rule", "reason": "带图片或附件"}
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_explicit_model_overrides_routing(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+    monkeypatch.setattr(question_routing, "AgentRunRepository", _NoRouteHistoryRepo)
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        agent_config_json={"context": {"model_simple": "fast-1"}},
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("hello"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-1"},
+        current_uid="user-1",
+        db=db,
+        model_spec="claude-x",
+    )
+
+    payload = db.created_run_kwargs["input_payload"]
+    assert payload["model_spec"] == "claude-x"
+    assert "route" not in payload
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_keeps_route_disabled_payload_without_model_simple(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """回归：未配置 model_simple 时 payload 与未启用路由时完全一致（无 route 键）。"""
+    db = _patch_agent_run_creation(monkeypatch)
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("hello"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-1"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    assert db.created_run_kwargs["input_payload"] == {"model_spec": "agent-default-model"}
+
+
+@pytest.mark.asyncio
+async def test_create_chat_run_thread_inertia_keeps_agent_model(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+
+    class _LastComplexRunRepo:
+        def __init__(self, db):
+            del db
+
+        async def get_latest_run_by_thread_for_user(self, thread_id: str, uid: str):
+            del thread_id, uid
+            return SimpleNamespace(input_payload={"route": {"complexity": "complex"}})
+
+    monkeypatch.setattr(question_routing, "AgentRunRepository", _LastComplexRunRepo)
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        agent_config_json={"context": {"model_simple": "fast-1"}},
+    )
+
+    await agent_run_service.create_agent_run_view(
+        input_message=_chat_input("hello"),
+        agent_slug="default",
+        thread_id="thread-1",
+        meta={"request_id": "req-1"},
+        current_uid="user-1",
+        db=db,
+    )
+
+    payload = db.created_run_kwargs["input_payload"]
+    assert payload["model_spec"] == "agent-default-model"
+    assert payload["route"]["tier"] == "thread-inertia"
+
+
+# ==================== 问题路由：连续多轮场景（route 落库 → 下一轮惯性回读） ====================
+
+
+def _make_thread_history_repo(store: dict):
+    """带 thread 历史的仓储桩：create_run 落库 route，get_latest 回读最新 run。
+
+    仿真实仓储 get_latest_run_by_thread_for_user 的语义（thread 最近一条），
+    让连续 create_agent_run_view 调用之间形成真实的路由历史传递。
+    """
+
+    class _ThreadHistoryRepo(_CreateRunRepo):
+        async def create_run(self, **kwargs):
+            run = await super().create_run(**kwargs)
+            store.setdefault(kwargs["conversation_thread_id"], []).append(
+                SimpleNamespace(input_payload=kwargs["input_payload"])
+            )
+            return run
+
+        async def get_latest_run_by_thread_for_user(self, thread_id: str, uid: str):
+            del uid
+            runs = store.get(thread_id) or []
+            return runs[-1] if runs else None
+
+    return _ThreadHistoryRepo
+
+
+def _patch_routed_thread(monkeypatch: pytest.MonkeyPatch):
+    """启用 model_simple=fast-1 的路由环境（thread 历史跨 run 共享），返回可复用 db。"""
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+    db = _patch_agent_run_creation(
+        monkeypatch,
+        agent_config_json={"context": {"model_simple": "fast-1"}},
+    )
+    repo = _make_thread_history_repo({})
+    monkeypatch.setattr(agent_run_service, "AgentRunRepository", repo)
+    monkeypatch.setattr(question_routing, "AgentRunRepository", repo)
+    return db
+
+
+async def _create_thread_turns(db, questions: list[str]) -> list[tuple[str, str, str]]:
+    """同一 thread 连续提问，返回每轮 (model_spec, complexity, tier)。"""
+    turns = []
+    for index, question in enumerate(questions, 1):
+        await agent_run_service.create_agent_run_view(
+            input_message=_chat_input(question),
+            agent_slug="default",
+            thread_id="thread-1",
+            meta={"request_id": f"req-{index}"},
+            current_uid="user-1",
+            db=db,
+        )
+        payload = db.created_run_kwargs["input_payload"]
+        route = payload.get("route") or {}
+        turns.append((payload["model_spec"], route.get("complexity"), route.get("tier")))
+    return turns
+
+
+SIMPLE_QUESTION = "f10 的价格是多少"
+COMPLEX_QUESTION = "对比一下 F10 和 P10 再给个选型建议"
+
+
+@pytest.mark.asyncio
+async def test_route_scenario_multiround_simple_stays_simple(monkeypatch: pytest.MonkeyPatch):
+    # 多轮简单问题：simple 历史不构成惯性，每轮独立判档，全部走轻量模型
+    db = _patch_routed_thread(monkeypatch)
+
+    turns = await _create_thread_turns(db, [SIMPLE_QUESTION, "p10 支持几张扩展卡", "官网的登录地址是什么"])
+
+    assert turns == [
+        ("fast-1", "simple", "rule"),
+        ("fast-1", "simple", "rule"),
+        ("fast-1", "simple", "rule"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_route_scenario_complex_insert_sticks_afterwards(monkeypatch: pytest.MonkeyPatch):
+    # 简单开头、复杂问题中间插入：插入轮判 complex，之后简单追问被惯性粘滞到完整模型
+    db = _patch_routed_thread(monkeypatch)
+
+    turns = await _create_thread_turns(db, [SIMPLE_QUESTION, COMPLEX_QUESTION, "p10 支持几张扩展卡"])
+
+    assert turns == [
+        ("fast-1", "simple", "rule"),
+        ("agent-default-model", "complex", "rule"),
+        ("agent-default-model", "complex", "thread-inertia"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_route_scenario_complex_start_keeps_simple_insert_on_base(monkeypatch: pytest.MonkeyPatch):
+    # 复杂开头、简单问题中间插入：惯性压过规则，简单追问也走完整模型
+    db = _patch_routed_thread(monkeypatch)
+
+    turns = await _create_thread_turns(db, [COMPLEX_QUESTION, SIMPLE_QUESTION, "官网的登录地址是什么"])
+
+    assert turns == [
+        ("agent-default-model", "complex", "rule"),
+        ("agent-default-model", "complex", "thread-inertia"),
+        ("agent-default-model", "complex", "thread-inertia"),
+    ]
 
 
 @pytest.mark.asyncio

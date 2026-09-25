@@ -199,6 +199,16 @@ class BaseContext:
             "kind": "llm",
         },
     )
+    # 问题路由：配置后启用“简单问题用轻量模型”，留空即关闭（行为与未启用完全一致）
+    model_simple: str = field(
+        default="",
+        metadata={
+            "name": "简单问题模型",
+            "options": [],
+            "description": "判定为简单问题时使用的轻量模型，留空则不启用问题路由（全部走智能体模型）。",
+            "kind": "llm",
+        },
+    )
 
     tools: list[str] | None = field(
         default=None,

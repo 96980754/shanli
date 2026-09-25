@@ -36,6 +36,7 @@ from yuxi.services.input_message_service import (
     AgentRunInputMessage,
     build_resume_input_message,
 )
+from yuxi.services.question_routing import route_question_model_spec
 from yuxi.services.run_queue_service import (
     build_run_event_envelope,
     get_arq_pool,
@@ -398,10 +399,28 @@ async def create_agent_run_view(
     if scope.existing_run:
         return _build_run_response(scope.existing_run)
 
+    route_record = None
     if run_type == "resume":
         resolved_model_spec = scope.parent_run.input_payload["model_spec"]
+        # resume 是同一 run 的续答：继承路由记录，thread 惯性跨中断续答不断链
+        parent_payload = scope.parent_run.input_payload or {}
+        if isinstance(parent_payload.get("route"), dict):
+            route_record = parent_payload["route"]
     else:
         resolved_model_spec = resolve_agent_run_model_spec(model_spec, scope.agent_item, scope.agent_backend)
+        # 问题路由（简单问题用 model_simple）：手选模型或未配置时零开销返回
+        resolved_model_spec, route_record = await route_question_model_spec(
+            explicit_model_spec=model_spec,
+            base_spec=resolved_model_spec,
+            agent_item=scope.agent_item,
+            agent_backend=scope.agent_backend,
+            question=input_message.content,
+            has_image=input_message.message_type == "multimodal_image" or bool(input_message.image_content),
+            has_attachment=bool(meta.get("attachment_file_ids")),
+            thread_id=thread_id,
+            uid=current_uid,
+            db=db,
+        )
 
     run_input_message = _prepare_run_input_message(
         run_type=run_type,
@@ -419,6 +438,9 @@ async def create_agent_run_view(
         input_message=run_input_message,
     )
     input_payload = {"model_spec": resolved_model_spec}
+    # 问题路由判定记录（仅启用路由时存在）：既是审计/判对率样本，也是 thread 惯性的数据源
+    if route_record is not None:
+        input_payload["route"] = route_record
     # 历史版本阅读/对比：chat 且携带 version_ask 结构化请求时打标，供 worker 分派到
     # 封闭的 document_version 生成器（仿 industry_solution 标记通道，仅 chat，不继承）。
     if run_type == "chat" and version_ask:
