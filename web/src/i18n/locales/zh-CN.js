@@ -1441,6 +1441,20 @@ export default {
     pendingSummaryGo: '去生成候选问答',
     pendingSummaryDismiss: '知道了'
   },
+  opsOverview: {
+    pageTitle: '运营总览',
+    pageSubtitle: '按产品线聚合的问答量、拒答率与分类覆盖率，口径与问答明细一致。',
+    cardTotal: '总问答数',
+    cardClassified: '已分类',
+    cardUnclassified: '未分类',
+    cardCoverageRate: '分类覆盖率',
+    chartDomainTitle: '各产品线问答数与拒答率',
+    chartRefusalTitle: '各产品线拒答类型分布',
+    chartTrendTitle: '各产品线问答趋势',
+    yAxisCount: '问答数',
+    yAxisRate: '拒答率 (%)',
+    loadFailed: '加载运营总览失败'
+  },
   upload: {
     addFileTitle: '添加文件',
     documentProcessingHelp: '文档处理说明',

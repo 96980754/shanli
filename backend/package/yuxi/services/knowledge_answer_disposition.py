@@ -87,6 +87,31 @@ def build_judge_system_prompt(lines: list[BusinessLine] | None = None) -> str:
     return JUDGE_SYSTEM_PROMPT_TEMPLATE.replace("@DOMAIN_CHOICES@", domain_choices)
 
 
+# 业务线判域模型：DOMAIN_JUDGE_MODEL 优先，缺省退回拒答 judge 的快模型；
+# 均未配置则判域只跑关键词快路径（行为与未启用时一致）。
+DOMAIN_JUDGE_MODEL = os.getenv("DOMAIN_JUDGE_MODEL", "").strip() or REFUSAL_JUDGE_MODEL
+
+DOMAIN_JUDGE_SYSTEM_PROMPT_TEMPLATE = """\
+你是企业知识库客服的问题业务线分类器。把用户问题归入最贴切的一条业务线，只输出 JSON（不要输出任何其它文字）。
+
+业务线取值：@DOMAIN_CHOICES@
+- 问题明确属于某条业务线（提到该线的产品、功能或术语）→ 选该线；
+- 属于通用客服诉求（账号、怎么联系人工、平台使用帮助等）→ 选通用客服线；
+- 与所有业务线都无关（闲聊、完全无关话题）→ {"domain": "unknown"}。
+
+输出格式：{"domain": "<业务线 code 或 unknown>"}
+"""
+
+
+def build_domain_judge_system_prompt(lines: list[BusinessLine] | None = None) -> str:
+    """按配置业务线动态组装判域提示词：新增产品线后模型即可判到新线（含 kefu 通用线）。"""
+    if lines is None:
+        lines = resolve_business_lines()
+    choices = "、".join(f"{line.code}（{line.name}）" for line in lines)
+    domain_choices = f"{choices}、unknown" if choices else "unknown"
+    return DOMAIN_JUDGE_SYSTEM_PROMPT_TEMPLATE.replace("@DOMAIN_CHOICES@", domain_choices)
+
+
 def _disposition(
     disposition_type: str,
     reason: str | None,
@@ -223,7 +248,8 @@ def is_identity_reply(content: str) -> bool:
     return False
 
 
-def should_revoke_no_evidence(    content: str,
+def should_revoke_no_evidence(
+    content: str,
     evidence: dict[str, Any] | None,
     tool_names: set[str],
     *,
@@ -298,12 +324,19 @@ def classify_domain_by_keywords(question: str, lines: list[BusinessLine] | None 
     return max(matches)[2]
 
 
-def resolve_handoff_domain(disposition: dict[str, Any], question: str) -> str:
-    """Resolve a configured business domain only for refusals eligible for handoff."""
+async def resolve_disposition_domain(disposition: dict[str, Any], question: str, *, caller=None) -> str:
+    """消息落库前的域解析（resolve_handoff_domain 的全量版，覆盖 answered 正常回答）。
+
+    ① judge 已判定的合法 domain 优先；② off_topic 跑题拒答只跑关键词
+    （跑题无业务线可归，不烧判域模型）；③ 其余（含 answered）走 judge_domain 分层判域。
+    caller 可注入以便测试：async (messages: list[dict]) -> str。
+    """
     domain = sanitize_business_domain(disposition.get("domain"))
-    if domain == "unknown" and is_handoff_disposition(disposition):
-        domain = classify_domain_by_keywords(question)
-    return sanitize_business_domain(domain)
+    if domain != "unknown":
+        return domain
+    if disposition.get("type") == "scope_refusal" and disposition.get("reason") == "off_topic":
+        return classify_domain_by_keywords(question)
+    return await judge_domain(question, caller=caller)
 
 
 def is_final_assistant_message(message: dict[str, Any]) -> bool:
@@ -412,6 +445,51 @@ async def judge_refusal(question: str, *, caller=None) -> dict[str, Any] | None:
         return None
 
 
+def _parse_domain_payload(text: str) -> str | None:
+    content = text.strip()
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            payload = json.loads(content[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(payload, dict):
+        return None
+    domain = payload.get("domain")
+    return domain if isinstance(domain, str) and domain.strip() else None
+
+
+async def judge_domain(question: str, *, caller=None) -> str:
+    """分层判域单点：关键词快路径命中即返回（免费）；未命中且配置了判定模型
+    （或注入 caller）时一次小模型判定；未配置/调用/解析失败回退 unknown。
+    caller 可注入以便测试：async (messages: list[dict]) -> str。
+    """
+    keyword_domain = classify_domain_by_keywords(question)
+    if keyword_domain != "unknown":
+        return keyword_domain
+    if not DOMAIN_JUDGE_MODEL and caller is None:
+        return "unknown"
+    messages = [
+        {"role": "system", "content": build_domain_judge_system_prompt()},
+        {"role": "user", "content": f"用户问题：{question.strip() or '（空）'}\n\n只输出 JSON。"},
+    ]
+    try:
+        if caller is not None:
+            text = await caller(messages)
+        else:
+            adapter = select_model(DOMAIN_JUDGE_MODEL)
+            text = (await adapter.call(messages)).content
+        domain = _parse_domain_payload(str(text or ""))
+    except Exception as exc:  # noqa: BLE001 — 判域失败不应影响消息保存
+        logger.warning("业务线判域模型调用失败，按未分类处理: {}", exc)
+        return "unknown"
+    return sanitize_business_domain(domain)
+
+
 def apply_knowledge_disposition(
     message: dict[str, Any],
     *,
@@ -444,10 +522,11 @@ __all__ = [
     "is_conversational_ack",
     "is_final_assistant_message",
     "is_handoff_disposition",
+    "judge_domain",
     "judge_refusal",
     "no_evidence_disposition",
     "parse_query_kb_output",
-    "resolve_handoff_domain",
+    "resolve_disposition_domain",
     "should_revoke_no_evidence",
     "turn_has_grounding_source",
 ]

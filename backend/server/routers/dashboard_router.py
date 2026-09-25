@@ -638,16 +638,14 @@ def _beijing_day_bounds(start_date: str | None, end_date: str | None) -> tuple[d
     """
     try:
         start_utc = (
-            ensure_utc(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=SHANGHAI_TZ))
-            .replace(tzinfo=None)
+            ensure_utc(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=SHANGHAI_TZ)).replace(tzinfo=None)
             if start_date
             else None
         )
         end_utc = (
             ensure_utc(
                 (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=SHANGHAI_TZ)
-            )
-            .replace(tzinfo=None)
+            ).replace(tzinfo=None)
             if end_date
             else None
         )
@@ -692,9 +690,7 @@ async def get_dashboard_stats(
         )
         active_conversations = active_conversations_result.scalar() or 0
 
-        total_messages_result = await db.execute(
-            select(func.count(Message.id)).filter(*within(Message.created_at))
-        )
+        total_messages_result = await db.execute(select(func.count(Message.id)).filter(*within(Message.created_at)))
         total_messages = total_messages_result.scalar() or 0
 
         total_users_result = await db.execute(
@@ -812,9 +808,7 @@ def _resolve_qa_domain(disposition: dict | None, question: str, lines: list) -> 
     return domain
 
 
-async def _load_qa_record_rows(
-    db: AsyncSession, start_at: datetime | None, end_at: datetime | None
-) -> list[dict]:
+async def _load_qa_record_rows(db: AsyncSession, start_at: datetime | None, end_at: datetime | None) -> list[dict]:
     """全量拉取时段内的问答明细行并解析产品线（量级为单机客服库的千级以内，可内存过滤分页）。"""
     from yuxi.storage.postgres.models_business import Conversation, Message, User
 
@@ -956,6 +950,143 @@ async def export_qa_records(
         logger.error(f"Error exporting qa records: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to export qa records: {str(e)}")
+
+
+# =============================================================================
+# 分类维度运营总览（超级管理员权限）
+# =============================================================================
+
+
+def _qa_domain_sort_key(domain: str, order: dict[str, int]) -> tuple[int, int | str, str]:
+    """产品线排序口径：配置顺序在前，游离 code（业务线被删后的历史行）居中，unknown 兜底最后。"""
+    if domain == "unknown":
+        return (2, 0, "")
+    index = order.get(domain)
+    if index is not None:
+        return (0, index, domain)
+    return (1, 0, domain)
+
+
+def _aggregate_qa_stats_by_domain(records: list[dict], lines: list | None = None) -> dict:
+    """按产品线聚合问答明细：问答数、拒答数/率、回答类型分布与分类覆盖率。
+
+    行的 domain 已在 _load_qa_record_rows 解析（含关键词兜底），与问答明细页同口径、数字可对账。
+    拒答口径与 feedback_service 一致（knowledge/scope/policy_refusal 三类之和）。
+    """
+    if lines is None:
+        lines = resolve_business_lines()
+    order = {line.code: index for index, line in enumerate(lines)}
+    stats: dict[str, dict] = {line.code: {"domain": line.code, "total": 0, "answer_types": {}} for line in lines}
+    for record in records:
+        entry = stats.setdefault(record["domain"], {"domain": record["domain"], "total": 0, "answer_types": {}})
+        entry["total"] += 1
+        entry["answer_types"][record["answer_type"]] = entry["answer_types"].get(record["answer_type"], 0) + 1
+
+    rows = []
+    for domain in sorted(stats, key=lambda code: _qa_domain_sort_key(code, order)):
+        entry = stats[domain]
+        refusal_count = sum(entry["answer_types"].get(dtype, 0) for dtype in REFUSAL_DISPOSITION_TYPES)
+        rows.append(
+            {
+                "domain": domain,
+                "total": entry["total"],
+                "answer_types": entry["answer_types"],
+                "refusal_count": refusal_count,
+                "refusal_rate": round(refusal_count / entry["total"] * 100, 2) if entry["total"] else 0.0,
+            }
+        )
+
+    total = len(records)
+    unclassified = stats.get("unknown", {}).get("total", 0)
+    classified = total - unclassified
+    return {
+        "lines": rows,
+        "coverage": {
+            "total": total,
+            "classified": classified,
+            "unclassified": unclassified,
+            "classified_rate": round(classified / total * 100, 2) if total else 0.0,
+        },
+    }
+
+
+def _aggregate_qa_domain_trend(
+    records: list[dict], start_date: str | None, end_date: str | None, lines: list | None = None
+) -> dict:
+    """按北京日聚合各产品线问答量趋势，逐日补零；日期缺省用记录最早/最晚日。
+
+    categories 只含窗口内有量的产品线（零量线不进图例），排序同 _qa_domain_sort_key。
+    """
+    if not records:
+        return {"categories": [], "data": []}
+    if lines is None:
+        lines = resolve_business_lines()
+    order = {line.code: index for index, line in enumerate(lines)}
+
+    def day_key(record: dict) -> str:
+        # created_at 为 naive UTC（isoformat 自 DB 行），挂 UTC 后转北京日界；
+        # 不可用 ensure_utc（它把 naive 当上海时间，对 naive UTC 是恒等变换）。
+        local = ensure_shanghai(datetime.fromisoformat(record["created_at"]).replace(tzinfo=UTC))
+        return local.strftime("%Y-%m-%d")
+
+    record_days = {day_key(record) for record in records}
+    first_day = datetime.strptime(start_date or min(record_days), "%Y-%m-%d").date()
+    last_day = datetime.strptime(end_date or max(record_days), "%Y-%m-%d").date()
+
+    counts: dict[str, dict[str, int]] = {}
+    for record in records:
+        bucket = counts.setdefault(day_key(record), {})
+        bucket[record["domain"]] = bucket.get(record["domain"], 0) + 1
+
+    seen_domains = {domain for bucket in counts.values() for domain in bucket}
+    categories = sorted(seen_domains, key=lambda code: _qa_domain_sort_key(code, order))
+    data = []
+    cursor = first_day
+    while cursor <= last_day:
+        day = cursor.strftime("%Y-%m-%d")
+        bucket = counts.get(day, {})
+        day_counts = {code: bucket.get(code, 0) for code in categories}
+        data.append({"date": day, "data": day_counts, "total": sum(bucket.values())})
+        cursor += timedelta(days=1)
+    return {"categories": categories, "data": data}
+
+
+@dashboard.get("/qa-stats-by-domain")
+async def get_qa_stats_by_domain(
+    start_date: str | None = Query(None, description="起始日（北京日期 YYYY-MM-DD，含当日）"),
+    end_date: str | None = Query(None, description="结束日（北京日期 YYYY-MM-DD，含当日）"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """按产品线聚合问答数/拒答率与分类覆盖率（超级管理员权限）。口径与问答明细页一致。"""
+    del current_user
+    start_at, end_at = _beijing_day_bounds(start_date, end_date)
+    try:
+        records = await _load_qa_record_rows(db, start_at, end_at)
+        return _aggregate_qa_stats_by_domain(records)
+    except Exception as e:
+        logger.error(f"Error getting qa stats by domain: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to get qa stats by domain: {str(e)}")
+
+
+@dashboard.get("/qa-stats-by-domain/trend")
+async def get_qa_stats_by_domain_trend(
+    start_date: str | None = Query(None, description="起始日（北京日期 YYYY-MM-DD，含当日）"),
+    end_date: str | None = Query(None, description="结束日（北京日期 YYYY-MM-DD，含当日）"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_superadmin_user),
+):
+    """各产品线问答量按日趋势（超级管理员权限）。北京日分桶，逐日补零。"""
+    del current_user
+    start_at, end_at = _beijing_day_bounds(start_date, end_date)
+    try:
+        records = await _load_qa_record_rows(db, start_at, end_at)
+        return _aggregate_qa_domain_trend(records, start_date, end_date)
+    except Exception as e:
+        logger.error(f"Error getting qa stats by domain trend: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to get qa stats by domain trend: {str(e)}")
 
 
 # =============================================================================

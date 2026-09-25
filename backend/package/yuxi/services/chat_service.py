@@ -48,9 +48,10 @@ from yuxi.services.knowledge_answer_disposition import (
     collect_turn_tool_names,
     is_final_assistant_message,
     is_handoff_disposition,
+    judge_domain,
     judge_refusal,
     no_evidence_disposition,
-    resolve_handoff_domain,
+    resolve_disposition_domain,
 )
 from yuxi.services.knowledge_gap_service import record_knowledge_gap
 from yuxi.services.knowledge_scope_gate import build_scope_corpus, evaluate_scope
@@ -822,8 +823,11 @@ async def save_messages_from_langgraph_state(
                 judgment = await judge_refusal(knowledge_question or "")
                 disposition = apply_refusal_judgment(disposition, judgment)
                 msg_dict["knowledge_disposition"] = disposition
-            disposition["domain"] = resolve_handoff_domain(disposition, knowledge_question or "")
-            msg_dict["knowledge_disposition"] = disposition
+            # 域解析对全部带判定的消息执行（含 answered）：关键词快路径免费命中，
+            # 未命中且配置判域模型时一次小模型判定；空判定（中间消息）不写 stub。
+            if disposition:
+                disposition["domain"] = await resolve_disposition_domain(disposition, knowledge_question or "")
+                msg_dict["knowledge_disposition"] = disposition
             if is_handoff_disposition(disposition):
                 msg_dict["handoff_available"] = True
                 msg_dict["handoff_query"] = knowledge_question or ""
@@ -1283,6 +1287,8 @@ async def stream_agent_chat(
                                 "schema_version": DISPOSITION_SCHEMA_VERSION,
                                 "type": "scope_refusal",
                                 "reason": "off_topic",
+                                # 跑题只跑关键词归域（命中产品线仍计该线），不烧判域模型
+                                "domain": classify_domain_by_keywords(query),
                             },
                         },
                         run_id=meta.get("run_id"),
@@ -1314,9 +1320,7 @@ async def stream_agent_chat(
                     results, incomplete = await GlobalKnowledgeSearchService().search_with_status(current_user, query)
                     if not results and not incomplete:
                         refusal = (
-                            KNOWLEDGE_REFUSAL_REPLY
-                            if is_chinese_text(display_query)
-                            else KNOWLEDGE_REFUSAL_REPLY_EN
+                            KNOWLEDGE_REFUSAL_REPLY if is_chinese_text(display_query) else KNOWLEDGE_REFUSAL_REPLY_EN
                         )
                         message_id = f"handoff-{meta['request_id']}"
                         if source_lang and source_lang != "en":
@@ -1334,7 +1338,7 @@ async def stream_agent_chat(
                                     "schema_version": DISPOSITION_SCHEMA_VERSION,
                                     "type": "knowledge_refusal",
                                     "reason": "no_results",
-                                    "domain": classify_domain_by_keywords(query),
+                                    "domain": await judge_domain(query),
                                 },
                                 "handoff_available": True,
                                 "handoff_query": query,

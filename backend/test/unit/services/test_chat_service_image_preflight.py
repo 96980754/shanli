@@ -247,6 +247,7 @@ async def test_english_off_topic_preflight_uses_english_scope_refusal(monkeypatc
         "schema_version": 2,
         "type": "scope_refusal",
         "reason": "off_topic",
+        "domain": "unknown",  # 跑题只跑关键词归域（命中产品线仍计该线），不烧判域模型
     }
     assert "handoff_available" not in assistant["extra_metadata"]
     assert any(chunk.get("response") == SCOPE_REFUSAL_REPLY_EN for chunk in chunks)
@@ -326,6 +327,7 @@ async def test_off_topic_chitchat_first_turn_refused_by_scope_no_handoff(monkeyp
         "schema_version": 2,
         "type": "scope_refusal",
         "reason": "off_topic",
+        "domain": "unknown",  # 跑题只跑关键词归域（命中产品线仍计该线），不烧判域模型
     }
     assert "handoff_available" not in assistant["extra_metadata"]  # 业务外闲聊不转人工
     assert scope_calls == ["今天天气怎么样"]

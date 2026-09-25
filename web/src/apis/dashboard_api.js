@@ -364,5 +364,28 @@ export const dashboardApi = {
       if (value !== undefined && value !== null && value !== '') query.append(key, value)
     })
     return apiSuperAdminGet(`/api/dashboard/qa-records/export?${query.toString()}`, {}, 'blob')
+  },
+
+  /**
+   * 按产品线聚合问答数/拒答率与分类覆盖率（口径与问答明细一致）
+   * @param {Object} params - start_date/end_date（北京日期 YYYY-MM-DD）
+   */
+  getQaStatsByDomain: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiSuperAdminGet(`/api/dashboard/qa-stats-by-domain?${query.toString()}`)
+  },
+
+  /**
+   * 各产品线问答量按日趋势（北京日分桶，逐日补零）
+   */
+  getQaStatsByDomainTrend: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.append(key, value)
+    })
+    return apiSuperAdminGet(`/api/dashboard/qa-stats-by-domain/trend?${query.toString()}`)
   }
 }

@@ -273,3 +273,35 @@ async def test_qa_records_export_csv(test_client, admin_headers):
     assert filtered_export.status_code == 200
     filtered_rows = [row for row in csv.reader(io.StringIO(filtered_export.text.lstrip("﻿"))) if row]
     assert len(filtered_rows) - 1 == filtered_list.json()["total"]
+
+
+async def test_admin_can_fetch_qa_stats_by_domain(test_client, admin_headers):
+    """按产品线聚合返回 lines/coverage 信封，合计与明细接口同筛选 total 对账。"""
+    response = await test_client.get("/api/dashboard/qa-stats-by-domain", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert isinstance(data["lines"], list)
+    coverage = data["coverage"]
+    for key in ("total", "classified", "unclassified", "classified_rate"):
+        assert key in coverage
+    assert sum(line["total"] for line in data["lines"]) == coverage["total"]
+
+    records = await test_client.get("/api/dashboard/qa-records", headers=admin_headers)
+    assert records.status_code == 200, records.text
+    assert coverage["total"] == records.json()["total"]
+
+
+async def test_qa_stats_by_domain_trend_envelope_and_consistency(test_client, admin_headers):
+    """按日趋势返回 categories/data 信封，逐日合计与 stats 接口总数对账。"""
+    response = await test_client.get("/api/dashboard/qa-stats-by-domain/trend", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert isinstance(data["categories"], list)
+    assert isinstance(data["data"], list)
+    dates = [point["date"] for point in data["data"]]
+    assert dates == sorted(dates), "趋势应按日期升序"
+
+    stats = await test_client.get("/api/dashboard/qa-stats-by-domain", headers=admin_headers)
+    assert stats.status_code == 200, stats.text
+    if data["data"]:
+        assert sum(point["total"] for point in data["data"]) == stats.json()["coverage"]["total"]

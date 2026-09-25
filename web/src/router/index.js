@@ -93,6 +93,12 @@ const router = createRouter({
           children: [
             { path: '', redirect: '/knowledge-ops/gaps' },
             {
+              path: 'overview',
+              name: 'KnowledgeOpsOverviewComp',
+              component: () => import('../views/KnowledgeOpsOverviewView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
               path: 'gaps',
               name: 'KnowledgeGapsComp',
               component: () => import('../views/KnowledgeGapsView.vue'),

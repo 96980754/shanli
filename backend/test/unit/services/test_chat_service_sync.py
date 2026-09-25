@@ -268,6 +268,7 @@ async def test_save_messages_from_langgraph_state_backfills_run_output_message(m
             captured["message_id"] = message_id
 
     monkeypatch.setattr(svc, "AgentRunRepository", FakeRunRepo)
+
     # “answer”是零检索硬答，会被 ② 改写为拒答并走域/缺口落库；单测里隔离 DB 副作用。
     async def _no_gap(**kwargs):
         return None
@@ -867,6 +868,61 @@ async def test_save_messages_identity_greeting_answer_answered_no_banner() -> No
     assert "handoff_available" not in meta
 
 
+@pytest.mark.asyncio
+async def test_save_messages_resolves_domain_for_answered(monkeypatch: pytest.MonkeyPatch) -> None:
+    """answered 终答落库也判域：关键词快路径命中即归业务线（未命中且未配置模型时为 unknown）。"""
+    from yuxi.config.app import config as runtime_config
+
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+    monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
+
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "网优参数怎么配"},
+                {"type": "ai", "content": "网优参数配置如下：……"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    disposition = conv_repo.saved_messages[0]["extra_metadata"]["knowledge_disposition"]
+    assert disposition["type"] == "answered"
+    assert disposition["domain"] == "mno"
+
+
+@pytest.mark.asyncio
+async def test_save_messages_intermediate_ai_message_has_no_disposition_stub() -> None:
+    """带 tool_calls 的中间 ai 消息不是终答：不再写 knowledge_disposition（含 domain stub）。"""
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "网优参数怎么配"},
+                {
+                    "type": "ai",
+                    "content": "",
+                    "tool_calls": [{"id": "call-1", "name": "query_kb", "args": {"query": "网优参数"}}],
+                },
+                {"type": "ai", "content": "网优参数配置如下。"},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    intermediate_meta = conv_repo.saved_messages[0]["extra_metadata"]
+    final_meta = conv_repo.saved_messages[1]["extra_metadata"]
+    assert "knowledge_disposition" not in intermediate_meta
+    assert final_meta["knowledge_disposition"]["type"] == "answered"
+
+
 def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
     scope_refusal = {"knowledge_disposition": {"type": "scope_refusal", "reason": "off_topic"}}
     answered = {"knowledge_disposition": {"type": "answered"}}
@@ -876,13 +932,17 @@ def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
     assert svc._assistant_meta_is_answer(answered) is True
     assert svc._assistant_meta_is_answer(None) is True
     # 类别3 命中问答对：带 answer_source/human_confirmed、无 disposition/handoff → 视为正常作答（线程不污染）。
-    assert svc._assistant_meta_is_answer(
-        {"answer_source": "curated_qa", "curated_qa_id": 7, "human_confirmed": True}
-    ) is True
+    assert (
+        svc._assistant_meta_is_answer({"answer_source": "curated_qa", "curated_qa_id": 7, "human_confirmed": True})
+        is True
+    )
     # 零命中拒答（入口）带 no_results disposition + handoff → 保持“未作答”，线程仍处首答轮语义。
-    assert svc._assistant_meta_is_answer(
-        {"knowledge_disposition": {"type": "knowledge_refusal", "reason": "no_results"}, "handoff_available": True}
-    ) is False
+    assert (
+        svc._assistant_meta_is_answer(
+            {"knowledge_disposition": {"type": "knowledge_refusal", "reason": "no_results"}, "handoff_available": True}
+        )
+        is False
+    )
 
 
 def test_requires_knowledge_preflight_skips_greeting_and_identity_but_keeps_business() -> None:

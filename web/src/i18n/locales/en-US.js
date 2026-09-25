@@ -1478,6 +1478,20 @@ export default {
     pendingSummaryGo: 'Generate Q&A candidates',
     pendingSummaryDismiss: 'Got it'
   },
+  opsOverview: {
+    pageTitle: 'Operations Overview',
+    pageSubtitle: 'Q&A volume, refusal rate and classification coverage by product line, consistent with Q&A records.',
+    cardTotal: 'Total Q&A',
+    cardClassified: 'Classified',
+    cardUnclassified: 'Unclassified',
+    cardCoverageRate: 'Coverage Rate',
+    chartDomainTitle: 'Q&A Volume & Refusal Rate by Product Line',
+    chartRefusalTitle: 'Refusal Types by Product Line',
+    chartTrendTitle: 'Q&A Trend by Product Line',
+    yAxisCount: 'Q&A Count',
+    yAxisRate: 'Refusal Rate (%)',
+    loadFailed: 'Failed to load operations overview'
+  },
   upload: {
     addFileTitle: 'Add Files',
     documentProcessingHelp: 'Document Processing Guide',

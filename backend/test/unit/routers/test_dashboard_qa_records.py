@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from server.routers.dashboard_router import _filter_qa_records, _resolve_qa_domain
+from server.routers.dashboard_router import (
+    _aggregate_qa_domain_trend,
+    _aggregate_qa_stats_by_domain,
+    _filter_qa_records,
+    _resolve_qa_domain,
+)
 from yuxi.config.app import BusinessLine, config as app_config
 
 pytestmark = [pytest.mark.unit]
@@ -60,3 +65,90 @@ def test_filter_qa_records_by_domain_and_keyword():
     # 空 keyword 不过滤
     assert len(_filter_qa_records(records, None, "  ")) == 3
     assert _filter_qa_records(records, None, "不存在的词") == []
+
+
+def _qa_record(domain: str, answer_type: str = "answered", created_at: str = "2026-09-24T02:00:00") -> dict:
+    # created_at 为 naive UTC（同 _load_qa_record_rows 输出的 isoformat）
+    return {"created_at": created_at, "domain": domain, "answer_type": answer_type}
+
+
+def test_aggregate_qa_stats_counts_rates_and_coverage():
+    records = [
+        _qa_record("dispatch"),
+        _qa_record("dispatch", "knowledge_refusal"),
+        _qa_record("dispatch", "scope_refusal"),
+        _qa_record("mdm", "policy_refusal"),
+        _qa_record("unknown"),
+    ]
+    summary = _aggregate_qa_stats_by_domain(records, LINES)
+
+    assert [row["domain"] for row in summary["lines"]] == ["dispatch", "mdm", "unknown"]
+    by_domain = {row["domain"]: row for row in summary["lines"]}
+    assert by_domain["dispatch"]["total"] == 3
+    assert by_domain["dispatch"]["refusal_count"] == 2
+    assert by_domain["dispatch"]["refusal_rate"] == 66.67
+    assert by_domain["dispatch"]["answer_types"] == {
+        "answered": 1,
+        "knowledge_refusal": 1,
+        "scope_refusal": 1,
+    }
+    assert by_domain["mdm"]["refusal_rate"] == 100.0
+    # coverage 与逐线合计自洽
+    assert summary["coverage"] == {"total": 5, "classified": 4, "unclassified": 1, "classified_rate": 80.0}
+    assert sum(row["total"] for row in summary["lines"]) == summary["coverage"]["total"]
+
+
+def test_aggregate_qa_stats_keeps_zero_lines_and_orders_stray_before_unknown():
+    summary = _aggregate_qa_stats_by_domain([_qa_record("ghost"), _qa_record("unknown")], LINES)
+
+    # 零量业务线保留（看板 x 轴稳定）；游离 code（业务线被删后的历史行）排在配置线之后、unknown 之前
+    assert [row["domain"] for row in summary["lines"]] == ["dispatch", "mdm", "ghost", "unknown"]
+    assert all(row["total"] == 0 and row["refusal_rate"] == 0.0 for row in summary["lines"][:2])
+    assert summary["coverage"] == {"total": 2, "classified": 1, "unclassified": 1, "classified_rate": 50.0}
+
+
+def test_aggregate_qa_stats_empty_records():
+    summary = _aggregate_qa_stats_by_domain([], LINES)
+
+    assert summary["coverage"] == {"total": 0, "classified": 0, "unclassified": 0, "classified_rate": 0.0}
+    # 零量配置线保留；unknown 无记录时不出现（未分类为 0 由 coverage 卡片表达）
+    assert [row["domain"] for row in summary["lines"]] == ["dispatch", "mdm"]
+
+
+def test_aggregate_qa_domain_trend_beijing_day_and_fill_zero():
+    records = [
+        _qa_record("dispatch", created_at="2026-09-23T02:00:00"),  # 北京 23 日 10:00
+        _qa_record("mdm", created_at="2026-09-24T18:00:00"),  # 北京 25 日 02:00（跨日界）
+        _qa_record("mdm", created_at="2026-09-24T18:30:00"),
+    ]
+    trend = _aggregate_qa_domain_trend(records, "2026-09-23", "2026-09-25", LINES)
+
+    assert trend["categories"] == ["dispatch", "mdm"]
+    assert [point["date"] for point in trend["data"]] == ["2026-09-23", "2026-09-24", "2026-09-25"]
+    assert trend["data"][0]["data"] == {"dispatch": 1, "mdm": 0}
+    assert trend["data"][1]["data"] == {"dispatch": 0, "mdm": 0}
+    assert trend["data"][1]["total"] == 0
+    assert trend["data"][2]["data"] == {"dispatch": 0, "mdm": 2}
+    assert trend["data"][2]["total"] == 2
+
+
+def test_aggregate_qa_domain_trend_defaults_to_record_day_range():
+    records = [
+        _qa_record("dispatch", created_at="2026-09-23T02:00:00"),
+        _qa_record("mdm", created_at="2026-09-25T02:00:00"),
+    ]
+    trend = _aggregate_qa_domain_trend(records, None, None, LINES)
+
+    assert [point["date"] for point in trend["data"]] == ["2026-09-23", "2026-09-24", "2026-09-25"]
+    assert trend["data"][1]["total"] == 0
+
+
+def test_aggregate_qa_domain_trend_orders_unknown_last():
+    records = [_qa_record("unknown"), _qa_record("dispatch")]
+    trend = _aggregate_qa_domain_trend(records, None, None, LINES)
+
+    assert trend["categories"] == ["dispatch", "unknown"]
+
+
+def test_aggregate_qa_domain_trend_empty_records():
+    assert _aggregate_qa_domain_trend([], None, None, LINES) == {"categories": [], "data": []}

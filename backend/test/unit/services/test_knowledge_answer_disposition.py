@@ -15,15 +15,17 @@ from yuxi.config.app import config as runtime_config
 from yuxi.services.knowledge_answer_disposition import (
     apply_knowledge_disposition,
     apply_refusal_judgment,
+    build_domain_judge_system_prompt,
     build_judge_system_prompt,
     build_knowledge_evidence,
     classify_domain_by_keywords,
     classify_knowledge_disposition,
     collect_turn_tool_names,
     is_handoff_disposition,
+    judge_domain,
     judge_refusal,
     no_evidence_disposition,
-    resolve_handoff_domain,
+    resolve_disposition_domain,
     should_revoke_no_evidence,
 )
 
@@ -257,6 +259,97 @@ async def test_judge_reads_content_from_real_adapter(monkeypatch: pytest.MonkeyP
     assert result == {"type": "scope_refusal", "reason": "off_topic", "domain": "unknown"}
 
 
+# ---- judge_domain / resolve_disposition_domain ----
+
+
+async def test_judge_domain_keyword_fast_path_skips_model(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def never_called(messages):
+        raise AssertionError("关键词命中时不应调判域模型")
+
+    assert await judge_domain("网优参数怎么配", caller=never_called) == "mno"
+
+
+async def test_judge_domain_disabled_without_model_and_caller(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("yuxi.services.knowledge_answer_disposition.DOMAIN_JUDGE_MODEL", "")
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    assert await judge_domain("关键词没盖住的奇怪问题") == "unknown"
+
+
+async def test_judge_domain_parses_caller_json(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        runtime_config,
+        "business_lines",
+        [
+            {"code": "mno", "name": "网优", "keywords": ["网优"]},
+            {"code": "kefu", "name": "通用客服", "keywords": []},
+        ],
+    )
+
+    async def caller(messages):
+        return '{"domain": "kefu"}'
+
+    assert await judge_domain("怎么转人工", caller=caller) == "kefu"
+
+
+async def test_judge_domain_parses_json_wrapped_in_text(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def caller(messages):
+        return '好的：\n```json\n{"domain": "mno"}\n```'
+
+    assert await judge_domain("参数核查", caller=caller) == "mno"
+
+
+async def test_judge_domain_stray_code_falls_back_unknown(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def caller(messages):
+        return '{"domain": "不存在的业务线"}'
+
+    assert await judge_domain("奇怪的问题", caller=caller) == "unknown"
+
+
+async def test_judge_domain_invalid_output_returns_unknown(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def caller(messages):
+        return "无法分类"
+
+    assert await judge_domain("奇怪的问题", caller=caller) == "unknown"
+
+
+async def test_judge_domain_llm_failure_returns_unknown(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def caller(messages):
+        raise RuntimeError("model unavailable")
+
+    assert await judge_domain("奇怪的问题", caller=caller) == "unknown"
+
+
+def test_build_domain_judge_system_prompt_includes_kefu_and_unknown_tail():
+    from yuxi.config.app import BusinessLine
+
+    prompt = build_domain_judge_system_prompt(
+        lines=[BusinessLine(code="mno", name="网优"), BusinessLine(code="kefu", name="通用客服")]
+    )
+    assert "业务线取值：mno（网优）、kefu（通用客服）、unknown" in prompt
+
+
+def test_build_domain_judge_system_prompt_empty_lines_only_unknown():
+    prompt = build_domain_judge_system_prompt(lines=[])
+    assert "业务线取值：unknown" in prompt
+
+
+def test_build_domain_judge_system_prompt_preserves_json_example_braces():
+    prompt = build_domain_judge_system_prompt(lines=[])
+    assert '{"domain": "unknown"}' in prompt
+    assert "@DOMAIN_CHOICES@" not in prompt
+
+
 # ---- apply_knowledge_disposition ----
 
 
@@ -378,25 +471,68 @@ def test_no_evidence_disposition_ignores_refusal_or_grounded():
     assert no_evidence_disposition(grounded, evidence=ok_evidence, tool_names={"query_kb"}) is None
 
 
-def test_resolve_handoff_domain_fills_scope_domain_from_keywords(monkeypatch: pytest.MonkeyPatch):
+async def test_resolve_disposition_domain_fills_scope_domain_from_keywords(monkeypatch: pytest.MonkeyPatch):
     from yuxi.config.app import BusinessLine
 
     lines = [BusinessLine(code="mno", name="网优", keywords=["网优"])]
     monkeypatch.setattr(runtime_config, "business_lines", [line.model_dump() for line in lines])
 
-    assert resolve_handoff_domain(
-        {"type": "scope_refusal", "reason": "other_domain", "domain": "unknown"}, "网优问题"
-    ) == "mno"
+    assert (
+        await resolve_disposition_domain(
+            {"type": "scope_refusal", "reason": "other_domain", "domain": "unknown"}, "网优问题"
+        )
+        == "mno"
+    )
 
 
-def test_resolve_handoff_domain_does_not_fill_policy_or_off_topic(monkeypatch: pytest.MonkeyPatch):
+async def test_resolve_disposition_domain_policy_refusal_walks_layered_judge(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
 
-    assert resolve_handoff_domain({"type": "policy_refusal", "domain": "unknown"}, "网优") == "unknown"
-    assert resolve_handoff_domain({"type": "scope_refusal", "reason": "off_topic"}, "网优") == "unknown"
+    # policy 拒答不再恒 unknown：问题点名业务线关键词时同样归线
+    policy = {"type": "policy_refusal", "reason": "privacy", "domain": "unknown"}
+    assert await resolve_disposition_domain(policy, "网优账号泄密了怎么办") == "mno"
 
 
+async def test_resolve_disposition_domain_off_topic_keyword_only(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
 
+    async def never_called(messages):
+        raise AssertionError("off_topic 不应触发判域模型调用")
+
+    # off_topic 只跑关键词：命中归线、未命中 unknown，均不调 caller
+    off_topic = {"type": "scope_refusal", "reason": "off_topic"}
+    assert await resolve_disposition_domain(off_topic, "网优问题", caller=never_called) == "mno"
+    assert await resolve_disposition_domain(off_topic, "天气怎么样", caller=never_called) == "unknown"
+
+
+async def test_resolve_disposition_domain_prefers_judged_domain(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+
+    async def never_called(messages):
+        raise AssertionError("judge 已判定合法域时不应再调模型")
+
+    judged = {"type": "knowledge_refusal", "reason": "no_results", "domain": "mno"}
+    assert await resolve_disposition_domain(judged, "随便什么问题", caller=never_called) == "mno"
+
+
+async def test_resolve_disposition_domain_answered_walks_layered_judge(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        runtime_config,
+        "business_lines",
+        [
+            {"code": "mno", "name": "网优", "keywords": ["网优"]},
+            {"code": "kefu", "name": "通用客服", "keywords": []},
+        ],
+    )
+
+    async def caller(messages):
+        return '{"domain": "kefu"}'
+
+    # answered 走分层判域：关键词未命中 → 小模型判出通用客服线
+    assert await resolve_disposition_domain({"type": "answered"}, "账号怎么登不上", caller=caller) == "kefu"
+
+
+def test_classify_domain_by_keywords_prefers_longer_keyword():
     from yuxi.config.app import BusinessLine
 
     lines = [
