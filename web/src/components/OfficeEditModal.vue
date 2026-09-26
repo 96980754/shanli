@@ -16,13 +16,15 @@
 
     <div v-else-if="error" class="office-error">{{ error }}</div>
 
-    <div v-if="createType && !loading && !error" class="office-filename-row">
-      <span>{{ $t('office.filenameLabel') }}</span>
-      <a-input v-model:value="documentFilename" size="small" />
-    </div>
+    <template v-else>
+      <!-- 新建模式：文件名行与编辑器并列渲染（不能进 v-else-if 链，否则编辑器永不出现） -->
+      <div v-if="createType" class="office-filename-row">
+        <span>{{ $t('office.filenameLabel') }}</span>
+        <a-input v-model:value="documentFilename" size="small" />
+      </div>
 
-    <!-- Word：平台轻量富文本块 -->
-    <div v-else-if="editingType === 'docx'" class="office-docx">
+      <!-- Word：平台轻量富文本块 -->
+      <div v-if="editingType === 'docx'" class="office-docx">
       <div class="office-toolbar">
         <a-button size="small" @click="addBlock('heading')">{{ $t('office.addHeading') }}</a-button>
         <a-button size="small" @click="addBlock('para')">{{ $t('office.addParagraph') }}</a-button>
@@ -62,7 +64,7 @@
           contenteditable="true"
           spellcheck="false"
           @input="syncBlock(block, $event)"
-          v-html="blockHtml(block)"
+          v-office-html="blockHtml(block)"
         />
       </div>
     </div>
@@ -97,6 +99,7 @@
         </a-tab-pane>
       </a-tabs>
     </div>
+    </template>
   </a-modal>
 </template>
 
@@ -186,6 +189,20 @@ const escapeHtml = (value) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
+
+// contenteditable 不能用 v-html 受控重渲：每次 input 更新 runs 都会重设 innerHTML，
+// 把光标重置到开头导致输入倒序。挂载时写入一次；更新时仅当元素未聚焦（编辑中 DOM 即事实来源）
+// 且内容确实变化（如 execCommand 产生的 <b> 归一化为 <strong>）才覆盖。
+const vOfficeHtml = {
+  mounted: (el, binding) => {
+    el.innerHTML = binding.value
+  },
+  updated: (el, binding) => {
+    if (document.activeElement !== el && el.innerHTML !== binding.value) {
+      el.innerHTML = binding.value
+    }
+  }
+}
 
 const blockHtml = (block) => {
   if (block.runs?.length) {

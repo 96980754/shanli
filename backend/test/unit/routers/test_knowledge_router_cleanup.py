@@ -290,6 +290,44 @@ async def test_create_office_document_serializes_ingests_and_indexes(monkeypatch
     assert captured["index"][1] == "file-new"
 
 
+async def test_create_office_document_duplicate_name_returns_409(monkeypatch):
+    async def fake_upload(kb_id, content_bytes, filename):
+        return "minio://kb/new.docx"
+
+    class FakeIngestionService:
+        async def create_uploaded_document(self, **kwargs):
+            raise DuplicateConflictError(
+                conflict_type="name_mismatch",
+                incoming={},
+                conflicts=[],
+                allowed_strategies=("prompt",),
+                message="同一文件夹中已存在同名但内容不同的文件",
+            )
+
+    async def fake_supports(_kb_id, _operation):
+        return None
+
+    from yuxi.services import document_ingestion_service
+    from yuxi.services.document_ingestion_service import DuplicateConflictError
+
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", fake_supports)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "upload_office_bytes", fake_upload)
+    monkeypatch.setattr(document_ingestion_service, "DocumentIngestionService", FakeIngestionService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.create_office_document(
+            "kb-1",
+            knowledge_router.CreateOfficeDocumentRequest(
+                content_type="docx",
+                blocks=[{"kind": "para", "text": "新建内容"}],
+                filename="重名.docx",
+            ),
+            current_user=user("user-1"),
+        )
+    assert exc_info.value.status_code == 409
+    assert "同名" in exc_info.value.detail
+
+
 async def test_create_office_document_rejects_mismatched_type(monkeypatch):
     async def fake_supports(_kb_id, _operation):
         return None

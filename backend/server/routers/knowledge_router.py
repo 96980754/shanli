@@ -2664,7 +2664,7 @@ async def create_office_document(
             raise HTTPException(status_code=400, detail="文档内容为空")
 
         file_path = await knowledge_base.upload_office_bytes(kb_id, new_bytes, filename)
-        from yuxi.services.document_ingestion_service import DocumentIngestionService
+        from yuxi.services.document_ingestion_service import DocumentIngestionService, DuplicateConflictError
 
         params = dict(request.processing_params or {})
         params.update(
@@ -2674,12 +2674,16 @@ async def create_office_document(
                 "duplicate_strategy": "prompt",
             }
         )
-        creation = await DocumentIngestionService().create_uploaded_document(
-            kb_id=kb_id,
-            item=file_path,
-            params=params,
-            operator_id=current_user.uid,
-        )
+        try:
+            creation = await DocumentIngestionService().create_uploaded_document(
+                kb_id=kb_id,
+                item=file_path,
+                params=params,
+                operator_id=current_user.uid,
+            )
+        except DuplicateConflictError as e:
+            # 与普通上传的重复冲突口径一致：返回 409 让用户改名重试，而非 500
+            raise HTTPException(status_code=409, detail=str(e)) from e
         if creation.action == "skipped":
             raise HTTPException(status_code=409, detail="知识库中已存在相同内容的文档")
 
