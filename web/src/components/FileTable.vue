@@ -61,6 +61,13 @@
       :can-manage="props.canManage"
       @changed="handleRefresh"
     />
+    <OfficeEditModal
+      v-model:visible="officeEditVisible"
+      :kb-id="store.kbId"
+      :doc-id="officeEditFileId"
+      :filename="officeEditFilename"
+      @success="handleRefresh"
+    />
     <KnowledgeConflictModal
       v-model:open="conflictModalVisible"
       :kb-id="store.kbId"
@@ -503,6 +510,10 @@
                     <template #icon><FileText :size="14" /></template>
                     {{ $t('fileTable.enrichment') }}
                   </a-button>
+                  <a-button v-if="props.canManage && isEditableOffice(row)" type="text" block @click="openOfficeEdit(row)">
+                    <template #icon><Pencil :size="14" /></template>
+                    {{ $t('fileTable.editOffice') }}
+                  </a-button>
                   <a-button v-if="props.canManage" type="text" block @click="openDocumentQA(row)">
                     <template #icon><HelpCircle :size="14" /></template>
                     {{ $t('docModal.qaPairs') }}
@@ -606,6 +617,9 @@ const enrichmentModalVisible = ref(false)
 const enrichmentFileId = ref('')
 const qaModalVisible = ref(false)
 const qaFileId = ref('')
+const officeEditVisible = ref(false)
+const officeEditFileId = ref('')
+const officeEditFilename = ref('')
 const conflictModalVisible = ref(false)
 
 const openCleaningPreview = (record) => {
@@ -618,6 +632,15 @@ const openEnrichment = (record) => {
   closePopover(record.file_id)
   enrichmentFileId.value = record.file_id
   enrichmentModalVisible.value = true
+}
+
+const isEditableOffice = (record) => /\.(docx|xlsx)$/i.test(record?.filename || '')
+
+const openOfficeEdit = (record) => {
+  closePopover(record.file_id)
+  officeEditFileId.value = record.file_id
+  officeEditFilename.value = record.filename || ''
+  officeEditVisible.value = true
 }
 
 const openDocumentQA = (record) => {
@@ -1414,6 +1437,7 @@ import DocumentVersionHistoryModal from '@/components/DocumentVersionHistoryModa
 import DocumentCleaningModal from '@/components/DocumentCleaningModal.vue'
 import DocumentEnrichmentModal from '@/components/DocumentEnrichmentModal.vue'
 import DocumentQAModal from '@/components/DocumentQAModal.vue'
+import OfficeEditModal from '@/components/OfficeEditModal.vue'
 import KnowledgeConflictModal from '@/components/KnowledgeConflictModal.vue'
 import FileBrowserTable from '@/components/common/FileBrowserTable.vue'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'

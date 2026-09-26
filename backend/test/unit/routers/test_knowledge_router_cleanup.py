@@ -241,6 +241,69 @@ async def test_markdown_endpoint_rejects_oversized_file(monkeypatch):
     assert "100 MB" in exc_info.value.detail
 
 
+async def test_create_office_document_serializes_ingests_and_indexes(monkeypatch):
+    captured = {}
+
+    async def fake_upload(kb_id, content_bytes, filename):
+        captured["upload"] = (kb_id, content_bytes, filename)
+        return "minio://kb/new.docx"
+
+    class FakeIngestionService:
+        async def create_uploaded_document(self, **kwargs):
+            captured["creation"] = kwargs
+            return SimpleNamespace(action="created", file_meta={"file_id": "file-new", "status": "uploaded"})
+
+    async def fake_parse(kb_id, file_id, operator_id=None):
+        captured["parse"] = (kb_id, file_id, operator_id)
+        return {"status": "parsed"}
+
+    async def fake_index(kb_id, file_id, operator_id=None, params=None):
+        captured["index"] = (kb_id, file_id, operator_id, params)
+        return {"status": "indexed"}
+
+    async def fake_supports(_kb_id, _operation):
+        return None
+
+    from yuxi.services import document_ingestion_service
+
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", fake_supports)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "upload_office_bytes", fake_upload)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "parse_file", fake_parse)
+    monkeypatch.setattr(knowledge_router.knowledge_base, "index_file", fake_index)
+    monkeypatch.setattr(document_ingestion_service, "DocumentIngestionService", FakeIngestionService)
+
+    result = await knowledge_router.create_office_document(
+        "kb-1",
+        knowledge_router.CreateOfficeDocumentRequest(
+            content_type="docx",
+            blocks=[{"kind": "para", "text": "新建内容"}],
+            filename="新建文档.docx",
+        ),
+        current_user=user("user-1"),
+    )
+
+    assert result["file_id"] == "file-new"
+    assert captured["upload"][0] == "kb-1"
+    assert captured["upload"][2] == "新建文档.docx"
+    assert captured["creation"]["item"] == "minio://kb/new.docx"
+    assert captured["parse"][1] == "file-new"
+    assert captured["index"][1] == "file-new"
+
+
+async def test_create_office_document_rejects_mismatched_type(monkeypatch):
+    async def fake_supports(_kb_id, _operation):
+        return None
+
+    monkeypatch.setattr(knowledge_router, "_ensure_database_supports_documents", fake_supports)
+    with pytest.raises(HTTPException) as exc_info:
+        await knowledge_router.create_office_document(
+            "kb-1",
+            knowledge_router.CreateOfficeDocumentRequest(content_type="xlsx", filename="new.docx"),
+            current_user=user("user-1"),
+        )
+    assert exc_info.value.status_code == 400
+
+
 async def test_save_edited_document_serializes_and_replaces(monkeypatch):
     class FakePermissionService:
         async def has_permission(self, user, kb_id, action):

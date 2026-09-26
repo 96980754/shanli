@@ -337,6 +337,11 @@ class OfficeWritebackRequest(BaseModel):
     filename: str
 
 
+class CreateOfficeDocumentRequest(OfficeWritebackRequest):
+    parent_id: str | None = None
+    processing_params: dict | None = None
+
+
 class DocumentVersionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2637,6 +2642,67 @@ async def office_writeback(
     except Exception as e:
         logger.error(f"Office 写回失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Office 写回失败") from e
+
+
+@knowledge.post("/databases/{kb_id}/documents/create-office")
+async def create_office_document(
+    kb_id: str,
+    request: CreateOfficeDocumentRequest,
+    current_user: User = Depends(get_required_user),
+):
+    """创建轻量在线 Word/Excel 文档，保存后立即解析并建立索引。"""
+    await _require_kb_permission(current_user, kb_id, "can_upload")
+    await _ensure_database_supports_documents(kb_id, "在线文档创建")
+
+    filename = os.path.basename((request.filename or "").strip())
+    suffix = os.path.splitext(filename)[1].lower()
+    if suffix not in {".docx", ".xlsx"} or request.content_type != suffix[1:]:
+        raise HTTPException(status_code=400, detail="仅支持匹配的 docx 或 xlsx 文档")
+    try:
+        new_bytes = serialize_edited_content(request.content_type, request.model_dump())
+        if not new_bytes:
+            raise HTTPException(status_code=400, detail="文档内容为空")
+
+        file_path = await knowledge_base.upload_office_bytes(kb_id, new_bytes, filename)
+        from yuxi.services.document_ingestion_service import DocumentIngestionService
+
+        params = dict(request.processing_params or {})
+        params.update(
+            {
+                "source_path": filename,
+                "parent_id": request.parent_id,
+                "duplicate_strategy": "prompt",
+            }
+        )
+        creation = await DocumentIngestionService().create_uploaded_document(
+            kb_id=kb_id,
+            item=file_path,
+            params=params,
+            operator_id=current_user.uid,
+        )
+        if creation.action == "skipped":
+            raise HTTPException(status_code=409, detail="知识库中已存在相同内容的文档")
+
+        file_id = (creation.file_meta or {}).get("file_id")
+        if not file_id:
+            raise RuntimeError("文档记录创建失败")
+        try:
+            await knowledge_base.parse_file(kb_id, file_id, operator_id=current_user.uid)
+            await knowledge_base.index_file(
+                kb_id,
+                file_id,
+                operator_id=current_user.uid,
+                params=request.processing_params or {},
+            )
+        except Exception:
+            await knowledge_base.delete_file(kb_id, file_id, family=False)
+            raise
+        return {"message": "在线文档已创建并入库", "file_id": file_id, "file_meta": creation.file_meta}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建在线 Office 文档失败: {e}, {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="创建在线文档失败") from e
 
 
 @knowledge.get("/databases/{kb_id}/documents/{doc_id}/office-content")
