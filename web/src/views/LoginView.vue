@@ -1,5 +1,5 @@
 <template>
-  <div class="login-view" :class="{ 'has-alert': serverStatus === 'error' }">
+  <div class="login-view">
     <!-- 服务状态提示 -->
     <div v-if="serverStatus === 'error'" class="server-status-alert">
       <div class="alert-content">
@@ -653,21 +653,12 @@ onUnmounted(() => {
   background-color: var(--gray-10);
   background-image: radial-gradient(var(--gray-200) 1px, transparent 1px);
   background-size: 24px 24px;
-
-  &.has-alert {
-    padding-top: 60px;
-  }
 }
 
 /* Unified Navbar */
 .login-navbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  /* App 外壳下状态栏/刘海叠加在 WebView 顶部，需让开安全区 */
+  /* 流内布局：服务告警会自然推到导航栏上方 */
   padding: calc(32px + var(--safe-top)) 0 32px;
-  z-index: 10;
 
   .navbar-content {
     max-width: 1500px; /* Constraint the width */
@@ -744,8 +735,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  /* Add space for navbar；叠加 safe-top 与 .login-navbar 保持一致，否则 App 外壳里表单会被导航栏压住 */
-  padding-top: calc(80px + var(--safe-top));
 }
 
 .login-card {
@@ -754,7 +743,7 @@ onUnmounted(() => {
   height: 560px;
   background: var(--gray-0);
   border-radius: 16px;
-  box-shadow: 0 0px 40px var(--shadow-1);
+  box-shadow: 0 2px 8px var(--shadow-2);
   display: flex;
   overflow: hidden;
 }
@@ -967,14 +956,9 @@ onUnmounted(() => {
 
 /* Server Status Alert */
 .server-status-alert {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   padding: 12px 20px;
   background: var(--color-error-500);
   color: var(--gray-0);
-  z-index: 1000;
 
   .alert-content {
     display: flex;

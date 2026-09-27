@@ -100,7 +100,7 @@ class MilvusRetrievalConfig:
     final_top_k: int = field(
         default=10,
         metadata={
-            "label": "最终返回 Chunk 数",
+            "label": "最终返回片段数",
             "type": "number",
             "min": 1,
             "max": 100,
@@ -205,7 +205,7 @@ class MilvusRetrievalConfig:
     graph_top_k: int = field(
         default=20,
         metadata={
-            "label": "图召回 Chunk 数",
+            "label": "图召回片段数",
             "type": "number",
             "min": 1,
             "max": 200,

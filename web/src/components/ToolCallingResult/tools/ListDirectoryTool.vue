@@ -12,7 +12,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BaseToolCall from '../BaseToolCall.vue'
+import { getToolCallId, getToolLabel } from '../toolRegistry'
 
 const props = defineProps({
   toolCall: {
@@ -21,8 +23,10 @@ const props = defineProps({
   }
 })
 
+const { t } = useI18n()
+
 const toolCallName = computed(
-  () => props.toolCall.name || props.toolCall.function?.name || 'list_directory'
+  () => getToolLabel(getToolCallId(props.toolCall)) || t('toolCall.badge.unknown')
 )
 
 const parsedArgs = computed(() => {

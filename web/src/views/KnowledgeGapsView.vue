@@ -19,6 +19,7 @@
       :data-source="items"
       :loading="loading"
       :pagination="pagination"
+      :locale="{ emptyText: $t('common.noData') }"
       row-key="id"
       :scroll="{ x: 1140 }"
       @change="handleTableChange"
@@ -57,7 +58,7 @@
         <a-descriptions-item :label="t('gaps.reasonLabel')">{{ reasonLabel(detail.reason) }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.businessDomainLabel')">{{ domainLabel(detail.domain) }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.occurrenceCountLabel')">{{ detail.occurrence_count }}</a-descriptions-item>
-        <a-descriptions-item label="Agent">{{ detail.agent_slug }}</a-descriptions-item>
+        <a-descriptions-item :label="$t('gaps.agentLabel')">{{ detail.agent_name || detail.agent_slug }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.kbScopeLabel')">{{ detail.kb_scope?.join(', ') || $t('gaps.kbScopeUnspecified') }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.recentUserLabel')">{{ detail.uid || '-' }}</a-descriptions-item>
         <a-descriptions-item :label="t('gaps.recentConversationLabel')">{{ detail.conversation_thread_id || '-' }}</a-descriptions-item>
@@ -94,7 +95,9 @@
         </a-form-item>
 
         <div class="web-search-toolbar">
-          <span class="web-search-agent">{{ $t('gaps.agentInfo', { name: webSearchGap?.agent_slug || '-' }) }}</span>
+          <span class="web-search-agent">{{
+            $t('gaps.agentInfo', { name: webSearchGap?.agent_name || webSearchGap?.agent_slug || '-' })
+          }}</span>
           <a-button :loading="webSearching" @click="runWebSearch">{{ $t('gaps.webSearchGenerateLabel') }}</a-button>
         </div>
 
@@ -155,7 +158,8 @@ const reasonOptions = computed(() => [
   { label: t('gaps.reasonNoEnabledKb'), value: 'no_enabled_knowledge_base' },
   { label: t('gaps.reasonNoResults'), value: 'no_results' },
   { label: t('gaps.reasonEmptyContent'), value: 'empty_content' },
-  { label: t('gaps.reasonInsufficientEvidence'), value: 'insufficient_evidence' }
+  { label: t('gaps.reasonInsufficientEvidence'), value: 'insufficient_evidence' },
+  { label: t('gaps.reasonNoEvidenceOutput'), value: 'no_evidence_output' }
 ])
 const domainOptions = computed(() => [
   { label: t('gaps.businessDomainAll'), value: '' },

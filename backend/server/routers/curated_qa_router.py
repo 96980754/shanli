@@ -8,6 +8,7 @@ from sqlalchemy import exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_superadmin_user
+from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.curated_qa_candidate_repository import CuratedQACandidateRepository
 from yuxi.repositories.curated_qa_repository import CuratedQARepository
 from yuxi.services.curated_qa_service import CuratedQAService
@@ -110,7 +111,13 @@ async def list_qa_pairs(
         limit=limit,
         offset=offset,
     )
-    return {"total": total, "items": [item.to_dict() for item in items]}
+    # 补 agent_name（智能体已删除时缺省，前端回落 slug），与 dashboard 明细接口同口径
+    slugs = sorted({item.agent_slug for item in items if item.agent_slug})
+    agent_names = {agent.slug: agent.name for agent in await AgentRepository(db).list_by_slugs(slugs)} if slugs else {}
+    return {
+        "total": total,
+        "items": [{**item.to_dict(), "agent_name": agent_names.get(item.agent_slug)} for item in items],
+    }
 
 
 @curated_qa_dashboard.patch("/qa-pairs/enabled")

@@ -889,7 +889,7 @@ const showCopiedFeedback = (btn) => {
     width: 100%;
     height: var(--html-preview-min-height, 1px);
     max-height: var(--html-preview-max-height, 700px);
-    background: #fff;
+    background: var(--gray-0);
   }
 
   .html-preview-loading-slot {
@@ -897,7 +897,7 @@ const showCopiedFeedback = (btn) => {
     width: 100%;
     height: clamp(var(--html-preview-height, 360px), 58vh, var(--html-preview-max-height, 1200px));
     padding: 24px;
-    background: linear-gradient(180deg, #fff 0%, var(--gray-50) 100%);
+    background: linear-gradient(180deg, var(--gray-0) 0%, var(--gray-50) 100%);
   }
 
   .html-preview-loading-canvas {
@@ -980,6 +980,7 @@ const showCopiedFeedback = (btn) => {
     width: 100%;
     height: 100%;
     border: 0;
+    /* 渲染的是 HTML 文档本体，白底是文档语义而非主题缺省，暗色下保持白 */
     background: #fff;
   }
 

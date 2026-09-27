@@ -104,6 +104,12 @@ export function useAgentStreamHandler({
   streamSmoother
 }) {
   const debugPrefix = '[AgentStateDebug]'
+  const debugLog = (...args) => {
+    if (import.meta.env.DEV) console.log(...args)
+  }
+  const debugWarn = (...args) => {
+    if (import.meta.env.DEV) console.warn(...args)
+  }
   // 记录每个工具调用（按 tool_call_id）的开始时刻，用于 tool-finished 时计算单次调用耗时。
   const toolStartedAt = new Map()
   /**
@@ -255,7 +261,7 @@ export function useAgentStreamHandler({
         threadState.replyLoadingVisible = false
         threadState.generationPhase = null
         threadState.activeToolName = null
-        console.log(`${debugPrefix}[approval_required]`, {
+        debugLog(`${debugPrefix}[approval_required]`, {
           threadId,
           currentAgentId: unref(currentAgentId)
         })
@@ -266,7 +272,7 @@ export function useAgentStreamHandler({
         return false
 
       case 'agent_state':
-        console.log(`${debugPrefix}[agent_state_chunk]`, {
+        debugLog(`${debugPrefix}[agent_state_chunk]`, {
           threadId,
           supportsFiles: unref(supportsFiles),
           currentAgentId: unref(currentAgentId),
@@ -277,14 +283,14 @@ export function useAgentStreamHandler({
             : 0
         })
         if (chunk.agent_state) {
-          console.log(`${debugPrefix}[agent_state_apply]`, {
+          debugLog(`${debugPrefix}[agent_state_apply]`, {
             threadId,
             todos: chunk.agent_state?.todos || [],
             uploads: chunk.agent_state?.uploads || []
           })
           threadState.agentState = chunk.agent_state
         } else {
-          console.warn(`${debugPrefix}[agent_state_skip]`, {
+          debugWarn(`${debugPrefix}[agent_state_skip]`, {
             reason: 'empty_state',
             supportsFiles: unref(supportsFiles),
             hasAgentState: !!chunk.agent_state,
@@ -311,14 +317,14 @@ export function useAgentStreamHandler({
           threadState.contextCompressing = false
           threadState.generationPhase = null
           threadState.activeToolName = null
-          console.log(`${debugPrefix}[finished]`, {
+          debugLog(`${debugPrefix}[finished]`, {
             threadId,
             currentAgentId: unref(currentAgentId),
             hasThreadAgentState: !!threadState.agentState,
             supportsFiles: unref(supportsFiles)
           })
           if (unref(supportsFiles) && threadState.agentState) {
-            console.log(
+            debugLog(
               `[AgentState|Final] ${new Date().toLocaleTimeString()}.${new Date().getMilliseconds()}`,
               {
                 threadId,
@@ -333,7 +339,7 @@ export function useAgentStreamHandler({
       case 'interrupted':
         streamSmoother?.flushThread(threadId)
         // 中断状态，刷新消息历史
-        console.warn(`${debugPrefix}[interrupted]`, {
+        debugWarn(`${debugPrefix}[interrupted]`, {
           threadId,
           message: chunkMessage,
           currentAgentId: unref(currentAgentId)

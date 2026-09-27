@@ -27,6 +27,13 @@ html {
   touch-action: pan-x pan-y;
 }
 
+/* 统一键盘焦点环（design.md §4：焦点必须可见）。:where 不加分特异性，
+   组件自身的 :focus-visible 样式仍可覆盖；outline: none 的地方由此兜底。 */
+:where(a, button, [tabindex], input, select, textarea, [contenteditable]):focus-visible {
+  outline: 2px solid var(--main-color);
+  outline-offset: 2px;
+}
+
 body {
   display: flow-root;
   min-height: 100vh;

@@ -167,123 +167,112 @@ const initFileTypeChart = () => {
         name: type || t('common.unknown'),
         value: count
       }))
-      .sort((a, b) => b.value - a.value) // 按数量排序
+    .sort((a, b) => b.value - a.value) // 按数量排序
 
-    // 设置轮播数据
-    fileTypeData.value = data
-    totalFiles.value = data.reduce((sum, item) => sum + item.value, 0)
+  // 设置轮播数据
+  fileTypeData.value = data
+  totalFiles.value = data.reduce((sum, item) => sum + item.value, 0)
 
-    // 启动轮播
-    startCarousel()
+  // 启动轮播
+  startCarousel()
 
-    const option = {
-      tooltip: {
-        trigger: 'item',
-        backgroundColor: getCSSVariable('--gray-0'),
-        borderColor: getCSSVariable('--gray-200'),
-        borderWidth: 1,
-        textStyle: {
-          color: getCSSVariable('--gray-600')
+  const option = {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: getCSSVariable('--gray-0'),
+      borderColor: getCSSVariable('--gray-200'),
+      borderWidth: 1,
+      textStyle: {
+        color: getCSSVariable('--gray-600')
+      },
+      formatter: '{a} <br/>{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'horizontal',
+      bottom: '5%',
+      left: 'center',
+      itemGap: 16,
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: {
+        fontSize: 11,
+        color: getCSSVariable('--gray-600')
+      }
+    },
+    series: [
+      {
+        name: t('dash.fileTypeSeriesName'),
+        type: 'pie',
+        radius: ['45%', '75%'], // 调整为更大的环，为中心信息留出更多空间
+        center: ['50%', '45%'], // 向上移动，为中心和底部图例留出空间
+        avoidLabelOverlap: true, // 避免标签重叠
+        itemStyle: {
+          borderRadius: 8,
+          borderColor: getCSSVariable('--gray-0'),
+          borderWidth: 2
         },
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
-      },
-      legend: {
-        orient: 'horizontal',
-        bottom: '5%',
-        left: 'center',
-        itemGap: 16,
-        itemWidth: 10,
-        itemHeight: 10,
-        textStyle: {
-          fontSize: 11,
-          color: getCSSVariable('--gray-600')
-        }
-      },
-      series: [
-        {
-          name: t('dash.fileTypeSeriesName'),
-          type: 'pie',
-          radius: ['45%', '75%'], // 调整为更大的环，为中心信息留出更多空间
-          center: ['50%', '45%'], // 向上移动，为中心和底部图例留出空间
-          avoidLabelOverlap: true, // 避免标签重叠
+        label: {
+          show: false // 隐藏饼图上的标签，使用图例代替
+        },
+        emphasis: {
           itemStyle: {
-            borderRadius: 8,
-            borderColor: getCSSVariable('--gray-0'),
-            borderWidth: 2
-          },
-          label: {
-            show: false // 隐藏饼图上的标签，使用图例代替
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: getCSSVariable('--shadow-3')
-            }
-          },
-          labelLine: {
-            show: false // 隐藏标签线
-          },
-          data: data,
-          color: getColorPalette()
-        }
-      ]
-    }
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: getCSSVariable('--shadow-3')
+          }
+        },
+        labelLine: {
+          show: false // 隐藏标签线
+        },
+        data: data,
+        color: getColorPalette()
+      }
+    ]
+  }
 
-    fileTypeChart.setOption(option)
+  fileTypeChart.setOption(option)
   } else {
-    // 清空轮播数据
     fileTypeData.value = []
     totalFiles.value = 0
     stopCarousel()
 
-    // 如果没有文件类型数据，显示一个占位图表
     const option = {
       tooltip: {
         trigger: 'item',
         backgroundColor: getCSSVariable('--gray-0'),
         borderColor: getCSSVariable('--gray-200'),
         borderWidth: 1,
-        textStyle: {
-          color: getCSSVariable('--gray-600')
-        },
+        textStyle: { color: getCSSVariable('--gray-600') },
         formatter: '{a} <br/>{b}: {c} ({d}%)'
       },
-      series: [
-        {
-          name: t('dash.fileTypeSeriesName'),
-          type: 'pie',
-          radius: ['45%', '75%'],
-          center: ['50%', '45%'],
-          avoidLabelOverlap: true,
+      series: [{
+        name: t('dash.fileTypeSeriesName'),
+        type: 'pie',
+        radius: ['45%', '75%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 8,
+          borderColor: getCSSVariable('--gray-0'),
+          borderWidth: 2
+        },
+        label: { show: false },
+        emphasis: {
           itemStyle: {
-            borderRadius: 8,
-            borderColor: getCSSVariable('--gray-0'),
-            borderWidth: 2
-          },
-          label: {
-            show: false
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: getCSSVariable('--shadow-3')
-            }
-          },
-          labelLine: {
-            show: false
-          },
-          data: [{ name: t('common.noData'), value: 1 }],
-          color: [getCSSVariable('--color-info-500')]
-        }
-      ]
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: getCSSVariable('--shadow-3')
+          }
+        },
+        labelLine: { show: false },
+        data: [{ name: t('common.noData'), value: 1 }],
+        color: [getCSSVariable('--color-info-500')]
+      }]
     }
 
     fileTypeChart.setOption(option)
   }
 }
-
 // 轮播功能
 const startCarousel = () => {
   stopCarousel() // 先停止之前的轮播

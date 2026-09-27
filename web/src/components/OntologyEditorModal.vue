@@ -22,7 +22,7 @@
         <a-form-item :label="$t('ontology.displayName')" required>
           <a-input v-model:value="form.name" :disabled="isReadOnly" :placeholder="$t('ontology.namePlaceholder')" />
         </a-form-item>
-        <a-form-item label="Registry ID" required>
+        <a-form-item :label="$t('ontology.registryIdLabel')" required>
           <a-input v-model:value="form.registry_id" :disabled="mode !== 'create'" :placeholder="$t('ontology.registryIdPlaceholder')" />
         </a-form-item>
         <a-form-item :label="$t('ontology.versionLabel')" required>
@@ -121,7 +121,7 @@
             </a-form-item>
           </div>
           <div class="form-grid two-columns">
-            <a-form-item label="Source" required>
+            <a-form-item :label="$t('ontology.sourceTypeLabel')" required>
               <a-select
                 v-model:value="relation.source"
                 mode="multiple"
@@ -130,7 +130,7 @@
                 :placeholder="$t('ontology.selectSourceType')"
               />
             </a-form-item>
-            <a-form-item label="Target" required>
+            <a-form-item :label="$t('ontology.targetTypeLabel')" required>
               <a-select
                 v-model:value="relation.target"
                 mode="multiple"

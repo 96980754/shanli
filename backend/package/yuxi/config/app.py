@@ -255,11 +255,11 @@ class Config(BaseModel):
     )
     default_model: str = Field(
         default="siliconflow-cn:Pro/MiniMaxAI/MiniMax-M2.5",
-        description="默认对话模型",
+        description="默认完整对话模型；智能体未单独配置模型时作为回退模型",
     )
     fast_model: str = Field(
         default="siliconflow-cn:Pro/MiniMaxAI/MiniMax-M2.5",
-        description="快速响应模型",
+        description="快速响应模型；简单问题自动使用，复杂问题使用默认对话模型，也用于生成会话标题",
     )
     embed_model: str = Field(
         default="siliconflow-cn:Pro/BAAI/bge-m3",

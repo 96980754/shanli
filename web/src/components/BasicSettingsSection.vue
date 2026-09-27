@@ -7,6 +7,7 @@
           <div class="setting-row two-cols">
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.defaultChatModel') }}</div>
+              <div class="setting-description">{{ $t('settings.defaultChatModelDesc') }}</div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   @select-model="handleChatModelSelect"
@@ -17,6 +18,7 @@
             </div>
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.fastModel') }}</div>
+              <div class="setting-description">{{ $t('settings.fastModelDesc') }}</div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   @select-model="handleFastModelSelect"
@@ -29,6 +31,7 @@
           <div class="setting-row two-cols">
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.embedModel') }}</div>
+              <div class="setting-description setting-description-placeholder" aria-hidden="true"></div>
               <div class="setting-content">
                 <EmbeddingModelSelector
                   :value="configStore.config?.embed_model"
@@ -39,6 +42,7 @@
             </div>
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.rerankerModel') }}</div>
+              <div class="setting-description setting-description-placeholder" aria-hidden="true"></div>
               <div class="setting-content">
                 <RerankModelSelector
                   :value="configStore.config?.reranker"
@@ -51,6 +55,7 @@
           <div class="setting-row two-cols">
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.defaultOcrEngine') }}</div>
+              <div class="setting-description setting-description-placeholder" aria-hidden="true"></div>
               <div class="setting-content">
                 <a-select
                   :value="configStore.config?.default_ocr_engine || 'rapid_ocr'"
@@ -69,6 +74,7 @@
             </div>
             <div class="col-item">
               <div class="setting-label">{{ $t('settings.defaultTranscriptionModel') }}</div>
+              <div class="setting-description setting-description-placeholder" aria-hidden="true"></div>
               <div class="setting-content">
                 <ModelSelectorComponent
                   :model_spec="configStore.config?.transcription_model"
@@ -172,7 +178,7 @@
 
         <div class="service-link-card">
           <div class="service-info">
-            <h4>Milvus WebUI</h4>
+            <h4>{{ $t('settings.milvusWebUITitle') }}</h4>
             <p>{{ $t('settings.milvusWebUIDesc') }}</p>
           </div>
           <a-button
@@ -350,6 +356,14 @@ const openLink = (url) => {
     font-size: 13px;
     font-weight: 500;
     color: var(--gray-700);
+  }
+
+  .setting-description {
+    min-height: 18px;
+    margin-top: -2px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--gray-500);
   }
 
   .setting-content {

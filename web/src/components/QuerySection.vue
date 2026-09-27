@@ -99,13 +99,13 @@
                     <div class="result-header">
                       <span class="result-index">#{{ index + 1 }}</span>
                       <span v-if="typeof chunk.score === 'number'" class="result-score">
-                        score: {{ chunk.score.toFixed(4) }}
+                        {{ $t('querySection.rawScoreLabel') }} {{ chunk.score.toFixed(4) }}
                       </span>
                       <span
                         v-if="typeof chunk.rerank_score === 'number'"
                         class="result-rerank-score"
                       >
-                        rerank: {{ chunk.rerank_score.toFixed(4) }}
+                        {{ $t('querySection.rawRerankScoreLabel') }} {{ chunk.rerank_score.toFixed(4) }}
                       </span>
                       <span class="result-score">{{ queryResult.retrieval.mode }}</span>
                       <span v-if="chunk.metadata?.document_version" class="result-version">
@@ -480,8 +480,6 @@ defineExpose({
   &:hover {
     background-color: var(--main-bright);
     border-color: var(--main-bright);
-    box-shadow: 0 4px 8px rgba(1, 136, 166, 0.25);
-    transform: translateY(-1px);
   }
 
   &:disabled {

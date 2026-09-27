@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall" :hide-params="true">
     <template #header>
       <div class="sep-header">
-        <span class="note">grep</span>
+        <span class="note">{{ $t('toolCall.badge.grep') }}</span>
         <span class="separator" v-if="pattern">|</span>
         <span class="note">{{ pattern }}</span>
         <span class="separator" v-if="targetPath">|</span>

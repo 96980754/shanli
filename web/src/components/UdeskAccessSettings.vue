@@ -303,7 +303,7 @@ const flush = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  .cs-panel-icon { display: inline-flex; color: var(--primary-color, var(--gray-600)); }
+  .cs-panel-icon { display: inline-flex; color: var(--main-color); }
   .cs-panel-title { margin: 0; font-size: 15px; color: var(--gray-900); }
 }
 .cs-panel-desc { margin: 4px 0 12px; color: var(--gray-500); font-size: 12px; }

@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall">
     <template #header>
       <div class="sep-header">
-        <span class="note">Exec</span>
+        <span class="note">{{ $t('toolCall.badge.execute') }}</span>
         <span class="separator" v-if="command">|</span>
         <span class="description" v-if="command">
           <span class="code">{{ command }}</span>

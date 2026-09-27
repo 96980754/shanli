@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.knowledge_gap_repository import KnowledgeGapRepository
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_curated_qa import CuratedQAPair
@@ -22,6 +23,14 @@ GAP_REASONS = {
     "insufficient_evidence",
     "no_evidence_output",
 }
+
+
+async def _agent_name_map(session, slugs: Iterable[str]) -> dict[str, str]:
+    """slug -> 智能体名；用于给缺口行补 agent_name（智能体已删除时缺省，前端回落 slug）。"""
+    unique = sorted({slug for slug in slugs if slug})
+    if not unique:
+        return {}
+    return {agent.slug: agent.name for agent in await AgentRepository(session).list_by_slugs(unique)}
 
 
 def normalize_question(question: str) -> str:
@@ -96,8 +105,13 @@ class KnowledgeGapAdminService:
             self.validate_status(filters["status"])
         items, total = await KnowledgeGapRepository(session).list(**filters)
         answers = await load_gap_answers(session, [item.assistant_message_id for item in items])
+        # 补 agent_name（智能体已删除时缺省，前端回落 slug），与 dashboard 明细接口同口径
+        agent_names = await _agent_name_map(session, (item.agent_slug for item in items))
         return {
-            "items": [annotate_gap_has_answer(item.to_dict(), answers) for item in items],
+            "items": [
+                {**annotate_gap_has_answer(item.to_dict(), answers), "agent_name": agent_names.get(item.agent_slug)}
+                for item in items
+            ],
             "total": total,
             "limit": filters["limit"],
             "offset": filters["offset"],
@@ -108,7 +122,8 @@ class KnowledgeGapAdminService:
         if record is None:
             return None
         answers = await load_gap_answers(session, [record.assistant_message_id])
-        return annotate_gap_has_answer(record.to_dict(), answers)
+        agent_name = (await _agent_name_map(session, [record.agent_slug])).get(record.agent_slug)
+        return {**annotate_gap_has_answer(record.to_dict(), answers), "agent_name": agent_name}
 
     async def update(self, session, gap_id: int, *, status: str, resolution_note: str | None, operator_uid: str):
         record = await KnowledgeGapRepository(session).update_status(
@@ -120,7 +135,8 @@ class KnowledgeGapAdminService:
         if record is None:
             return None
         answers = await load_gap_answers(session, [record.assistant_message_id])
-        return annotate_gap_has_answer(record.to_dict(), answers)
+        agent_name = (await _agent_name_map(session, [record.agent_slug])).get(record.agent_slug)
+        return {**annotate_gap_has_answer(record.to_dict(), answers), "agent_name": agent_name}
 
 
 async def load_gap_answers(session: Any, assistant_message_ids: Iterable[int | None]) -> dict[int, str]:

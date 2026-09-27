@@ -37,6 +37,7 @@
       :data-source="items"
       :loading="loading"
       :pagination="pagination"
+      :locale="{ emptyText: $t('common.noData') }"
       :custom-row="customRow"
       row-key="id"
       :scroll="{ x: 960 }"
@@ -44,10 +45,10 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'question'">
-          <span class="clamp-text" :title="record.question">{{ record.question || '-' }}</span>
+          <span class="clamp-text" :title="stripMarkdown(record.question)">{{ stripMarkdown(record.question) || '-' }}</span>
         </template>
         <template v-else-if="column.key === 'answer'">
-          <span class="clamp-text" :title="record.answer">{{ record.answer || '-' }}</span>
+          <span class="clamp-text" :title="stripMarkdown(record.answer)">{{ stripMarkdown(record.answer) || '-' }}</span>
         </template>
         <template v-else-if="column.key === 'domain'">
           <a-tag :color="record.domain === 'unknown' ? 'default' : 'blue'">{{ domainLabel(record.domain) }}</a-tag>
@@ -60,6 +61,9 @@
         </template>
         <template v-else-if="column.key === 'username'">
           {{ record.username || record.uid || '-' }}
+        </template>
+        <template v-else-if="column.key === 'agent_id'">
+          {{ record.agent_name || record.agent_id || '-' }}
         </template>
       </template>
     </a-table>
@@ -79,7 +83,9 @@
           <a-descriptions-item :label="t('qaRecords.answerTypeColumn')">
             <a-tag :color="answerTypeColor(detail.answer_type)">{{ answerTypeLabel(detail.answer_type) }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item :label="t('qaRecords.agentColumn')">{{ detail.agent_id || '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="t('qaRecords.agentColumn')">{{
+            detail.agent_name || detail.agent_id || '-'
+          }}</a-descriptions-item>
         </a-descriptions>
 
         <div class="detail-block">
@@ -104,6 +110,7 @@ import { ArrowLeft, Download } from 'lucide-vue-next'
 import dayjs, { formatFullDateTime } from '@/utils/time'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { useConfigStore } from '@/stores/config'
+import { stripMarkdown } from '@/utils/markdownText'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -137,7 +144,7 @@ const columns = computed(() => [
   { title: t('qaRecords.answerColumn'), key: 'answer' },
   { title: t('qaRecords.domainColumn'), key: 'domain', width: 110 },
   { title: t('qaRecords.answerTypeColumn'), key: 'answer_type', width: 100 },
-  { title: t('qaRecords.agentColumn'), dataIndex: 'agent_id', width: 120 }
+  { title: t('qaRecords.agentColumn'), key: 'agent_id', width: 120 }
 ])
 
 const loading = ref(false)

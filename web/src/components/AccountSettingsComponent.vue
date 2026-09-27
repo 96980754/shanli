@@ -82,7 +82,7 @@
             </button>
           </div>
           <div class="profile-row">
-            <span class="profile-label">UID</span>
+            <span class="profile-label">{{ $t('settings.profileUidLabel') }}</span>
             <span class="profile-value mono">{{ userStore.uid || $t('settings.notSet') }}</span>
           </div>
         </div>

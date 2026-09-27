@@ -431,7 +431,7 @@ function canCancel(task) {
 :deep(.filter-count) {
   margin-left: 2px;
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-600);
 }
 
 .task-toolbar-actions :deep(.ant-btn) {
@@ -589,7 +589,7 @@ function canCancel(task) {
 }
 
 .task-card-duration {
-  color: var(--gray-400);
+  color: var(--gray-600);
 }
 
 .task-card-progress {
@@ -640,7 +640,7 @@ function canCancel(task) {
   display: flex;
   gap: 6px;
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-600);
 }
 
 .task-card-actions {
@@ -687,6 +687,6 @@ function canCancel(task) {
   font-size: 13px;
   max-width: 320px;
   line-height: 1.5;
-  color: var(--gray-400);
+  color: var(--gray-600);
 }
 </style>

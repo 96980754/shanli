@@ -117,9 +117,21 @@ const defaultLayout = {
   collide: { radius: 40, strength: 0.8, iterations: 3 }
 }
 
+// 这三个是后端枚举值，用于着色与过滤，不要当展示文案改
 const CHUNK_NODE_LABEL = 'Chunk'
 const CHUNK_NODE_COLOR = '#8c8c8c'
 const CHUNK_MENTION_EDGE_LABEL = 'MENTIONS'
+
+// 后端枚举 → 展示名。LLM 抽取出的实体名与关系名属于数据，原样显示
+const NODE_TYPE_LABEL_KEYS = {
+  [CHUNK_NODE_LABEL]: 'graph.nodeTypeChunk',
+  Entity: 'graph.nodeTypeEntity'
+}
+const EDGE_TYPE_LABEL_KEYS = {
+  [CHUNK_MENTION_EDGE_LABEL]: 'graph.edgeTypeMentions',
+  RELATED_TO: 'graph.edgeTypeRelatedTo'
+}
+const toDisplayType = (value, labelKeys) => (labelKeys[value] ? t(labelKeys[value]) : value)
 const NODE_LABEL_COLORS = [
   '#3996ae',
   '#5ad8a6',
@@ -208,12 +220,19 @@ const visibleRelationshipEdges = computed(() =>
 const visibleEntityCount = computed(() => visibleEntityNodes.value.length)
 const visibleRelationshipCount = computed(() => visibleRelationshipEdges.value.length)
 
+// 汇总键用原始枚举（同名合并、排序都基于它），只在输出时换成展示名
 const nodeTypeStats = computed(() =>
-  buildTypeStats(visibleEntityNodes.value, getNodeVisualLabel, getNodeColor)
+  buildTypeStats(visibleEntityNodes.value, getNodeVisualLabel, getNodeColor).map((item) => ({
+    ...item,
+    name: toDisplayType(item.name, NODE_TYPE_LABEL_KEYS)
+  }))
 )
 
 const edgeTypeStats = computed(() =>
-  buildTypeStats(visibleRelationshipEdges.value, getEdgeVisualLabel, getEdgeColor)
+  buildTypeStats(visibleRelationshipEdges.value, getEdgeVisualLabel, getEdgeColor).map((item) => ({
+    ...item,
+    name: toDisplayType(item.name, EDGE_TYPE_LABEL_KEYS)
+  }))
 )
 
 const activeTypeStats = computed(() =>
@@ -254,7 +273,7 @@ function formatData() {
     source: String(e.source_id),
     target: String(e.target_id),
     data: {
-      label: e.type ?? '',
+      label: e.type ? toDisplayType(e.type, EDGE_TYPE_LABEL_KEYS) : '',
       visualLabel: getEdgeVisualLabel(e),
       color: getEdgeColor(e),
       original: e // 保存原始数据 // i18n-ignore

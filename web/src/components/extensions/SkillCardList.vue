@@ -1528,7 +1528,7 @@ defineExpose({
 
     &:hover,
     &:focus {
-      border-color: var(--color-error-200, #ffccc7);
+      border-color: var(--color-error-100);
       background: var(--color-error-50, #fff2f0);
       color: var(--color-error-700, #cf1322);
 
@@ -1712,8 +1712,8 @@ defineExpose({
     background: var(--gray-0);
 
     &.failed {
-      border-color: var(--error-200, #ffccc7);
-      background: var(--error-50, #fff2f0);
+      border-color: var(--color-error-100);
+      background: var(--color-error-50);
     }
   }
 
@@ -1734,7 +1734,7 @@ defineExpose({
   }
 
   .draft-item-warning {
-    color: var(--warning-600, #d48806);
+    color: var(--color-warning-700);
   }
 }
 

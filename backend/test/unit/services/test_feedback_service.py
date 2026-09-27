@@ -206,12 +206,12 @@ def test_build_satisfaction_stats_unreplied_counts_as_satisfied():
     assert stats["rated_satisfaction_rate"] == 25.0
 
 
-def test_build_satisfaction_stats_no_evaluable_defaults_to_100():
+def test_build_satisfaction_stats_no_evaluable_returns_none():
     stats = svc.build_satisfaction_stats(evaluable_count=0, like_count=0, dislike_count=0)
 
     assert stats["silent_count"] == 0
-    assert stats["satisfaction_rate"] == 100.0
-    assert stats["participation_rate"] == 0.0
+    assert stats["satisfaction_rate"] is None
+    assert stats["participation_rate"] is None
     assert stats["rated_count"] == 0
     assert stats["rated_satisfaction_rate"] == 0.0
 

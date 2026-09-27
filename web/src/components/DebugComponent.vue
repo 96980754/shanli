@@ -683,8 +683,8 @@ const switchToUser = async (user) => {
 .log-container {
   height: calc(80vh - 200px);
   overflow-y: auto;
-  background: #1e1f1f;
-  color: #ffffff;
+  background: var(--gray-900);
+  color: var(--gray-0);
   border-radius: 5px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;

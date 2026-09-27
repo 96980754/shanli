@@ -696,7 +696,6 @@ div.header {
     margin: 0;
     text-decoration: none;
     cursor: pointer;
-    outline: none;
 
     .icon {
       flex: 0 0 @sidebar-icon-size;
@@ -717,13 +716,6 @@ div.header {
         opacity 0.12s ease,
         margin-left 0.18s ease,
         max-width 0.18s ease;
-    }
-
-    & > svg:focus {
-      outline: none;
-    }
-    & > svg:focus-visible {
-      outline: none;
     }
 
     &.active {

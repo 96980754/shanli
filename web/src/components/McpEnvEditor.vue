@@ -3,14 +3,14 @@
     <div v-for="(row, index) in rows" :key="index" class="env-row">
       <a-input
         v-model:value="row.key"
-        placeholder="Key"
+        :placeholder="$t('agentCfg.envKeyPlaceholder')"
         class="env-key-input"
         :disabled="isKeyLocked(row)"
       />
       <div class="env-value-field">
         <a-input
           v-model:value="row.value"
-          placeholder="Value"
+          :placeholder="$t('agentCfg.envValuePlaceholder')"
           class="env-value-input"
           :type="isValueHidden(row) ? 'password' : 'text'"
         />

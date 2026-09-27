@@ -335,7 +335,13 @@ defineExpose({
             <component :is="item.icon" :size="16" />
             <span>{{ item.label }}</span>
           </span>
-          <span v-if="item.key === 'model' && agentStore.hasConfigChanges" class="nav-dirty-dot" />
+          <span
+            v-if="item.key === 'model' && agentStore.hasConfigChanges"
+            class="nav-dirty-dot"
+            :title="$t('msgInput.unsaved')"
+            :aria-label="$t('msgInput.unsaved')"
+            role="img"
+          />
         </button>
       </aside>
 

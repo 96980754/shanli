@@ -58,19 +58,19 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'question'">
-          <a-tooltip :title="record.question" placement="topLeft">
-            <div class="qa-text">{{ record.question }}</div>
+          <a-tooltip :title="stripMarkdown(record.question)" placement="topLeft">
+            <div class="qa-text">{{ stripMarkdown(record.question) }}</div>
           </a-tooltip>
         </template>
 
         <template v-else-if="column.key === 'answer'">
-          <a-tooltip :title="record.answer" placement="topLeft">
-            <div class="qa-text">{{ record.answer }}</div>
+          <a-tooltip :title="stripMarkdown(record.answer)" placement="topLeft">
+            <div class="qa-text">{{ stripMarkdown(record.answer) }}</div>
           </a-tooltip>
         </template>
 
         <template v-else-if="column.key === 'agent'">
-          <a-tag>{{ record.agent_slug }}</a-tag>
+          <a-tag>{{ record.agent_name || record.agent_slug }}</a-tag>
         </template>
 
         <template v-else-if="column.key === 'source_type'">
@@ -140,6 +140,7 @@ import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { agentApi } from '@/apis/agent_api'
 import { formatFullDateTime } from '@/utils/time'
+import { stripMarkdown } from '@/utils/markdownText'
 
 const { t } = useI18n()
 

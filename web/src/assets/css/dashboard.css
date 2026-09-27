@@ -35,23 +35,6 @@
   background: linear-gradient(180deg, rgba(245, 34, 45, 0.3) 0%, rgba(245, 34, 45, 0.05) 100%);
 }
 
-/* Chart Shadow Effects - 图表阴影效果 */
-.chart-shadow-primary {
-  box-shadow: 0 4px 12px rgba(57, 150, 174, 0.15);
-}
-
-.chart-shadow-success {
-  box-shadow: 0 4px 12px rgba(82, 196, 26, 0.15);
-}
-
-.chart-shadow-warning {
-  box-shadow: 0 4px 12px rgba(250, 173, 20, 0.15);
-}
-
-.chart-shadow-error {
-  box-shadow: 0 4px 12px rgba(245, 34, 45, 0.15);
-}
-
 /* 共享的卡片样式 */
 .dashboard-card {
   background-color: var(--gray-0);

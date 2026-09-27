@@ -54,7 +54,7 @@
 
     <!-- @ 提及选择弹窗 -->
     <div v-if="mentionPopupVisible" ref="mentionDropdownRef" class="mention-dropdown-wrapper">
-      <div class="mention-popup" @mousedown.prevent>
+      <div class="mention-popup" role="listbox" @mousedown.prevent>
         <!-- 文件列表 -->
         <div v-if="mentionItems.files.length > 0 || showFileSearchPrompt" class="mention-group">
           <div class="mention-group-title">{{ $t('msgInput.files') }}</div>
@@ -66,6 +66,8 @@
               v-for="(item, index) in mentionItems.files"
               :key="'file-' + item.value"
               :class="['mention-item', 'file-item', { active: isItemSelected('file', index) }]"
+              role="option"
+              :aria-selected="isItemSelected('file', index)"
               @click="insertMention(item)"
             >
               <div class="file-info-left">
@@ -114,6 +116,8 @@
               'resource-item',
               { active: isItemSelected('knowledge', index) }
             ]"
+            role="option"
+            :aria-selected="isItemSelected('knowledge', index)"
             @click="insertMention(item)"
           >
             <div class="resource-name">
@@ -144,11 +148,13 @@
 
         <!-- MCP 列表 -->
         <div v-if="mentionItems.mcps.length > 0" class="mention-group">
-          <div class="mention-group-title">MCP</div>
+          <div class="mention-group-title">{{ $t('msgInput.groupMcp') }}</div>
           <div
             v-for="(item, index) in mentionItems.mcps"
             :key="'mcp-' + item.value"
             :class="['mention-item', 'resource-item', { active: isItemSelected('mcp', index) }]"
+            role="option"
+            :aria-selected="isItemSelected('mcp', index)"
             @click="insertMention(item)"
           >
             <div class="resource-name">
@@ -179,11 +185,13 @@
 
         <!-- Skills 列表 -->
         <div v-if="mentionItems.skills.length > 0" class="mention-group">
-          <div class="mention-group-title">Skills</div>
+          <div class="mention-group-title">{{ $t('msgInput.groupSkills') }}</div>
           <div
             v-for="(item, index) in mentionItems.skills"
             :key="'skill-' + item.value"
             :class="['mention-item', 'resource-item', { active: isItemSelected('skill', index) }]"
+            role="option"
+            :aria-selected="isItemSelected('skill', index)"
             @click="insertMention(item)"
           >
             <div class="resource-name">
@@ -214,7 +222,7 @@
 
         <!-- Subagents 列表 -->
         <div v-if="mentionItems.subagents.length > 0" class="mention-group">
-          <div class="mention-group-title">Subagents</div>
+          <div class="mention-group-title">{{ $t('msgInput.groupSubagents') }}</div>
           <div
             v-for="(item, index) in mentionItems.subagents"
             :key="'subagent-' + item.value"
@@ -223,6 +231,8 @@
               'resource-item',
               { active: isItemSelected('subagent', index) }
             ]"
+            role="option"
+            :aria-selected="isItemSelected('subagent', index)"
             @click="insertMention(item)"
           >
             <div class="resource-name">
@@ -1688,7 +1698,7 @@ defineExpose({
 
       .file-parent-dir {
         font-size: 11px;
-        color: var(--gray-400);
+        color: var(--gray-600);
         margin-left: 8px;
         flex-shrink: 1;
         overflow: hidden;
@@ -1753,13 +1763,13 @@ defineExpose({
   .mention-empty {
     text-align: center;
     padding: 12px 8px;
-    color: var(--gray-400);
+    color: var(--gray-600);
     font-size: 13px;
   }
 
   .mention-search-placeholder {
     padding: 4px 8px;
-    color: var(--gray-400);
+    color: var(--gray-600);
     font-size: 13px;
   }
 }

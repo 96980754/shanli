@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall">
     <template #header>
       <div class="sep-header">
-        <span class="note">glob</span>
+        <span class="note">{{ $t('toolCall.badge.glob') }}</span>
         <span class="separator" v-if="pattern">|</span>
         <span class="description">{{ pattern }}</span>
       </div>

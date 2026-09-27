@@ -528,7 +528,7 @@ const runCompare = (group) => {
 
   .ask-error {
     margin: 4px 0 0;
-    color: var(--red-600, #d33);
+    color: var(--color-error-700);
   }
 
   .ask-run-btn {

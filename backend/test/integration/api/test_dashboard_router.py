@@ -68,7 +68,7 @@ async def test_admin_can_fetch_stats(test_client, admin_headers):
         "refusal_rate",
     ):
         assert key in feedback_stats, f"feedback_stats missing {key}"
-    assert 0 <= feedback_stats["satisfaction_rate"] <= 100
+    assert feedback_stats["satisfaction_rate"] is None or 0 <= feedback_stats["satisfaction_rate"] <= 100
     assert 0 <= feedback_stats["refusal_count"] <= feedback_stats["evaluable_count"]
     assert 0 <= feedback_stats["refusal_rate"] <= 100
 
@@ -93,7 +93,7 @@ async def test_admin_can_fetch_feedback_summary_with_satisfaction_breakdown(test
         assert key in data, f"feedback-summary missing {key}"
     # 未反馈 = 可评价基数 − 显式反馈；满意率 = (好评 + 未反馈) / 可评价基数
     assert data["silent_count"] == data["evaluable_count"] - data["like_count"] - data["dislike_count"]
-    assert 0 <= data["satisfaction_rate"] <= 100
+    assert data["satisfaction_rate"] is None or 0 <= data["satisfaction_rate"] <= 100
     assert 0 <= data["refusal_count"] <= data["evaluable_count"]
     assert 0 <= data["refusal_rate"] <= 100
 
@@ -120,6 +120,7 @@ async def test_admin_can_fetch_feedbacks(test_client, admin_headers):
         "message_content",
         "conversation_title",
         "agent_id",
+        "agent_name",
         "is_refusal_source",
         "has_qa_pair",
     )
@@ -178,7 +179,7 @@ async def test_admin_stats_with_date_range_filters_counts(test_client, admin_hea
     full_feedback, ranged_feedback = full["feedback_stats"], ranged["feedback_stats"]
     assert ranged_feedback["total_feedbacks"] <= full_feedback["total_feedbacks"]
     assert ranged_feedback["evaluable_count"] <= full_feedback["evaluable_count"]
-    assert 0 <= ranged_feedback["satisfaction_rate"] <= 100
+    assert ranged_feedback["satisfaction_rate"] is None or 0 <= ranged_feedback["satisfaction_rate"] <= 100
     assert 0 <= ranged_feedback["knowledge_gap_rate"] <= 100
 
 
@@ -216,6 +217,7 @@ async def test_admin_can_fetch_qa_records(test_client, admin_headers):
             "answer_type",
             "uid",
             "agent_id",
+            "agent_name",
             "thread_id",
         ):
             assert key in item, f"qa record missing {key}"
@@ -237,9 +239,8 @@ async def test_qa_records_filters_and_pagination(test_client, admin_headers):
     for item in filtered.json()["items"]:
         assert item["domain"] == "unknown"
 
-    keyworded = await test_client.get(
-        "/api/dashboard/qa-records?keyword=%E4%B8%8D%E5%AD%98%E5%9C%A8", headers=admin_headers
-    )
+    # 用保证不存在的关键词验证「无命中返回 0」；不硬编码业务词，避免随库内数据漂移
+    keyworded = await test_client.get("/api/dashboard/qa-records?keyword=no-such-keyword-9f3a", headers=admin_headers)
     assert keyworded.status_code == 200, keyworded.text
     assert keyworded.json()["total"] == 0
 

@@ -54,6 +54,7 @@
             :data-source="errorData"
             size="small"
             :pagination="false"
+            :locale="{ emptyText: $t('common.noData') }"
             :scroll="{ y: 200 }"
           >
             <template #bodyCell="{ column, record }">

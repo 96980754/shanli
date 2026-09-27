@@ -70,6 +70,7 @@
       :data-source="accessRows"
       :loading="loading"
       :pagination="false"
+      :locale="{ emptyText: $t('common.noData') }"
       size="middle"
       :scroll="{ x: 'max-content' }"
     >

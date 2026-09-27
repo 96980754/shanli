@@ -45,6 +45,7 @@ import { ChevronDown, ChevronRight, Atom } from 'lucide-vue-next'
 import { ToolCallRenderer } from '@/components/ToolCallingResult'
 import {
   getToolCallId,
+  getToolLabel,
   isSubagentToolCall,
   normalizeToolCalls
 } from '@/components/ToolCallingResult/toolRegistry'
@@ -106,9 +107,7 @@ const getToolCallLabel = (toolCall) => {
   const displayLabel = String(toolCall?.display_label || '').trim()
   if (displayLabel) return displayLabel
 
-  const rawName = getToolCallId(toolCall)
-  const name = typeof rawName === 'string' ? rawName.replaceAll('_', ' ') : 'tool'
-  return name.charAt(0).toUpperCase() + name.slice(1)
+  return getToolLabel(getToolCallId(toolCall)) || t('toolCall.badge.unknown')
 }
 
 const toolCallsSummaryTitle = computed(() => {

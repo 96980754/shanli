@@ -221,7 +221,7 @@ onMounted(() => {
 
 .param-description {
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--gray-600);
   margin: 4px 0 0 0;
   line-height: 1.4;
 }

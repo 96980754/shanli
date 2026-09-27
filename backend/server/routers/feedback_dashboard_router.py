@@ -35,8 +35,8 @@ class FeedbackSummaryResponse(BaseModel):
     silent_count: int
     rated_count: int
     rated_satisfaction_rate: float
-    satisfaction_rate: float
-    participation_rate: float
+    satisfaction_rate: float | None
+    participation_rate: float | None
     refusal_count: int
     refusal_rate: float
     knowledge_gap_count: int

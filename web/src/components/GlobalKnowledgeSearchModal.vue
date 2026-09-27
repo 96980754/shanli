@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { queryApi } from '@/apis/knowledge_api'
+import { stripMarkdown } from '@/utils/markdownText'
 
 const { t } = useI18n()
 
@@ -46,7 +47,7 @@ const createHandoff = async () => {
               <div class="file-name">{{ item.file_name || item.filename || $t('globalSearch.kbSnippet') }}</div>
             </template>
           </a-list-item-meta>
-          <div class="content">{{ item.content || item.text }}</div>
+          <div class="content">{{ stripMarkdown(item.content || item.text) }}</div>
         </a-list-item>
       </template>
     </a-list>
@@ -57,7 +58,7 @@ const createHandoff = async () => {
 
 <style scoped lang="less">
 .results { margin-top: 16px; max-height: 420px; overflow-y: auto; }
-.content { white-space: pre-wrap; color: var(--text-color-secondary); }
-.file-dir { color: var(--text-color-secondary); font-size: 12px; }
+.content { white-space: pre-wrap; color: var(--color-text-secondary); }
+.file-dir { color: var(--color-text-secondary); font-size: 12px; }
 .file-name { color: var(--text-color); font-weight: 500; }
 </style>

@@ -33,13 +33,27 @@ const searchQuery = ref('')
 const modelTestLoadingBySpec = ref({})
 const modelTestResultBySpec = ref({})
 
-const PROVIDER_TYPE_OPTIONS = [
-  { value: 'openai', label: 'OpenAI Completions API' },
-  { value: 'anthropic', label: 'Anthropic Messages API' }
-]
+// 后端能力/模型类型枚举 → 展示名。未登记的（如远端返回的新类型）原样显示
+const CAPABILITY_LABEL_KEYS = {
+  chat: 'modelMgmt.capabilityChat',
+  embedding: 'modelMgmt.capabilityEmbedding',
+  rerank: 'modelMgmt.capabilityRerank',
+  transcription: 'modelMgmt.capabilityTranscription',
+  unknown: 'modelMgmt.capabilityUnknown'
+}
 
-const providerTypeLabelMap = Object.fromEntries(
-  PROVIDER_TYPE_OPTIONS.map((option) => [option.value, option.label])
+const getCapabilityLabel = (value) =>
+  CAPABILITY_LABEL_KEYS[value] ? t(CAPABILITY_LABEL_KEYS[value]) : value
+
+const CAPABILITY_OPTIONS = ['chat', 'embedding', 'rerank', 'transcription']
+
+const PROVIDER_TYPE_OPTIONS = computed(() => [
+  { value: 'openai', label: t('modelMgmt.providerTypeOpenai') },
+  { value: 'anthropic', label: t('modelMgmt.providerTypeAnthropic') }
+])
+
+const providerTypeLabelMap = computed(() =>
+  Object.fromEntries(PROVIDER_TYPE_OPTIONS.value.map((option) => [option.value, option.label]))
 )
 
 // Provider form state
@@ -134,7 +148,7 @@ const getProviderIcon = (provider) => {
 }
 
 const getProviderTypeLabel = (providerType) =>
-  providerTypeLabelMap[providerType] || providerType || '-'
+  providerTypeLabelMap.value[providerType] || providerType || '-'
 
 const getIconUrl = (icon) => {
   if (!icon) return modelIcons.default
@@ -261,9 +275,9 @@ const remoteModelTypeOptions = computed(() => {
   }, {})
   return [
     { label: t('modelMgmt.allWithCount', { count: models.length }), value: 'all' },
-    { label: `Chat ${counts.chat || 0}`, value: 'chat' },
-    { label: `Embedding ${counts.embedding || 0}`, value: 'embedding' },
-    { label: `Rerank ${counts.rerank || 0}`, value: 'rerank' }
+    { label: `${getCapabilityLabel('chat')} ${counts.chat || 0}`, value: 'chat' },
+    { label: `${getCapabilityLabel('embedding')} ${counts.embedding || 0}`, value: 'embedding' },
+    { label: `${getCapabilityLabel('rerank')} ${counts.rerank || 0}`, value: 'rerank' }
   ]
 })
 
@@ -272,7 +286,7 @@ const remoteModelTypeOptions = computed(() => {
 const editingModelTypeOptions = computed(() => {
   const caps = currentProviderForModels.value?.capabilities
   const types = Array.isArray(caps) && caps.length ? caps : ['chat', 'embedding', 'rerank']
-  return types.map((c) => ({ value: c, label: c }))
+  return types.map((c) => ({ value: c, label: getCapabilityLabel(c) }))
 })
 
 const parseJsonObject = (text, label) => {
@@ -305,16 +319,19 @@ const loadProviders = async () => {
 
 function getProviderInfo(provider) {
   return [
-    { label: 'Provider Type', value: getProviderTypeLabel(provider.provider_type) },
-    { label: 'Base URL', value: provider.base_url || '-' },
-    { label: t('modelMgmt.capabilities'), value: provider.capabilities?.join(', ') || 'chat' }
+    { label: t('modelMgmt.providerTypeLabel'), value: getProviderTypeLabel(provider.provider_type) },
+    { label: t('modelMgmt.baseUrlLabel'), value: provider.base_url || '-' },
+    {
+      label: t('modelMgmt.capabilities'),
+      value: provider.capabilities?.map(getCapabilityLabel).join('、') || getCapabilityLabel('chat')
+    }
   ]
 }
 
 function getProviderStatus(provider) {
   if (!provider.is_enabled) return { label: t('modelMgmt.providerDisabled'), level: 'info' }
   if (provider.credential_status === 'warning') return { label: t('modelMgmt.credentialMissing'), level: 'warning' }
-  if (provider.is_enabled) return { label: '', level: 'success' }
+  if (provider.is_enabled) return { label: t('modelMgmt.providerVerified'), level: 'success' }
   return null
 }
 
@@ -781,7 +798,7 @@ defineExpose({
       <div class="modal-form">
         <div class="form-row">
           <label class="form-label">
-            <span>Provider ID</span>
+            <span>{{ $t('modelMgmt.providerIdLabel') }}</span>
             <a-input
               v-model:value="providerForm.provider_id"
               :disabled="!!editingProviderId"
@@ -796,14 +813,14 @@ defineExpose({
 
         <div class="form-row">
           <label class="form-label">
-            <span>Base URL</span>
+            <span>{{ $t('modelMgmt.baseUrlLabel') }}</span>
             <a-input
               v-model:value="providerForm.base_url"
               placeholder="https://api.example.com/v1"
             />
           </label>
           <label class="form-label">
-            <span>Provider Type</span>
+            <span>{{ $t('modelMgmt.providerTypeLabel') }}</span>
             <a-select v-model:value="providerForm.provider_type">
               <a-select-option
                 v-for="option in PROVIDER_TYPE_OPTIONS"
@@ -818,18 +835,18 @@ defineExpose({
 
         <div class="form-row">
           <label class="form-label">
-            <span>API Key Env</span>
+            <span>{{ $t('modelMgmt.apiKeyEnvLabel') }}</span>
             <a-input v-model:value="providerForm.api_key_env" :placeholder="$t('modelMgmt.envVarPlaceholder')" />
           </label>
           <label class="form-label">
-            <span>API Key</span>
+            <span>{{ $t('modelMgmt.apiKeyLabel') }}</span>
             <a-input-password v-model:value="providerForm.api_key" />
           </label>
         </div>
 
         <div class="form-row">
           <label class="form-label">
-            <span>Models Endpoint</span>
+            <span>{{ $t('modelMgmt.modelsEndpointLabel') }}</span>
             <a-input v-model:value="providerForm.models_endpoint" placeholder="/models" />
           </label>
         </div>
@@ -837,14 +854,14 @@ defineExpose({
         <template v-if="providerForm.capabilities.includes('embedding')">
           <div class="form-row">
             <label class="form-label">
-              <span>Embedding Base URL</span>
+              <span>{{ $t('modelMgmt.embeddingBaseUrlLabel') }}</span>
               <a-input
                 v-model:value="providerForm.embedding_base_url"
                 placeholder="https://api.example.com/v1/embeddings"
               />
             </label>
             <label class="form-label">
-              <span>Embedding Endpoint</span>
+              <span>{{ $t('modelMgmt.embeddingEndpointLabel') }}</span>
               <a-input
                 v-model:value="providerForm.embedding_models_endpoint"
                 placeholder="/embeddings/models"
@@ -856,14 +873,14 @@ defineExpose({
         <template v-if="providerForm.capabilities.includes('rerank')">
           <div class="form-row">
             <label class="form-label">
-              <span>Rerank Base URL</span>
+              <span>{{ $t('modelMgmt.rerankBaseUrlLabel') }}</span>
               <a-input
                 v-model:value="providerForm.rerank_base_url"
                 placeholder="https://api.example.com/v1/rerank"
               />
             </label>
             <label class="form-label">
-              <span>Rerank Endpoint</span>
+              <span>{{ $t('modelMgmt.rerankEndpointLabel') }}</span>
               <a-input
                 v-model:value="providerForm.rerank_models_endpoint"
                 :placeholder="$t('modelMgmt.rerankEndpointPlaceholder')"
@@ -875,10 +892,9 @@ defineExpose({
         <label class="form-label full-width">
           <span>{{ $t('modelMgmt.capabilities') }}</span>
           <a-select v-model:value="providerForm.capabilities" mode="multiple">
-            <a-select-option value="chat">chat</a-select-option>
-            <a-select-option value="embedding">embedding</a-select-option>
-            <a-select-option value="rerank">rerank</a-select-option>
-            <a-select-option value="transcription">transcription</a-select-option>
+            <a-select-option v-for="capability in CAPABILITY_OPTIONS" :key="capability" :value="capability">
+              {{ getCapabilityLabel(capability) }}
+            </a-select-option>
           </a-select>
         </label>
 
@@ -963,7 +979,7 @@ defineExpose({
                 <span class="model-id">{{ getModelId(model) }}</span>
               </div>
               <span class="col-type">
-                <span class="type-tag" :class="model.type">{{ model.type }}</span>
+                <span class="type-tag" :class="model.type">{{ getCapabilityLabel(model.type) }}</span>
                 <span
                   v-if="model.source === 'manual'"
                   class="type-tag manual"
@@ -1053,7 +1069,7 @@ defineExpose({
               <span class="remote-name">{{ getModelDisplayName(remoteModel) }}</span>
               <div class="remote-tags">
                 <span class="type-tag" :class="remoteModel.type || 'chat'">
-                  {{ remoteModel.type || 'chat' }}
+                  {{ getCapabilityLabel(remoteModel.type || 'chat') }}
                 </span>
                 <template v-for="mod in getInputModalities(remoteModel) || []" :key="mod">
                   <span class="modality-tag">{{ mod }}</span>
@@ -1065,7 +1081,7 @@ defineExpose({
               <span class="remote-price" v-if="formatMtokenPrice(remoteModel.pricing)">
                 {{ formatPriceDisplay(remoteModel.pricing) }}
               </span>
-              <span class="remote-price placeholder" v-else>N/A</span>
+              <span class="remote-price placeholder" v-else>{{ $t('modelMgmt.priceUnavailable') }}</span>
               <a-button
                 size="small"
                 :type="
@@ -1148,7 +1164,7 @@ defineExpose({
             class="form-label"
             v-if="editingModel.type === 'embedding' || editingModel.type === 'rerank'"
           >
-            <span>Batch Size</span>
+            <span>{{ $t('modelMgmt.batchSizeLabel') }}</span>
             <a-input-number v-model:value="editingModel.batch_size" :min="1" />
           </label>
         </div>

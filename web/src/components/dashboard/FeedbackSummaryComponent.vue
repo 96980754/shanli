@@ -111,10 +111,13 @@ const reasonRows = computed(() => {
   return rows.filter((item) => Number(item.count || 0) > 0)
 })
 
+// 无可评价回答时后端返回 null，显示「—」而不是 0%
 const formatRate = (rate) =>
-  `${Number(rate || 0)
-    .toFixed(2)
-    .replace(/\.00$/, '')}%`
+  rate == null
+    ? '—'
+    : `${Number(rate)
+        .toFixed(2)
+        .replace(/\.00$/, '')}%`
 
 const getReasonPercent = (count) => {
   const total = Number(summary.value?.dislike_count || 0)

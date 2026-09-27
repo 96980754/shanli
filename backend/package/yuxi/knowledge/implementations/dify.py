@@ -195,7 +195,7 @@ class DifyKB(ReadOnlyConnectors):
             },
             {
                 "key": "final_top_k",
-                "label": "最终返回 Chunk 数",
+                "label": "最终返回片段数",
                 "type": "number",
                 "default": 10,
                 "min": 1,

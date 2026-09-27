@@ -12,7 +12,14 @@
       <a-button type="primary" :loading="saving" @click="createCategory">{{ $t('kbCategory.add') }}</a-button>
     </div>
 
-    <a-table :data-source="items" :columns="columns" :pagination="false" row-key="id" size="small">
+    <a-table
+      :data-source="items"
+      :columns="columns"
+      :pagination="false"
+      :locale="{ emptyText: $t('common.noData') }"
+      row-key="id"
+      size="small"
+    >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'name'">
           <a-input

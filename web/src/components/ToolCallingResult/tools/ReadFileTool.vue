@@ -4,12 +4,12 @@
       <div class="sep-header">
         <!-- 特殊处理：SKILL.md 文件显示为 Skill | <父目录名> -->
         <template v-if="skillName">
-          <span class="note skill-note">Skill</span>
+          <span class="note skill-note">{{ $t('toolCall.badge.skill') }}</span>
           <span class="separator">|</span>
           <span class="description skill-name">{{ skillName }}</span>
         </template>
         <template v-else>
-          <span class="note">Read</span>
+          <span class="note">{{ $t('toolCall.badge.readFile') }}</span>
           <span class="separator" v-if="filePath">|</span>
           <span class="description" :title="filePath">
             <span class="code">{{ fileName }}</span>

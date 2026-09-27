@@ -1,8 +1,8 @@
-"""问题路由：简单问题用轻量模型，复杂问题用智能体模型。
+"""问题路由：简单问题用快速响应模型，复杂问题用默认/智能体模型。
 
-启用条件：智能体配置了 model_simple（留空即关闭，不产生任何额外查询或模型调用，
-行为与未启用时完全一致）。判定只看问题文本与输入形态（图片/附件），不看检索结果；
-分档失败一律按复杂处理——省钱不能以答砸为代价，宁可多花一次完整模型的调用。
+启用条件：全局配置了 fast_model（或历史智能体配置中配置了 model_simple）。简单问题使用快速响应模型，
+复杂问题保持当前已解析的默认/智能体模型；分档失败一律按复杂处理——省钱不能以答砸为代价，
+宁可多花一次完整模型的调用。
 
 分档按 免费规则 → 小模型确认 的层级早退（形状仿 knowledge_scope_gate）：
 - 规则命中（附件/长问题/复杂意图词/短问题无复杂信号）→ 零开销返回；
@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from yuxi.config.app import config as app_config
 from yuxi.models import select_model
 from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.agent_run_repository import AgentRunRepository
@@ -95,17 +96,18 @@ async def route_question_model_spec(
     thread_id: str,
     uid: str,
     db,
+    simple_model: str | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """run 创建点的路由入口：返回 (最终 model_spec, route 记录或 None)。
 
-    优先级：请求显式手选 > 未配置 model_simple（路由关闭）> 分档。前两种情况
+    优先级：请求显式手选 > 快速响应模型未配置（路由关闭）> 分档。前两种情况
     原样返回 base_spec 且不产生 route 记录，不触发任何额外查询或模型调用。
     model_simple 配置了但不可用时直接报错，不静默回退。
     """
     if isinstance(explicit_model_spec, str) and explicit_model_spec.strip():
         return base_spec, None
 
-    model_simple = _configured_model_simple(agent_item, agent_backend)
+    model_simple = simple_model if simple_model is not None else _configured_model_simple(agent_item, agent_backend)
     if not model_simple:
         return base_spec, None
 
@@ -160,13 +162,13 @@ async def classify_complexity(
 
 
 def _configured_model_simple(agent_item, agent_backend) -> str:
-    """读智能体配置里的 model_simple，解析方式与 resolve_agent_run_model_spec 一致。"""
+    """优先兼容历史智能体配置，否则使用全局快速响应模型。"""
     config_json = getattr(agent_item, "config_json", None) or {}
     config_context = config_json.get("context") if isinstance(config_json, dict) else {}
     context = agent_backend.context_schema()
     if isinstance(config_context, dict):
         context.update_from_dict(config_context)
-    return (getattr(context, "model_simple", "") or "").strip()
+    return (getattr(context, "model_simple", "") or getattr(app_config, "fast_model", "") or "").strip()
 
 
 async def _thread_last_route_complex(db, thread_id: str, uid) -> bool:

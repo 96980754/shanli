@@ -718,7 +718,7 @@ onUnmounted(() => {
     color 0.15s ease;
 
   &:hover:not(:disabled) {
-    border-color: var(--gray-250);
+    border-color: var(--gray-200);
     background: var(--gray-50);
     color: var(--gray-900);
   }

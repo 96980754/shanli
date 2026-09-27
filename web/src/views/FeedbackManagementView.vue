@@ -48,8 +48,8 @@
         </template>
 
         <template v-else-if="column.key === 'message'">
-          <a-tooltip :title="record.message_content" placement="topLeft">
-            <div class="message-content">{{ record.message_content || '-' }}</div>
+          <a-tooltip :title="stripMarkdown(record.message_content)" placement="topLeft">
+            <div class="message-content">{{ stripMarkdown(record.message_content) || '-' }}</div>
           </a-tooltip>
           <div v-if="record.reason" class="message-reason">{{ displayReason(record.reason) }}</div>
           <div class="message-tags">
@@ -68,7 +68,7 @@
             {{ record.conversation_title || record.conversation_thread_id }}
           </a-button>
           <span v-else>-</span>
-          <div class="agent-id">{{ record.agent_id }}</div>
+          <div class="agent-id">{{ record.agent_name || record.agent_id }}</div>
         </template>
 
         <template v-else-if="column.key === 'user'">
@@ -129,7 +129,7 @@
         <div class="conversation-meta">
           <div class="conversation-title">{{ conversation.title }}</div>
           <a-space>
-            <a-tag>{{ conversation.agent_id }}</a-tag>
+            <a-tag>{{ conversation.agent_name || conversation.agent_id }}</a-tag>
             <span class="meta-muted">{{ conversation.message_count }} msgs</span>
           </a-space>
         </div>
@@ -146,7 +146,9 @@
               </a-tag>
               <span class="meta-muted">{{ formatFullDateTime(msg.created_at) }}</span>
             </div>
-            <div class="message-body">{{ msg.content }}</div>
+            <div class="message-body">
+              <MarkdownPreview :content="msg.content" compact />
+            </div>
           </div>
         </div>
       </template>
@@ -165,7 +167,9 @@ import { agentApi } from '@/apis/agent_api'
 import { formatFullDateTime } from '@/utils/time'
 import { generatePixelAvatar } from '@/utils/pixelAvatar'
 import { formatFeedbackReason } from '@/utils/feedbackReason'
+import { stripMarkdown } from '@/utils/markdownText'
 import FallbackAvatar from '@/components/common/FallbackAvatar.vue'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 import FeedbackTuningModal from '@/components/dashboard/FeedbackTuningModal.vue'
 
 const { t } = useI18n()
@@ -290,7 +294,9 @@ async function openConversation(record) {
   conversationLoading.value = true
   conversation.value = null
   try {
-    conversation.value = await dashboardApi.getConversationDetail(record.conversation_thread_id)
+    // 行上的 agent_name（后端已补）带入抽屉，避免抽屉里又显示回内部代号
+    const detail = await dashboardApi.getConversationDetail(record.conversation_thread_id)
+    conversation.value = { ...detail, agent_name: record.agent_name ?? detail.agent_name }
   } catch (error) {
     console.error('加载会话上下文失败', error)
     message.error(error?.message || t('feedback.loadConversationFailed'))

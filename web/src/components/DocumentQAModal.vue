@@ -74,7 +74,7 @@
           :key="`evidence-${index}`"
           class="evidence-editor"
         >
-          <a-input v-model:value="evidence.chunk_id" placeholder="chunk ID" />
+          <a-input v-model:value="evidence.chunk_id" :placeholder="$t('docModal.chunkIdPlaceholder')" />
           <a-textarea
             v-model:value="evidence.text"
             :auto-size="{ minRows: 2, maxRows: 5 }"

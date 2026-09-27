@@ -1292,6 +1292,7 @@ def _patch_agent_run_creation(
     parent_run: SimpleNamespace | None = None,
     raise_create_integrity_error: bool = False,
 ):
+    monkeypatch.setattr(agent_run_service.app_config, "fast_model", "")
     runs_by_id = {
         "parent-agent-run": SimpleNamespace(
             id="parent-agent-run",

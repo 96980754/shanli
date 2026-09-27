@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n'
 import {
   BookOpen,
   Bot,
@@ -55,6 +56,47 @@ export const TOOL_ICON_MAP = {
   text_to_img_qwen_image: Image,
   write_file: FileEdit,
   write_todos: CheckSquare
+}
+
+// 工具 ID → 展示名。用户看到的是「检索知识库」，不是 query_kb。
+// 与 TOOL_ICON_MAP 同一份 ID 列表；新增工具时两处一起补。
+export const TOOL_LABEL_KEY_MAP = {
+  ask_user_question: 'toolCall.badge.askUser',
+  bash: 'toolCall.badge.bash',
+  calculator: 'toolCall.badge.calculator',
+  cmd: 'toolCall.badge.cmd',
+  edit_file: 'toolCall.badge.editFile',
+  execute: 'toolCall.badge.execute',
+  find_kb_document: 'toolCall.badge.findKbDocument',
+  get_mindmap: 'toolCall.badge.getMindmap',
+  glob: 'toolCall.badge.glob',
+  grep: 'toolCall.badge.grep',
+  list_directory: 'toolCall.badge.listDirectory',
+  list_kbs: 'toolCall.badge.listKbs',
+  ls: 'toolCall.badge.ls',
+  mysql_describe_table: 'toolCall.badge.mysqlDescribeTable',
+  mysql_list_tables: 'toolCall.badge.mysqlListTables',
+  mysql_query: 'toolCall.badge.mysqlQuery',
+  ocr_parse_file: 'toolCall.badge.ocrParseFile',
+  open_kb_document: 'toolCall.badge.openKbDocument',
+  present_artifacts: 'toolCall.badge.presentArtifacts',
+  query_kb: 'toolCall.badge.queryKb',
+  query_kbs: 'toolCall.badge.queryKbs',
+  read_file: 'toolCall.badge.readFile',
+  replace: 'toolCall.badge.replace',
+  run_shell_command: 'toolCall.badge.runShellCommand',
+  search_file: 'toolCall.badge.searchFile',
+  search_file_content: 'toolCall.badge.searchFileContent',
+  subagent_await: 'toolCall.badge.subagentAwait',
+  subagent_cancel: 'toolCall.badge.subagentCancel',
+  subagent_events: 'toolCall.badge.subagentEvents',
+  subagent_start: 'toolCall.badge.subagentStart',
+  subagent_status: 'toolCall.badge.subagentStatus',
+  task: 'toolCall.badge.task',
+  tavily_search: 'toolCall.badge.tavilySearch',
+  text_to_img_qwen_image: 'toolCall.badge.textToImg',
+  write_file: 'toolCall.badge.writeFile',
+  write_todos: 'toolCall.badge.writeTodos'
 }
 
 // Keep intentionally hidden tool calls centralized so group summaries and renderers stay consistent.
@@ -155,3 +197,9 @@ export const enrichTaskToolCalls = (toolCalls, options = {}) =>
   })
 
 export const getToolIcon = (toolId) => TOOL_ICON_MAP[toolId] || null
+
+// 未登记的工具返回 ''，由调用方决定兜底文案——别再猜名字（下划线换空格会渲染出 "Query kb"）
+export const getToolLabel = (toolId) => {
+  const key = TOOL_LABEL_KEY_MAP[toolId]
+  return key ? i18n.global.t(key) : ''
+}

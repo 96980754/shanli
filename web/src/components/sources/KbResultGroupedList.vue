@@ -581,7 +581,7 @@ const downloadHistoryVersion = async (fileGroup, version) => {
     .history-versions {
       padding: 5px 10px;
       border-bottom: 1px solid var(--gray-100);
-      background: var(--gray-5);
+      background: var(--gray-25);
 
       .history-toggle {
         display: flex;
@@ -684,7 +684,7 @@ const downloadHistoryVersion = async (fileGroup, version) => {
       }
 
       &.high-relevance {
-        background: var(--gray-5);
+        background: var(--gray-10);
       }
 
       &:hover {

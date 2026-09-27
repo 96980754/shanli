@@ -1,14 +1,7 @@
 <template>
   <div class="graph-section" v-if="isGraphSupported">
     <div class="graph-container-compact">
-      <div v-if="!isGraphSupported" class="graph-disabled">
-        <div class="disabled-content">
-          <h4>{{ $t('graph.unavailableTitle') }}</h4>
-          <p>{{ $t('graph.unsupportedByType', { type: kbTypeLabel }) }}</p>
-          <p>{{ $t('graph.milvusOnly') }}</p>
-        </div>
-      </div>
-      <div v-else class="graph-wrapper">
+      <div class="graph-wrapper">
         <GraphCanvas
           ref="graphRef"
           :graph-data="graph.graphData"
@@ -330,7 +323,7 @@
             @select-model="(spec) => (graphConfigForm.model_spec = spec)"
           />
         </a-form-item>
-        <a-form-item v-if="!isLegacyGraphConfig" label="Core Ontology">
+        <a-form-item v-if="!isLegacyGraphConfig" :label="$t('ontology.coreOntologyTitle')">
           <a-select
             v-model:value="graphConfigForm.ontology_key"
             :loading="ontologyRegistryLoading"
@@ -399,7 +392,6 @@ import {
 import GraphCanvas from '@/components/GraphCanvas.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import ResourceEmptyState from '@/components/shared/ResourceEmptyState.vue'
-import { getKbTypeLabel } from '@/utils/kb_utils'
 import { unifiedApi } from '@/apis/graph_api'
 import { graphBuildApi } from '@/apis/knowledge_api'
 import { ontologyRegistryApi } from '@/apis/ontology_api'
@@ -430,7 +422,6 @@ const configStore = useConfigStore()
 
 const kbId = computed(() => store.kbId)
 const kbType = computed(() => store.database.kb_type)
-const kbTypeLabel = computed(() => getKbTypeLabel(kbType.value || 'milvus'))
 const isMilvus = computed(() => kbType.value?.toLowerCase() === MILVUS_KB_TYPE)
 
 const graphRef = ref(null)
@@ -1050,7 +1041,7 @@ onUnmounted(() => {
     &:focus,
     &-focused {
       background: var(--main-0);
-      border-color: var(--primary-color);
+      border-color: var(--main-color);
     }
 
     input {
@@ -1074,7 +1065,7 @@ onUnmounted(() => {
 
     &:hover {
       background: var(--shadow-1);
-      color: var(--primary-color);
+      color: var(--main-color);
     }
   }
 
@@ -1136,22 +1127,6 @@ onUnmounted(() => {
   }
   50% {
     opacity: 0.2;
-  }
-}
-
-.graph-disabled {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-}
-
-.disabled-content {
-  text-align: center;
-  color: var(--gray-400);
-
-  h4 {
-    margin-bottom: 8px;
   }
 }
 

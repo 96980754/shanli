@@ -2,7 +2,7 @@
   <BaseToolCall :tool-call="toolCall" :hide-params="true">
     <template #header>
       <div class="sep-header">
-        <span class="note">Search File</span>
+        <span class="note">{{ $t('toolCall.badge.searchFile') }}</span>
         <span class="separator" v-if="kbNameLabel">|</span>
         <span class="description" v-if="kbNameLabel">{{ $t('toolCall.kbLabel', { name: kbNameLabel }) }}</span>
         <span class="separator" v-if="queryLabel">|</span>

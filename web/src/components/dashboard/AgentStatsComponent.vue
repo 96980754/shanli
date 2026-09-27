@@ -43,49 +43,6 @@
       </a-col>
     </a-row>
 
-    <!-- 表现排行榜 -->
-    <a-divider />
-    <div class="top-performers">
-      <h4>{{ $t('dash.topPerformersTitle') }}</h4>
-      <a-table
-        :columns="performerColumns"
-        :data-source="topPerformers"
-        size="small"
-        :pagination="false"
-        :scroll="{ x: 420 }"
-      >
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'rank'">
-            <div class="rank-display">
-              <span class="rank-number" :class="{ featured: index < 3 }">{{ index + 1 }}</span>
-            </div>
-          </template>
-          <template v-if="column.key === 'agent_id'">
-            <span class="agent-name" :title="resolveAgentName(record.agent_id)">
-              {{ resolveAgentName(record.agent_id) }}
-            </span>
-          </template>
-          <template v-if="column.key === 'satisfaction_rate'">
-            <a-statistic
-              :value="record.satisfaction_rate"
-              suffix="%"
-              :value-style="{
-                color:
-                  record.satisfaction_rate >= 80
-                    ? 'var(--color-success-500)'
-                    : record.satisfaction_rate >= 60
-                      ? 'var(--color-warning-500)'
-                      : 'var(--color-error-500)',
-                fontSize: '14px'
-              }"
-            />
-          </template>
-          <template v-if="column.key === 'conversation_count'">
-            <span class="metric-value">{{ record.conversation_count }}</span>
-          </template>
-        </template>
-      </a-table>
-    </div>
   </a-card>
 </template>
 
@@ -122,33 +79,6 @@ const props = defineProps({
 const conversationToolChartRef = ref(null)
 let conversationToolChart = null
 
-// 表格列定义
-const performerColumns = [
-  {
-    title: t('dash.rankColumn'),
-    key: 'rank',
-    width: '80px',
-    align: 'center'
-  },
-  {
-    title: t('dash.agentColumn'),
-    key: 'agent_id',
-    width: '30%'
-  },
-  {
-    title: t('dash.satisfactionRate'),
-    key: 'satisfaction_rate',
-    width: '25%',
-    align: 'center'
-  },
-  {
-    title: t('dash.conversationCountColumn'),
-    key: 'conversation_count',
-    width: '20%',
-    align: 'center'
-  }
-]
-
 // 计算属性
 const totalConversations = computed(() => {
   const conversationCounts = props.agentStats?.agent_conversation_counts || []
@@ -158,10 +88,6 @@ const totalConversations = computed(() => {
 const totalToolUsage = computed(() => {
   const toolUsage = props.agentStats?.agent_tool_usage || []
   return toolUsage.reduce((sum, item) => sum + item.tool_usage_count, 0)
-})
-
-const topPerformers = computed(() => {
-  return props.agentStats?.top_performing_agents || []
 })
 
 const agentNames = computed(() => props.agentStats?.agent_names || {})

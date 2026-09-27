@@ -13,8 +13,11 @@
 
       <div
         class="stat-card secondary clickable"
+        role="button"
+        tabindex="0"
         :title="$t(rangeActive ? 'dash.periodQaCountTip' : 'dash.qaCountTip')"
         @click="handleQaRecordsClick"
+        @keydown.enter="handleQaRecordsClick"
       >
         <div class="stat-icon">
           <MessagesSquare class="icon" />
@@ -37,8 +40,11 @@
 
       <div
         class="stat-card info clickable"
+        role="button"
+        tabindex="0"
         :title="$t(rangeActive ? 'dash.periodKnowledgeGapRateTip' : 'dash.knowledgeGapRateTip')"
         @click="handleKnowledgeGapClick"
+        @keydown.enter="handleKnowledgeGapClick"
       >
         <div class="stat-icon">
           <Activity class="icon" />
@@ -60,7 +66,13 @@
         </div>
       </div>
 
-      <div class="stat-card secondary clickable" @click="handleFeedbackClick">
+      <div
+        class="stat-card secondary clickable"
+        role="button"
+        tabindex="0"
+        @click="handleFeedbackClick"
+        @keydown.enter="handleFeedbackClick"
+      >
         <div class="stat-icon">
           <BarChart3 class="icon" />
         </div>
@@ -75,7 +87,11 @@
           <Heart class="icon" />
         </div>
         <div class="stat-content" :title="$t(rangeActive ? 'dash.periodSatisfactionRateTip' : 'dash.satisfactionRateTip')">
-          <div class="stat-value">{{ basicStats?.feedback_stats?.satisfaction_rate || 0 }}%</div>
+          <div class="stat-value">{{
+            basicStats?.feedback_stats?.satisfaction_rate == null
+              ? '—'
+              : `${basicStats.feedback_stats.satisfaction_rate}%`
+          }}</div>
           <div class="stat-label">{{ $t('dash.satisfactionRate') }}</div>
           <div class="stat-sub" v-if="feedbackStats">
             {{ $t('dash.ratedSatisfaction', { rate: feedbackStats.rated_satisfaction_rate || 0, count: feedbackStats.rated_count || 0 }) }}
@@ -132,7 +148,8 @@ const handleQaRecordsClick = () => {
 
 // Methods
 const getSatisfactionClass = () => {
-  const rate = feedbackStats.value?.satisfaction_rate || 0
+  const rate = feedbackStats.value?.satisfaction_rate
+  if (rate == null) return ''
   if (rate >= 80) return 'satisfaction-high'
   if (rate >= 60) return 'satisfaction-medium'
   return 'satisfaction-low'

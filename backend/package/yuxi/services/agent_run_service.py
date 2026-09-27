@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.models import resolve_chat_model_spec
+from yuxi.config import config as app_config
 from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
@@ -420,6 +421,7 @@ async def create_agent_run_view(
             thread_id=thread_id,
             uid=current_uid,
             db=db,
+            simple_model=app_config.fast_model or None,
         )
 
     run_input_message = _prepare_run_input_message(

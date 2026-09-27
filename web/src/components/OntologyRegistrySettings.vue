@@ -2,7 +2,7 @@
   <div class="ontology-registry-settings">
     <div class="section-header">
       <div>
-        <h3>Core Ontology</h3>
+        <h3>{{ $t('ontology.coreOntologyTitle') }}</h3>
         <p>{{ $t('ontology.registryIntro') }}</p>
       </div>
       <a-button v-if="userStore.isSuperAdmin" type="primary" class="create-btn" @click="openCreate">

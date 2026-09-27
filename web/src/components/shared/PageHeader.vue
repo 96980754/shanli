@@ -63,7 +63,7 @@ function emitChange(item) {
   justify-content: space-between;
   gap: 16px;
   padding: 14px var(--page-padding);
-  background-color: var(--light-60);
+  background-color: var(--light-70);
   backdrop-filter: blur(10px);
   position: sticky;
   top: 0;

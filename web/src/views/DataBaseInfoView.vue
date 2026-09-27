@@ -185,7 +185,7 @@
                   <DatabaseIcon v-else :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ fileStats.chunkText }}</strong>
-                    <span>Chunks</span>
+                    <span>{{ $t('dbInfo.statChunks') }}</span>
                   </div>
                 </button>
                 <button
@@ -202,7 +202,7 @@
                   <Hash v-else :size="16" />
                   <div class="file-stat-inline">
                     <strong>{{ fileStats.tokenText }}</strong>
-                    <span>Tokens</span>
+                    <span>{{ $t('dbInfo.statTokens') }}</span>
                   </div>
                 </button>
               </div>
@@ -1072,7 +1072,7 @@ onMounted(() => {
 .graph-section-loading {
   padding: 48px 0;
   text-align: center;
-  color: var(--text-color-secondary, #8c8c8c);
+  color: var(--color-text-secondary);
 }
 
 .database-info-container {

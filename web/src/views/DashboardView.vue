@@ -190,9 +190,6 @@ const loadAllStats = async () => {
       knowledge: response.knowledge,
       agents: response.agents
     }
-
-    console.log('Dashboard 数据加载完成:', response)
-    message.success(t('dash.loadSuccess'))
   } catch (error) {
     console.error('加载统计数据失败:', error)
     message.error(t('dash.loadStatsFailed'))
@@ -315,7 +312,7 @@ onUnmounted(() => {
       .conversations-section,
       .call-stats-section {
         border-color: var(--gray-200);
-        box-shadow: 0 1px 3px 0 var(--shadow-100);
+        box-shadow: 0 1px 3px 0 var(--shadow-2);
       }
     }
 
@@ -363,7 +360,7 @@ onUnmounted(() => {
   &:hover {
     background-color: var(--gray-25);
     border-color: var(--gray-200);
-    box-shadow: 0 1px 3px 0 var(--shadow-100);
+    box-shadow: 0 1px 3px 0 var(--shadow-2);
   }
 
   :deep(.ant-card-head) {

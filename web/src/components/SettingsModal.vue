@@ -23,7 +23,8 @@
       <!-- 侧边栏 (Desktop) -->
       <div class="settings-sider">
         <div class="settings-sider-nav">
-          <div
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'account' }"
             @click="activeTab = 'account'"
@@ -31,8 +32,9 @@
           >
             <CircleUser class="icon" :size="18" />
             <span>{{ $t('settings.tabAccount') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'base' }"
             @click="activeTab = 'base'"
@@ -40,8 +42,9 @@
           >
             <Settings class="icon" :size="18" />
             <span>{{ $t('settings.tabBase') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'csaccess' }"
             @click="activeTab = 'csaccess'"
@@ -49,8 +52,9 @@
           >
             <Headset class="icon" :size="18" />
             <span>{{ $t('settings.csAccessTitle') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'udesk' }"
             @click="activeTab = 'udesk'"
@@ -58,8 +62,9 @@
           >
             <Headset class="icon" :size="18" />
             <span>{{ $t('settings.udeskTitle') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'integrations' }"
             @click="activeTab = 'integrations'"
@@ -67,8 +72,9 @@
           >
             <Plug class="icon" :size="18" />
             <span>{{ $t('settings.integrationsTitle') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'user' }"
             @click="activeTab = 'user'"
@@ -76,17 +82,19 @@
           >
             <User class="icon" :size="18" />
             <span>{{ $t('userMgmt.title') }}</span>
-          </div>
-          <div
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'ontology' }"
             @click="activeTab = 'ontology'"
             v-if="userStore.isAdmin"
           >
             <Network class="icon" :size="18" />
-            <span>Core Ontology</span>
-          </div>
-          <div
+            <span>{{ $t('ontology.coreOntologyTitle') }}</span>
+          </button>
+          <button
+            type="button"
             class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
@@ -94,7 +102,7 @@
           >
             <Users class="icon" :size="18" />
             <span>{{ $t('deptMgmt.title') }}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -154,7 +162,7 @@
           @click="activeTab = 'ontology'"
           v-if="userStore.isAdmin"
         >
-          Core Ontology
+          {{ $t('ontology.coreOntologyTitle') }}
         </div>
         <div
           class="nav-item"
@@ -345,6 +353,9 @@ watch(
   .sider-item {
     width: 100%;
     padding: 6px 12px; /* Matches SettingView .sider > * */
+    border: none;
+    background: none;
+    font: inherit;
     cursor: pointer;
     transition: all 0.1s; /* Matches SettingView */
     text-align: left;

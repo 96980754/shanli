@@ -86,20 +86,20 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'question'">
-          <a-tooltip :title="record.question" placement="topLeft">
-            <div class="qa-text">{{ record.question }}</div>
+          <a-tooltip :title="stripMarkdown(record.question)" placement="topLeft">
+            <div class="qa-text">{{ stripMarkdown(record.question) }}</div>
           </a-tooltip>
         </template>
 
         <template v-else-if="column.key === 'answer'">
-          <a-tooltip :title="record.answer" placement="topLeft">
-            <div class="qa-text">{{ record.answer }}</div>
+          <a-tooltip :title="stripMarkdown(record.answer)" placement="topLeft">
+            <div class="qa-text">{{ stripMarkdown(record.answer) }}</div>
           </a-tooltip>
         </template>
 
         <template v-else-if="column.key === 'evidence'">
-          <a-tooltip :title="record.evidence_quote" placement="topLeft">
-            <div class="qa-text evidence-text">{{ record.evidence_quote }}</div>
+          <a-tooltip :title="stripMarkdown(record.evidence_quote)" placement="topLeft">
+            <div class="qa-text evidence-text">{{ stripMarkdown(record.evidence_quote) }}</div>
           </a-tooltip>
         </template>
 
@@ -158,7 +158,9 @@
           <a-textarea v-model:value="acceptForm.answer" :rows="5" :maxlength="2000" show-count />
         </a-form-item>
         <a-form-item :label="t('candidates.evidenceColumn')">
-          <div class="evidence-quote">{{ acceptTarget?.evidence_quote }}</div>
+          <div class="evidence-quote">
+            <MarkdownPreview :content="acceptTarget?.evidence_quote || ''" compact />
+          </div>
         </a-form-item>
       </a-form>
 
@@ -219,6 +221,8 @@ import { agentApi } from '@/apis/agent_api'
 import { isBuiltinAgent } from '@/stores/agent'
 import { useConfigStore } from '@/stores/config'
 import { formatDateTime, formatFullDateTime } from '@/utils/time'
+import { stripMarkdown } from '@/utils/markdownText'
+import MarkdownPreview from '@/components/common/MarkdownPreview.vue'
 
 const { t } = useI18n()
 const configStore = useConfigStore()

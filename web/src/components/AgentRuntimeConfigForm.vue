@@ -824,7 +824,7 @@ defineExpose({ validateAndFilterConfig })
 
       &.is-readonly {
         .config-item {
-          background: var(--gray-20);
+          background: var(--gray-25);
 
           .model-selector.is-readonly {
             opacity: 0.78;
@@ -1197,7 +1197,7 @@ defineExpose({ validateAndFilterConfig })
 
         &:hover {
           border-color: var(--gray-300);
-          background: var(--gray-20);
+          background: var(--gray-25);
         }
         .selection-item-content {
           .selection-item-header {

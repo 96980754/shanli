@@ -1,11 +1,16 @@
 <template>
   <div class="not-found">
     <h1>{{ $t('empty.title') }}</h1>
-    <p>Sorry, Yemian has not been zuoed.</p>
+    <p>{{ $t('empty.desc') }}</p>
+    <a-button type="primary" @click="router.push('/agent')">{{ $t('empty.backHome') }}</a-button>
   </div>
 </template>
 
-<script setup></script>
+<script setup>
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+</script>
 
 <style scoped>
 .not-found {

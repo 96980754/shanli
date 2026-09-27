@@ -75,7 +75,13 @@
                 :class="`card-status-tag--${status.level || 'info'}`"
                 >{{ status.label }}</span
               >
-              <span class="card-status-dot" :class="`card-status-dot--${statusDotColor}`"></span>
+              <span
+                class="card-status-dot"
+                :class="`card-status-dot--${statusDotColor}`"
+                :title="status.label || $t(statusDotTitle)"
+                :aria-label="status.label || $t(statusDotTitle)"
+                :role="status.label ? undefined : 'img'"
+              ></span>
             </template>
           </template>
         </div>
@@ -151,6 +157,12 @@ const statusDotColor = computed(() => {
   if (level === 'success') return 'on'
   if (level === 'warning' || level === 'error') return level
   return 'off'
+})
+
+// 无文字标签时圆点自身的可读名称（色盲/读屏场景）
+const statusDotTitle = computed(() => {
+  const map = { on: 'common.statusOn', off: 'common.statusOff', warning: 'common.statusWarning', error: 'common.statusError' }
+  return map[statusDotColor.value] || map.off
 })
 
 defineEmits(['click', 'actionClick'])
@@ -400,7 +412,7 @@ const normalizedTags = computed(() => {
 
     &:hover,
     &:focus {
-      border-color: var(--color-error-200);
+      border-color: var(--color-error-100);
       background: var(--color-error-50);
       color: var(--color-error-800);
     }

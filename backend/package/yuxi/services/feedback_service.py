@@ -232,14 +232,15 @@ def build_satisfaction_stats(*, evaluable_count: int, like_count: int, dislike_c
 
     silent_count = 可评价基数 − 显式好评 − 显式差评（未反馈的收尾回答，默认满意）；
     satisfaction_rate = (好评 + 未反馈) / 可评价基数。
+    无可评价回答时两个比率返回 None（前端显示「—」），不给假数字。
     """
     silent_count = max(0, evaluable_count - like_count - dislike_count)
     if evaluable_count > 0:
         satisfaction_rate = round((like_count + silent_count) / evaluable_count * 100, 2)
         participation_rate = round((like_count + dislike_count) / evaluable_count * 100, 2)
     else:
-        satisfaction_rate = 100.0
-        participation_rate = 0.0
+        satisfaction_rate = None
+        participation_rate = None
     rated_count = like_count + dislike_count
     rated_satisfaction_rate = round(like_count / rated_count * 100, 2) if rated_count else 0.0
     return {

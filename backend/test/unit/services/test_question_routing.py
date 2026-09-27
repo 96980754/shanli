@@ -155,6 +155,7 @@ class _Backend:
 
 
 def _patch_model_cache(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(question_routing.app_config, "fast_model", "")
     monkeypatch.setattr(
         question_routing.model_cache,
         "get_model_info",
@@ -198,6 +199,27 @@ async def test_route_disabled_when_model_simple_empty(monkeypatch: pytest.Monkey
     )
     assert spec == "base"
     assert route is None
+
+
+@pytest.mark.asyncio
+async def test_route_uses_global_fast_model_when_agent_model_is_empty(monkeypatch: pytest.MonkeyPatch):
+    _patch_model_cache(monkeypatch)
+    monkeypatch.setattr(question_routing.app_config, "fast_model", "fast-1")
+    monkeypatch.setattr(question_routing, "AgentRunRepository", _NoHistoryRepo)
+    spec, route = await route_question_model_spec(
+        explicit_model_spec=None,
+        base_spec="default-1",
+        agent_item=_agent_item({}),
+        agent_backend=_Backend(),
+        question="f10 的价格是多少",
+        has_image=False,
+        has_attachment=False,
+        thread_id="t",
+        uid="u",
+        db=None,
+    )
+    assert spec == "fast-1"
+    assert route["complexity"] == "simple"
 
 
 @pytest.mark.asyncio

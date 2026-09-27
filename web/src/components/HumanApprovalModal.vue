@@ -438,9 +438,9 @@ const handleCancel = () => {
 }
 
 .tab-item.completed .tab-index {
-  color: var(--green-700);
-  border-color: var(--green-200);
-  background: var(--green-50);
+  color: var(--color-success-700);
+  border-color: var(--color-success-100);
+  background: var(--color-success-50);
 }
 
 .tab-index {

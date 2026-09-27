@@ -104,7 +104,7 @@ async def test_feedback_summary_cross_language_reasons_bucket_into_same_codes():
 
 
 @pytest.mark.asyncio
-async def test_feedback_summary_no_evaluable_answers_defaults_to_satisfied():
+async def test_feedback_summary_no_evaluable_answers_returns_none():
     result = await get_feedback_summary(agent_id=None, db=_FakeDb([]), current_user=_FakeUser())
 
     assert result.total_feedbacks == 0
@@ -112,8 +112,8 @@ async def test_feedback_summary_no_evaluable_answers_defaults_to_satisfied():
     assert result.dislike_count == 0
     assert result.evaluable_count == 0
     assert result.silent_count == 0
-    assert result.satisfaction_rate == 100.0
-    assert result.participation_rate == 0.0
+    assert result.satisfaction_rate is None
+    assert result.participation_rate is None
     assert result.refusal_count == 0
     assert result.refusal_rate == 0.0
 

@@ -588,9 +588,10 @@ async def get_agent_analytics(
         # 表现最佳的智能体（按对话数排序）
         top_performing_agents = []
         for i, (agent_id, conv_count) in enumerate(agents):
-            # 获取满意度数据
+            # 获取满意度数据（该智能体无任何可评价回答时为 None，前端显示「—」）
             satisfaction_data = next(
-                (s for s in agent_satisfaction if s["agent_id"] == agent_id), {"satisfaction_rate": 0}
+                (s for s in agent_satisfaction if s["agent_id"] == agent_id),
+                {"satisfaction_rate": None},
             )
 
             top_performing_agents.append(
@@ -873,6 +874,17 @@ async def _load_qa_record_rows(db: AsyncSession, start_at: datetime | None, end_
     return records
 
 
+async def _attach_agent_names(db: AsyncSession, records: list[dict]) -> list[dict]:
+    """给明细行补 agent_name（与 /stats/agents 的 agent_names 同源）；智能体已删除时缺省，前端回落 slug。"""
+    slugs = sorted({record["agent_id"] for record in records if record["agent_id"]})
+    if not slugs:
+        return records
+    names = {agent.slug: agent.name for agent in await AgentRepository(db).list_by_slugs(slugs)}
+    for record in records:
+        record["agent_name"] = names.get(record["agent_id"])
+    return records
+
+
 def _filter_qa_records(records: list[dict], domain: str | None, keyword: str | None) -> list[dict]:
     """产品线/关键词过滤：domain 在加载时解析（含关键词分类兜底），只能行级过滤。"""
     if domain:
@@ -899,6 +911,7 @@ async def get_qa_records(
     start_at, end_at = _beijing_day_bounds(start_date, end_date)
     try:
         records = _filter_qa_records(await _load_qa_record_rows(db, start_at, end_at), domain, keyword)
+        records = await _attach_agent_names(db, records)
         return {"total": len(records), "items": records[offset : offset + limit]}
     except Exception as e:
         logger.error(f"Error getting qa records: {e}")
@@ -920,6 +933,7 @@ async def export_qa_records(
     start_at, end_at = _beijing_day_bounds(start_date, end_date)
     try:
         records = _filter_qa_records(await _load_qa_record_rows(db, start_at, end_at), domain, keyword)
+        records = await _attach_agent_names(db, records)
         line_names = {line.code: line.name for line in resolve_business_lines()}
 
         buffer = io.StringIO()
@@ -935,7 +949,7 @@ async def export_qa_records(
                     record["answer"],
                     line_names.get(record["domain"], "未分类" if record["domain"] == "unknown" else record["domain"]),
                     _QA_ANSWER_TYPE_LABELS.get(record["answer_type"], record["answer_type"]),
-                    record["agent_id"] or "",
+                    record.get("agent_name") or record["agent_id"] or "",
                     record["thread_id"],
                 ]
             )
@@ -1122,6 +1136,7 @@ class FeedbackListItem(BaseModel):
     message_content: str
     conversation_title: str | None
     agent_id: str
+    agent_name: str | None
     is_refusal_source: bool
     has_qa_pair: bool
 
@@ -1237,8 +1252,14 @@ async def get_all_feedbacks(
         )
         matched_qa = {(agent_slug, q_hash) for agent_slug, q_hash in qa_result.all()}
 
+    feedback_agent_names = await _attach_agent_names(
+        db, [{"agent_id": conversation.agent_id} for _, _, conversation, _, _ in rows]
+    )
+
     items = []
-    for (feedback, message, conversation, user, _question), key in zip(rows, row_keys, strict=True):
+    for (feedback, message, conversation, user, _question), key, names in zip(
+        rows, row_keys, feedback_agent_names, strict=True
+    ):
         items.append(
             {
                 "id": feedback.id,
@@ -1254,6 +1275,7 @@ async def get_all_feedbacks(
                 "message_content": message.content,
                 "conversation_title": conversation.title,
                 "agent_id": conversation.agent_id,
+                "agent_name": names.get("agent_name"),
                 "is_refusal_source": _is_refusal_source_message(message.extra_metadata),
                 "has_qa_pair": key is not None and key in matched_qa,
             }

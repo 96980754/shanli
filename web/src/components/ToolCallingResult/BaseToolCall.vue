@@ -4,7 +4,7 @@
     :class="{ 'is-collapsed': !isExpanded, 'is-timeline': isTimeline }"
   >
     <!-- Header Slot -->
-    <div class="tool-header" @click="toggleExpand">
+    <button type="button" class="tool-header" :aria-expanded="isExpanded" @click="toggleExpand">
       <!-- Fixed Status Icon -->
       <span v-if="effectiveStatus === 'completed'">
         <component v-if="toolIcon" :is="toolIcon" size="15" class="tool-loader tool-success" />
@@ -59,7 +59,7 @@
         <ChevronsDownUp v-if="isExpanded" size="14" />
         <ChevronsUpDown v-else size="14" />
       </span>
-    </div>
+    </button>
 
     <!-- Content Area -->
     <div v-if="isExpanded" class="tool-content">
@@ -246,13 +246,17 @@ const formatResultData = (data) => {
     font-size: 13px;
     font-weight: 500;
     color: var(--gray-800);
+    background: none;
+    border: none;
     border-bottom: 1px solid var(--gray-50);
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     user-select: none;
     position: relative;
+    text-align: left;
     transition: background-color 0.2s ease;
 
     &:hover {

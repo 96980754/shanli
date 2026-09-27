@@ -229,7 +229,7 @@ const publishAlertType = (status) =>
 .readonly-hint,
 .predicate,
 small {
-  color: var(--gray-7);
+  color: var(--gray-700);
 }
 .predicate {
   margin-left: 12px;
@@ -237,7 +237,7 @@ small {
 .conflict-card {
   padding: 16px;
   margin-bottom: 16px;
-  border: 1px solid var(--gray-4);
+  border: 1px solid var(--gray-200);
   border-radius: 8px;
 }
 .conflict-card header {
@@ -251,7 +251,7 @@ small {
 }
 .comparison-grid article {
   padding: 12px;
-  background: var(--gray-1);
+  background: var(--gray-50);
   border-radius: 6px;
 }
 .value {
@@ -259,13 +259,13 @@ small {
   word-break: break-word;
 }
 .empty-value {
-  color: var(--gray-7);
+  color: var(--gray-700);
 }
 blockquote {
   padding-left: 10px;
   margin: 8px 0 0;
-  color: var(--gray-8);
-  border-left: 3px solid var(--gray-4);
+  color: var(--gray-800);
+  border-left: 3px solid var(--gray-200);
 }
 .review-actions {
   margin-top: 14px;

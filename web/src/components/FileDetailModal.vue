@@ -311,8 +311,8 @@ const makeViewModeOption = (label, value, icon) => ({
 const viewModeOptions = computed(() => {
   const optionMap = {
     source: makeViewModeOption(t('docModal.viewSource'), 'source', FileSearch),
-    markdown: makeViewModeOption('Markdown', 'markdown', FileText),
-    chunks: makeViewModeOption('Chunks', 'chunks', Rows3)
+    markdown: makeViewModeOption(t('docModal.viewMarkdown'), 'markdown', FileText),
+    chunks: makeViewModeOption(t('docModal.viewChunks'), 'chunks', Rows3)
   }
   return availableViewModes.value.map((mode) => optionMap[mode])
 })
