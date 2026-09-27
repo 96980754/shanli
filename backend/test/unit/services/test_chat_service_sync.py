@@ -10,7 +10,19 @@ from langchain.messages import AIMessage, HumanMessage
 from yuxi.agents import context as agent_context
 from yuxi.agents.backends.sandbox import paths as workspace_paths
 from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN
+from yuxi.config.app import config as runtime_config
 from yuxi.services import chat_service as svc
+
+
+@pytest.fixture(autouse=True)
+def _disable_domain_judge_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """单测不联网：置空「快速响应模型」使判域只走关键词快路径。
+
+    判域模型缺省回落到设置页「快速响应模型」（见 knowledge_answer_disposition.judge_domain），
+    不置空则每个关键词未命中的终答都会真调一次模型；该回落本身由
+    test_knowledge_answer_disposition.py 显式覆盖。
+    """
+    monkeypatch.setattr(runtime_config, "fast_model", "")
 
 
 def _empty_agent_context(_thread_id: str, _uid: str) -> str:
@@ -871,8 +883,6 @@ async def test_save_messages_identity_greeting_answer_answered_no_banner() -> No
 @pytest.mark.asyncio
 async def test_save_messages_resolves_domain_for_answered(monkeypatch: pytest.MonkeyPatch) -> None:
     """answered 终答落库也判域：关键词快路径命中即归业务线（未命中且未配置模型时为 unknown）。"""
-    from yuxi.config.app import config as runtime_config
-
     monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
     monkeypatch.setattr(svc, "record_knowledge_gap", _no_gap)
 

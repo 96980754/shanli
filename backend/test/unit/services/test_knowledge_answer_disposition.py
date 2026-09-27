@@ -271,11 +271,33 @@ async def test_judge_domain_keyword_fast_path_skips_model(monkeypatch: pytest.Mo
     assert await judge_domain("网优参数怎么配", caller=never_called) == "mno"
 
 
-async def test_judge_domain_disabled_without_model_and_caller(monkeypatch: pytest.MonkeyPatch):
+async def test_judge_domain_disabled_without_any_model(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("yuxi.services.knowledge_answer_disposition.DOMAIN_JUDGE_MODEL", "")
+    monkeypatch.setattr(runtime_config, "fast_model", "")
     monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
 
     assert await judge_domain("关键词没盖住的奇怪问题") == "unknown"
+
+
+async def test_judge_domain_falls_back_to_fast_model(monkeypatch: pytest.MonkeyPatch):
+    """两个 judge 模型 env 均空时判域仍可用：回落到设置页「快速响应模型」。"""
+    monkeypatch.setattr("yuxi.services.knowledge_answer_disposition.DOMAIN_JUDGE_MODEL", "")
+    monkeypatch.setattr(runtime_config, "fast_model", "fake:fast")
+    monkeypatch.setattr(runtime_config, "business_lines", [{"code": "mno", "name": "网优", "keywords": ["网优"]}])
+    used: list[str] = []
+
+    def fake_select_model(spec: str):
+        used.append(spec)
+
+        async def call(messages):
+            return SimpleNamespace(content='{"domain": "mno"}')
+
+        return SimpleNamespace(call=call)
+
+    monkeypatch.setattr("yuxi.services.knowledge_answer_disposition.select_model", fake_select_model)
+
+    assert await judge_domain("关键词没盖住的参数问题") == "mno"
+    assert used == ["fake:fast"]
 
 
 async def test_judge_domain_parses_caller_json(monkeypatch: pytest.MonkeyPatch):

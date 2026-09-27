@@ -90,6 +90,7 @@ def test_extract_collects_content_tools_only_and_dedups(e2e):
     history = {
         "history": [
             {
+                "run_id": "run_1",
                 "tool_calls": [
                     {
                         "name": "query_kbs",
@@ -111,9 +112,10 @@ def test_extract_collects_content_tools_only_and_dedups(e2e):
                         "status": "success",
                         "tool_call_result": {"content": "任意文件正文"},
                     },
-                ]
+                ],
             },
             {
+                "run_id": "run_1",
                 "tool_calls": [
                     {
                         "name": "find_kb_document",
@@ -132,11 +134,75 @@ def test_extract_collects_content_tools_only_and_dedups(e2e):
                         "status": "error",
                         "tool_call_result": {"content": json.dumps({"windows": [{"start_line": 1, "content": "x"}]})},
                     },
-                ]
+                ],
             },
         ]
     }
-    chunks = e2e.extract_retrieved_chunks(history)
+    chunks = e2e.extract_retrieved_chunks(history, "run_1")
     ids = [c["id"] for c in chunks]
     assert ids == ["c1", "file_1:L10-20"]
     assert all(c.get("content") for c in chunks)
+
+
+def test_extract_slices_by_run_id(e2e):
+    """同线程复用多题：只有本题 run 的证据才算数。"""
+
+    def msg(run_id: str, chunk_id: str) -> dict:
+        content = json.dumps({"status": "ok", "results": [{"id": chunk_id, "content": "正文"}]})
+        return {
+            "run_id": run_id,
+            "tool_calls": [{"name": "query_kb", "status": "success", "tool_call_result": {"content": content}}],
+        }
+
+    history = {"history": [msg("run_a", "c_a"), msg("run_b", "c_b")]}
+    assert [c["id"] for c in e2e.extract_retrieved_chunks(history, "run_b")] == ["c_b"]
+
+
+def test_extract_run_steps_counts_turns_and_tools(e2e):
+    """一轮里并发多个工具仍算一个 tool_turn（super-step 按轮计）。"""
+    history = {
+        "history": [
+            {"run_id": "run_1", "type": "human", "content": "问题"},
+            {
+                "run_id": "run_1",
+                "type": "ai",
+                "tool_calls": [{"name": "query_kb"}, {"name": "query_kb"}, {"name": "search_file"}],
+            },
+            {"run_id": "run_1", "type": "ai", "tool_calls": [{"name": "open_kb_document"}]},
+            {"run_id": "run_1", "type": "ai", "content": "终答"},
+            # 同线程另一题的 run 不计入
+            {"run_id": "run_2", "type": "ai", "tool_calls": [{"name": "query_kb"}]},
+        ]
+    }
+    steps = e2e.extract_run_steps(history, "run_1")
+    assert steps["tool_calls"] == 4
+    assert steps["tool_turns"] == 2
+    assert steps["est_steps"] == 5
+    assert steps["by_tool"] == {"query_kb": 2, "open_kb_document": 1, "search_file": 1}
+
+
+def test_extract_run_steps_without_tool_calls(e2e):
+    """直接作答（零工具）仍消耗 1 步（终答的模型节点）。"""
+    history = {"history": [{"run_id": "run_1", "type": "ai", "content": "终答"}]}
+    steps = e2e.extract_run_steps(history, "run_1")
+    assert steps == {"tool_calls": 0, "by_tool": {}, "tool_turns": 0, "est_steps": 1}
+
+
+def test_sum_run_steps_merges_clarification_rounds(e2e):
+    """反问澄清拆两轮 run：首轮检索成本不能漏，两轮工具计数与步数相加。"""
+    history = {
+        "history": [
+            {"run_id": "run_ask", "type": "ai", "tool_calls": [{"name": "query_kbs"}, {"name": "ask_user_question"}]},
+            {"run_id": "run_done", "type": "ai", "tool_calls": [{"name": "query_kbs"}]},
+            {"run_id": "run_done", "type": "ai", "content": "终答"},
+        ]
+    }
+    steps = e2e.sum_run_steps(history, ["run_ask", "run_done"])
+    # 两轮各 (2×1+1)=3 步、各占一份独立的 recursion_limit，故合计 6 而非「合起来算 2 轮」
+    assert steps == {
+        "tool_calls": 3,
+        "by_tool": {"query_kbs": 2, "ask_user_question": 1},
+        "tool_turns": 2,
+        "est_steps": 6,
+        "runs": 2,
+    }

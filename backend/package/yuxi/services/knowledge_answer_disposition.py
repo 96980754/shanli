@@ -11,7 +11,7 @@ from yuxi.agents.buildin.chatbot.prompt import (
     SYSTEM_ERROR_REPLY,
     SYSTEM_ERROR_REPLY_EN,
 )
-from yuxi.config.app import BusinessLine, resolve_business_lines, sanitize_business_domain
+from yuxi.config.app import BusinessLine, config, resolve_business_lines, sanitize_business_domain
 from yuxi.models import select_model
 from yuxi.utils.logging_config import logger
 
@@ -87,8 +87,8 @@ def build_judge_system_prompt(lines: list[BusinessLine] | None = None) -> str:
     return JUDGE_SYSTEM_PROMPT_TEMPLATE.replace("@DOMAIN_CHOICES@", domain_choices)
 
 
-# 业务线判域模型：DOMAIN_JUDGE_MODEL 优先，缺省退回拒答 judge 的快模型；
-# 均未配置则判域只跑关键词快路径（行为与未启用时一致）。
+# 业务线判域模型：DOMAIN_JUDGE_MODEL 优先，缺省退回拒答 judge 的快模型。
+# 两者均空时由 judge_domain 再回落到设置页「快速响应模型」，判域默认可用。
 DOMAIN_JUDGE_MODEL = os.getenv("DOMAIN_JUDGE_MODEL", "").strip() or REFUSAL_JUDGE_MODEL
 
 DOMAIN_JUDGE_SYSTEM_PROMPT_TEMPLATE = """\
@@ -464,14 +464,16 @@ def _parse_domain_payload(text: str) -> str | None:
 
 
 async def judge_domain(question: str, *, caller=None) -> str:
-    """分层判域单点：关键词快路径命中即返回（免费）；未命中且配置了判定模型
-    （或注入 caller）时一次小模型判定；未配置/调用/解析失败回退 unknown。
+    """分层判域单点：关键词快路径命中即返回（免费）；未命中时一次小模型判定，
+    判定模型取 DOMAIN_JUDGE_MODEL > 拒答 judge 模型 > 设置页「快速响应模型」
+    （末级每次调用重读配置，改设置即热生效）；无可用模型/调用/解析失败回退 unknown。
     caller 可注入以便测试：async (messages: list[dict]) -> str。
     """
     keyword_domain = classify_domain_by_keywords(question)
     if keyword_domain != "unknown":
         return keyword_domain
-    if not DOMAIN_JUDGE_MODEL and caller is None:
+    judge_model = DOMAIN_JUDGE_MODEL or str(getattr(config, "fast_model", "") or "").strip()
+    if not judge_model and caller is None:
         return "unknown"
     messages = [
         {"role": "system", "content": build_domain_judge_system_prompt()},
@@ -481,7 +483,7 @@ async def judge_domain(question: str, *, caller=None) -> str:
         if caller is not None:
             text = await caller(messages)
         else:
-            adapter = select_model(DOMAIN_JUDGE_MODEL)
+            adapter = select_model(judge_model)
             text = (await adapter.call(messages)).content
         domain = _parse_domain_payload(str(text or ""))
     except Exception as exc:  # noqa: BLE001 — 判域失败不应影响消息保存
