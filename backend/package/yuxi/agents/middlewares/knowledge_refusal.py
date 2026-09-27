@@ -3,30 +3,18 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, NotRequired
+from collections.abc import Mapping, Sequence
+from typing import Any
 
-from langchain.agents.middleware.types import AgentMiddleware, AgentState, ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, ToolMessage
-from langgraph.types import Command
+from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 _QUERY_TOOLS = frozenset({"query_kb", "query_kbs"})
 _EMPTY_RESULT_LIMIT = 2
 
 
-class KnowledgeRefusalState(AgentState):
-    """State fields owned by :class:`KnowledgeRefusalMiddleware`."""
-
-    knowledge_empty_searches: NotRequired[int]
-    knowledge_refusal_pending: NotRequired[bool]
-
-
-def _tool_name(request: Any) -> str:
-    return str((request.tool_call or {}).get("name") or "")
-
-
-def _tool_payload(result: ToolMessage) -> Mapping[str, Any] | None:
-    content = result.content
+def _tool_payload(message: ToolMessage) -> Mapping[str, Any] | None:
+    content = message.content
     if isinstance(content, Mapping):
         return content
     if not isinstance(content, str):
@@ -38,60 +26,51 @@ def _tool_payload(result: ToolMessage) -> Mapping[str, Any] | None:
     return payload if isinstance(payload, Mapping) else None
 
 
-def _is_empty_search(result: ToolMessage) -> bool:
-    payload = _tool_payload(result)
+def _is_empty_search(message: ToolMessage) -> bool:
+    payload = _tool_payload(message)
     return payload is not None and payload.get("status") == "insufficient" and payload.get("reason") == "no_results"
 
 
-class KnowledgeRefusalMiddleware(AgentMiddleware[KnowledgeRefusalState]):
-    """Stop after two consecutive query-tool no-result responses.
+def _consecutive_empty_searches(messages: Sequence[BaseMessage]) -> int:
+    """本轮提问内末尾连续的空检索次数。
 
-    The tool call still returns a normal ``ToolMessage``.  The following model
-    call is short-circuited into a normal refusal, so the run completes instead
-    of reaching the recursion limit or continuing into sandbox tools.
+    遇到非空检索结果（含检索错误）或新的用户提问即停止回溯；其它工具（上下文取证、
+    沙箱等）不影响连续计数。
+    """
+    count = 0
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            break
+        if isinstance(message, ToolMessage) and message.name in _QUERY_TOOLS:
+            if not _is_empty_search(message):
+                break
+            count += 1
+    return count
+
+
+def _refusal_message() -> AIMessage:
+    """固定拒答终答：正文即 KNOWLEDGE_REFUSAL_REPLY，落库时由既有
+    classify_knowledge_disposition 按同一文案前缀判为 knowledge_refusal。"""
+    # 延后导入：chatbot 包的 __init__ 会反向 import 本包，模块级导入会成环。
+    from yuxi.agents.buildin.chatbot.prompt import KNOWLEDGE_REFUSAL_REPLY
+
+    return AIMessage(content=KNOWLEDGE_REFUSAL_REPLY)
+
+
+class KnowledgeRefusalMiddleware(AgentMiddleware):
+    """两次检索无结果后，用正常拒答终答结束本次 run。
+
+    判断放在模型调用前，直接回溯消息历史，不在工具 hook 里写状态：模型可能在一个
+    step 内并行发起多个 ``query_kb``/``query_kbs``，对同一 state key 的并发写入会被
+    LangGraph 判为 InvalidUpdateError。回溯读取历史同样能覆盖并行调用。
     """
 
-    state_schema = KnowledgeRefusalState
-
-    def wrap_tool_call(self, request, handler):
-        result = handler(request)
-        return self._record_search(request, result)
-
-    async def awrap_tool_call(self, request, handler: Callable[..., Awaitable[ToolMessage]]):
-        result = await handler(request)
-        return self._record_search(request, result)
-
-    def _record_search(self, request, result):
-        if _tool_name(request) not in _QUERY_TOOLS or not isinstance(result, ToolMessage):
-            return result
-
-        searches = int(request.state.get("knowledge_empty_searches") or 0)
-        if _is_empty_search(result):
-            searches += 1
-        else:
-            searches = 0
-
-        update: dict[str, Any] = {"knowledge_empty_searches": searches, "messages": [result]}
-        if searches >= _EMPTY_RESULT_LIMIT:
-            update["knowledge_refusal_pending"] = True
-
-        return Command(update=update)
-
     def wrap_model_call(self, request: ModelRequest, handler) -> ModelResponse | AIMessage:
-        if request.state.get("knowledge_refusal_pending"):
-            return self._refusal_message()
+        if _consecutive_empty_searches(request.state.get("messages") or ()) >= _EMPTY_RESULT_LIMIT:
+            return _refusal_message()
         return handler(request)
 
     async def awrap_model_call(self, request: ModelRequest, handler) -> ModelResponse | AIMessage:
-        if request.state.get("knowledge_refusal_pending"):
-            return self._refusal_message()
+        if _consecutive_empty_searches(request.state.get("messages") or ()) >= _EMPTY_RESULT_LIMIT:
+            return _refusal_message()
         return await handler(request)
-
-    @staticmethod
-    def _refusal_message() -> AIMessage:
-        """固定拒答终答：正文即 KNOWLEDGE_REFUSAL_REPLY，落库时由既有
-        classify_knowledge_disposition 按同一文案前缀判为 knowledge_refusal。"""
-        # 延后导入：chatbot 包的 __init__ 会反向 import 本包，模块级导入会成环。
-        from yuxi.agents.buildin.chatbot.prompt import KNOWLEDGE_REFUSAL_REPLY
-
-        return AIMessage(content=KNOWLEDGE_REFUSAL_REPLY)
