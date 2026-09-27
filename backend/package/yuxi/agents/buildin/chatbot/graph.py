@@ -15,6 +15,7 @@ from yuxi.agents.context import (
 )
 from yuxi.agents.middlewares import (
     ImageInputCompatibilityMiddleware,
+    KnowledgeRefusalMiddleware,
     TokenUsageMiddleware,
     create_summary_middleware,
     save_attachments_to_fs,
@@ -71,6 +72,7 @@ async def _build_middlewares(context):
             ModelRetryMiddleware(max_retries=getattr(context, "model_retry_times", 2)),
             # 主对话纯文本模型拒图时，先走本地产品识别，再退 OCR（产品图片识别链路）。
             ImageInputCompatibilityMiddleware(product_detect=True),
+            KnowledgeRefusalMiddleware(),
             TokenUsageMiddleware(),
         ]
     )
