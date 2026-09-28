@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -91,6 +91,12 @@ async def test_rejects_duplicate_pull_when_job_already_queued(udesk_credentials,
 
 
 # ----------------------------------------------------------------- 状态接口
+# 累计量六列 = 五个 COUNT + 已入库会话最早的 started_at，与 get_udesk_status 的 select 一一对应。
+# 末列由页面用来回答「同步的是多久的记录」，写死一个固定时刻才能钉住回传的格式化结果。
+EARLIEST_CONVERSATION_AT = datetime(2026, 3, 1, 8, 30, tzinfo=UTC)
+EARLIEST_CONVERSATION_ISO = "2026-03-01T08:30:00Z"
+
+
 class _FakeResult:
     def __init__(self, value):
         self._value = value
@@ -103,7 +109,7 @@ class _FakeResult:
 
 
 class _FakeDb:
-    """按调用顺序吐出结果：累计量五连 COUNT → 拉取状态行 → 总结状态行。"""
+    """按调用顺序吐出结果：累计量六连 → 拉取状态行 → 总结状态行。"""
 
     def __init__(self, *results):
         self._results = list(results)
@@ -126,7 +132,7 @@ async def test_status_reports_running_pull_while_lease_is_held(udesk_credentials
         progress_total=7,
         last_run_status="running",
     )
-    db = _FakeDb(_FakeResult((39, 522, 4, 1, 12)), _FakeResult(state), _FakeResult(state))
+    db = _FakeDb(_FakeResult((39, 522, 4, 1, 12, EARLIEST_CONVERSATION_AT)), _FakeResult(state), _FakeResult(state))
 
     payload = await get_udesk_status(db=db, current_user=None)
 
@@ -142,6 +148,7 @@ async def test_status_reports_running_pull_while_lease_is_held(udesk_credentials
         "messages": 522,
         "candidates": 4,
         "candidates_pending": 1,
+        "earliest_conversation_at": EARLIEST_CONVERSATION_ISO,
     }
     # 总结进度由会话总数与待总结数现算，天然单调、不依赖批大小
     assert payload["summarize"]["done"] == 27 and payload["summarize"]["total"] == 39
@@ -161,7 +168,7 @@ async def test_status_marks_summarize_running_and_surfaces_last_error(udesk_cred
         last_run_conversations=8,
         last_run_messages=0,
     )
-    db = _FakeDb(_FakeResult((39, 522, 4, 0, 0)), _FakeResult(state), _FakeResult(state))
+    db = _FakeDb(_FakeResult((39, 522, 4, 0, 0, EARLIEST_CONVERSATION_AT)), _FakeResult(state), _FakeResult(state))
 
     payload = await get_udesk_status(db=db, current_user=None)
 
@@ -176,13 +183,11 @@ async def test_status_marks_summarize_running_and_surfaces_last_error(udesk_cred
 async def test_status_reports_next_auto_pull_when_configured(udesk_credentials, monkeypatch):
     """凭证齐备时给出「下次自动拉取」：与 run_worker 的 cron 同一时刻（换算回容器
     本地时区应为 02:47），且永远在未来。"""
-    from datetime import datetime
-
     from yuxi.services.udesk.config import PULL_CRON_HOUR, PULL_CRON_MINUTE
 
     monkeypatch.setenv("UDESK_OPEN_API_TOKEN", "tok-test")
     state = UdeskSyncState(id=1)
-    db = _FakeDb(_FakeResult((39, 522, 4, 1, 12)), _FakeResult(state), _FakeResult(state))
+    db = _FakeDb(_FakeResult((39, 522, 4, 1, 12, EARLIEST_CONVERSATION_AT)), _FakeResult(state), _FakeResult(state))
 
     payload = await get_udesk_status(db=db, current_user=None)
 
