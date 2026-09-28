@@ -315,7 +315,18 @@ const flush = async () => {
   margin-bottom: 14px;
   .cs-label { flex: none; width: 150px; text-align: right; color: var(--gray-700); }
   .udesk-hint { color: var(--gray-500); font-size: 12px; }
-  :deep(.ant-input), :deep(.ant-input-number) { width: 320px; }
+  // 控件统一 320px 且不随同行提示文字长短伸缩：密码框的 affix 包装器自带 width:100%
+  // 会撑满剩余空间，数字框又会被长提示挤扁，不锁定就出现同页输入框长短不一
+  :deep(.ant-input),
+  :deep(.ant-input-number) {
+    flex: none;
+    width: 320px;
+  }
+  :deep(.ant-input-affix-wrapper) {
+    flex: none;
+    width: 320px;
+    .ant-input { width: 100%; }
+  }
 }
 .udesk-token-alert { margin-top: 8px; }
 
