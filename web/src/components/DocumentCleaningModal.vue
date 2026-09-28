@@ -1,6 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
+    class="modal-scroll"
     :title="$t('docModal.cleaningPreviewTitle')"
     width="1180px"
     :footer="null"
@@ -76,7 +77,7 @@
           </ul>
         </a-collapse-panel>
       </a-collapse>
-      <div class="modal-actions">
+      <div class="modal-sticky-actions">
         <a-button @click="visible = false">{{ $t('common.close') }}</a-button>
         <template v-if="!draft.readonly">
           <a-button :loading="actionLoading" @click="cancelDraft">{{ $t('docModal.cancelDraft') }}</a-button>
@@ -307,11 +308,6 @@ const openQA = () => {
 }
 .change-list li {
   display: flex;
-  gap: 8px;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
   gap: 8px;
 }
 @media (max-width: 900px) {

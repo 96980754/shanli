@@ -1,6 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
+    class="modal-scroll"
     :title="$t('docModal.enrichmentTitle')"
     width="820px"
     :footer="null"
@@ -139,7 +140,7 @@
           :placeholder="$t('docModal.tagPlaceholder')"
         />
       </section>
-      <div class="modal-actions">
+      <div class="modal-sticky-actions">
         <a-button @click="visible = false">{{ $t('common.close') }}</a-button>
         <template v-if="!payload.readonly">
           <a-button :loading="actionLoading" @click="generateAll">{{ $t('docModal.generateAll') }}</a-button>
@@ -350,12 +351,8 @@ const saveAll = async () => {
 .source-tag {
   margin-left: 8px;
 }
-.section-actions,
-.modal-actions {
+.section-actions {
   display: flex;
   gap: 8px;
-}
-.modal-actions {
-  justify-content: flex-end;
 }
 </style>

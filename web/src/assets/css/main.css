@@ -101,6 +101,36 @@ body {
   justify-content: center;
 }
 
+/* 内容可能超出一屏的弹窗：弹窗高度受限于视口，正文区独立滚动，
+   操作栏吸在弹窗下缘，滚到哪都看得见。.ant-modal-content 有 20px 24px 内边距，
+   操作栏左右用负边距抵消，让分隔线铺满弹窗宽度。 */
+.modal-scroll .ant-modal-content {
+  display: flex;
+  max-height: calc(100vh - 140px);
+  flex-direction: column;
+}
+
+.modal-scroll .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modal-sticky-actions {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 12px -24px 0;
+  padding: 12px 24px;
+  border-top: 1px solid var(--gray-150);
+  background: var(--gray-25);
+}
+
 .card-tag {
   display: inline-flex;
   align-items: center;

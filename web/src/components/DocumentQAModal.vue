@@ -1,6 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
+    class="modal-scroll"
     :title="$t('docModal.qaPairs')"
     width="920px"
     :footer="null"
@@ -138,7 +139,7 @@
           </div>
         </div>
       </section>
-      <div class="qa-footer">
+      <div class="modal-sticky-actions">
         <a-button @click="visible = false">{{ $t('common.close') }}</a-button>
       </div>
     </div>
@@ -347,8 +348,7 @@ const rejectOne = (item) => {
 }
 .qa-toolbar,
 .qa-card header,
-.qa-editor-actions,
-.qa-footer {
+.qa-editor-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -393,8 +393,5 @@ const rejectOne = (item) => {
 }
 .evidence-list code {
   overflow-wrap: anywhere;
-}
-.qa-footer {
-  justify-content: flex-end;
 }
 </style>
