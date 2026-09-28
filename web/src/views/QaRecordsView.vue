@@ -1,14 +1,5 @@
 <template>
   <div class="qa-records-page">
-    <div class="page-header">
-      <button class="back-btn" type="button" @click="backToDashboard">
-        <ArrowLeft :size="16" />
-        <span>{{ $t('common.back') }}</span>
-      </button>
-      <h1>{{ $t('qaRecords.pageTitle') }}</h1>
-      <p>{{ $t('qaRecords.pageSubtitle') }}</p>
-    </div>
-
     <div class="filters">
       <a-range-picker
         v-model:value="customRange"
@@ -105,8 +96,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Download } from 'lucide-vue-next'
+import { useRoute } from 'vue-router'
+import { Download } from 'lucide-vue-next'
 import dayjs, { formatFullDateTime } from '@/utils/time'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { useConfigStore } from '@/stores/config'
@@ -114,14 +105,7 @@ import { stripMarkdown } from '@/utils/markdownText'
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
 const configStore = useConfigStore()
-
-// 本页是数据总览下钻的明细页，返回总览（与 DataBaseInfoView 的返回一致，用 push 而非 back，
-// 直接输 URL 进来时也有确定的落点）
-const backToDashboard = () => {
-  router.push({ path: '/dashboard' })
-}
 
 const domainOptions = computed(() => [
   { label: t('qaRecords.domainAll'), value: '' },
@@ -273,29 +257,13 @@ onMounted(() => {
 
 <style scoped lang="less">
 .qa-records-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   min-height: 100%;
-  padding: var(--page-padding);
+  // 自持页面内边距（数据总览 Tab 壳只提供 Tab 栏）；上方间距由 Tab 栏自带 margin 提供
+  padding: 0 var(--page-padding) var(--page-padding);
   background: var(--gray-25);
-}
-.page-header {
-  margin-bottom: 12px;
-  h1 { margin: 0 0 6px; font-size: 24px; color: var(--gray-1000); }
-  p { margin: 0; color: var(--gray-600); }
-}
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 8px -8px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--gray-500);
-  font-size: 14px;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  &:hover { color: var(--gray-700); background: var(--gray-50); }
 }
 .filters {
   display: flex;

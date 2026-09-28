@@ -1,9 +1,10 @@
 <template>
   <div class="dashboard-tabs-page">
-    <!-- Tab 与子路由一一对应：main = /dashboard 主看板本身；问答明细是独立全页（/dashboard/qa-records），不在此列 -->
+    <!-- Tab 与子路由一一对应：main = /dashboard 主看板本身，另两个是子路由 -->
     <a-tabs :active-key="activeTab" @change="switchTab">
       <a-tab-pane key="main" :tab="t('dash.tabMain')" />
       <a-tab-pane key="overview" :tab="t('opsOverview.pageTitle')" />
+      <a-tab-pane key="qa-records" :tab="t('qaRecords.pageTitle')" />
     </a-tabs>
 
     <RouterView />
@@ -19,10 +20,14 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const activeTab = computed(() => (route.path.endsWith('/overview') ? 'overview' : 'main'))
+// Tab key 与子路由路径后缀一致；主看板自身是 /dashboard（无后缀）
+const TAB_PATHS = { main: '/dashboard', overview: '/dashboard/overview', 'qa-records': '/dashboard/qa-records' }
+const activeTab = computed(
+  () => Object.keys(TAB_PATHS).find((key) => route.path === TAB_PATHS[key]) || 'main'
+)
 
 function switchTab(key) {
-  router.push(key === 'overview' ? '/dashboard/overview' : '/dashboard')
+  router.push(TAB_PATHS[key])
 }
 </script>
 

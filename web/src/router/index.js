@@ -83,14 +83,14 @@ const router = createRouter({
               name: 'DashboardOverviewComp',
               component: () => import('../views/DashboardOverviewView.vue'),
               meta: { requiresAuth: true, requiresSuperAdmin: true }
+            },
+            {
+              path: 'qa-records',
+              name: 'QaRecordsComp',
+              component: () => import('../views/QaRecordsView.vue'),
+              meta: { requiresAuth: true, requiresSuperAdmin: true }
             }
           ]
-        },
-        {
-          path: 'qa-records',
-          name: 'QaRecordsComp',
-          component: () => import('../views/QaRecordsView.vue'),
-          meta: { requiresAuth: true, requiresSuperAdmin: true }
         }
       ]
     },
