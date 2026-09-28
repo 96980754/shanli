@@ -1,7 +1,6 @@
-"""问题路由：简单问题用快速响应模型，复杂问题用默认/智能体模型。
+"""问题路由：简单问题统一使用个人页面的快速响应模型，复杂问题使用个人页面的默认对话模型。
 
-启用条件：全局配置了 fast_model（或历史智能体配置中配置了 model_simple）。简单问题使用快速响应模型，
-复杂问题保持当前已解析的默认/智能体模型；分档失败一律按复杂处理——省钱不能以答砸为代价，
+简单问题模型不再从智能体配置读取。分档失败一律按复杂处理——省钱不能以答砸为代价，
 宁可多花一次完整模型的调用。
 
 分档按 免费规则 → 小模型确认 的层级早退（形状仿 knowledge_scope_gate）：
@@ -88,32 +87,29 @@ async def route_question_model_spec(
     *,
     explicit_model_spec: str | None,
     base_spec: str,
-    agent_item,
-    agent_backend,
     question: str,
     has_image: bool,
     has_attachment: bool,
     thread_id: str,
     uid: str,
     db,
-    simple_model: str | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """run 创建点的路由入口：返回 (最终 model_spec, route 记录或 None)。
 
     优先级：请求显式手选 > 快速响应模型未配置（路由关闭）> 分档。前两种情况
     原样返回 base_spec 且不产生 route 记录，不触发任何额外查询或模型调用。
-    model_simple 配置了但不可用时直接报错，不静默回退。
+    个人页面的快速响应模型配置了但不可用时直接报错，不静默回退。
     """
     if isinstance(explicit_model_spec, str) and explicit_model_spec.strip():
         return base_spec, None
 
-    model_simple = simple_model if simple_model is not None else _configured_model_simple(agent_item, agent_backend)
+    model_simple = str(app_config.fast_model or "").strip()
     if not model_simple:
         return base_spec, None
 
     info = model_cache.get_model_info(model_simple)
     if not info or info.model_type != "chat":
-        raise HTTPException(status_code=422, detail=f"问题路由配置的简单问题模型不可用: '{model_simple}'")
+        raise HTTPException(status_code=422, detail=f"个人页面的快速响应模型不可用: '{model_simple}'")
 
     if await _thread_last_route_complex(db, thread_id, uid):
         verdict = {"complexity": "complex", "tier": "thread-inertia", "reason": "thread 上一 run 为 complex"}
@@ -159,16 +155,6 @@ async def classify_complexity(
     if complexity is None:
         return {"complexity": "complex", "tier": "fallback", "reason": "分档判定不可用，按复杂处理"}
     return {"complexity": complexity, "tier": "llm", "reason": "小模型分档"}
-
-
-def _configured_model_simple(agent_item, agent_backend) -> str:
-    """优先兼容历史智能体配置，否则使用全局快速响应模型。"""
-    config_json = getattr(agent_item, "config_json", None) or {}
-    config_context = config_json.get("context") if isinstance(config_json, dict) else {}
-    context = agent_backend.context_schema()
-    if isinstance(config_context, dict):
-        context.update_from_dict(config_context)
-    return (getattr(context, "model_simple", "") or getattr(app_config, "fast_model", "") or "").strip()
 
 
 async def _thread_last_route_complex(db, thread_id: str, uid) -> bool:

@@ -87,8 +87,8 @@ class AgentRunWaitTimeout(Exception):
         super().__init__(f"agent run {run_id} is still {status} after waiting")
 
 
-def resolve_agent_run_model_spec(model_spec: str | None, agent_item, agent_backend) -> str:
-    """解析本次 run 实际使用的模型：显式覆盖优先，否则配置模型，最后系统默认模型。"""
+def resolve_agent_run_model_spec(model_spec: str | None) -> str:
+    """解析本次 run 实际使用的模型：请求显式手选优先，否则用个人页面的默认对话模型。"""
     normalized = model_spec.strip() if isinstance(model_spec, str) else None
     if normalized:
         info = model_cache.get_model_info(normalized)
@@ -96,13 +96,7 @@ def resolve_agent_run_model_spec(model_spec: str | None, agent_item, agent_backe
             raise HTTPException(status_code=422, detail=f"未找到可用聊天模型: '{normalized}'")
         return normalized
 
-    context = agent_backend.context_schema()
-    config_json = getattr(agent_item, "config_json", None) or {}
-    config_context = config_json.get("context") if isinstance(config_json, dict) else {}
-    if isinstance(config_context, dict):
-        context.update_from_dict(config_context)
-
-    return resolve_chat_model_spec(getattr(context, "model", None))
+    return resolve_chat_model_spec(app_config.default_model)
 
 
 def _build_run_response(run) -> dict:
@@ -408,20 +402,17 @@ async def create_agent_run_view(
         if isinstance(parent_payload.get("route"), dict):
             route_record = parent_payload["route"]
     else:
-        resolved_model_spec = resolve_agent_run_model_spec(model_spec, scope.agent_item, scope.agent_backend)
-        # 问题路由（简单问题用 model_simple）：手选模型或未配置时零开销返回
+        resolved_model_spec = resolve_agent_run_model_spec(model_spec)
+        # 问题路由统一使用个人页面的全局快速响应模型
         resolved_model_spec, route_record = await route_question_model_spec(
             explicit_model_spec=model_spec,
             base_spec=resolved_model_spec,
-            agent_item=scope.agent_item,
-            agent_backend=scope.agent_backend,
             question=input_message.content,
             has_image=input_message.message_type == "multimodal_image" or bool(input_message.image_content),
             has_attachment=bool(meta.get("attachment_file_ids")),
             thread_id=thread_id,
             uid=current_uid,
             db=db,
-            simple_model=app_config.fast_model or None,
         )
 
     run_input_message = _prepare_run_input_message(

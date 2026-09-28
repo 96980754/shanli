@@ -138,145 +138,70 @@ async def test_classify_judge_exception_defaults_complex():
 # ---------- route_question_model_spec：优先级与惯性 ----------
 
 
-def _agent_item(config: dict | None = None):
-    return SimpleNamespace(config_json={"context": config or {}})
-
-
-class _Backend:
-    class context_schema:  # noqa: N801 — 仿 agent_run_service 测试的 _FakeBackend 形状
-        def __init__(self):
-            self.model = ""
-            self.model_simple = ""
-
-        def update_from_dict(self, data: dict):
-            for key, value in data.items():
-                if hasattr(self, key):
-                    setattr(self, key, value)
-
-
-def _patch_model_cache(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(question_routing.app_config, "fast_model", "")
+def _patch_fast_model(monkeypatch: pytest.MonkeyPatch, spec: str = "fast-1"):
+    """把个人页面的快速响应模型设为 spec（空串表示未配置、路由关闭）。"""
+    monkeypatch.setattr(question_routing.app_config, "fast_model", spec)
     monkeypatch.setattr(
         question_routing.model_cache,
         "get_model_info",
-        lambda spec: SimpleNamespace(model_type="chat") if spec == "fast-1" else None,
+        lambda value: SimpleNamespace(model_type="chat") if value == "fast-1" else None,
     )
+
+
+async def _route(**overrides):
+    kwargs = {
+        "explicit_model_spec": None,
+        "base_spec": "base",
+        "question": "f10 的价格是多少",
+        "has_image": False,
+        "has_attachment": False,
+        "thread_id": "t",
+        "uid": "u",
+        "db": None,
+    }
+    kwargs.update(overrides)
+    return await route_question_model_spec(**kwargs)
 
 
 @pytest.mark.asyncio
 async def test_route_explicit_model_spec_bypasses_routing(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
-    spec, route = await route_question_model_spec(
-        explicit_model_spec="claude-x",
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="hello",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
-    assert spec == "base"
-    assert route is None
-
-
-@pytest.mark.asyncio
-async def test_route_disabled_when_model_simple_empty(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({}),
-        agent_backend=_Backend(),
-        question="hello",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
-    assert spec == "base"
-    assert route is None
-
-
-@pytest.mark.asyncio
-async def test_route_uses_global_fast_model_when_agent_model_is_empty(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
-    monkeypatch.setattr(question_routing.app_config, "fast_model", "fast-1")
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(question_routing, "AgentRunRepository", _NoHistoryRepo)
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="default-1",
-        agent_item=_agent_item({}),
-        agent_backend=_Backend(),
-        question="f10 的价格是多少",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
-    assert spec == "fast-1"
-    assert route["complexity"] == "simple"
+    spec, route = await _route(explicit_model_spec="claude-x")
+    assert spec == "base"
+    assert route is None
 
 
 @pytest.mark.asyncio
-async def test_route_invalid_model_simple_raises(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
+async def test_route_disabled_when_fast_model_empty(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_model(monkeypatch, "")
+    spec, route = await _route(question="hello")
+    assert spec == "base"
+    assert route is None
+
+
+@pytest.mark.asyncio
+async def test_route_invalid_fast_model_raises(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_model(monkeypatch, "missing-model")
     with pytest.raises(HTTPException) as exc_info:
-        await route_question_model_spec(
-            explicit_model_spec=None,
-            base_spec="base",
-            agent_item=_agent_item({"model_simple": "missing-model"}),
-            agent_backend=_Backend(),
-            question="hello",
-            has_image=False,
-            has_attachment=False,
-            thread_id="t",
-            uid="u",
-            db=None,
-        )
+        await _route(question="hello")
     assert exc_info.value.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_route_simple_question_uses_model_simple(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
+async def test_route_simple_question_uses_fast_model(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(question_routing, "AgentRunRepository", _NoHistoryRepo)
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="f10 的价格是多少",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
+    spec, route = await _route()
     assert spec == "fast-1"
     assert route == {"complexity": "simple", "tier": "rule", "reason": "短问题且无复杂信号"}
 
 
 @pytest.mark.asyncio
 async def test_route_complex_question_keeps_base_spec(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(question_routing, "AgentRunRepository", _NoHistoryRepo)
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="hello",
-        has_image=False,
-        has_attachment=True,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
+    spec, route = await _route(question="hello", has_attachment=True)
     assert spec == "base"
     assert route["complexity"] == "complex"
     assert route["tier"] == "rule"
@@ -285,48 +210,26 @@ async def test_route_complex_question_keeps_base_spec(monkeypatch: pytest.Monkey
 @pytest.mark.asyncio
 async def test_route_thread_inertia_overrides_simple_rules(monkeypatch: pytest.MonkeyPatch):
     """短问题本应判 simple，但 thread 上一 run 是 complex 时必须粘滞到 complex。"""
-    _patch_model_cache(monkeypatch)
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(
         question_routing,
         "AgentRunRepository",
         lambda db: _LastRunRepo(db, last_run=SimpleNamespace(input_payload={"route": {"complexity": "complex"}})),
     )
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="f10 的价格是多少",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
+    spec, route = await _route()
     assert spec == "base"
     assert route == {"complexity": "complex", "tier": "thread-inertia", "reason": "thread 上一 run 为 complex"}
 
 
 @pytest.mark.asyncio
 async def test_route_thread_inertia_not_triggered_by_simple_history(monkeypatch: pytest.MonkeyPatch):
-    _patch_model_cache(monkeypatch)
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(
         question_routing,
         "AgentRunRepository",
         lambda db: _LastRunRepo(db, last_run=SimpleNamespace(input_payload={"route": {"complexity": "simple"}})),
     )
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="f10 的价格是多少",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
+    spec, route = await _route()
     assert spec == "fast-1"
     assert route["complexity"] == "simple"
 
@@ -334,23 +237,12 @@ async def test_route_thread_inertia_not_triggered_by_simple_history(monkeypatch:
 @pytest.mark.asyncio
 async def test_route_thread_inertia_ignores_runs_without_route(monkeypatch: pytest.MonkeyPatch):
     """subagent 等未路由 run 没有 route 记录，不构成惯性。"""
-    _patch_model_cache(monkeypatch)
+    _patch_fast_model(monkeypatch)
     monkeypatch.setattr(
         question_routing,
         "AgentRunRepository",
         lambda db: _LastRunRepo(db, last_run=SimpleNamespace(input_payload={"model_spec": "base"})),
     )
-    spec, route = await route_question_model_spec(
-        explicit_model_spec=None,
-        base_spec="base",
-        agent_item=_agent_item({"model_simple": "fast-1"}),
-        agent_backend=_Backend(),
-        question="f10 的价格是多少",
-        has_image=False,
-        has_attachment=False,
-        thread_id="t",
-        uid="u",
-        db=None,
-    )
+    spec, route = await _route()
     assert spec == "fast-1"
     assert route["complexity"] == "simple"

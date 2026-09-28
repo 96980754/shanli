@@ -67,6 +67,8 @@ export const useAgentStore = defineStore(
 
     const configurableItems = computed(() => {
       const items = { ...(selectedAgent.value?.configurable_items || {}) }
+      delete items.model
+      delete items.model_simple
       Object.keys(items).forEach((key) => {
         const item = items[key]
         if (item?.x_oap_ui_config) {

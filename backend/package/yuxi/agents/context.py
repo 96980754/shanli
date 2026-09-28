@@ -195,8 +195,9 @@ class BaseContext:
         metadata={
             "name": "智能体模型",
             "options": [],
-            "description": "智能体的驱动模型，留空时使用系统默认模型。",
+            "description": "已统一使用个人页面的默认对话模型。",
             "kind": "llm",
+            "hide": True,
         },
     )
     # 问题路由：配置后启用“简单问题用轻量模型”，留空即关闭（行为与未启用完全一致）
@@ -205,8 +206,9 @@ class BaseContext:
         metadata={
             "name": "简单问题模型",
             "options": [],
-            "description": "判定为简单问题时使用的轻量模型，留空则不启用问题路由（全部走智能体模型）。",
+            "description": "已统一使用个人页面的快速响应模型。",
             "kind": "llm",
+            "hide": True,
         },
     )
 
@@ -511,6 +513,10 @@ async def normalize_agent_context_config(
     raw_context = dict(context) if isinstance(context, dict) else {}
     filtered = filter_config_by_role({"context": raw_context}, getattr(user, "role", None), schema)
     normalized = dict(filtered.get("context") or {})
+    # 模型统一由个人页面的全局 default_model/fast_model 决定；兼容历史 Agent
+    # 配置但不再让旧的 per-agent model/model_simple 覆盖全局设置。
+    normalized.pop("model", None)
+    normalized.pop("model_simple", None)
     field_names = {item.name for item in fields(schema)}
     resource_fields = _AGENT_RESOURCE_FIELDS & field_names
     if not resource_fields:

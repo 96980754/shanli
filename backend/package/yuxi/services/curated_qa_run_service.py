@@ -137,7 +137,7 @@ async def try_create_curated_qa_run(
     if scope.existing_run:
         return _run_response(scope.existing_run)
 
-    resolved_model_spec = resolve_agent_run_model_spec(None, scope.agent_item, scope.agent_backend)
+    resolved_model_spec = resolve_agent_run_model_spec(None)
     input_metadata: dict[str, Any] = {"request_id": request_id, "answer_source": answer_source}
     if raw_message := input_message.raw_message():
         input_metadata["raw_message"] = raw_message

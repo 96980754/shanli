@@ -1242,10 +1242,22 @@ async def test_cancel_agent_run_view_cascades_children(monkeypatch: pytest.Monke
     assert signals == [("child-1", True), ("child-2", True), ("parent-run", True)]
 
 
+def test_resolve_agent_run_model_spec_uses_global_default(monkeypatch: pytest.MonkeyPatch):
+    """不传模型时使用个人页面的默认对话模型；历史智能体级 model 配置不再参与。"""
+    monkeypatch.setattr(agent_run_service.app_config, "default_model", "global-default")
+    monkeypatch.setattr(
+        agent_run_service.model_cache,
+        "get_model_info",
+        lambda spec: SimpleNamespace(model_type="chat"),
+    )
+
+    assert agent_run_service.resolve_agent_run_model_spec(None) == "global-default"
+
+
 def test_resolve_agent_run_model_spec_rejects_unknown_explicit_model(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(agent_run_service.model_cache, "get_model_info", lambda spec: None)
     with pytest.raises(agent_run_service.HTTPException) as exc:
-        agent_run_service.resolve_agent_run_model_spec("nope", SimpleNamespace(config_json={}), _FakeBackend())
+        agent_run_service.resolve_agent_run_model_spec("nope")
     assert exc.value.status_code == 422
 
 
@@ -1256,7 +1268,7 @@ def test_resolve_agent_run_model_spec_rejects_non_chat_explicit_model(monkeypatc
         lambda spec: SimpleNamespace(model_type="embedding"),
     )
     with pytest.raises(agent_run_service.HTTPException) as exc:
-        agent_run_service.resolve_agent_run_model_spec("embed-1", SimpleNamespace(config_json={}), _FakeBackend())
+        agent_run_service.resolve_agent_run_model_spec("embed-1")
     assert exc.value.status_code == 422
 
 
@@ -1269,14 +1281,7 @@ def test_resolve_agent_run_model_spec_strips_explicit_chat_model(monkeypatch: py
 
     monkeypatch.setattr(agent_run_service.model_cache, "get_model_info", fake_get_model_info)
 
-    assert (
-        agent_run_service.resolve_agent_run_model_spec(
-            " gpt-x ",
-            SimpleNamespace(config_json={}),
-            _FakeBackend(),
-        )
-        == "gpt-x"
-    )
+    assert agent_run_service.resolve_agent_run_model_spec(" gpt-x ") == "gpt-x"
     assert seen == ["gpt-x"]
 
 
@@ -1291,8 +1296,11 @@ def _patch_agent_run_creation(
     existing_run_after_rollback: SimpleNamespace | None = None,
     parent_run: SimpleNamespace | None = None,
     raise_create_integrity_error: bool = False,
+    fast_model: str = "",
 ):
-    monkeypatch.setattr(agent_run_service.app_config, "fast_model", "")
+    # 问题路由默认关闭：只有显式传 fast_model（个人页面的快速响应模型）的用例才会进入
+    # 分档，避免无关用例被路由改写 model_spec。
+    monkeypatch.setattr(agent_run_service.app_config, "fast_model", fast_model)
     runs_by_id = {
         "parent-agent-run": SimpleNamespace(
             id="parent-agent-run",
@@ -1344,6 +1352,7 @@ def _patch_agent_run_creation(
     async def fake_get_arq_pool():
         return Queue()
 
+    monkeypatch.setattr(agent_run_service.app_config, "default_model", "agent-default-model")
     monkeypatch.setattr(agent_run_service.agent_manager, "get_agent", lambda backend_id: _FakeBackend())
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
@@ -1386,7 +1395,7 @@ class _NoRouteHistoryRepo:
 
 
 @pytest.mark.asyncio
-async def test_create_chat_run_routes_simple_question_to_model_simple(monkeypatch: pytest.MonkeyPatch):
+async def test_create_chat_run_routes_simple_question_to_fast_model(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         agent_run_service.model_cache,
         "get_model_info",
@@ -1396,6 +1405,7 @@ async def test_create_chat_run_routes_simple_question_to_model_simple(monkeypatc
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model_simple": "fast-1"}},
+        fast_model="fast-1",
     )
 
     await agent_run_service.create_agent_run_view(
@@ -1413,7 +1423,7 @@ async def test_create_chat_run_routes_simple_question_to_model_simple(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_create_chat_run_routes_complex_question_to_agent_model(monkeypatch: pytest.MonkeyPatch):
+async def test_create_chat_run_routes_complex_question_to_default_model(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         agent_run_service.model_cache,
         "get_model_info",
@@ -1423,6 +1433,7 @@ async def test_create_chat_run_routes_complex_question_to_agent_model(monkeypatc
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model_simple": "fast-1"}},
+        fast_model="fast-1",
     )
 
     await agent_run_service.create_agent_run_view(
@@ -1450,6 +1461,7 @@ async def test_create_chat_run_explicit_model_overrides_routing(monkeypatch: pyt
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model_simple": "fast-1"}},
+        fast_model="fast-1",
     )
 
     await agent_run_service.create_agent_run_view(
@@ -1468,10 +1480,10 @@ async def test_create_chat_run_explicit_model_overrides_routing(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_create_chat_run_keeps_route_disabled_payload_without_model_simple(
+async def test_create_chat_run_keeps_route_disabled_without_global_fast_model(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """回归：未配置 model_simple 时 payload 与未启用路由时完全一致（无 route 键）。"""
+    """回归：个人页面未配置快速响应模型时，payload 与未启用路由时完全一致（无 route 键）。"""
     db = _patch_agent_run_creation(monkeypatch)
 
     await agent_run_service.create_agent_run_view(
@@ -1487,7 +1499,7 @@ async def test_create_chat_run_keeps_route_disabled_payload_without_model_simple
 
 
 @pytest.mark.asyncio
-async def test_create_chat_run_thread_inertia_keeps_agent_model(monkeypatch: pytest.MonkeyPatch):
+async def test_create_chat_run_thread_inertia_keeps_default_model(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         agent_run_service.model_cache,
         "get_model_info",
@@ -1506,6 +1518,7 @@ async def test_create_chat_run_thread_inertia_keeps_agent_model(monkeypatch: pyt
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model_simple": "fast-1"}},
+        fast_model="fast-1",
     )
 
     await agent_run_service.create_agent_run_view(
@@ -1549,7 +1562,7 @@ def _make_thread_history_repo(store: dict):
 
 
 def _patch_routed_thread(monkeypatch: pytest.MonkeyPatch):
-    """启用 model_simple=fast-1 的路由环境（thread 历史跨 run 共享），返回可复用 db。"""
+    """启用全局快速响应模型的路由环境（thread 历史跨 run 共享），返回可复用 db。"""
     monkeypatch.setattr(
         agent_run_service.model_cache,
         "get_model_info",
@@ -1558,6 +1571,7 @@ def _patch_routed_thread(monkeypatch: pytest.MonkeyPatch):
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model_simple": "fast-1"}},
+        fast_model="fast-1",
     )
     repo = _make_thread_history_repo({})
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", repo)
@@ -1652,7 +1666,8 @@ async def test_create_chat_run_with_image_persists_multimodal_message_type(monke
 
 
 @pytest.mark.asyncio
-async def test_create_chat_run_snapshots_agent_configured_model_spec(monkeypatch: pytest.MonkeyPatch):
+async def test_create_chat_run_ignores_legacy_agent_configured_model(monkeypatch: pytest.MonkeyPatch):
+    """历史智能体配置里的 model 不再生效，完整问题统一用个人页面的默认对话模型。"""
     db = _patch_agent_run_creation(
         monkeypatch,
         agent_config_json={"context": {"model": "agent-config-model"}},
@@ -1668,33 +1683,7 @@ async def test_create_chat_run_snapshots_agent_configured_model_spec(monkeypatch
         model_spec=None,
     )
 
-    assert db.created_run_kwargs["input_payload"]["model_spec"] == "agent-config-model"
-    assert "model_spec" not in db.added[0].extra_metadata
-
-
-@pytest.mark.asyncio
-async def test_create_chat_run_snapshots_system_default_when_agent_model_empty(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        agent_run_service,
-        "resolve_chat_model_spec",
-        lambda model_spec: str(model_spec).strip() if str(model_spec or "").strip() else "system-default-model",
-    )
-    db = _patch_agent_run_creation(
-        monkeypatch,
-        agent_config_json={"context": {"model": ""}},
-    )
-
-    await agent_run_service.create_agent_run_view(
-        input_message=_chat_input("hello"),
-        agent_slug="default",
-        thread_id="thread-1",
-        meta={"request_id": "req-1"},
-        current_uid="user-1",
-        db=db,
-        model_spec=None,
-    )
-
-    assert db.created_run_kwargs["input_payload"]["model_spec"] == "system-default-model"
+    assert db.created_run_kwargs["input_payload"]["model_spec"] == "agent-default-model"
     assert "model_spec" not in db.added[0].extra_metadata
 
 

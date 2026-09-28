@@ -209,8 +209,8 @@ def _patch_run_record_creation(
     db.active_run = active_run
 
     class _FakeContext:
-        def __init__(self):
-            self.model = "agent-default-model"
+        # 智能体级 model 配置已废弃：即使这里配了值，运行时也必须走个人页面的默认对话模型。
+        model = "legacy-agent-model"
 
         def update_from_dict(self, data: dict):
             for key, value in data.items():
@@ -276,6 +276,7 @@ def _patch_run_record_creation(
             )
             return self.db.created_run
 
+    monkeypatch.setattr(agent_run_service.app_config, "default_model", "agent-default-model")
     monkeypatch.setattr(agent_run_service.agent_manager, "get_agent", lambda backend_id: _FakeBackend())
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
