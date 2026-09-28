@@ -242,8 +242,10 @@ def _query_error(kb_id: str, reason: str, message: str) -> dict[str, Any]:
 async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, runtime: ToolRuntime = None) -> Any:
     """在指定知识库中检索内容
 
-    当用户需要查询具体内容时使用此工具。kb_id 是知识库资源 ID，也就是 kb_id；返回结果中的
-    file_id 可继续用于 find_kb_document 或 open_kb_document。
+    当用户需要查询具体内容时使用此工具。返回的片段若已直接包含用户所问的结论、参数或步骤，
+    应直接基于片段作答，不要为了补充上下文继续打开文件。kb_id 是知识库资源 ID，也就是 kb_id；
+    返回结果中的 file_id 仅在片段被截断、存在歧义、缺少关键上下文，或用户要求原文/完整出处时，
+    才继续用于 find_kb_document 或 open_kb_document。
     """
     if not kb_id:
         return _query_error("", "invalid_request", "请提供 kb_id")
@@ -341,7 +343,10 @@ async def query_kbs(
 
     当一个问题可能同时涉及多个知识库（如产品资料、证书认证、解决方案）时使用：
     一次性传入多个 kb_id，各库并行检索，比逐个调用 query_kb 更快。
-    返回结果按 kb_id 标注来源，可直接用于回答。单库问题请用 query_kb。
+    返回结果按 kb_id 标注来源，可直接用于回答。若片段已直接包含用户所问的结论、参数或步骤，
+    应直接基于片段作答，不要默认继续打开文件；只有片段被截断、存在歧义、缺少关键上下文，
+    或用户要求原文/完整出处时，才使用 find_kb_document 或 open_kb_document。
+    单库问题请用 query_kb。
     """
     return await retrieve_kbs(kb_ids, query_text, file_name=file_name, runtime=runtime)
 
@@ -418,7 +423,10 @@ async def open_kb_document(
 ) -> dict[str, Any] | str:
     """按行窗口打开知识库文档原文
 
-    当 query_kb 返回的片段不足以回答问题，或需要查看某个文档的上下文时使用。
+    这是检索后的条件性核对工具，不是每次 query_kb/query_kbs 成功后的默认下一步。
+    仅当检索片段被截断、存在歧义、缺少回答所需的关键上下文，或用户明确要求原文、上下文、
+    页码、章节或完整出处时使用。若片段已经直接包含用户所问的结论、参数或步骤，应直接基于
+    片段回答，不要调用本工具。
     kb_id 是知识库资源 ID，也就是 kb_id；file_id 是知识库文件 ID。
     """
     normalized_kb_id = str(kb_id or "").strip()
@@ -475,7 +483,10 @@ async def find_kb_document(
 ) -> dict[str, Any] | str:
     """在已知知识库文件内做关键词或正则定位。
 
-    当 query_kb 已找到候选文件，但需要在该文件内定位术语、指标、章节或实体时使用。
+    这是检索后的条件性核对工具，不是每次 query_kb/query_kbs 成功后的默认下一步。
+    仅当已找到候选文件，且需要在文件内定位缺失的术语、指标或章节，或需要核对被截断/有歧义的
+    片段时使用。若检索片段已经直接包含用户所问的结论、参数或步骤，应直接基于片段回答，
+    不要调用本工具；用户明确要求原文或完整出处时也可使用。
     """
     normalized_kb_id = str(kb_id or "").strip()
     normalized_file_id = str(file_id or "").strip()
