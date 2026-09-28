@@ -105,15 +105,12 @@
         </div>
       </div>
     </div>
-    <div class="account-card user-config-card">
-      <UserConfigSettingsCard />
-    </div>
+    <!-- 用户配置「是否启用 Memory」为预留开关：仅落库、未接入智能体运行逻辑，暂不展示。
+         需要恢复时把 UserConfigSettingsCard 与对应 import 加回即可。 -->
   </div>
 </template>
 
 <script setup>
-import UserConfigSettingsCard from '@/components/UserConfigSettingsCard.vue'
-
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
