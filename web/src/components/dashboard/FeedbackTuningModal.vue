@@ -11,33 +11,37 @@
     @cancel="reset"
   >
     <div v-if="loading" class="loading-wrap"><a-spin /></div>
-    <a-form v-else-if="context" layout="vertical">
-      <a-alert
-        type="info"
-        show-icon
-        :message="t('feedback.saveTip')"
-        class="tip"
-      />
+    <div v-else-if="context">
+      <div class="answer-hint">
+        <Info :size="16" class="answer-hint-icon" />
+        <div class="answer-hint-body">
+          <p class="answer-hint-title">{{ t('feedback.saveTip') }}</p>
+        </div>
+      </div>
 
-      <a-alert
-        v-if="isJsonQuestion"
-        type="warning"
-        show-icon
-        :message="t('feedback.jsonQuestionTip')"
-        class="tip"
-      />
+      <div v-if="isJsonQuestion" class="json-hint">
+        <TriangleAlert :size="16" class="json-hint-icon" />
+        <div class="answer-hint-body">
+          <p class="answer-hint-desc">{{ t('feedback.jsonQuestionTip') }}</p>
+        </div>
+      </div>
 
-      <a-form-item :label="t('feedback.userQuestionLabel')">
-        <div class="readonly-block" :class="{ 'question-json': isJsonQuestion }">
+      <div class="question-card">
+        <div class="question-label">{{ t('feedback.userQuestionLabel') }}</div>
+        <div class="question-text" :class="{ 'question-json': isJsonQuestion }">
           {{ displayQuestion }}
         </div>
-      </a-form-item>
+      </div>
 
-      <a-form-item :label="t('feedback.originalAnswerLabel')">
-        <div class="readonly-block original-answer">{{ context.current_answer || '-' }}</div>
-      </a-form-item>
+      <div class="question-card">
+        <div class="question-label">{{ t('feedback.originalAnswerLabel') }}</div>
+        <div class="question-text original-answer">{{ context.current_answer || '-' }}</div>
+      </div>
 
-      <a-form-item :label="t('feedback.confirmAnswerLabel')" required>
+      <div class="answer-field">
+        <div class="field-label">
+          {{ t('feedback.answerFieldLabel') }}<span class="field-required">*</span>
+        </div>
         <a-textarea
           v-model:value="answer"
           :rows="8"
@@ -45,18 +49,20 @@
           show-count
           :placeholder="t('feedback.answerPlaceholder')"
         />
-      </a-form-item>
+      </div>
 
       <div v-if="context.qa_pair" class="existing-tip">
-        {{ $t('feedback.existingQaTip', { count: context.qa_pair.hit_count || 0 }) }}
+        <History :size="13" />
+        <span>{{ t('feedback.existingQaTip', { count: context.qa_pair.hit_count || 0 }) }}</span>
       </div>
-    </a-form>
+    </div>
   </a-modal>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { History, Info, TriangleAlert } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { dashboardApi } from '@/apis/dashboard_api'
 
@@ -148,30 +154,101 @@ defineExpose({ show })
   justify-content: center;
   padding: 64px 0;
 }
-.tip {
-  margin-bottom: 20px;
+
+/* ---------- 调优答案弹窗（与「人工补答」保持同一版式） ---------- */
+.answer-hint,
+.json-hint {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
 }
-.readonly-block {
-  padding: 10px 12px;
+.answer-hint {
+  border: 1px solid var(--color-info-100);
+  background: var(--color-info-50);
+}
+.json-hint {
+  border: 1px solid var(--color-warning-100);
+  background: var(--color-warning-50);
+}
+.answer-hint-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-info-700);
+}
+.json-hint-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-warning-900);
+}
+.answer-hint-body {
+  min-width: 0;
+}
+.answer-hint-title {
+  margin: 0;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.answer-hint-desc {
+  margin: 0;
+  color: var(--gray-700);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.question-card {
+  margin-bottom: 16px;
+  padding: 12px 14px;
   border: 1px solid var(--gray-150);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--gray-25);
-  color: var(--gray-800);
+}
+.question-label {
+  margin-bottom: 6px;
+  color: var(--gray-600);
+  font-size: 12px;
+}
+.question-text {
+  max-height: 140px;
+  overflow-y: auto;
+  color: var(--gray-900);
+  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
-
+.original-answer {
+  font-size: 13px;
+}
 .question-json {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.5;
 }
-.original-answer {
-  max-height: 180px;
-  overflow-y: auto;
+
+.answer-field {
+  margin-bottom: 16px;
 }
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+}
+.field-required {
+  color: var(--color-error-500);
+}
+
 .existing-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--gray-600);
   font-size: 12px;
 }

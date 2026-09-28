@@ -81,56 +81,75 @@
       :ok-button-props="{ disabled: webSearching || !webAnswer.trim() }"
       @ok="saveWebQa"
     >
-      <a-alert
-        type="info"
-        show-icon
-        class="web-search-alert"
-        :message="t('gaps.answerAlertMessage')"
-        :description="t('gaps.answerAlertDescription')"
-      />
-
-      <a-form layout="vertical">
-        <a-form-item :label="t('gaps.uncoveredQuestionLabel')">
-          <a-textarea :value="webSearchGap?.question || ''" :rows="2" readonly />
-        </a-form-item>
-
-        <div class="web-search-toolbar">
-          <span class="web-search-agent">{{
-            $t('gaps.agentInfo', { name: webSearchGap?.agent_name || webSearchGap?.agent_slug || '-' })
-          }}</span>
-          <a-button :loading="webSearching" @click="runWebSearch">{{ $t('gaps.webSearchGenerateLabel') }}</a-button>
+      <div class="answer-hint">
+        <Info :size="16" class="answer-hint-icon" />
+        <div class="answer-hint-body">
+          <p class="answer-hint-title">{{ t('gaps.answerHintTitle') }}</p>
+          <p class="answer-hint-desc">{{ t('gaps.answerHintDesc') }}</p>
         </div>
+      </div>
 
-        <div v-if="webSearching" class="web-search-loading">
-          <a-spin />
-          <span>{{ $t('gaps.webSearchLoadingText') }}</span>
-        </div>
+      <div class="question-card">
+        <div class="question-label">{{ t('gaps.uncoveredQuestionLabel') }}</div>
+        <div class="question-text">{{ webSearchGap?.question || '-' }}</div>
+      </div>
 
-        <template v-else>
-          <a-form-item :label="t('feedback.confirmAnswerLabel')" required>
-            <a-textarea
-              v-model:value="webAnswer"
-              :rows="8"
-              :maxlength="20000"
-              show-count
-              :placeholder="t('gaps.answerPlaceholder')"
-            />
-          </a-form-item>
+      <div class="draft-row">
+        <span class="agent-chip">
+          <Bot :size="15" />
+          {{ t('gaps.agentInfo', { name: webSearchGap?.agent_name || webSearchGap?.agent_slug || '-' }) }}
+        </span>
+        <a-button :loading="webSearching" @click="runWebSearch">
+          <template #icon><Globe :size="14" /></template>
+          {{ t('gaps.webSearchGenerateLabel') }}
+        </a-button>
+      </div>
 
-          <div class="source-section">
-            <div class="source-title">{{ $t('gaps.sourceTitle') }}</div>
-            <a-empty v-if="webSources.length === 0" :image="simpleImage" :description="t('gaps.noSources')" />
-            <div v-else class="source-list">
-              <div v-for="(source, index) in webSources" :key="`${source.url}-${index}`" class="source-item">
-                <a :href="source.url" target="_blank" rel="noopener noreferrer">
-                  {{ index + 1 }}. {{ source.title || source.url }}
-                </a>
-                <p v-if="source.content">{{ source.content }}</p>
-              </div>
-            </div>
+      <div v-if="webSearching" class="draft-loading">
+        <LoaderCircle :size="18" class="spin" />
+        <span>{{ t('gaps.webSearchLoadingText') }}</span>
+      </div>
+
+      <template v-else>
+        <div class="answer-field">
+          <div class="field-label">
+            {{ t('gaps.answerFieldLabel') }}<span class="field-required">*</span>
           </div>
-        </template>
-      </a-form>
+          <a-textarea
+            v-model:value="webAnswer"
+            :rows="8"
+            :maxlength="20000"
+            show-count
+            :placeholder="t('gaps.answerPlaceholder')"
+          />
+        </div>
+
+        <div class="source-section">
+          <div class="source-header">
+            <span class="source-title">{{ t('gaps.sourceTitle') }}</span>
+            <span v-if="webSources.length" class="source-count">{{ webSources.length }}</span>
+          </div>
+          <a-empty v-if="webSources.length === 0" :image="simpleImage" :description="t('gaps.noSources')" />
+          <div v-else class="source-list">
+            <a
+              v-for="(source, index) in webSources"
+              :key="`${source.url}-${index}`"
+              class="source-item"
+              :href="source.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="source-index">{{ index + 1 }}</span>
+              <span class="source-body">
+                <span class="source-name">{{ source.title || source.url }}</span>
+                <span v-if="source.content" class="source-snippet" :title="source.content">
+                  {{ source.content }}
+                </span>
+              </span>
+            </a>
+          </div>
+        </div>
+      </template>
     </a-modal>
   </div>
 </template>
@@ -139,6 +158,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Empty, message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
+import { Bot, Globe, Info, LoaderCircle } from 'lucide-vue-next'
 import { dashboardApi } from '@/apis/dashboard_api'
 import { formatFullDateTime } from '@/utils/time'
 import { useConfigStore } from '@/stores/config'
@@ -318,54 +338,174 @@ onMounted(loadGaps)
 .refresh-btn { margin-left: auto; }
 .question-link { height: auto; padding: 0; text-align: left; white-space: normal; }
 .drawer-actions { width: 100%; margin-top: 20px; }
-.web-search-alert { margin-bottom: 18px; }
-.web-search-toolbar {
+
+/* ---------- 人工补答弹窗 ---------- */
+.answer-hint {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-info-100);
+  border-radius: 8px;
+  background: var(--color-info-50);
+}
+.answer-hint-icon { flex: 0 0 auto; margin-top: 2px; color: var(--color-info-700); }
+.answer-hint-body { min-width: 0; }
+.answer-hint-title {
+  margin: 0;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.answer-hint-desc {
+  margin: 4px 0 0;
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.question-card {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  background: var(--gray-25);
+}
+.question-label { margin-bottom: 6px; color: var(--gray-600); font-size: 12px; }
+.question-text {
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--gray-900);
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.draft-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
 }
-.web-search-agent { color: var(--gray-600); font-size: 13px; }
-.web-search-loading {
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gray-600);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draft-loading {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 180px;
+  min-height: 220px;
   color: var(--gray-600);
+  font-size: 13px;
 }
+.answer-field { margin-bottom: 16px; }
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+}
+.field-required { color: var(--color-error-500); }
 .source-section {
   padding-top: 14px;
   border-top: 1px solid var(--gray-150);
 }
-.source-title {
+.source-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
-  color: var(--gray-900);
-  font-weight: 600;
+}
+.source-title { color: var(--gray-900); font-size: 13px; font-weight: 600; }
+.source-count {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 18px;
 }
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 260px;
+  gap: 8px;
+  max-height: 240px;
   overflow-y: auto;
 }
 .source-item {
+  display: flex;
+  gap: 10px;
   padding: 10px 12px;
-  background: var(--gray-25);
-  border: 1px solid var(--gray-100);
+  border: 1px solid var(--gray-150);
   border-radius: 6px;
-  a { font-size: 13px; font-weight: 500; }
-  p {
-    margin: 6px 0 0;
-    color: var(--gray-600);
-    font-size: 12px;
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  background: var(--gray-25);
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    border-color: var(--main-50);
+    background: var(--gray-0);
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--main-color);
+    outline-offset: 1px;
+  }
+}
+.source-index {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: 11px;
+  font-weight: 600;
+}
+.source-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.source-name {
+  color: var(--main-700);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.source-snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.spin { animation: spin 1s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
