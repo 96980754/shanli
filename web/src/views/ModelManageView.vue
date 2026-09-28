@@ -14,9 +14,8 @@ const router = useRouter()
 const userStore = useUserStore()
 const { t } = useI18n()
 
-// 「智能体」页签暂隐藏——与 AppLayout.vue 的「全库搜索」同一做法：把这里改为 true 即恢复。
-// 页签、面板、统计条、切换逻辑都原样留着，由这一个开关决定它们出不出现。
-const SHOW_AGENT_TAB = false
+// 智能体管理页签已恢复；页签、面板、统计条和切换逻辑共用这一个开关。
+const SHOW_AGENT_TAB = true
 
 const activeTab = ref('agents')
 const agentPanelRef = ref(null)
