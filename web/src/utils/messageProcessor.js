@@ -376,6 +376,16 @@ export class MessageProcessor {
     const text = typeof answerText === 'string' ? answerText : ''
     if (!text) return chunks
 
+    const referencedNumbers = new Set(
+      [...text.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]))
+    )
+    if (referencedNumbers.size) {
+      const numbered = chunks.filter((chunk) =>
+        referencedNumbers.has(chunk?.metadata?.source_reference)
+      )
+      if (chunks.some((chunk) => chunk?.metadata?.source_reference)) return numbered
+    }
+
     const citationNames = MessageProcessor.extractCitationNames(text)
     if (citationNames.length === 0) return chunks
     const citationCores = citationNames
@@ -532,13 +542,20 @@ export class MessageProcessor {
         i18n.global.t('errors.unknownSource')
       const displayName = String(source).split(/[\\/]/).filter(Boolean).pop() || source
       const product = metadata.product || ''
-      const groupKey = product ? `${product}::${displayName}` : displayName
+      const sourceReference = metadata.source_reference
+      const groupKey =
+        sourceReference && item.kb_id && item.file_id
+          ? `${item.kb_id}::${item.file_id}`
+          : product
+            ? `${product}::${displayName}`
+            : displayName
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           key: groupKey,
           filename: source,
           displayName,
           product,
+          sourceReference,
           kb_id: item?.kb_id || '',
           file_id: item?.file_id || '',
           chunks: []

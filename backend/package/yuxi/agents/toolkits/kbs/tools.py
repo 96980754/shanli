@@ -238,6 +238,30 @@ def _query_error(kb_id: str, reason: str, message: str) -> dict[str, Any]:
     ).model_dump()
 
 
+def _number_query_sources(output: dict[str, Any], runtime: ToolRuntime | None) -> dict[str, Any]:
+    """Number real file evidence once per agent run, including repeated retrievals."""
+    if output.get("status") != "ok":
+        return output
+
+    context = getattr(runtime, "context", None)
+    references = getattr(context, "_knowledge_source_references", None)
+    if references is None:
+        references = {}
+        if context is not None:
+            context._knowledge_source_references = references
+
+    for result in output["results"]:
+        kb_id = str(result.get("kb_id") or output.get("kb_id") or "")
+        file_id = str(result.get("file_id") or "")
+        if not kb_id or not file_id:
+            continue
+        key = (kb_id, file_id)
+        if key not in references:
+            references[key] = len(references) + 1
+        result["metadata"]["source_reference"] = references[key]
+    return output
+
+
 @tool(category="knowledge", tags=["知识库"], args_schema=QueryKBInput)
 async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, runtime: ToolRuntime = None) -> Any:
     """在指定知识库中检索内容
@@ -273,7 +297,7 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         else:
             result = retriever(query_text, **kwargs)
 
-        return await _build_query_output(target_kb_id, result)
+        return _number_query_sources(await _build_query_output(target_kb_id, result), runtime)
 
     except Exception as e:
         logger.exception("知识库检索失败 kb_id={}: {}", target_kb_id, e)
@@ -404,7 +428,8 @@ async def retrieve_kbs(
         return SearchOutputSchema(status="insufficient", reason="no_results", kb_id="").model_dump()
 
     queried_kb_ids = ",".join(target_kb_id for _, target_kb_id in targets)
-    return SearchOutputSchema(status="ok", kb_id=queried_kb_ids, results=merged_results).model_dump()
+    output = SearchOutputSchema(status="ok", kb_id=queried_kb_ids, results=merged_results).model_dump()
+    return _number_query_sources(output, runtime)
 
 
 @tool(category="knowledge", tags=["知识库"], args_schema=OpenKBDocumentInput)

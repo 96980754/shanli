@@ -1134,5 +1134,14 @@ export const flowchartApi = {
     apiPost(
       `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/reparse`,
       { expected_revision: expectedRevision }
+    ),
+  confirmFlowchart: (kbId, fileId, expectedRevision) =>
+    apiPost(
+      `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/confirm`,
+      { expected_revision: expectedRevision }
+    ),
+  retryFlowchartIndex: (kbId, fileId) =>
+    apiPost(
+      `/api/knowledge/databases/${encodeURIComponent(kbId)}/flowcharts/${encodeURIComponent(fileId)}/retry-index`
     )
 }

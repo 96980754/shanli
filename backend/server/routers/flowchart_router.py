@@ -178,4 +178,22 @@ async def confirm_flowchart(
         _raise_flowchart_http_error(error)
 
 
+@flowcharts.post("/databases/{kb_id}/flowcharts/{file_id}/retry-index")
+async def retry_flowchart_index(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_required_user),
+):
+    await _require_kb_permission(current_user, kb_id, "can_manage")
+    await _ensure_database_supports_documents(kb_id, "重试流程图索引")
+    try:
+        return await FlowchartIngestionService().retry_index(
+            kb_id=kb_id,
+            file_id=file_id,
+            operator_id=current_user.uid,
+        )
+    except Exception as error:  # noqa: BLE001
+        _raise_flowchart_http_error(error)
+
+
 __all__ = ["flowcharts"]

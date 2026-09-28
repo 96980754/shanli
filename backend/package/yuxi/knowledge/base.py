@@ -1,5 +1,4 @@
 import asyncio
-import mimetypes
 import os
 import re
 import secrets
@@ -852,7 +851,7 @@ class KnowledgeBase(ABC):
         original_path = self._original_file_path(file_meta)
         if not original_path:
             raise ValueError("文件没有可下载的原始内容")
-        media_type = file_meta.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        media_type = detect_media_type(filename)
         return {
             "filename": filename,
             "content": await self._read_minio_bytes(original_path),

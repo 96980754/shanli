@@ -105,6 +105,33 @@ def test_office_file_entry_exposes_logical_file_availability(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "expected_type"),
+    [
+        ("flowchart.pdf", "application/pdf"),
+        ("ordinary.pdf", "application/pdf"),
+        ("ordinary.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("unknown.unrecognizedextension", "application/octet-stream"),
+    ],
+)
+async def test_original_download_uses_filename_mime_not_legacy_content_type(
+    tmp_path, monkeypatch, filename, expected_type
+) -> None:
+    kb = make_kb(tmp_path)
+    kb.test_file_meta.update(filename=filename, content_type="file")
+
+    async def read_original(_path: str) -> bytes:
+        return b"original"
+
+    monkeypatch.setattr(kb, "_read_minio_bytes", read_original)
+    result = await kb.get_file_download("db1", "file1")
+
+    assert result["filename"] == filename
+    assert result["content"] == b"original"
+    assert result["media_type"] == expected_type
+
+
+@pytest.mark.asyncio
 async def test_read_office_pdf_preview_converts_and_caches_pdf(tmp_path, monkeypatch) -> None:
     kb = make_kb(tmp_path)
     minio_client = FakeMinioClient()

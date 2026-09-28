@@ -47,7 +47,7 @@ const run = () => {
       is_current: true,
       is_folder: false
     }),
-    true
+    false
   )
   assert.equal(
     canReparseFile({

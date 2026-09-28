@@ -462,6 +462,8 @@ class KnowledgeBaseManager:
         record = await self._get_flowchart_record(kb_id, file_id)
         if record is not None and record.confirmed_at is None:
             raise ValueError("流程图尚未确认，不能通过普通文档入口入库")
+        if record is not None and params:
+            raise ValueError("流程图确认后不能覆盖索引处理参数")
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.index_file(kb_id, file_id, operator_id, params=params)
 

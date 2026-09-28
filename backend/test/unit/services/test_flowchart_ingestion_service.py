@@ -24,6 +24,13 @@ from yuxi.services.flowchart_ingestion_service import (
 pytestmark = pytest.mark.asyncio
 
 PDF_PATH = "http://minio/knowledgebases/kb-1/upload/process_1234567890123.pdf"
+VALID_MARKDOWN = "# 采购审批\n\n" + "\n\n".join(
+    f"## {section}\n\n未识别到明确内容"
+    for section in (
+        "流程用途", "参与角色", "主流程", "条件分支", "退回与异常路径",
+        "关键上下游关系", "开始与结束", "补充说明",
+    )
+)
 
 
 def make_record(**overrides):
@@ -140,16 +147,9 @@ class MemoryMinio:
 
 class FakeVisionAnalyzer:
     async def analyze_flowchart(self, images, _prompt, model_spec):
-        markdown = "# 采购审批\n\n" + "\n\n".join(
-            f"## {section}\n\n未识别到明确内容"
-            for section in (
-                "流程用途", "参与角色", "主流程", "条件分支", "退回与异常路径",
-                "关键上下游关系", "开始与结束", "补充说明",
-            )
-        )
         return FlowchartAnalysisResult(
-            pages=(PageFlowchartAnalysis(1, markdown, ()),),
-            semantic_markdown=markdown,
+            pages=(PageFlowchartAnalysis(1, VALID_MARKDOWN, ()),),
+            semantic_markdown=VALID_MARKDOWN,
             warnings=(),
             model_spec=model_spec,
         )
@@ -168,9 +168,14 @@ def flowchart_service(monkeypatch):
     pdf.close()
     monkeypatch.setattr(module, "get_minio_client", lambda: minio)
     monkeypatch.setattr(module.config, "flowchart_vision_model_spec", "domestic:vision")
+
+    async def start_index(_kb_id, _file_id, _operator_id):
+        repository.record.status = FileStatus.INDEXED
+
     return (
         FlowchartIngestionService(
-            file_repository=repository, document_ingestion=ingestion, vision_analyzer=FakeVisionAnalyzer()
+            file_repository=repository, document_ingestion=ingestion,
+            vision_analyzer=FakeVisionAnalyzer(), index_starter=start_index,
         ),
         repository,
         ingestion,
@@ -332,7 +337,7 @@ async def test_confirm_freezes_draft_and_reparse_and_is_idempotent(flowchart_ser
         kb_id="kb-1",
         file_id="file-flow",
         expected_revision=0,
-        semantic_markdown="# 流程名称\n\n采购审批",
+        semantic_markdown=VALID_MARKDOWN,
         operator_id="admin",
     )
 
@@ -344,7 +349,7 @@ async def test_confirm_freezes_draft_and_reparse_and_is_idempotent(flowchart_ser
         kb_id="kb-1", file_id="file-flow", expected_revision=1, operator_id="admin"
     )
 
-    assert first["status"] == FileStatus.ERROR_INDEXING
+    assert first["status"] == FileStatus.INDEXED
     assert first["idempotent"] is False
     assert second["idempotent"] is True
     assert repository.record.confirmed_at == confirmed_at
@@ -374,6 +379,7 @@ async def test_confirmed_flowchart_can_start_only_one_index_side_effect(monkeypa
 
     async def start_index(kb_id, file_id, operator_id):
         calls.append((kb_id, file_id, operator_id))
+        repository.record.status = FileStatus.INDEXED
 
     service = FlowchartIngestionService(
         file_repository=repository,
@@ -384,11 +390,64 @@ async def test_confirmed_flowchart_can_start_only_one_index_side_effect(monkeypa
         kb_id="kb-1",
         file_id="file-flow",
         expected_revision=0,
-        semantic_markdown="# Flow",
+        semantic_markdown=VALID_MARKDOWN,
         operator_id="admin",
     )
     await service.confirm(kb_id="kb-1", file_id="file-flow", expected_revision=1, operator_id="admin")
     await service.confirm(kb_id="kb-1", file_id="file-flow", expected_revision=1, operator_id="admin")
 
     assert calls == [("kb-1", "file-flow", "admin")]
-    assert repository.record.status == FileStatus.INDEXING
+    assert repository.record.status == FileStatus.INDEXED
+
+
+async def test_confirm_rejects_stale_revision_and_malformed_markdown(flowchart_service):
+    service, repository, _ingestion = flowchart_service
+    await service.update_draft(
+        kb_id="kb-1", file_id="file-flow", expected_revision=0,
+        semantic_markdown="# Broken\n\n## 主流程\n提交申请", operator_id="admin",
+    )
+
+    with pytest.raises(FlowchartRevisionConflict):
+        await service.confirm(kb_id="kb-1", file_id="file-flow", expected_revision=0, operator_id="admin")
+    with pytest.raises(FlowchartIngestionError) as error:
+        await service.confirm(kb_id="kb-1", file_id="file-flow", expected_revision=1, operator_id="admin")
+
+    assert error.value.code == "FLOWCHART_INVALID_OUTPUT"
+    assert repository.record.confirmed_at is None
+    assert repository.record.status == FileStatus.FLOWCHART_WAITING_CONFIRMATION
+
+
+async def test_failed_index_keeps_frozen_draft_and_retry_does_not_reparse(monkeypatch):
+    from yuxi.services import flowchart_ingestion_service as module
+
+    minio = MemoryMinio()
+    monkeypatch.setattr(module, "get_minio_client", lambda: minio)
+    repository = MemoryFlowchartRepository()
+    calls = []
+
+    async def start_index(_kb_id, _file_id, _operator_id):
+        calls.append(repository.record.markdown_file)
+        if len(calls) == 1:
+            raise RuntimeError("temporary index failure")
+        repository.record.status = FileStatus.INDEXED
+
+    service = FlowchartIngestionService(
+        file_repository=repository, document_ingestion=FakeDocumentIngestion(repository),
+        index_starter=start_index,
+    )
+    await service.update_draft(
+        kb_id="kb-1", file_id="file-flow", expected_revision=0,
+        semantic_markdown=VALID_MARKDOWN, operator_id="admin",
+    )
+    frozen_path = repository.record.markdown_file
+    failed = await service.confirm(kb_id="kb-1", file_id="file-flow", expected_revision=1, operator_id="admin")
+    assert failed["status"] == FileStatus.ERROR_INDEXING
+    assert repository.record.confirmed_at is not None
+    with pytest.raises(FlowchartImmutable):
+        await service.reparse(kb_id="kb-1", file_id="file-flow", expected_revision=2, operator_id="admin")
+
+    retried = await service.retry_index(kb_id="kb-1", file_id="file-flow", operator_id="admin")
+    assert retried["status"] == FileStatus.INDEXED
+    assert calls == [frozen_path, frozen_path]
+    assert repository.record.markdown_file == frozen_path
+    assert flowchart_revision(repository.record) == 2

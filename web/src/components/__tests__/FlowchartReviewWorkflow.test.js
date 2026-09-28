@@ -47,16 +47,22 @@ assert.match(
   /getFileStatusView\(reparsing \? 'flowchart_parsing' : preview\.status\)\.label/
 )
 assert.match(review, /t\('flowchart\.reparsing'\)/)
-assert.doesNotMatch(review, /confirmFlowchart\(/)
+assert.match(review, /if \(!editable\.value \|\| !savedMarkdown\.value \|\| dirty\.value/)
+assert.match(
+  review,
+  /flowchartApi\.confirmFlowchart\(props\.kbId, props\.fileId, preview\.value\.revision\)/
+)
+assert.match(review, /flowchartApi\.retryFlowchartIndex\(props\.kbId, props\.fileId\)/)
 
 for (const method of [
   'createFlowchart',
   'getFlowchartPreview',
   'updateFlowchartDraft',
-  'reparseFlowchart'
+  'reparseFlowchart',
+  'confirmFlowchart',
+  'retryFlowchartIndex'
 ]) {
   assert.match(api, new RegExp(`${method}:`))
 }
-assert.doesNotMatch(api.slice(api.indexOf('export const flowchartApi')), /confirmFlowchart:/)
 
 console.log('FlowchartReviewWorkflow: component/API contract assertions passed')

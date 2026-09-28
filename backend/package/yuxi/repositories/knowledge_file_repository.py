@@ -1448,6 +1448,7 @@ class KnowledgeFileRepository:
                     )
                 sanitized_data["replacement_target_file_id"] = replacement_target.file_id
                 sanitized_data["is_active"] = False
+                sanitized_data["is_current"] = False
                 sanitized_data["processing_stage"] = "replacement_preparing"
             elif duplicate_strategy == "keep_both" and same_name_records:
                 sibling_names = (

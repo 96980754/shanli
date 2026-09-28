@@ -30,9 +30,6 @@ from yuxi.storage.minio import get_minio_client
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat, utc_now_naive
 
-FLOWCHART_INDEX_NOT_IMPLEMENTED = "P0-B 尚未接入流程图索引调度"
-
-
 class FlowchartIngestionError(ValueError):
     """User-visible flowchart lifecycle error."""
 
@@ -49,7 +46,7 @@ class FlowchartImmutable(FlowchartIngestionError):
     pass
 
 
-FlowchartIndexStarter = Callable[[str, str, str], Awaitable[None]]
+FlowchartIndexStarter = Callable[[str, str, str], Awaitable[Any]]
 
 
 class FlowchartIngestionService:
@@ -63,7 +60,7 @@ class FlowchartIngestionService:
     ) -> None:
         self.file_repository = file_repository or KnowledgeFileRepository()
         self.document_ingestion = document_ingestion or DocumentIngestionService(file_repository=self.file_repository)
-        self.index_starter = index_starter
+        self.index_starter = index_starter or self._index_confirmed_flowchart
         self.vision_analyzer = vision_analyzer or FlowchartVisionAnalyzer()
 
     async def create(
@@ -311,9 +308,15 @@ class FlowchartIngestionService:
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
         if record.confirmed_at is None:
+            if flowchart_revision(record) != expected_revision:
+                raise FlowchartRevisionConflict("流程图草稿已被其他编辑更新，请刷新后重试")
             if not record.markdown_file:
                 raise FlowchartIngestionError("流程图没有可确认的语义 Markdown 草稿")
-            self._validate_markdown(await self._read_markdown(record.markdown_file))
+            content = self._validate_markdown(await self._read_markdown(record.markdown_file))
+            try:
+                validate_semantic_markdown(content)
+            except FlowchartAnalysisError as exc:
+                raise FlowchartIngestionError(str(exc), code=exc.code) from exc
 
         now = utc_now_naive()
         result = await self.file_repository.update_flowchart_with_revision(
@@ -347,29 +350,22 @@ class FlowchartIngestionService:
         return payload
 
     async def _begin_indexing(self, *, kb_id: str, file_id: str, operator_id: str):
-        await self.file_repository.update_flowchart_status(
-            kb_id=kb_id,
-            file_id=file_id,
-            allowed_statuses={FileStatus.FLOWCHART_CONFIRMING},
-            require_confirmed=True,
-            data={
-                "status": FileStatus.INDEXING,
-                "processing_stage": "flowchart_indexing",
-                "processing_progress": 70,
-                "updated_by": operator_id,
-            },
-        )
         try:
-            if self.index_starter is None:
-                raise NotImplementedError(FLOWCHART_INDEX_NOT_IMPLEMENTED)
             await self.index_starter(kb_id, file_id, operator_id)
+            indexed = await self._get_record(kb_id, file_id)
+            if indexed.status != FileStatus.INDEXED:
+                raise FlowchartStateConflict("流程图索引未完成")
+            return indexed
         except Exception as exc:  # noqa: BLE001 - failure is persisted as the retryable boundary
             message = sanitize_processing_error(exc)
-            logger.info("Flowchart indexing was not started for {}: {}", file_id, message)
+            logger.error("Flowchart indexing failed for {}: {}", file_id, message)
+            record = await self._get_record(kb_id, file_id)
+            if record.status == FileStatus.ERROR_INDEXING:
+                return record
             return await self.file_repository.update_flowchart_status(
                 kb_id=kb_id,
                 file_id=file_id,
-                allowed_statuses={FileStatus.INDEXING},
+                allowed_statuses={FileStatus.FLOWCHART_CONFIRMING, FileStatus.INDEXING},
                 require_confirmed=True,
                 data={
                     "status": FileStatus.ERROR_INDEXING,
@@ -379,7 +375,31 @@ class FlowchartIngestionService:
                     "updated_by": operator_id,
                 },
             )
-        return await self._get_record(kb_id, file_id)
+
+    async def retry_index(self, *, kb_id: str, file_id: str, operator_id: str) -> dict[str, Any]:
+        record = await self._get_record(kb_id, file_id)
+        if record.confirmed_at is None:
+            raise FlowchartStateConflict("流程图尚未确认")
+        await self.file_repository.update_flowchart_status(
+            kb_id=kb_id,
+            file_id=file_id,
+            allowed_statuses={FileStatus.ERROR_INDEXING},
+            require_confirmed=True,
+            data={
+                "status": FileStatus.FLOWCHART_CONFIRMING,
+                "processing_stage": "flowchart_confirming",
+                "processing_progress": 68,
+                "error_message": None,
+                "updated_by": operator_id,
+            },
+        )
+        return self._serialize_record(await self._begin_indexing(kb_id=kb_id, file_id=file_id, operator_id=operator_id))
+
+    @staticmethod
+    async def _index_confirmed_flowchart(kb_id: str, file_id: str, operator_id: str) -> None:
+        from yuxi.knowledge.runtime import knowledge_base
+
+        await knowledge_base.index_file(kb_id, file_id, operator_id=operator_id)
 
     async def _get_record(self, kb_id: str, file_id: str):
         record = await self.file_repository.get_by_file_id(file_id)

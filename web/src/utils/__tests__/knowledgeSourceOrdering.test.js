@@ -69,4 +69,60 @@ assert.deepEqual(
   ['打开文档第一段', '打开文档第二段']
 )
 
+// 编号只映射真实检索来源；同一 PDF 的多个 chunk 保持同一来源卡片。
+const citedChunks = MessageProcessor.extractKnowledgeChunksFromConversation({
+  messages: [
+    {
+      type: 'ai',
+      tool_calls: [
+        {
+          name: 'query_kb',
+          tool_call_result: {
+            content: {
+              schema_version: 1,
+              status: 'ok',
+              kb_id: 'kb-a',
+              results: [
+                {
+                  id: 'c1',
+                  kb_id: 'kb-a',
+                  file_id: 'flow-pdf',
+                  content: '角色',
+                  metadata: { source: '流程.pdf', source_reference: 1 }
+                },
+                {
+                  id: 'c2',
+                  kb_id: 'kb-a',
+                  file_id: 'flow-pdf',
+                  content: '顺序',
+                  metadata: { source: '流程.pdf', source_reference: 1 }
+                },
+                {
+                  id: 'c3',
+                  kb_id: 'kb-a',
+                  file_id: 'ordinary-pdf',
+                  content: '文档',
+                  metadata: { source: '普通.pdf', source_reference: 2 }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+})
+const cited = MessageProcessor.filterKnowledgeChunksByAnswer(citedChunks, '流程步骤。[1]')
+assert.equal(cited.length, 2)
+assert.deepEqual([...new Set(cited.map((chunk) => chunk.file_id))], ['flow-pdf'])
+const citedGroups = MessageProcessor.groupKnowledgeChunksByDocument(cited)
+assert.equal(citedGroups.length, 1)
+assert.equal(citedGroups[0].sourceReference, 1)
+assert.equal(citedGroups[0].file_id, 'flow-pdf')
+assert.equal(citedGroups[0].displayName, '流程.pdf')
+assert.equal(
+  MessageProcessor.filterKnowledgeChunksByAnswer(citedChunks, '普通内容。[2]')[0].file_id,
+  'ordinary-pdf'
+)
+
 console.log('knowledgeSourceOrdering: all assertions passed')

@@ -338,6 +338,107 @@ async def test_index_file_persists_chunk_stats(monkeypatch):
     assert refreshed_kbs == ["db"]
 
 
+async def test_confirmed_flowchart_candidate_only_replaces_current_after_index_success(monkeypatch):
+    current = make_file_record(
+        file_id="file-v1", filename="flow.pdf", status=FileStatus.INDEXED,
+        is_current=True, is_active=True,
+    )
+    candidate = make_file_record(
+        file_id="file-v2", filename="flow.pdf", status=FileStatus.FLOWCHART_CONFIRMING,
+        is_current=False, is_active=False, replacement_target_file_id="file-v1",
+        processing_params={"ingestion_type": "flowchart"},
+    )
+    file_repo = FakeKnowledgeFileRepository({"file-v1": current, "file-v2": candidate})
+    patch_file_repository(monkeypatch, file_repo)
+    kb = MilvusKB.__new__(MilvusKB)
+    kb.databases_meta = {"db": {"embedding_model_spec": "test-provider:test-embedding", "metadata": {}}}
+    collection = FakeCollection()
+    index_attempts = []
+    activations = []
+
+    async def get_collection(_kb_id):
+        return collection
+
+    async def store_chunks(_kb_id, _file_id, _collection, _chunks, _embedding):
+        index_attempts.append(candidate.markdown_file)
+        if len(index_attempts) == 1:
+            raise RuntimeError("embedding unavailable")
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    class FakeChunkRepo:
+        async def delete_by_file_id(self, _file_id):
+            return 0
+
+    class FakeIngestionService:
+        async def activate_replacement(self, *, kb_id, new_file_id, old_file_id):
+            activations.append((kb_id, new_file_id, old_file_id))
+            current.is_current = current.is_active = False
+            candidate.is_current = candidate.is_active = True
+
+    class VersionCollection(FakeCollection):
+        def search(self, **kwargs):
+            self.search_calls.append(kwargs)
+            return [[
+                types.SimpleNamespace(
+                    distance=0.8,
+                    entity={
+                        "content": f"version {file_id}", "chunk_id": f"{file_id}-chunk",
+                        "file_id": file_id, "chunk_index": 0,
+                    },
+                )
+                for file_id in ("file-v1", "file-v2")
+            ]]
+
+    query_kb = make_kb(VersionCollection())
+    query_kb._file_repository = file_repo
+    query_kb._hydrate_chunk_sources = types.MethodType(MilvusKB._hydrate_chunk_sources, query_kb)
+
+    monkeypatch.setattr("yuxi.knowledge.implementations.milvus.KnowledgeChunkRepository", FakeChunkRepo)
+    monkeypatch.setattr("yuxi.services.document_ingestion_service.DocumentIngestionService", FakeIngestionService)
+    kb._get_milvus_collection = get_collection
+    kb._get_embedding_function = lambda _spec: no_op
+    kb._read_markdown_from_minio = lambda _path: no_op()
+    kb._split_text_into_chunks = lambda *_args: [
+        {**make_chunk(0, "流程：认款流程\n章节：主流程\n提交申请"), "file_id": "file-v2"}
+    ]
+    kb.delete_file_chunks_only = no_op
+    kb._embed_and_store_chunks = store_chunks
+    kb._delete_file_chunks_from_milvus = no_op
+    kb.refresh_database_stats = no_op
+
+    with pytest.raises(RuntimeError, match="embedding unavailable"):
+        await kb.index_file("db", "file-v2")
+    assert candidate.status == FileStatus.ERROR_INDEXING
+    assert current.is_current and current.is_active
+    assert not candidate.is_current and not candidate.is_active
+    assert activations == []
+    before_retry = await query_kb.aquery("认款流程", "db", search_mode="vector")
+    assert [chunk["metadata"]["file_id"] for chunk in before_retry] == ["file-v1"]
+    assert before_retry[0]["metadata"]["source"] == "flow.pdf"
+
+    await kb.index_file("db", "file-v2")
+    assert candidate.status == FileStatus.INDEXED
+    assert activations == [("db", "file-v2", "file-v1")]
+    assert candidate.is_current and candidate.is_active
+    assert not current.is_current and not current.is_active
+    assert index_attempts == [candidate.markdown_file, candidate.markdown_file]
+    after_retry = await query_kb.aquery("认款流程", "db", search_mode="vector")
+    assert [chunk["metadata"]["file_id"] for chunk in after_retry] == ["file-v2"]
+    assert after_retry[0]["metadata"]["source"] == "flow.pdf"
+    from yuxi.agents.toolkits.kbs.tools import _number_query_sources
+
+    cited = _number_query_sources(
+        {"status": "ok", "kb_id": "db", "results": KnowledgeBase.build_search_output("db", after_retry)["results"]},
+        None,
+    )
+    assert [
+        (item["file_id"], item["metadata"]["source"], item["metadata"]["source_reference"])
+        for item in cited["results"]
+    ] == [("file-v2", "flow.pdf", 1)]
+
+
 async def test_archive_file_indexes_preserves_postgres_chunks(monkeypatch):
     kb = MilvusKB.__new__(MilvusKB)
     collection = FakeCollection()

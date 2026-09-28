@@ -64,6 +64,54 @@ class DetachSession:
 
 
 @pytest.mark.asyncio
+async def test_replacement_upload_starts_as_non_current_candidate(monkeypatch):
+    target = SimpleNamespace(file_id="file-v1")
+
+    class Session:
+        def __init__(self):
+            self.calls = 0
+            self.created = None
+            self.flush = AsyncMock()
+
+        async def execute(self, _statement, _params=None):
+            self.calls += 1
+            if self.calls <= 3:
+                return SimpleNamespace()
+            if self.calls == 5:
+                return ScalarResult(scalars=[target])
+            if self.calls == 6:
+                return ScalarResult(scalar=target)
+            return ScalarResult(scalars=[])
+
+        def add(self, record):
+            self.created = record
+
+    session = Session()
+
+    @asynccontextmanager
+    async def session_context():
+        yield session
+
+    monkeypatch.setattr(repo_module.pg_manager, "get_async_session_context", session_context)
+    outcome = await KnowledgeFileRepository().create_document_with_duplicate_guard(
+        file_id="file-v2",
+        data={
+            "kb_id": "kb-1",
+            "filename": "flow.pdf",
+            "content_hash": "different-content",
+            "path": "minio://documents/kb-1/upload/flow-v2.pdf",
+        },
+        duplicate_strategy="replace",
+        replace_file_id="file-v1",
+    )
+
+    assert outcome.action == "created"
+    assert session.created.replacement_target_file_id == "file-v1"
+    assert session.created.is_active is False
+    assert session.created.is_current is False
+
+
+@pytest.mark.asyncio
 async def test_detach_history_version_creates_independent_current(monkeypatch):
     current = SimpleNamespace(file_id="file-v18")
     history = SimpleNamespace(

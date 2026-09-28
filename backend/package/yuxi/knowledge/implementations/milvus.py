@@ -794,6 +794,7 @@ class MilvusKB(KnowledgeBase):
             FileStatus.PARSED,
             FileStatus.ERROR_INDEXING,
             FileStatus.INDEXED,
+            FileStatus.FLOWCHART_CONFIRMING,
             "done",
         }
         params = resolve_processing_params(
@@ -912,13 +913,14 @@ class MilvusKB(KnowledgeBase):
             return result
 
         except Exception as e:
-            logger.error(f"Indexing failed for {file_id}: {e}")
+            error_message = sanitize_processing_error(e) if params.get("ingestion_type") == "flowchart" else str(e)
+            logger.error(f"Indexing failed for {file_id}: {error_message}")
             try:
                 await KnowledgeChunkRepository().delete_by_file_id(file_id)
                 await self._delete_file_chunks_from_milvus(collection, file_id)
             except Exception as cleanup_error:
                 logger.error(f"Failed to clean partial chunks for {file_id}: {cleanup_error}")
-            update_data = {"status": FileStatus.ERROR_INDEXING, "error_message": str(e)}
+            update_data = {"status": FileStatus.ERROR_INDEXING, "error_message": error_message}
             if operator_id:
                 update_data["updated_by"] = operator_id
             await KnowledgeFileRepository().update_fields(file_id=file_id, kb_id=kb_id, data=update_data)

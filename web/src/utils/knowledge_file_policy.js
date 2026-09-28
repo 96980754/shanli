@@ -144,8 +144,8 @@ export const canIndexFile = (record) =>
     record &&
       record.is_current !== false &&
       !record.is_folder &&
-      INDEXABLE_STATUSES.has(record.status) &&
-      (!isFlowchart(record) || Boolean(record.confirmed_at))
+      !isFlowchart(record) &&
+      INDEXABLE_STATUSES.has(record.status)
   )
 
 export const canReindexFile = (record) =>

@@ -20,6 +20,7 @@ async def test_flowchart_api_skeleton_routes_are_registered():
     assert ("/knowledge/databases/{kb_id}/flowcharts/{file_id}/draft", ("PUT",)) in routes
     assert ("/knowledge/databases/{kb_id}/flowcharts/{file_id}/reparse", ("POST",)) in routes
     assert ("/knowledge/databases/{kb_id}/flowcharts/{file_id}/confirm", ("POST",)) in routes
+    assert ("/knowledge/databases/{kb_id}/flowcharts/{file_id}/retry-index", ("POST",)) in routes
 
 
 async def test_create_requires_existing_upload_permission(monkeypatch):
@@ -115,6 +116,9 @@ async def test_mutating_routes_reuse_manage_permission(monkeypatch):
         async def confirm(self, **_kwargs):
             return {"status": "error_indexing"}
 
+        async def retry_index(self, **_kwargs):
+            return {"status": "indexed"}
+
     monkeypatch.setattr(flowchart_router, "_require_kb_permission", require_permission)
     monkeypatch.setattr(flowchart_router, "_ensure_database_supports_documents", _allow_documents)
     monkeypatch.setattr(flowchart_router, "FlowchartIngestionService", FakeService)
@@ -126,5 +130,8 @@ async def test_mutating_routes_reuse_manage_permission(monkeypatch):
     await flowchart_router.confirm_flowchart(
         "kb-1", "file-1", request, current_user=SimpleNamespace(uid="admin")
     )
+    await flowchart_router.retry_flowchart_index(
+        "kb-1", "file-1", current_user=SimpleNamespace(uid="admin")
+    )
 
-    assert checks == [("kb-1", "can_manage"), ("kb-1", "can_manage")]
+    assert checks == [("kb-1", "can_manage")] * 3

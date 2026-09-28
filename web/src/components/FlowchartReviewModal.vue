@@ -42,6 +42,23 @@
               @click="saveDraft"
               >{{ t('flowchart.saveDraft') }}</a-button
             >
+            <a-button
+              v-if="
+                editable && savedMarkdown && preview.status === 'flowchart_waiting_confirmation'
+              "
+              type="primary"
+              :disabled="dirty || busy || conflict"
+              :loading="confirming"
+              @click="requestConfirm"
+              >{{ t('flowchart.confirmIndex') }}</a-button
+            >
+            <a-button
+              v-if="canManage && preview.confirmed_at && preview.status === 'error_indexing'"
+              type="primary"
+              :loading="confirming"
+              @click="retryIndex"
+              >{{ t('flowchart.retryIndex') }}</a-button
+            >
           </div>
         </div>
         <p class="flowchart-disclaimer">{{ t('flowchart.disclaimer') }}</p>
@@ -51,6 +68,21 @@
           type="info"
           show-icon
           :message="t('flowchart.reparsing')"
+        />
+        <a-alert
+          v-if="['flowchart_confirming', 'indexing'].includes(preview.status)"
+          class="flowchart-notice"
+          type="info"
+          show-icon
+          :message="t('flowchart.indexing')"
+        />
+        <a-alert
+          v-if="preview.status === 'error_indexing'"
+          class="flowchart-notice"
+          type="error"
+          show-icon
+          :message="t('flowchart.indexFailed')"
+          :description="preview.error_message || undefined"
         />
         <a-alert
           v-if="preview.status === 'error_flowchart_parsing'"
@@ -172,6 +204,7 @@ const conflict = ref(false)
 const editorMode = ref('edit')
 const saving = ref(false)
 const reparsing = ref(false)
+const confirming = ref(false)
 const sourceLoading = ref(false)
 const sourceError = ref('')
 const sourceUrl = ref('')
@@ -184,7 +217,11 @@ const sectionNames =
 const dirty = computed(() => isFlowchartDraftDirty(savedMarkdown.value, currentMarkdown.value))
 const editable = computed(() => canEditFlowchartDraft(preview.value, props.canManage))
 const busy = computed(
-  () => saving.value || reparsing.value || preview.value?.status === 'flowchart_parsing'
+  () =>
+    saving.value ||
+    reparsing.value ||
+    confirming.value ||
+    preview.value?.status === 'flowchart_parsing'
 )
 const warningKeys = computed(() => getFlowchartWarningKeys(preview.value?.flowchart_metadata))
 const dpiPages = computed(() =>
@@ -193,7 +230,7 @@ const dpiPages = computed(() =>
   )
 )
 const statusColor = computed(() => {
-  if (preview.value?.status === 'error_flowchart_parsing') return 'orange'
+  if (['error_flowchart_parsing', 'error_indexing'].includes(preview.value?.status)) return 'orange'
   if (preview.value?.confirmed_at) return 'green'
   return 'blue'
 })
@@ -227,7 +264,7 @@ const loadPreview = async () => {
     const payload = await flowchartApi.getFlowchartPreview(props.kbId, props.fileId)
     if (sequence !== requestSequence) return
     applyPreview(payload)
-    if (payload.status === 'flowchart_parsing') {
+    if (['flowchart_parsing', 'flowchart_confirming', 'indexing'].includes(payload.status)) {
       pollTimer = setTimeout(loadPreview, 3000)
     }
     return payload
@@ -354,13 +391,57 @@ const requestReparse = async () => {
   }
 }
 
+const requestConfirm = async () => {
+  if (!editable.value || !savedMarkdown.value || dirty.value || busy.value || conflict.value) return
+  if (preview.value.status !== 'flowchart_waiting_confirmation') return
+  if (!(await confirmAction(t('flowchart.confirmWarning')))) return
+  confirming.value = true
+  const previousStatus = preview.value.status
+  preview.value = { ...preview.value, status: 'flowchart_confirming' }
+  pollTimer = setTimeout(loadPreview, 3000)
+  try {
+    await flowchartApi.confirmFlowchart(props.kbId, props.fileId, preview.value.revision)
+    await loadPreview()
+    emit('changed')
+  } catch (cause) {
+    if (cause.response?.status === 409) {
+      clearPoll()
+      preview.value = { ...preview.value, status: previousStatus }
+      conflict.value = true
+      message.error(t('flowchart.revisionConflict'))
+    } else {
+      message.error(cause.message || t('flowchart.indexFailed'))
+      await loadPreview()
+    }
+  } finally {
+    confirming.value = false
+  }
+}
+
+const retryIndex = async () => {
+  if (!props.canManage || confirming.value || preview.value?.status !== 'error_indexing') return
+  confirming.value = true
+  preview.value = { ...preview.value, status: 'flowchart_confirming' }
+  pollTimer = setTimeout(loadPreview, 3000)
+  try {
+    await flowchartApi.retryFlowchartIndex(props.kbId, props.fileId)
+    await loadPreview()
+    emit('changed')
+  } catch (cause) {
+    message.error(cause.message || t('flowchart.indexFailed'))
+    await loadPreview()
+  } finally {
+    confirming.value = false
+  }
+}
+
 const confirmDiscard = async () => {
-  if (saving.value || reparsing.value) return false
+  if (saving.value || reparsing.value || confirming.value) return false
   if (!dirty.value) return true
   return confirmAction(t('flowchart.discardConfirm'))
 }
 const requestClose = async () => {
-  if (saving.value || reparsing.value) return
+  if (saving.value || reparsing.value || confirming.value) return
   if (await confirmDiscard()) emit('update:open', false)
 }
 const beforeUnload = (event) => {
