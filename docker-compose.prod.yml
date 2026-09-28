@@ -171,7 +171,10 @@ services:
       - ./docker/volumes/neo4j/data:/data
       - ./docker/volumes/neo4j/logs:/var/lib/neo4j/logs
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7474 || exit 1"]
+      # neo4j:5.26 镜像不带 curl，原先的 `curl -f http://localhost:7474` 只会刷
+      # `/bin/sh: 1: curl: not found`，容器被判 unhealthy 而服务其实一直是好的。
+      # 用镜像自带的 cypher-shell 探 bolt，顺带覆盖认证与一次真实查询；与 dev 一致。
+      test: ["CMD-SHELL", "cypher-shell -a bolt://localhost:7687 -u ${NEO4J_USERNAME:-neo4j} -p ${NEO4J_PASSWORD:-0123456789} 'RETURN 1;' >/dev/null || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
