@@ -377,6 +377,7 @@ export default {
     statePanelEmpty: '暂无状态内容',
     currentAgentNote: '当前智能体：{name}；请注意辨别内容的可靠性',
     selectModel: '选择模型',
+    autoModel: '自动（自动路由）',
     unknownFile: '未知文件',
     deliveryFile: '产出文件',
     deliveryFileWithExt: '产出文件 · {ext}',

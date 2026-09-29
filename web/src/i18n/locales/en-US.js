@@ -384,6 +384,7 @@ export default {
     statePanelEmpty: 'No status content',
     currentAgentNote: 'Current agent: {name}; please verify the reliability of the content',
     selectModel: 'Select model',
+    autoModel: 'Automatic routing',
     unknownFile: 'Unknown file',
     deliveryFile: 'Output File',
     deliveryFileWithExt: 'Output File · {ext}',

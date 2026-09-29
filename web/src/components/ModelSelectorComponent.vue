@@ -64,6 +64,13 @@
           </a-input>
         </div>
         <a-menu class="scrollable-menu">
+          <a-menu-item
+            v-if="props.showAuto && props.modelType === 'chat'"
+            key="auto"
+            @click="handleSelectAuto"
+          >
+            {{ t('chat.autoModel') }}
+          </a-menu-item>
           <a-menu-item v-if="loadingV2Models" key="loading" disabled>{{
             $t('common.loading')
           }}</a-menu-item>
@@ -136,6 +143,10 @@ const props = defineProps({
   showStatus: {
     type: Boolean,
     default: true
+  },
+  showAuto: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -281,7 +292,9 @@ const extractModelName = (spec) => {
 
 const displayModelText = computed(() => {
   const spec = props.model_spec
-  if (!spec) return props.placeholder || t('modelSel.selectModel')
+  if (!spec) {
+    return props.showAuto ? t('chat.autoModel') : props.placeholder || t('modelSel.selectModel')
+  }
 
   const modelName = extractModelName(spec)
   if (props.displayName === 'mini') {
@@ -291,9 +304,12 @@ const displayModelText = computed(() => {
   return spec
 })
 
-const displayModelTitle = computed(
-  () => props.model_spec || props.placeholder || t('modelSel.selectModel')
-)
+const displayModelTitle = computed(() => {
+  return (
+    props.model_spec ||
+    (props.showAuto ? t('chat.autoModel') : props.placeholder || t('modelSel.selectModel'))
+  )
+})
 
 // 检查当前模型状态
 const checkCurrentModelStatus = async () => {
@@ -343,6 +359,13 @@ const getCurrentModelStatusTitle = () => {
 const handleSelectV2Model = (spec) => {
   if (props.disabled) return
   emit('select-model', spec)
+  dropdownOpen.value = false
+}
+
+const handleSelectAuto = () => {
+  if (props.disabled) return
+  state.currentModelStatus = null
+  emit('select-model', '')
   dropdownOpen.value = false
 }
 

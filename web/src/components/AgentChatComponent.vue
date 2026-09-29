@@ -175,6 +175,7 @@
                   <div class="input-model-selector">
                     <ModelSelectorComponent
                       :model_spec="currentModelSpec"
+                      :show-auto="true"
                       size="nano"
                       display-name="mini"
                       :placeholder="t('chat.selectModel')"
@@ -981,18 +982,11 @@ const currentAgent = computed(() => {
 const currentChatId = computed(() => currentThreadId.value)
 
 // ==================== 对话级模型覆盖 ====================
-// 按线程记忆用户选择的模型；未选择时回退到智能体配置的模型。
+// 按线程记忆用户选择的模型；未选择时使用自动路由。
 const DRAFT_MODEL_KEY = '__draft__'
 const selectedModelByThread = reactive({})
-const agentDefaultModel = computed(
-  () =>
-    agentConfig.value?.model ||
-    currentAgent.value?.config_json?.context?.model ||
-    configStore.config?.default_model ||
-    ''
-)
 const currentModelSpec = computed(
-  () => selectedModelByThread[currentChatId.value || DRAFT_MODEL_KEY] || agentDefaultModel.value
+  () => selectedModelByThread[currentChatId.value || DRAFT_MODEL_KEY] || ''
 )
 const handleModelSelect = (spec) => {
   if (typeof spec === 'string') {
@@ -2560,7 +2554,7 @@ const handleSendMessage = async ({ image, industrySolution } = {}) => {
       delete selectedOutputFormatByThread[DRAFT_OUTPUT_FORMAT_KEY]
     }
   }
-  // 仅当用户显式选择过模型才下发覆盖；否则传 null，由后端使用智能体配置的模型
+  // 未选择具体模型时传 null，由后端执行自动路由；选择具体模型则固定使用该模型。
   const modelSpec = selectedModelByThread[threadId] || null
 
   userInput.value = ''
