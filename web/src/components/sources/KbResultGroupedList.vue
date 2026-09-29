@@ -23,6 +23,9 @@
             />
             <ChevronDown v-else :size="14" class="expand-icon" />
             <FileText :size="14" color="var(--gray-600)" />
+            <span v-if="fileGroup.sourceReference" class="source-reference"
+              >[{{ fileGroup.sourceReference }}]</span
+            >
             <span v-if="fileGroup.product" class="product-name">{{ fileGroup.product }}</span>
             <span class="file-name">{{ fileGroup.displayName }}</span>
             <span

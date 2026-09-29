@@ -135,6 +135,7 @@ async def test_query_kb_returns_search_schema_without_sandbox_paths(monkeypatch)
     assert result["results"][0]["file_id"] == "file-1"
     assert result["results"][0]["content"] == "auth guide"
     assert result["results"][0]["metadata"]["source"] == "auth-guide.pdf"
+    assert result["results"][0]["metadata"]["source_reference"] == 1
     assert "filepath" not in result["results"][0]["metadata"]
     assert "parsed_path" not in result["results"][0]["metadata"]
 
@@ -177,11 +178,37 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
                     "chunk_id": "dify-segment-1",
                     "source": "Dify Doc",
                     "score": 0.98,
+                    "source_reference": 1,
                 },
             }
         ],
         "error": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_query_kb_numbers_real_files_once_across_flowchart_and_ordinary_results(monkeypatch) -> None:
+    async def retrieve(_query: str, **_kwargs):
+        return [
+            {"content": "flow roles", "metadata": {"file_id": "flow-pdf", "chunk_id": "flow-1", "source": "流程.pdf"}},
+            {"content": "flow order", "metadata": {"file_id": "flow-pdf", "chunk_id": "flow-2", "source": "流程.pdf"}},
+            {"content": "ordinary text", "metadata": {"file_id": "doc-pdf", "chunk_id": "doc-1", "source": "文档.pdf"}},
+        ]
+
+    _patch_retrievers(monkeypatch, retriever=retrieve)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+    runtime = SimpleNamespace(context=SimpleNamespace())
+
+    first = await _run_query_kb(kb_id="db-1", query_text="roles", runtime=runtime)
+    second = await _run_query_kb(kb_id="db-1", query_text="order", runtime=runtime)
+
+    assert [item["metadata"]["source_reference"] for item in first["results"]] == [1, 1, 2]
+    assert [item["metadata"]["source_reference"] for item in second["results"]] == [1, 1, 2]
+    assert [(item["file_id"], item["metadata"]["source"]) for item in first["results"]] == [
+        ("flow-pdf", "流程.pdf"),
+        ("flow-pdf", "流程.pdf"),
+        ("doc-pdf", "文档.pdf"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -277,7 +304,7 @@ async def test_query_kb_maps_full_doc_id_and_chunk_metadata(monkeypatch) -> None
         "kb_id": "db-1",
         "file_id": "file-1",
         "content": "auth guide",
-        "metadata": {"chunk_index": 3},
+        "metadata": {"chunk_index": 3, "source_reference": 1},
     }
 
 
@@ -335,6 +362,7 @@ async def test_query_kbs_merges_multi_kb_results(monkeypatch) -> None:
     assert result["schema_version"] == 1
     # 各库结果均保留来源 kb_id
     assert [item["kb_id"] for item in result["results"]] == ["db-1", "db-1", "db-2"]
+    assert [item["metadata"]["source_reference"] for item in result["results"]] == [1, 2, 3]
     assert result["results"][0]["content"] == "cert-a-0"
     assert result["results"][2]["content"] == "cert-b"
 

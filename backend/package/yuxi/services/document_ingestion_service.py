@@ -200,6 +200,7 @@ class DocumentIngestionService:
         item: str,
         params: dict[str, Any],
         operator_id: str,
+        ingestion_type: str | None = None,
     ) -> DocumentCreationResult:
         minio_client = get_minio_client()
         self._validate_upload_url_host(item, getattr(minio_client, "public_endpoint", ""))
@@ -229,6 +230,11 @@ class DocumentIngestionService:
         content_hash = await calculate_content_hash(file_bytes)
         file_size = len(file_bytes)
         trusted_params = dict(params)
+        # This discriminator is server-owned. Generic document callers cannot
+        # opt into a specialized ingestion lifecycle by submitting raw params.
+        trusted_params.pop("ingestion_type", None)
+        if ingestion_type:
+            trusted_params["ingestion_type"] = ingestion_type
         trusted_params["content_hashes"] = {item: content_hash}
         trusted_params["file_sizes"] = {item: file_size}
         requested_source_path = params.get("source_path")

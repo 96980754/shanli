@@ -29,7 +29,15 @@ const STATUS_VIEW = {
   validation_accepted: { key: 'kbFile.statusValidationAccepted', tone: 'status-success', icon: 'success' },
   validation_failed: { key: 'kbFile.statusValidationFailed', tone: 'status-error', icon: 'error' },
   validation_rejected: { key: 'kbFile.statusValidationRejected', tone: 'status-error', icon: 'error' },
-  error_replacement_cleanup: { key: 'kbFile.statusErrorReplacementCleanup', tone: 'status-error', icon: 'error' }
+  error_replacement_cleanup: { key: 'kbFile.statusErrorReplacementCleanup', tone: 'status-error', icon: 'error' },
+  flowchart_parsing: { key: 'kbFile.statusFlowchartParsing', tone: 'status-info', icon: 'progress' },
+  flowchart_waiting_confirmation: {
+    key: 'kbFile.statusFlowchartWaitingConfirmation',
+    tone: 'status-warning',
+    icon: 'clock'
+  },
+  flowchart_confirming: { key: 'kbFile.statusFlowchartConfirming', tone: 'status-info', icon: 'progress' },
+  error_flowchart_parsing: { key: 'kbFile.statusErrorFlowchartParsing', tone: 'status-error', icon: 'error' }
 }
 
 const STATUS_ACTION = {
@@ -50,9 +58,28 @@ const VERSION_MAINTENANCE_STAGES = new Set(['switching_version', 'replacement_cl
 
 const PARSED_PREVIEW_STATUSES = new Set(['done', 'parsed', 'indexed', 'error_indexing'])
 const SOURCE_ONLY_PREVIEW_STATUSES = new Set(['uploaded', 'error_parsing'])
-const TABLE_SELECTION_BLOCKED_STATUSES = new Set(['processing', 'waiting'])
-const DELETE_BLOCKED_STATUSES = new Set(['processing', 'parsing', 'indexing'])
-const PROCESSING_STATUSES = new Set(['processing', 'waiting', 'parsing', 'indexing'])
+const TABLE_SELECTION_BLOCKED_STATUSES = new Set([
+  'processing',
+  'waiting',
+  'flowchart_parsing',
+  'flowchart_waiting_confirmation',
+  'flowchart_confirming'
+])
+const DELETE_BLOCKED_STATUSES = new Set([
+  'processing',
+  'parsing',
+  'indexing',
+  'flowchart_parsing',
+  'flowchart_confirming'
+])
+const PROCESSING_STATUSES = new Set([
+  'processing',
+  'waiting',
+  'parsing',
+  'indexing',
+  'flowchart_parsing',
+  'flowchart_confirming'
+])
 const INDEXABLE_STATUSES = new Set(['parsed', 'error_indexing', 'done', 'indexed'])
 const PARSEABLE_STATUSES = new Set(['uploaded', 'error_parsing'])
 const DOWNLOADABLE_STATUSES = new Set(['done', 'indexed', 'parsed', 'error_indexing', 'error_replacement_cleanup'])
@@ -69,7 +96,11 @@ const STATUS_SORT_ORDER = {
   failed: 4,
   error_indexing: 4,
   error_parsing: 4,
-  error_replacement_cleanup: 4
+  error_replacement_cleanup: 4,
+  flowchart_parsing: 2,
+  flowchart_confirming: 2,
+  flowchart_waiting_confirmation: 3,
+  error_flowchart_parsing: 4
 }
 
 export const FILE_STATUS_FILTER_OPTIONS = [
@@ -79,8 +110,17 @@ export const FILE_STATUS_FILTER_OPTIONS = [
   { label: i18n.global.t('kbFile.statusErrorParsing'), value: 'error_parsing' },
   { label: i18n.global.t('kbFile.statusIndexing'), value: 'indexing' },
   { label: i18n.global.t('kbFile.statusIndexed'), value: 'indexed' },
-  { label: i18n.global.t('kbFile.statusErrorIndexing'), value: 'error_indexing' }
+  { label: i18n.global.t('kbFile.statusErrorIndexing'), value: 'error_indexing' },
+  { label: i18n.global.t('kbFile.statusFlowchartParsing'), value: 'flowchart_parsing' },
+  {
+    label: i18n.global.t('kbFile.statusFlowchartWaitingConfirmation'),
+    value: 'flowchart_waiting_confirmation'
+  },
+  { label: i18n.global.t('kbFile.statusFlowchartConfirming'), value: 'flowchart_confirming' },
+  { label: i18n.global.t('kbFile.statusErrorFlowchartParsing'), value: 'error_flowchart_parsing' }
 ]
+
+const isFlowchart = (record) => record?.ingestion_type === 'flowchart'
 
 export const getFileStatusView = (status) => {
   const meta = STATUS_VIEW[status]
@@ -90,23 +130,31 @@ export const getFileStatusView = (status) => {
 
 export const getFilePrimaryAction = (record) => {
   if (!record || record.is_folder) return null
+  if (isFlowchart(record)) return null
   const action = STATUS_ACTION[record.status]
   if (!action) return null
   return { type: action.type, label: i18n.global.t(action.key) }
 }
 
 export const canParseFile = (record) =>
-  Boolean(record && record.is_current !== false && !record.is_folder && PARSEABLE_STATUSES.has(record.status))
+  Boolean(record && record.is_current !== false && !record.is_folder && !isFlowchart(record) && PARSEABLE_STATUSES.has(record.status))
 
 export const canIndexFile = (record) =>
-  Boolean(record && record.is_current !== false && !record.is_folder && INDEXABLE_STATUSES.has(record.status))
-
-export const canReindexFile = (record) =>
   Boolean(
     record &&
       record.is_current !== false &&
       !record.is_folder &&
-      (record.status === 'done' || record.status === 'indexed')
+      !isFlowchart(record) &&
+      INDEXABLE_STATUSES.has(record.status)
+  )
+
+export const canReindexFile = (record) =>
+  Boolean(
+    record &&
+    record.is_current !== false &&
+    !record.is_folder &&
+    !isFlowchart(record) &&
+    (record.status === 'done' || record.status === 'indexed')
   )
 
 // 有解析结果的文档都可重新解析（覆盖旧 markdown 并重新入库）
@@ -115,6 +163,7 @@ export const canReparseFile = (record) =>
     record &&
       record.is_current !== false &&
       !record.is_folder &&
+      !isFlowchart(record) &&
       INDEXABLE_STATUSES.has(record.status)
   )
 

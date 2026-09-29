@@ -4,6 +4,7 @@ import os
 from yuxi.knowledge.base import KBNotFoundError, KnowledgeBase
 from yuxi.knowledge.chunking.ragflow_like.presets import deep_merge
 from yuxi.knowledge.factory import KnowledgeBaseFactory
+from yuxi.knowledge.flowchart import is_flowchart
 from yuxi.storage.postgres.models_business import User
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat
@@ -450,6 +451,7 @@ class KnowledgeBaseManager:
 
     async def parse_file(self, kb_id: str, file_id: str, operator_id: str | None = None) -> dict:
         """Parse file to Markdown"""
+        await self._reject_flowchart_ordinary_mutation(kb_id, file_id, "普通文档解析")
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.parse_file(kb_id, file_id, operator_id)
 
@@ -457,11 +459,17 @@ class KnowledgeBaseManager:
         self, kb_id: str, file_id: str, operator_id: str | None = None, params: dict | None = None
     ) -> dict:
         """Index parsed file"""
+        record = await self._get_flowchart_record(kb_id, file_id)
+        if record is not None and record.confirmed_at is None:
+            raise ValueError("流程图尚未确认，不能通过普通文档入口入库")
+        if record is not None and params:
+            raise ValueError("流程图确认后不能覆盖索引处理参数")
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.index_file(kb_id, file_id, operator_id, params=params)
 
     async def reparse_file(self, kb_id: str, file_id: str, operator_id: str | None = None) -> dict:
         """把已有解析结果的文档标回未解析状态并重新解析"""
+        await self._reject_flowchart_ordinary_mutation(kb_id, file_id, "普通文档重新解析")
         kb_instance = await self._get_kb_for_database(kb_id)
         return await kb_instance.reparse_file(kb_id, file_id, operator_id)
 
@@ -498,6 +506,10 @@ class KnowledgeBaseManager:
         流程：新文件上传 MinIO → add_file_record → parse_file → index_file → delete_file(旧版)。
         返回新 file_id。
         """
+        record = await self._get_flowchart_record(kb_id, file_id)
+        if record is not None and record.confirmed_at is not None:
+            raise ValueError("流程图当前版本已确认，不能通过普通编辑入口修改")
+
         import hashlib
         import time
 
@@ -539,8 +551,24 @@ class KnowledgeBaseManager:
 
     async def update_file_params(self, kb_id: str, file_id: str, params: dict, operator_id: str | None = None) -> None:
         """Update file processing params"""
+        record = await self._get_flowchart_record(kb_id, file_id)
+        if record is not None and record.confirmed_at is not None:
+            raise ValueError("流程图当前版本已确认，不能修改处理参数")
         kb_instance = await self._get_kb_for_database(kb_id)
         await kb_instance.update_file_params(kb_id, file_id, params, operator_id)
+
+    @staticmethod
+    async def _get_flowchart_record(kb_id: str, file_id: str):
+        from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
+
+        record = await KnowledgeFileRepository().get_by_file_id(file_id)
+        if record is None or record.kb_id != kb_id or not is_flowchart(record):
+            return None
+        return record
+
+    async def _reject_flowchart_ordinary_mutation(self, kb_id: str, file_id: str, operation: str) -> None:
+        if await self._get_flowchart_record(kb_id, file_id) is not None:
+            raise ValueError(f"流程图不能通过{operation}入口处理")
 
     async def aquery(self, query_text: str, kb_id: str, **kwargs) -> str:
         """异步查询知识库"""
@@ -580,6 +608,11 @@ class KnowledgeBaseManager:
             "document_version": getattr(record, "document_version", None),
             "version_label": getattr(record, "version_label", None),
             "is_current": bool(getattr(record, "is_current", True)),
+            "ingestion_type": getattr(record, "ingestion_type", None)
+            or ((getattr(record, "processing_params", None) or {}).get("ingestion_type")),
+            "confirmed_at": (
+                utc_isoformat(getattr(record, "confirmed_at")) if getattr(record, "confirmed_at", None) else None
+            ),
             "path_prefix": getattr(record, "path_prefix", None),
         }
 

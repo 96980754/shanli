@@ -1,5 +1,4 @@
 import asyncio
-import mimetypes
 import os
 import re
 import secrets
@@ -40,6 +39,10 @@ class FileStatus:
     CONFIRMED = "confirmed"
     ERROR_CLEANING = "error_cleaning"
     ERROR_REPLACEMENT_CLEANUP = "error_replacement_cleanup"
+    FLOWCHART_PARSING = "flowchart_parsing"
+    FLOWCHART_WAITING_CONFIRMATION = "flowchart_waiting_confirmation"
+    FLOWCHART_CONFIRMING = "flowchart_confirming"
+    ERROR_FLOWCHART_PARSING = "error_flowchart_parsing"
 
 
 INDEXED_STATS_STATUSES = {FileStatus.INDEXED, "done", FileStatus.ERROR_REPLACEMENT_CLEANUP}
@@ -848,7 +851,7 @@ class KnowledgeBase(ABC):
         original_path = self._original_file_path(file_meta)
         if not original_path:
             raise ValueError("文件没有可下载的原始内容")
-        media_type = file_meta.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        media_type = detect_media_type(filename)
         return {
             "filename": filename,
             "content": await self._read_minio_bytes(original_path),

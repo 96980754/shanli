@@ -9,6 +9,7 @@ from yuxi import config
 from yuxi.knowledge.base import FileStatus
 from yuxi.knowledge.cleaning import OptionalAIDocumentCleaner, sanitize_markdown_html
 from yuxi.knowledge.enrichment import formal_content_hash, mark_enrichment_data_outdated
+from yuxi.knowledge.flowchart import is_flowchart
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.utils import is_minio_url, parse_minio_url, sanitize_processing_error
 from yuxi.repositories.knowledge_file_repository import KnowledgeFileRepository
@@ -79,6 +80,11 @@ class DocumentCleaningService:
         if record is None or record.kb_id != kb_id or record.is_folder:
             raise DocumentCleaningNotFound("文档不存在")
         return record
+
+    @staticmethod
+    def _reject_flowchart_cleaning(record) -> None:
+        if is_flowchart(record):
+            raise DocumentCleaningError("流程图不能通过普通文档清洗入口修改")
 
     @staticmethod
     async def _read_markdown(path: str | None) -> str:
@@ -173,6 +179,7 @@ class DocumentCleaningService:
         use_ai: bool | None = None,
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
+        self._reject_flowchart_cleaning(record)
         if record.status in {FileStatus.PARSING, FileStatus.INDEXING}:
             raise DocumentCleaningError("文档当前正在处理")
         original_path = record.original_markdown_file or record.markdown_file
@@ -266,6 +273,7 @@ class DocumentCleaningService:
         content: str,
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
+        self._reject_flowchart_cleaning(record)
         cleaned = self._validate_content(content)
         previous_content = None
         if record.cleaning_draft_file:
@@ -332,6 +340,7 @@ class DocumentCleaningService:
         expected_version: int,
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
+        self._reject_flowchart_cleaning(record)
         restored_status = FileStatus.INDEXED if int(record.chunk_count or 0) > 0 else FileStatus.PARSED
         metadata = deepcopy(record.cleaning_metadata or {})
         previous_confirmation = metadata.pop("_previous_confirmed", None)
@@ -369,6 +378,7 @@ class DocumentCleaningService:
         expected_version: int,
     ) -> dict[str, Any]:
         record = await self._get_record(kb_id, file_id)
+        self._reject_flowchart_cleaning(record)
         if int(record.cleaning_version or 0) != max(0, int(expected_version)):
             raise CleaningVersionConflict("清洗草稿版本已变化，请刷新后重试")
         if record.status in {FileStatus.INDEXED, FileStatus.ERROR_REPLACEMENT_CLEANUP} and record.confirmed_at:

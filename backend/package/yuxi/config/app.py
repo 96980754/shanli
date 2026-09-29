@@ -276,6 +276,16 @@ class Config(BaseModel):
     )
     default_ocr_engine: str = Field(default=DEFAULT_OCR_ENGINE, description="默认 OCR 解析引擎")
 
+    flowchart_vision_model_spec: str | None = Field(default=None, description="流程图视觉模型 spec")
+    flowchart_vision_timeout_seconds: int = Field(default=180, ge=1, description="流程图单页视觉调用超时秒数")
+    flowchart_render_dpi: int = Field(default=280, ge=72, le=600, description="流程图 PDF 渲染 DPI")
+    flowchart_min_render_dpi: int = Field(default=72, ge=36, le=600, description="流程图自适应渲染最低 DPI")
+    flowchart_max_pages: int = Field(default=30, ge=1, description="流程图 PDF 最大页数")
+    flowchart_max_image_pixels: int = Field(default=30_000_000, ge=1, description="流程图单页最大像素数")
+    flowchart_max_image_bytes: int = Field(default=20_000_000, ge=1, description="流程图单页 PNG 最大字节数")
+    flowchart_max_render_bytes: int = Field(default=100_000_000, ge=1, description="流程图总渲染字节上限")
+    flowchart_max_response_chars: int = Field(default=50_000, ge=1, description="流程图单页模型输出最大字符数")
+
     # 文档清洗链路（PR12 吸收）
     document_cleaning_auto_confirm: bool = Field(
         default=True,

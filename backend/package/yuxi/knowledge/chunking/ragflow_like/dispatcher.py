@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from yuxi.knowledge.chunking.ragflow_like.parsers import book, general, laws, qa, semantic, separator
+from yuxi.knowledge.chunking.ragflow_like.parsers import book, flowchart, general, laws, qa, semantic, separator
 from yuxi.knowledge.chunking.ragflow_like.presets import map_to_internal_parser_id, normalize_chunk_preset_id
 
 
@@ -73,6 +73,17 @@ def chunk_markdown(
     params = dict(processing_params or {})
     preset_id = normalize_chunk_preset_id(params.get("chunk_preset_id"))
     parser_config = params.get("chunk_parser_config") if isinstance(params.get("chunk_parser_config"), dict) else {}
+
+    if params.get("ingestion_type") == "flowchart":
+        sections = flowchart.chunk_markdown(markdown_content, parser_config)
+        records = _build_chunk_records([part["content"] for part in sections], file_id, filename, markdown_content)
+        for record, part in zip(records, sections, strict=True):
+            record["tags"] = [
+                "flowchart",
+                f"section:{part['section']}",
+                *(f"page:{page}" for page in part["page_numbers"]),
+            ]
+        return records
 
     text_chunks = _dispatch_markdown_parser(preset_id, filename, markdown_content, parser_config)
     return _build_chunk_records(text_chunks, file_id, filename, markdown_content)

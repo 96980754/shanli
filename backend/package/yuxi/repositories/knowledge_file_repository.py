@@ -4,6 +4,7 @@ import hashlib
 import os
 import unicodedata
 from collections.abc import Iterator
+from copy import deepcopy
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -41,6 +42,7 @@ FAILED_REPLACEMENT_CANDIDATE_STATUSES = {
     "parse_failed",
     "index_failed",
     "error_parsing",
+    "error_flowchart_parsing",
     "error_indexing",
 }
 
@@ -107,6 +109,22 @@ class DocumentCreateOutcome:
     existing: KnowledgeFile | None = None
     conflicts: tuple[KnowledgeFile, ...] = ()
     conflict_type: str | None = None
+
+
+class FlowchartRevisionConflict(ValueError):
+    """The caller edited an obsolete flowchart draft revision."""
+
+    code = "FLOWCHART_REVISION_CONFLICT"
+
+
+class FlowchartStateConflict(ValueError):
+    """The requested flowchart transition is not valid for the locked row."""
+
+
+@dataclass(frozen=True)
+class FlowchartRevisionUpdate:
+    record: KnowledgeFile
+    idempotent: bool = False
 
 
 # asyncpg 单条 SQL 参数上限为 32767；按 file_id 批量查询时统一分批，避免
@@ -1430,6 +1448,7 @@ class KnowledgeFileRepository:
                     )
                 sanitized_data["replacement_target_file_id"] = replacement_target.file_id
                 sanitized_data["is_active"] = False
+                sanitized_data["is_current"] = False
                 sanitized_data["processing_stage"] = "replacement_preparing"
             elif duplicate_strategy == "keep_both" and same_name_records:
                 sibling_names = (
@@ -1675,6 +1694,113 @@ class KnowledgeFileRepository:
                 update(KnowledgeFile).where(*filters).values(**sanitized_data).returning(KnowledgeFile)
             )
             return result.scalar_one_or_none()
+
+    async def update_flowchart_with_revision(
+        self,
+        *,
+        kb_id: str,
+        file_id: str,
+        expected_revision: int,
+        data: dict[str, Any],
+        metadata_updates: dict[str, Any] | None = None,
+        increment_revision: bool = True,
+        allowed_statuses: set[str] | None = None,
+        idempotent_if_confirmed: bool = False,
+    ) -> FlowchartRevisionUpdate:
+        """Lock, compare and update one flowchart draft revision atomically."""
+        from yuxi.knowledge.flowchart import FLOWCHART_METADATA_KEY, is_flowchart
+
+        async with pg_manager.get_async_session_context() as session:
+            record = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == file_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if record is None or record.is_folder or not is_flowchart(record):
+                raise FlowchartStateConflict("流程图不存在")
+            if record.confirmed_at is not None:
+                if idempotent_if_confirmed:
+                    return FlowchartRevisionUpdate(record=record, idempotent=True)
+                raise FlowchartStateConflict("流程图当前版本已确认，不能继续修改")
+
+            parse_metadata = deepcopy(record.parse_metadata or {})
+            flowchart_metadata = deepcopy(parse_metadata.get(FLOWCHART_METADATA_KEY) or {})
+            current_revision = max(0, int(flowchart_metadata.get("revision") or 0))
+            if current_revision != max(0, int(expected_revision)):
+                raise FlowchartRevisionConflict("流程图草稿已被其他编辑更新，请刷新后重试")
+            if allowed_statuses and record.status not in allowed_statuses:
+                raise FlowchartStateConflict(f"流程图当前状态不允许此操作: {record.status}")
+
+            flowchart_metadata.update(metadata_updates or {})
+            if increment_revision:
+                flowchart_metadata["revision"] = current_revision + 1
+            else:
+                flowchart_metadata["revision"] = current_revision
+            parse_metadata[FLOWCHART_METADATA_KEY] = flowchart_metadata
+
+            allowed_fields = {
+                "status",
+                "markdown_file",
+                "original_markdown_file",
+                "processing_stage",
+                "processing_progress",
+                "error_message",
+                "confirmed_at",
+                "confirmed_by",
+                "updated_by",
+            }
+            for key, value in data.items():
+                if key in allowed_fields:
+                    setattr(record, key, value)
+            record.parse_metadata = parse_metadata
+            record.updated_at = utc_now_naive()
+            await session.flush()
+            return FlowchartRevisionUpdate(record=record)
+
+    async def update_flowchart_status(
+        self,
+        *,
+        kb_id: str,
+        file_id: str,
+        allowed_statuses: set[str],
+        data: dict[str, Any],
+        require_confirmed: bool | None = None,
+    ) -> KnowledgeFile:
+        """Transition a flowchart status under a row lock without changing its draft revision."""
+        from yuxi.knowledge.flowchart import is_flowchart
+
+        async with pg_manager.get_async_session_context() as session:
+            record = (
+                await session.execute(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.file_id == file_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if record is None or record.is_folder or not is_flowchart(record):
+                raise FlowchartStateConflict("流程图不存在")
+            if record.status not in allowed_statuses:
+                raise FlowchartStateConflict(f"流程图当前状态不允许此操作: {record.status}")
+            if require_confirmed is True and record.confirmed_at is None:
+                raise FlowchartStateConflict("流程图尚未确认")
+            if require_confirmed is False and record.confirmed_at is not None:
+                raise FlowchartStateConflict("流程图当前版本已确认，不能继续修改")
+
+            allowed_fields = {
+                "status",
+                "processing_stage",
+                "processing_progress",
+                "error_message",
+                "updated_by",
+            }
+            for key, value in data.items():
+                if key in allowed_fields:
+                    setattr(record, key, value)
+            record.updated_at = utc_now_naive()
+            await session.flush()
+            return record
 
     async def update_enrichment_fields_with_version(
         self,
@@ -1944,6 +2070,7 @@ class KnowledgeFileRepository:
             KnowledgeFile.document_version.label("document_version"),
             KnowledgeFile.version_label.label("version_label"),
             KnowledgeFile.is_current.label("is_current"),
+            KnowledgeFile.processing_params["ingestion_type"].as_string().label("ingestion_type"),
             literal(False).label("is_virtual_folder"),
             cast(literal(None), String).label("path_prefix"),
             literal(0).label("virtual_children_count"),
@@ -1967,6 +2094,7 @@ class KnowledgeFileRepository:
                 cast(literal(None), Integer).label("document_version"),
                 cast(literal(None), String).label("version_label"),
                 literal(True).label("is_current"),
+                cast(literal(None), String).label("ingestion_type"),
                 literal(True).label("is_virtual_folder"),
                 virtual_path_prefix,
                 func.count().label("virtual_children_count"),
@@ -2095,7 +2223,17 @@ class KnowledgeFileRepository:
                     func.sum(
                         case(
                             (
-                                non_folder & KnowledgeFile.status.in_(["processing", "waiting", "parsing", "indexing"]),
+                                non_folder
+                                & KnowledgeFile.status.in_(
+                                    [
+                                        "processing",
+                                        "waiting",
+                                        "parsing",
+                                        "indexing",
+                                        "flowchart_parsing",
+                                        "flowchart_confirming",
+                                    ]
+                                ),
                                 1,
                             ),
                             else_=0,

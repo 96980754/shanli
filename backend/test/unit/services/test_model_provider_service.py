@@ -114,6 +114,12 @@ def test_normalize_remote_model_preserves_detailed_model_config():
     assert model["raw_metadata"]["supported_parameters"] == ["temperature", "tools"]
 
 
+def test_normalize_remote_model_preserves_top_level_image_capability():
+    model = _normalize_remote_model({"id": "domestic-vision", "input_modalities": ["text", "image"]})
+
+    assert model["input_modalities"] == ["text", "image"]
+
+
 def test_normalize_remote_model_uses_endpoint_model_type():
     model = _normalize_remote_model({"id": "BAAI/bge-m3", "object": "model"}, "embedding")
 
