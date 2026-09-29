@@ -346,7 +346,9 @@ async def judge_entry(llm, question: str, gold: str, entry: dict, semaphore: asy
         return {"supported": False, "reason": "", "judge_error": str(last_err)}
 
 
-async def score_one(llm, record: dict, semaphore: asyncio.Semaphore, index: int, *, document_level: bool = False) -> dict:
+async def score_one(
+    llm, record: dict, semaphore: asyncio.Semaphore, index: int, *, document_level: bool = False
+) -> dict:
     """对单题判定引用条目；文档级模式先合并同文档的本轮证据。"""
     spans, entries = (
         build_cited_document_entries(record) if document_level else build_cited_entries(record)
@@ -583,7 +585,10 @@ def main() -> int:
     semaphore = asyncio.Semaphore(max(1, args.concurrency))
 
     async def run() -> list[dict]:
-        tasks = [score_one(llm, rec, semaphore, i, document_level=args.document_level) for i, rec in enumerate(records, 1)]
+        tasks = [
+            score_one(llm, rec, semaphore, i, document_level=args.document_level)
+            for i, rec in enumerate(records, 1)
+        ]
         items = []
         for done, task in enumerate(asyncio.as_completed(tasks), 1):
             items.append(await task)
