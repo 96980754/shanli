@@ -43,6 +43,7 @@ DEFAULT_JUDGE = "deepseek:deepseek-v4-flash"
 DEFAULT_OUTPUT = "/app/scripts/eval_datasets/reports"
 _REFUSAL_MARKERS = ("未找到", "未检索", "无相关", "没有找到", "未查询", "抱歉")
 _CLARIFY_WORDS = ("反问", "澄清", "补充", "请提供", "请补充")
+_JUDGE_ATTEMPTS = 4  # deepseek 偶发 Connection error，2 次不够；纯网络故障退避重试
 
 
 def build_prompt(question: str, gold: str, answer: str) -> str:
@@ -122,8 +123,10 @@ def parse_judge(text: str) -> dict:
 
 
 def classify(record: dict, judge: dict | None = None) -> str:
-    """按 Agent 回答形态 + judge 硬门槛分类：answered / refusal_gap / clarify_missing / e2e_error。
+    """按 Agent 回答形态 + judge 硬门槛分类：answered / refusal_gap / clarify_missing / judge_error / e2e_error。
 
+    评测失败单独成类：judge 没给出结论时既不能当实质作答，也不能当知识库缺口——
+    把调用失败归成拒答，等于把评测故障记成知识库问题，还会污染缺口清单。
     gate=fail 时以 judge 归因为准（拒答/未找到依据 → refusal_gap，反问澄清 → clarify_missing），
     不再受回答长度限制——修复长回答拒答（开头声明「知识库中未找到…」）被误判为实质作答的问题；
     短回答含拒答标记保留为无 judge 时的兜底。
@@ -136,6 +139,8 @@ def classify(record: dict, judge: dict | None = None) -> str:
     a = (record.get("agent_answer") or "").strip()
     if not a:
         return "clarify_missing"
+    if judge and judge.get("judge_error"):
+        return "judge_error"
     if judge and judge["gate"] == "fail":
         reason = judge.get("gate_reason") or ""
         if any(w in reason for w in _CLARIFY_WORDS):
@@ -166,19 +171,20 @@ async def score_one(llm, record: dict, semaphore: asyncio.Semaphore, max_tokens:
     async with semaphore:
         prompt = build_prompt(record["query"], record.get("gold_answer") or "", answer)
         last_err: Exception | None = None
-        for attempt in range(2):
+        for attempt in range(_JUDGE_ATTEMPTS):
             try:
                 # 显式超时：曾出现 deepseek 调用偶发挂起无响应，无超时会导致整轮评分卡死
                 resp = await asyncio.wait_for(llm.ainvoke(prompt), timeout=120)
                 parsed = parse_judge(str(resp.content))
-                parsed = parse_judge(str(resp.content))
                 parsed["score"] = score_of(parsed)
                 parsed["judge_error"] = None
                 return parsed
-            except Exception as e:  # JSON 解析/结构非法等：补一句提示重试一次
+            except ValueError as e:  # 输出无法解析为指定 JSON：补一句提示后重试
                 last_err = e
-                if attempt == 0:
-                    prompt = prompt + "\n\n（上一次输出无法解析为指定 JSON，请严格只输出指定 JSON 对象。）"
+                prompt = prompt + "\n\n（上一次输出无法解析为指定 JSON，请严格只输出指定 JSON 对象。）"
+            except Exception as e:  # 连接/超时等瞬时故障：提示语无用，退避重试
+                last_err = e
+                await asyncio.sleep(2**attempt)
         return {"score": None, "gate": "fail", "gate_reason": "",
                 "key_facts": {"total": 0, "hit": 0}, "supp_facts": {"total": 0, "hit": 0},
                 "key_missed": [], "supp_missed": [], "judge_error": str(last_err)}
@@ -256,8 +262,8 @@ def build_report(data: dict, md_path: Path, json_path: Path, domain: str = "") -
         "",
         "## 分域汇总",
         "",
-        "| 域 | 题数 | 答案正确性 | 实质作答 | 缺口拒答 | 需澄清 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| 域 | 题数 | 答案正确性 | 实质作答 | 缺口拒答 | 需澄清 | 评测失败 |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for name in sorted(domains):
         lst = domains[name]
@@ -266,7 +272,8 @@ def build_report(data: dict, md_path: Path, json_path: Path, domain: str = "") -
             f"| {name} | {len(lst)} | {_pct(_mean([it['score'] for it in rows]))} | "
             f"{sum(1 for it in lst if it['cls'] == 'answered')} | "
             f"{sum(1 for it in lst if it['cls'] == 'refusal_gap')} | "
-            f"{sum(1 for it in lst if it['cls'] == 'clarify_missing')} |"
+            f"{sum(1 for it in lst if it['cls'] == 'clarify_missing')} | "
+            f"{sum(1 for it in lst if it['cls'] == 'judge_error')} |"
         )
 
     lines += [
