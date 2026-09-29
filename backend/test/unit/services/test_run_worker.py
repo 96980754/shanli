@@ -140,6 +140,41 @@ async def test_process_agent_run_restores_invocation_meta(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_process_agent_run_restores_sandbox_scope(monkeypatch: pytest.MonkeyPatch):
+    """调用方声明的沙箱作用域要穿过 enqueue→worker，否则逐题新建会话就逐题新建沙箱。"""
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+
+    captured: dict[str, object] = {}
+
+    async def fake_load_input_message(message_id: int | None):
+        del message_id
+        return SimpleNamespace(
+            content="hello",
+            image_content=None,
+            extra_metadata={"file_thread_id": "eval-scope-1", "skills_thread_id": "eval-scope-1"},
+        )
+
+    async def fake_noop(*args, **kwargs):
+        del args, kwargs
+        return None
+
+    def fake_stream_agent_chat(**kwargs):
+        captured.update(kwargs)
+        return _BytesAsyncIter([b'{"status":"finished","request_id":"req-1","thread_id":"thread-1"}\n'])
+
+    monkeypatch.setattr(run_worker, "_load_input_message", fake_load_input_message)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fake_stream_agent_chat)
+    monkeypatch.setattr(run_worker, "append_run_event", fake_noop)
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_noop)
+
+    await run_worker.process_agent_run({"job_try": 1}, "run-1")
+
+    assert captured["meta"]["file_thread_id"] == "eval-scope-1"
+    assert captured["meta"]["skills_thread_id"] == "eval-scope-1"
+
+
+@pytest.mark.asyncio
 async def test_process_agent_run_non_retryable_error_marks_failed(monkeypatch: pytest.MonkeyPatch):
     run_obj = _build_run()
     _patch_common(monkeypatch, run_obj)

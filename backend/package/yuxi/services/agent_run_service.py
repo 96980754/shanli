@@ -489,6 +489,11 @@ def _prepare_run_input_message(
         metadata["attachment_file_ids"] = attachment_file_ids
     if source := meta.get("source"):
         metadata["source"] = source
+    # 沙箱作用域：调用方可显式指定本次 run 复用的沙箱，需随输入消息落库才能跨
+    # enqueue→worker 存活（worker 从这里交回 chat_service）；不落库则只能回退 thread_id。
+    for key in ("file_thread_id", "skills_thread_id"):
+        if scope := str(meta.get(key) or "").strip():
+            metadata[key] = scope
     if isinstance(meta.get("agent_invocation_meta"), dict):
         metadata["agent_invocation_meta"] = meta["agent_invocation_meta"]
     if run_type == "chat":

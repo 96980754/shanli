@@ -5,10 +5,15 @@
 （thread history tool_calls 中 query_kb/query_kbs/find_kb_document/open_kb_document 的结果），
 落盘 JSONL 供后续评分与汇报报告使用。失败题记录 error 不中断。
 
-为什么是「worker 绑定线程」而不是「逐题发一次调用」：
-- 沙箱按 (uid, thread_id) 分配（sandbox_id_for_thread），固定 worker 数即固定沙箱数上限；
-- 同一线程同时只允许一个 run，并发写同线程会被 run_busy(409) 拒绝；
-- 证据按 run_id 从线程历史切片，同线程多题不会互相污染。
+为什么是「一题一条对话 + 沙箱按 worker 复用」：
+- 线程历史是本轮 run 的上下文，同一条对话里跑多题时，后一题会读到前面所有题的问答——答案不再只由
+  本题决定，评测测的就不是这一题；反问澄清中断的题还会把自己的待答问题留给下一题（实测出现过下一题
+  的反问里列出上一题的现象）。所以每题新建一条对话，与 8/20 那批全量跑批（507 题 507 条对话）同条件。
+- 但沙箱是按对话分配的（sandbox_id_for_thread，(uid, file_thread_id, skills_thread_id)，缺省回退
+  thread_id），逐题新建对话若不管作用域就会逐题新建沙箱，每个约 500MB，几十题就把宿主机内存打满
+  （实测跑到第 21 题时 milvus 被 OOM 重启）。所以 meta 里显式指定 file_thread_id/skills_thread_id
+  为一个 worker 一条的固定作用域：对话逐题独立，沙箱 worker 内共用，沙箱数不超过并发数。
+- 证据按 run_id 从对话历史切片，一题一条对话下本题证据天然不与他题混淆。
 
 用法（容器内）：
     docker exec api-dev python /app/scripts/run_agent_e2e.py \
@@ -16,8 +21,12 @@
         --username <登录账号> --password <密码> --concurrency 3
 
 账号密码也可通过环境变量 YUXI_TEST_USER / YUXI_TEST_PASSWORD 传入。
-模型反问澄清（ask_user_question 中断）时，传 --clarify-reply 用同一段固定回复续跑一轮，
-让多模型比较拿到的是「澄清后的终答」而不是中断本身。
+模型反问澄清（ask_user_question 中断）时有两种自动作答策略，二选一：
+- `--clarify-reply <文本>`：每题都回同一段固定回复，让多模型比较拿到的是「澄清后的终答」
+  而不是中断本身（对所有模型同条件，答案才可比）；
+- `--clarify-pick-first`：每题取反问选项里的第一个作答，用于「拒答题在被追问时能不能答上来」
+  这类补测；追问没给选项的题如实记未作答，不编造回答。
+两者都可用 `--clarify-rounds N` 允许连续追问 N 轮（默认 1，模型再追问则按未完成记录）。
 
 每题的 record 里带 steps（本次 run 的工具调用次数与递归步数近似值），用于扫参
 「智能体最大执行步数」：传 --max-steps N 会在跑批前把 N 写进 Agent 的
@@ -45,7 +54,8 @@ POLL_INTERVAL_SECONDS = 3.0
 # 会返回正文证据的检索类工具：query_kb/query_kbs 返回命中片段（SearchOutputSchema.results），
 # find_kb_document 返回命中上下文窗口（FindOutputSchema.windows），open_kb_document 返回整窗正文
 # （OpenOutputSchema.content）。search_file 只返回文件元信息（无正文）、read_file 是沙箱通用
-# 文件读取器（读线程工作区文件而非 KB 内容），二者不作为忠实度证据采集。
+# 文件读取器（读线程工作区文件而非 KB 内容），二者不作为忠实度证据采集；search_file 的文件名
+# 另经 _collect_file_names 用作窗口片段的来源名（见 extract_retrieved_chunks）。
 CONTENT_TOOLS = {"query_kb", "query_kbs", "find_kb_document", "open_kb_document"}
 
 
@@ -57,16 +67,33 @@ def parse_args() -> argparse.Namespace:
         "--model-spec",
         help="可选，对话级模型覆盖（如 alibaba:qwen3.7-flash）；不传则用智能体自身配置的模型",
     )
-    parser.add_argument(
+    clarify = parser.add_mutually_exclusive_group()
+    clarify.add_argument(
         "--clarify-reply",
-        help="可选，模型用 ask_user_question 反问时自动续跑一轮的固定回复；不传则中断即计失败",
+        help="可选，模型用 ask_user_question 反问时自动续跑的固定回复；不传则中断即计失败",
+    )
+    clarify.add_argument(
+        "--clarify-pick-first",
+        action="store_true",
+        help="可选，反问时每题自动选第一个选项作答；追问没给选项的题不续跑，按未作答记录",
+    )
+    parser.add_argument(
+        "--clarify-rounds",
+        type=int,
+        default=1,
+        help="反问最多续跑几轮，每轮都用同一策略作答（默认 1；模型再次反问则按未完成记录）",
     )
     parser.add_argument("--base-url", default=BASE_URL_DEFAULT, help="API 基础地址")
     parser.add_argument("--username", help="登录账号（默认取环境变量 YUXI_TEST_USER）")
     parser.add_argument("--password", help="登录密码（默认取环境变量 YUXI_TEST_PASSWORD）")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="结果输出目录")
     parser.add_argument("--name", default="", help="结果文件名后缀（默认当日日期）")
-    parser.add_argument("--concurrency", type=int, default=2, help="worker 数，每个 worker 独占一条会话线程（默认 2）")
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=2,
+        help="worker 数：每题一条独立会话线程，每 worker 固定一个沙箱作用域（默认 2）",
+    )
     parser.add_argument("--timeout", type=float, default=1200.0, help="单题最长等待秒数（默认 1200）")
     parser.add_argument(
         "--max-steps",
@@ -96,7 +123,7 @@ async def create_thread(
     agent_slug: str,
     title: str,
 ) -> str:
-    """为 worker 建立独占会话线程；线程 ID 同时决定该 worker 的沙箱。"""
+    """建一条会话线程；用作沙箱作用域时，其线程 ID 即该 worker 共用的沙箱归属。"""
     resp = await client.post(
         f"{base_url}/api/chat/thread",
         json={"agent_id": agent_slug, "title": title},
@@ -110,8 +137,48 @@ async def create_thread(
     return thread_id
 
 
-def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
-    """按工具类型解析 tool_call_result.content 为正文证据片段；无正文的工具返回空。"""
+def _collect_file_names(messages: list[dict]) -> dict[str, str]:
+    """file_id → 文件名，取自同一轮的 search_file 与 query_kb/query_kbs 结果。
+
+    与前端 messageProcessor.js 的 fileInfoMap 同做法：find_kb_document/open_kb_document
+    只回 file_id 不回文件名，而模型往往是先用 search_file 按文件名找到文件、再打开它。
+    不采集 search_file，这类「向量检索没召回、改走文件检索兜底」的题在来源面板里就没有
+    可归因的文件名，引用证据会整批丢失。
+    """
+    names: dict[str, str] = {}
+    for msg in messages:
+        for tc in msg.get("tool_calls") or []:
+            if tc.get("status") != "success":
+                continue
+            try:
+                payload = json.loads((tc.get("tool_call_result") or {}).get("content") or "")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if tc.get("name") == "search_file":
+                entries = [
+                    (f.get("file_id"), f.get("filename")) for f in payload.get("files") or [] if isinstance(f, dict)
+                ]
+            elif tc.get("name") in {"query_kb", "query_kbs"}:
+                entries = [
+                    (c.get("file_id"), (c.get("metadata") or {}).get("source"))
+                    for c in payload.get("results") or []
+                    if isinstance(c, dict)
+                ]
+            else:
+                continue
+            for file_id, filename in entries:
+                if file_id and isinstance(filename, str) and filename:
+                    names.setdefault(str(file_id), filename)
+    return names
+
+
+def _parse_tool_content(tool_name: str, content: str, names: dict[str, str] | None = None) -> list[dict]:
+    """按工具类型解析 tool_call_result.content 为正文证据片段；无正文的工具返回空。
+
+    names 是 file_id → 文件名的同轮映射，用于给只带 file_id 的窗口片段补出来源名。
+    """
     try:
         payload = json.loads(content)
     except json.JSONDecodeError:
@@ -127,6 +194,7 @@ def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
         # windows[].content 是带行号的命中窗口正文，是 Agent 实际看到的证据。
         file_id = payload.get("file_id") or ""
         kb_id = payload.get("kb_id") or ""
+        metadata = {"file_id": file_id, "source": _file_name(payload, names)}
         chunks: list[dict] = []
         for w in payload.get("windows") or []:
             if not isinstance(w, dict):
@@ -141,6 +209,7 @@ def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
                     "kb_id": kb_id,
                     "file_id": file_id,
                     "tool": "find_kb_document",
+                    "metadata": metadata,
                 }
             )
         return chunks
@@ -156,9 +225,18 @@ def _parse_tool_content(tool_name: str, content: str) -> list[dict]:
                 "kb_id": payload.get("kb_id") or "",
                 "file_id": file_id,
                 "tool": "open_kb_document",
+                "metadata": {"file_id": file_id, "source": _file_name(payload, names)},
             }
         ]
     return []
+
+
+def _file_name(payload: dict, names: dict[str, str] | None) -> str:
+    """窗口片段的来源文件名：后端回填的 source 优先，缺失时用同轮 file_id 映射兜底。"""
+    source = str(payload.get("source") or "").strip()
+    if source or not names:
+        return source
+    return names.get(str(payload.get("file_id") or ""), "")
 
 
 def extract_retrieved_chunks(history: dict, run_id: str) -> list[dict]:
@@ -166,16 +244,16 @@ def extract_retrieved_chunks(history: dict, run_id: str) -> list[dict]:
 
     只取 run_id 命中的消息：线程被多题复用时，按 run 切片才能保证证据属于本题。
     """
+    messages = [msg for msg in history.get("history", []) if msg.get("run_id") == run_id]
+    names = _collect_file_names(messages)
     seen: set[str] = set()
     chunks: list[dict] = []
-    for msg in history.get("history", []):
-        if msg.get("run_id") != run_id:
-            continue
+    for msg in messages:
         for tc in msg.get("tool_calls") or []:
             if tc.get("name") not in CONTENT_TOOLS or tc.get("status") != "success":
                 continue
             result = tc.get("tool_call_result") or {}
-            for chunk in _parse_tool_content(tc["name"], result.get("content") or ""):
+            for chunk in _parse_tool_content(tc["name"], result.get("content") or "", names):
                 cid = str(chunk.get("id") or chunk.get("chunk_id") or "")
                 if cid and cid not in seen:
                     seen.add(cid)
@@ -298,16 +376,31 @@ async def start_run(
     query: str,
     request_id: str,
     model_spec: str | None = None,
+    sandbox_scope: str | None = None,
 ) -> str:
     payload = {
         "query": query,
         "agent_slug": agent_slug,
         "thread_id": thread_id,
-        "meta": {"source": EVALUATION_SOURCE, "request_id": request_id},
+        "meta": run_meta(request_id, sandbox_scope),
     }
     if model_spec:
         payload["model_spec"] = model_spec
     return await create_run(client, headers, base_url, payload)
+
+
+def run_meta(request_id: str, sandbox_scope: str | None) -> dict:
+    """run 的 meta：把沙箱作用域与对话线程分开——一题一条对话（上下文干净），沙箱按 worker 复用。
+
+    沙箱按 (uid, file_thread_id, skills_thread_id) 分配，缺省回退 thread_id。若逐题新建对话又
+    不指定作用域，就会逐题新建沙箱（每个约 500MB），几十题就把宿主机内存打满；固定作用域则
+    worker 内所有题共用同一个沙箱。后端对这两个键是显式支持的（chat_service 的沙箱作用域解析）。
+    """
+    meta = {"source": EVALUATION_SOURCE, "request_id": request_id}
+    if sandbox_scope:
+        meta["file_thread_id"] = sandbox_scope
+        meta["skills_thread_id"] = sandbox_scope
+    return meta
 
 
 async def wait_run(
@@ -337,16 +430,45 @@ async def wait_run(
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
+def resolve_question_id(item: dict, index: int) -> str:
+    """问题 ID；缺省规则与前端 normalizeQuestions、后端 normalize_questions 一致（q-1 起）。"""
+    return str(item.get("question_id") or item.get("questionId") or f"q-{index + 1}").strip()
+
+
 def build_clarification_answer(questions: list[dict], reply: str) -> dict[str, str]:
-    """把固定回复套到本次中断的问题 ID 上；ID 缺省规则与前端 normalizeQuestions 一致（q-1 起）。"""
+    """把固定回复套到本次中断的问题 ID 上。"""
     answer: dict[str, str] = {}
     for index, item in enumerate(questions):
         if not isinstance(item, dict):
             continue
-        qid = str(item.get("question_id") or item.get("questionId") or f"q-{index + 1}").strip()
+        qid = resolve_question_id(item, index)
         if qid:
             answer[qid] = reply
     return answer
+
+
+def build_first_option_answer(questions: list[dict]) -> tuple[dict, list[str]]:
+    """每题取第一个选项作答：返回（答案、没有可选项因而未作答的问题 ID）。
+
+    取值形状与前端 HumanApprovalModal 的 buildAnswer 一致：单选给字符串、多选给列表。
+    追问没给选项的题如实留空，不编造回答（调用方据此放弃本轮续跑）。
+    """
+    answer: dict[str, object] = {}
+    unanswered: list[str] = []
+    for index, item in enumerate(questions):
+        if not isinstance(item, dict):
+            continue
+        qid = resolve_question_id(item, index)
+        if not qid:
+            continue
+        options = [opt for opt in (item.get("options") or []) if isinstance(opt, dict)]
+        values = [str(opt.get("value") or opt.get("label") or "").strip() for opt in options]
+        values = [value for value in values if value]
+        if not values:
+            unanswered.append(qid)
+            continue
+        answer[qid] = [values[0]] if item.get("multi_select") else values[0]
+    return answer, unanswered
 
 
 async def fetch_interrupt_questions(
@@ -370,6 +492,14 @@ async def fetch_interrupt_questions(
     return []
 
 
+def is_clarification_interrupt(payload: dict) -> bool:
+    """本次 run 是否停在「模型反问澄清」上（区别于失败/取消等其它中断）。"""
+    return (
+        payload.get("status") == "interrupted"
+        and (payload.get("error") or {}).get("type") == "ask_user_question_required"
+    )
+
+
 async def resume_after_clarification(
     client: httpx.AsyncClient,
     headers: dict[str, str],
@@ -377,34 +507,67 @@ async def resume_after_clarification(
     agent_slug: str,
     thread_id: str,
     run_id: str,
-    payload: dict,
-    reply: str,
+    answer: dict,
     timeout: float,
     model_spec: str | None = None,
-) -> tuple[str, dict, list[dict]]:
-    """模型反问澄清时用固定回复续跑一轮，返回 (run_id, 终态 payload, 提问列表)。
-
-    只对 ask_user_question 中断生效；回复对所有模型是同一段文本，答案才可比。
-    未中断、或拿不到提问列表时原样返回，由调用方按中断处理。
-    """
-    error = payload.get("error") or {}
-    if payload.get("status") != "interrupted" or error.get("type") != "ask_user_question_required":
-        return run_id, payload, []
-    questions = await fetch_interrupt_questions(client, headers, base_url, run_id)
-    answer = build_clarification_answer(questions, reply)
-    if not answer:
-        return run_id, payload, questions
+    sandbox_scope: str | None = None,
+) -> tuple[str, dict]:
+    """用给定答案续跑一轮，返回 (新 run_id, 终态 payload)。"""
     resume_payload = {
         "agent_slug": agent_slug,
         "thread_id": thread_id,
         "resume": answer,
         "created_by_run_id": run_id,
-        "meta": {"source": EVALUATION_SOURCE, "request_id": f"agent-e2e-{uuid.uuid4().hex}"},
+        "meta": run_meta(f"agent-e2e-{uuid.uuid4().hex}", sandbox_scope),
     }
     if model_spec:
         resume_payload["model_spec"] = model_spec
     resumed_run_id = await create_run(client, headers, base_url, resume_payload)
-    return resumed_run_id, await wait_run(client, headers, base_url, resumed_run_id, timeout), questions
+    return resumed_run_id, await wait_run(client, headers, base_url, resumed_run_id, timeout)
+
+
+async def answer_clarifications(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    base_url: str,
+    agent_slug: str,
+    thread_id: str,
+    run_id: str,
+    payload: dict,
+    clarify_reply: str | None,
+    timeout: float,
+    model_spec: str | None,
+    max_rounds: int,
+    sandbox_scope: str | None = None,
+) -> tuple[str, dict, list[dict]]:
+    """反复「反问 → 作答 → 续跑」，直到跑完、答不出来或到轮次上限。
+
+    返回 (最终 run_id, 最终 payload, 逐轮明细)。明细带每轮的提问、作答与
+    「追问没给选项因而未作答」的问题 ID，供补测报告如实标注未作答的题；
+    各轮续跑出的 run_id 已并入调用方的 run_ids 计步，不重复落进明细。
+    """
+    rounds: list[dict] = []
+    while len(rounds) < max_rounds and is_clarification_interrupt(payload):
+        questions = await fetch_interrupt_questions(client, headers, base_url, run_id)
+        if clarify_reply is not None:
+            answer, unanswered = build_clarification_answer(questions, clarify_reply), []
+        else:
+            answer, unanswered = build_first_option_answer(questions)
+        rounds.append(
+            {
+                "questions": [str(item.get("question") or "") for item in questions if isinstance(item, dict)],
+                "answer": answer,
+                "unanswered": unanswered,
+                "resumed_run_id": None,
+            }
+        )
+        if not answer:
+            break
+        run_id, payload = await resume_after_clarification(
+            client, headers, base_url, agent_slug, thread_id, run_id, answer, timeout, model_spec, sandbox_scope
+        )
+        rounds[-1]["resumed_run_id"] = run_id
+    return run_id, payload, rounds
 
 
 async def run_one(
@@ -417,6 +580,9 @@ async def run_one(
     timeout: float,
     model_spec: str | None = None,
     clarify_reply: str | None = None,
+    clarify_pick_first: bool = False,
+    clarify_rounds: int = 1,
+    sandbox_scope: str | None = None,
 ) -> dict:
     request_id = f"agent-e2e-{uuid.uuid4().hex}"
     record: dict = {
@@ -431,19 +597,32 @@ async def run_one(
     }
     started = time.monotonic()
     try:
-        run_id = await start_run(client, headers, base_url, agent_slug, thread_id, q["query"], request_id, model_spec)
+        run_id = await start_run(
+            client, headers, base_url, agent_slug, thread_id, q["query"], request_id, model_spec, sandbox_scope
+        )
         payload = await wait_run(client, headers, base_url, run_id, timeout)
         run_ids = [run_id]
-        if clarify_reply:
-            first_run_id = run_id
-            run_id, payload, questions = await resume_after_clarification(
-                client, headers, base_url, agent_slug, thread_id, run_id, payload, clarify_reply, timeout, model_spec
+        if clarify_reply or clarify_pick_first:
+            run_id, payload, rounds = await answer_clarifications(
+                client,
+                headers,
+                base_url,
+                agent_slug,
+                thread_id,
+                run_id,
+                payload,
+                clarify_reply,
+                timeout,
+                model_spec,
+                clarify_rounds,
+                sandbox_scope,
             )
-            if run_id != first_run_id:
-                run_ids.append(run_id)
+            run_ids.extend(item.pop("resumed_run_id") for item in rounds if item["resumed_run_id"])
+            if rounds:
                 record["clarification"] = {
-                    "questions": [str(item.get("question") or "") for item in questions if isinstance(item, dict)],
                     "reply": clarify_reply,
+                    "pick_first": clarify_pick_first,
+                    "rounds": rounds,
                 }
     except Exception as e:
         record["error"] = f"调用失败: {e}"
@@ -493,10 +672,30 @@ async def run_worker(
     emit,
     model_spec: str | None = None,
     clarify_reply: str | None = None,
+    clarify_pick_first: bool = False,
+    clarify_rounds: int = 1,
 ) -> None:
-    thread_id = await create_thread(client, headers, base_url, agent_slug, f"Agent Evaluation Run #{worker_index + 1}")
-    for q in questions:
-        record = await run_one(client, headers, base_url, agent_slug, thread_id, q, timeout, model_spec, clarify_reply)
+    sandbox_scope = await create_thread(
+        client, headers, base_url, agent_slug, f"Agent Evaluation Sandbox #{worker_index + 1}"
+    )
+    for index, q in enumerate(questions):
+        thread_id = await create_thread(
+            client, headers, base_url, agent_slug, f"Agent Evaluation Run #{worker_index + 1}-{index + 1}"
+        )
+        record = await run_one(
+            client,
+            headers,
+            base_url,
+            agent_slug,
+            thread_id,
+            q,
+            timeout,
+            model_spec,
+            clarify_reply,
+            clarify_pick_first,
+            clarify_rounds,
+            sandbox_scope,
+        )
         await emit(record)
 
 
@@ -523,10 +722,16 @@ async def run(args: argparse.Namespace) -> int:
         token = await login(args.base_url, username, password, client)
         headers = {"Authorization": f"Bearer {token}"}
         worker_count = max(1, min(args.concurrency, len(questions)))
+        if args.clarify_pick_first:
+            clarify_mode = f"自动选第一个选项，最多 {args.clarify_rounds} 轮"
+        elif args.clarify_reply:
+            clarify_mode = f"固定回复「{args.clarify_reply}」，最多 {args.clarify_rounds} 轮"
+        else:
+            clarify_mode = "关闭（中断即计失败）"
         print(
             f"登录成功，开始运行 {len(questions)} 题（agent: {args.agent_slug}，"
             f"模型: {args.model_spec or '智能体默认配置'}，worker/沙箱: {worker_count}，"
-            f"澄清续跑: {args.clarify_reply or '关闭'}，"
+            f"澄清续跑: {clarify_mode}，"
             f"最大执行步数: {args.max_steps if args.max_steps else '保持 Agent 现有配置'}）"
         )
 
@@ -596,6 +801,8 @@ async def run(args: argparse.Namespace) -> int:
                             emit,
                             args.model_spec,
                             args.clarify_reply,
+                            args.clarify_pick_first,
+                            args.clarify_rounds,
                         )
                         for i, bucket in enumerate(buckets)
                         if bucket

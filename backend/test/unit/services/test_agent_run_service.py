@@ -68,6 +68,36 @@ def test_prepare_run_input_message_keeps_invocation_meta_namespaced():
     assert "custom_variables" not in input_message.extra_metadata
 
 
+def test_prepare_run_input_message_persists_sandbox_scope():
+    """请求 meta 声明的沙箱作用域必须落进输入消息，否则 worker 侧只能回退 thread_id。"""
+    input_message = agent_run_service._prepare_run_input_message(
+        run_type="chat",
+        input_message=build_chat_input_message("hello"),
+        resume=None,
+        request_id="req-1",
+        model_spec="provider:model",
+        meta={"file_thread_id": "eval-scope-1", "skills_thread_id": " eval-scope-1 "},
+    )
+
+    assert input_message.extra_metadata["file_thread_id"] == "eval-scope-1"
+    assert input_message.extra_metadata["skills_thread_id"] == "eval-scope-1"
+
+
+def test_prepare_run_input_message_skips_blank_sandbox_scope():
+    """空串等同于不声明：不写键，交回 chat_service 按 thread_id 分配。"""
+    input_message = agent_run_service._prepare_run_input_message(
+        run_type="chat",
+        input_message=build_chat_input_message("hello"),
+        resume=None,
+        request_id="req-1",
+        model_spec="provider:model",
+        meta={"file_thread_id": "   ", "skills_thread_id": None},
+    )
+
+    assert "file_thread_id" not in input_message.extra_metadata
+    assert "skills_thread_id" not in input_message.extra_metadata
+
+
 def _progress_event(seq: str, chunks: list[dict]) -> dict:
     return {
         "seq": seq,

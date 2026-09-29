@@ -129,6 +129,10 @@ def _install_harness(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int]]:
     async def fake_normalize_agent_context_config(context, **_kwargs):
         return dict(context or {})
 
+    async def fake_prewarm_sandbox(**_kwargs):
+        # 预冷会真连 sandbox-provisioner 建容器，单元测试里不触发。
+        return None
+
     class FakeRunRepository:
         def __init__(self, _db):
             pass
@@ -153,6 +157,7 @@ def _install_harness(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int]]:
     )
     monkeypatch.setattr(svc, "get_trace_info", lambda _run_context: {})
     monkeypatch.setattr(svc, "flush_langfuse", lambda: None)
+    monkeypatch.setattr(svc, "_prewarm_sandbox", fake_prewarm_sandbox)
     return output_messages
 
 

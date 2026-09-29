@@ -362,6 +362,11 @@ async def process_agent_run(ctx, run_id: str):
         meta["skills_thread_id"] = runtime.get("skills_thread_id")
     if input_metadata.get("source"):
         meta["source"] = input_metadata.get("source")
+    # 调用方在请求 meta 里声明的沙箱作用域：随输入消息落库、在此交回 chat_service，
+    # 让同一作用域下的多个 run 复用同一个沙箱容器；不声明则回退 thread_id。
+    for key in ("file_thread_id", "skills_thread_id"):
+        if scope := input_metadata.get(key):
+            meta[key] = scope
     if isinstance(input_metadata.get("agent_invocation_meta"), dict):
         meta["agent_invocation_meta"] = input_metadata.get("agent_invocation_meta") or {}
 

@@ -19,6 +19,16 @@ from yuxi.services import chat_service as svc
 from yuxi.utils.question_utils import normalize_options
 
 
+@pytest.fixture(autouse=True)
+def _disable_sandbox_prewarm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """stream_agent_resume 会后台预冷沙箱容器，单元测试不能连真实沙箱服务。"""
+
+    async def _noop(**_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(svc, "_prewarm_sandbox", _noop)
+
+
 class _FakeSession:
     def __init__(self):
         self.commit_count = 0
