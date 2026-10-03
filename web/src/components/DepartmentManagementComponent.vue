@@ -184,51 +184,62 @@
         <a-divider v-if="!departmentManagement.editMode" />
 
         <template v-if="!departmentManagement.editMode">
-          <p class="admin-section-hint">{{ $t('deptMgmt.adminRequiredHint') }}</p>
-
-          <a-form-item :label="$t('deptMgmt.adminUid')" required class="form-item">
-            <a-input
-              v-model:value="departmentManagement.form.adminUid"
-              :placeholder="$t('deptMgmt.adminUidPlaceholder')"
-              size="large"
-              :maxlength="20"
-              @blur="checkAdminUid"
-            />
-            <div v-if="departmentManagement.form.uidError" class="error-text">
-              {{ departmentManagement.form.uidError }}
+          <a-form-item :label="$t('deptMgmt.adminLabel')" class="form-item">
+            <a-radio-group v-model:value="departmentManagement.form.createAdmin" button-style="solid">
+              <a-radio-button :value="true">{{ $t('deptMgmt.adminModeCreate') }}</a-radio-button>
+              <a-radio-button :value="false">{{ $t('deptMgmt.adminModeLater') }}</a-radio-button>
+            </a-radio-group>
+            <div v-if="departmentManagement.form.createAdmin" class="help-text">
+              {{ $t('deptMgmt.adminCreateHint') }}
             </div>
-            <div v-else class="help-text">{{ $t('deptMgmt.uidForLogin') }}</div>
+            <div v-else class="help-text">{{ $t('deptMgmt.adminLaterHint') }}</div>
           </a-form-item>
 
-          <a-form-item :label="$t('login.label.password')" required class="form-item">
-            <a-input-password
-              v-model:value="departmentManagement.form.adminPassword"
-              :placeholder="$t('deptMgmt.adminPasswordPlaceholder')"
-              size="large"
-              :maxlength="50"
-            />
-          </a-form-item>
+          <template v-if="departmentManagement.form.createAdmin">
+            <a-form-item :label="$t('deptMgmt.adminUid')" required class="form-item">
+              <a-input
+                v-model:value="departmentManagement.form.adminUid"
+                :placeholder="$t('deptMgmt.adminUidPlaceholder')"
+                size="large"
+                :maxlength="20"
+                @blur="checkAdminUid"
+              />
+              <div v-if="departmentManagement.form.uidError" class="error-text">
+                {{ departmentManagement.form.uidError }}
+              </div>
+              <div v-else class="help-text">{{ $t('deptMgmt.uidForLogin') }}</div>
+            </a-form-item>
 
-          <a-form-item :label="$t('login.label.confirmPassword')" required class="form-item">
-            <a-input-password
-              v-model:value="departmentManagement.form.adminConfirmPassword"
-              :placeholder="$t('login.validation.confirmRequired')"
-              size="large"
-              :maxlength="50"
-            />
-          </a-form-item>
+            <a-form-item :label="$t('login.label.password')" required class="form-item">
+              <a-input-password
+                v-model:value="departmentManagement.form.adminPassword"
+                :placeholder="$t('deptMgmt.adminPasswordPlaceholder')"
+                size="large"
+                :maxlength="50"
+              />
+            </a-form-item>
 
-          <a-form-item :label="$t('deptMgmt.adminPhoneOptional')" class="form-item">
-            <a-input
-              v-model:value="departmentManagement.form.adminPhone"
-              :placeholder="$t('deptMgmt.adminPhonePlaceholder')"
-              size="large"
-              :maxlength="11"
-            />
-            <div v-if="departmentManagement.form.phoneError" class="error-text">
-              {{ departmentManagement.form.phoneError }}
-            </div>
-          </a-form-item>
+            <a-form-item :label="$t('login.label.confirmPassword')" required class="form-item">
+              <a-input-password
+                v-model:value="departmentManagement.form.adminConfirmPassword"
+                :placeholder="$t('login.validation.confirmRequired')"
+                size="large"
+                :maxlength="50"
+              />
+            </a-form-item>
+
+            <a-form-item :label="$t('deptMgmt.adminPhoneOptional')" class="form-item">
+              <a-input
+                v-model:value="departmentManagement.form.adminPhone"
+                :placeholder="$t('deptMgmt.adminPhonePlaceholder')"
+                size="large"
+                :maxlength="11"
+              />
+              <div v-if="departmentManagement.form.phoneError" class="error-text">
+                {{ departmentManagement.form.phoneError }}
+              </div>
+            </a-form-item>
+          </template>
         </template>
       </a-form>
     </a-modal>
@@ -350,6 +361,7 @@ const departmentManagement = reactive({
   form: {
     name: '',
     description: '',
+    createAdmin: true,
     adminUid: '',
     adminPassword: '',
     adminConfirmPassword: '',
@@ -589,6 +601,7 @@ const showAddDepartmentModal = () => {
   departmentManagement.form = {
     name: '',
     description: '',
+    createAdmin: true,
     adminUid: '',
     adminPassword: '',
     adminConfirmPassword: '',
@@ -607,6 +620,7 @@ const showEditDepartmentModal = (department) => {
   departmentManagement.form = {
     name: department.name,
     description: department.description || '',
+    createAdmin: false,
     adminUid: '',
     adminPassword: '',
     adminConfirmPassword: '',
@@ -682,48 +696,49 @@ const handleDepartmentFormSubmit = async () => {
       return
     }
 
-    // 验证管理员UID
+    // 验证管理员UID、密码与手机号（选择「暂不指定」时整块跳过）
+    const creatingAdmin = !departmentManagement.editMode && departmentManagement.form.createAdmin
     const adminUid = departmentManagement.form.adminUid.trim()
-    if (!adminUid) {
-      notification.error({ message: t('deptMgmt.adminUidRequired') })
-      return
-    }
+    if (creatingAdmin) {
+      if (!adminUid) {
+        notification.error({ message: t('deptMgmt.adminUidRequired') })
+        return
+      }
 
-    if (!/^[a-zA-Z0-9_]+$/.test(adminUid)) {
-      notification.error({ message: t('deptMgmt.uidInvalid') })
-      return
-    }
+      if (!/^[a-zA-Z0-9_]+$/.test(adminUid)) {
+        notification.error({ message: t('deptMgmt.uidInvalid') })
+        return
+      }
 
-    if (adminUid.length < 3 || adminUid.length > 20) {
-      notification.error({ message: t('deptMgmt.uidLengthInvalid') })
-      return
-    }
+      if (adminUid.length < 3 || adminUid.length > 20) {
+        notification.error({ message: t('deptMgmt.uidLengthInvalid') })
+        return
+      }
 
-    if (departmentManagement.form.uidError) {
-      notification.error({ message: t('deptMgmt.adminUidUnavailable') })
-      return
-    }
+      if (departmentManagement.form.uidError) {
+        notification.error({ message: t('deptMgmt.adminUidUnavailable') })
+        return
+      }
 
-    // 验证密码
-    if (!departmentManagement.form.adminPassword) {
-      notification.error({ message: t('deptMgmt.adminPasswordRequired') })
-      return
-    }
+      if (!departmentManagement.form.adminPassword) {
+        notification.error({ message: t('deptMgmt.adminPasswordRequired') })
+        return
+      }
 
-    if (
-      departmentManagement.form.adminPassword !== departmentManagement.form.adminConfirmPassword
-    ) {
-      notification.error({ message: t('login.validation.passwordMismatch') })
-      return
-    }
+      if (
+        departmentManagement.form.adminPassword !== departmentManagement.form.adminConfirmPassword
+      ) {
+        notification.error({ message: t('login.validation.passwordMismatch') })
+        return
+      }
 
-    // 验证手机号
-    if (
-      departmentManagement.form.adminPhone &&
-      !validatePhoneNumber(departmentManagement.form.adminPhone)
-    ) {
-      notification.error({ message: t('userMgmt.phoneFormatInvalid') })
-      return
+      if (
+        departmentManagement.form.adminPhone &&
+        !validatePhoneNumber(departmentManagement.form.adminPhone)
+      ) {
+        notification.error({ message: t('userMgmt.phoneFormatInvalid') })
+        return
+      }
     }
 
     departmentManagement.loading = true
@@ -736,16 +751,22 @@ const handleDepartmentFormSubmit = async () => {
       })
       notification.success({ message: t('deptMgmt.departmentUpdated') })
     } else {
-      // 创建部门，同时创建管理员
+      // 创建部门；指定管理员时同时新建管理员账号
       await departmentApi.createDepartment({
         name: departmentManagement.form.name.trim(),
         description: departmentManagement.form.description.trim() || undefined,
-        admin_uid: adminUid,
-        admin_password: departmentManagement.form.adminPassword,
-        admin_phone: departmentManagement.form.adminPhone || undefined
+        ...(creatingAdmin && {
+          admin_uid: adminUid,
+          admin_password: departmentManagement.form.adminPassword,
+          admin_phone: departmentManagement.form.adminPhone || undefined
+        })
       })
 
-      message.success(t('deptMgmt.departmentCreated', { uid: adminUid }))
+      message.success(
+        creatingAdmin
+          ? t('deptMgmt.departmentCreated', { uid: adminUid })
+          : t('deptMgmt.departmentCreatedWithoutAdmin')
+      )
     }
 
     // 重新获取部门列表

@@ -1409,6 +1409,7 @@ export default {
     sourceAll: 'All sources',
     sourceFeedback: 'Feedback tuning',
     sourceUdesk: 'Service records',
+    sourceKnowledgeGap: 'Knowledge gap answer',
     enabledAll: 'All states',
     enabledOn: 'Enabled',
     enabledOff: 'Disabled',
@@ -3072,8 +3073,12 @@ export default {
     departmentNamePlaceholder: 'Please enter the department name',
     departmentDescription: 'Department Description',
     departmentDescriptionPlaceholder: 'Please enter the department description (optional)',
-    adminRequiredHint:
-      "An administrator must be created along with the department. This administrator will manage the department's users.",
+    adminLabel: 'Administrator',
+    adminModeCreate: 'Create administrator',
+    adminModeLater: 'Assign later',
+    adminCreateHint: "Create an administrator account that manages the department's users.",
+    adminLaterHint:
+      'Create the department only; assign an existing user as its administrator later in User Management.',
     adminUid: 'Admin UID',
     adminUidPlaceholder: 'Please enter the admin UID (3-20 letters/digits/underscores)',
     uidForLogin: 'This UID will be used for login',
@@ -3122,10 +3127,12 @@ export default {
     adminPasswordRequired: 'Please enter the admin password',
     departmentUpdated: 'Department updated successfully',
     departmentCreated: 'Department created. Admin "{uid}" has been created.',
+    departmentCreatedWithoutAdmin:
+      'Department created. You can assign its administrator in User Management.',
     departmentOperationFailedLog: 'Department operation failed',
     confirmDeleteDepartmentTitle: 'Confirm Delete Department',
     confirmDeleteDepartmentContent:
-      'Are you sure you want to delete department "{name}"? This cannot be undone. Users under this department will be moved to the default department, and department-level configuration and API keys will be removed as well.',
+      'Are you sure you want to delete department "{name}"? This cannot be undone. Users under this department will be moved to the default department.',
     departmentDeleted: 'Department deleted successfully',
     deleteDepartmentFailedLog: 'Failed to delete department'
   },

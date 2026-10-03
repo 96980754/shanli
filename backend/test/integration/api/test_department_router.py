@@ -85,6 +85,37 @@ async def test_superadmin_can_delete_department_with_users(test_client, admin_he
             await test_client.delete(f"/api/departments/{department_id}", headers=admin_headers)
 
 
+async def test_superadmin_can_create_department_without_admin(test_client, admin_headers):
+    """管理员可留空：只建部门，之后在用户管理里把已有用户设为该部门管理员。"""
+    suffix = uuid.uuid4().hex[:8]
+    department_id = None
+
+    try:
+        response = await test_client.post(
+            "/api/departments",
+            json={"name": f"pytest_empty_department_{suffix}", "description": "department without admin"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        department_id = response.json()["id"]
+        assert response.json()["user_count"] == 0
+    finally:
+        if department_id is not None:
+            await test_client.delete(f"/api/departments/{department_id}", headers=admin_headers)
+
+
+async def test_create_department_rejects_half_admin_credentials(test_client, admin_headers):
+    suffix = uuid.uuid4().hex[:8]
+    response = await test_client.post(
+        "/api/departments",
+        json={"name": f"pytest_half_admin_{suffix}", "admin_uid": f"pta_{suffix}"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "创建管理员需同时提供用户ID和密码"
+
+
 async def test_superadmin_cannot_delete_default_department(test_client, admin_headers):
     departments_response = await test_client.get("/api/departments", headers=admin_headers)
     assert departments_response.status_code == 200, departments_response.text

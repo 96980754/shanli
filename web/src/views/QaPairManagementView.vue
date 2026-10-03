@@ -147,7 +147,8 @@ const { t } = useI18n()
 const sourceOptions = computed(() => [
   { label: t('qaPairs.sourceAll'), value: '' },
   { label: t('qaPairs.sourceFeedback'), value: 'feedback' },
-  { label: t('qaPairs.sourceUdesk'), value: 'udesk' }
+  { label: t('qaPairs.sourceUdesk'), value: 'udesk' },
+  { label: t('qaPairs.sourceKnowledgeGap'), value: 'knowledge_gap' }
 ])
 const enabledOptions = computed(() => [
   { label: t('qaPairs.enabledAll'), value: '' },

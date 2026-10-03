@@ -29,13 +29,16 @@ department = APIRouter(prefix="/departments", tags=["department"])
 
 
 class DepartmentCreate(BaseModel):
-    """创建部门请求"""
+    """创建部门请求
+
+    管理员可留空：不传 admin_uid/admin_password 时只建空部门，
+    之后到用户管理里把已有用户设为该部门管理员。
+    """
 
     name: str
     description: str | None = None
-    # 必需的管理员信息
-    admin_uid: str
-    admin_password: str
+    admin_uid: str | None = None
+    admin_password: str | None = None
     admin_phone: str | None = None
 
 
@@ -128,7 +131,7 @@ async def create_department(
     current_user: User = Depends(get_superadmin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建新部门，同时创建该部门的管理员"""
+    """创建新部门；带管理员信息时同时新建该部门管理员，否则只建空部门。"""
     dept_repo = DepartmentRepository()
     user_repo = UserRepository()
 
@@ -136,37 +139,50 @@ async def create_department(
     if await dept_repo.exists_by_name(department_data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="部门名称已存在")
 
-    # 验证管理员 uid 格式
-    admin_uid = department_data.admin_uid
-    if not re.match(r"^[a-zA-Z0-9_]+$", admin_uid):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户ID只能包含字母、数字和下划线",
-        )
-
-    if len(admin_uid) < 3 or len(admin_uid) > 20:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户ID长度必须在3-20个字符之间",
-        )
-
-    # 检查 uid 是否已存在
-    if await user_repo.exists_by_uid(admin_uid):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户ID已存在",
-        )
-
-    # 检查手机号是否已存在（如果提供了）
+    admin_uid = (department_data.admin_uid or "").strip()
     admin_phone = department_data.admin_phone
-    if admin_phone:
-        if not is_valid_phone_number(admin_phone):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="手机号格式不正确")
-        if await user_repo.exists_by_phone(admin_phone):
+    creating_admin = bool(admin_uid)
+    if creating_admin != bool(department_data.admin_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="创建管理员需同时提供用户ID和密码",
+        )
+    if not creating_admin and admin_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未指定管理员时不能填写管理员手机号",
+        )
+
+    if creating_admin:
+        # 验证管理员 uid 格式
+        if not re.match(r"^[a-zA-Z0-9_]+$", admin_uid):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="手机号已存在",
+                detail="用户ID只能包含字母、数字和下划线",
             )
+
+        if len(admin_uid) < 3 or len(admin_uid) > 20:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户ID长度必须在3-20个字符之间",
+            )
+
+        # 检查 uid 是否已存在
+        if await user_repo.exists_by_uid(admin_uid):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户ID已存在",
+            )
+
+        # 检查手机号是否已存在（如果提供了）
+        if admin_phone:
+            if not is_valid_phone_number(admin_phone):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="手机号格式不正确")
+            if await user_repo.exists_by_phone(admin_phone):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="手机号已存在",
+                )
 
     # 创建部门
     new_department = await dept_repo.create(
@@ -182,26 +198,28 @@ async def create_department(
     )
 
     # 创建管理员用户（落到默认团队）
-    hashed_password = AuthUtils.hash_password(department_data.admin_password)
-    default_team = await TeamRepository().get_default(new_department.id)
-    await user_repo.create(
-        {
-            "username": admin_uid,
-            "uid": admin_uid,
-            "phone_number": admin_phone,
-            "password_hash": hashed_password,
-            "role": "admin",
-            "department_id": new_department.id,
-            "team_id": default_team.id if default_team else None,
-        }
-    )
+    if creating_admin:
+        hashed_password = AuthUtils.hash_password(department_data.admin_password)
+        default_team = await TeamRepository().get_default(new_department.id)
+        await user_repo.create(
+            {
+                "username": admin_uid,
+                "uid": admin_uid,
+                "phone_number": admin_phone,
+                "password_hash": hashed_password,
+                "role": "admin",
+                "department_id": new_department.id,
+                "team_id": default_team.id if default_team else None,
+            }
+        )
 
     # 记录操作
-    await log_operation(
-        db, current_user.id, "创建部门", f"创建部门: {department_data.name}，并创建管理员: {admin_uid}", request
-    )
+    detail = f"创建部门: {department_data.name}"
+    if creating_admin:
+        detail += f"，并创建管理员: {admin_uid}"
+    await log_operation(db, current_user.id, "创建部门", detail, request)
 
-    return {**new_department.to_dict(), "user_count": 1}
+    return {**new_department.to_dict(), "user_count": 1 if creating_admin else 0}
 
 
 @department.put("/{department_id}", response_model=DepartmentResponse)
