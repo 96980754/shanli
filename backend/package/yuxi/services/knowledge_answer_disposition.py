@@ -354,6 +354,19 @@ def is_final_assistant_message(message: dict[str, Any]) -> bool:
     )
 
 
+# 固定话术的落位契约是“正文第一个字符”，但模型常把一句过程旁白写在它前面（线上 636：
+# 先写“两次针对性检索……按规则执行统一拒答。”，再写固定话术）。严格 startswith 会把这类
+# 拒答当成正常回答——不落知识缺口、前端不给转人工按钮、拒答率少算，因此容忍至多一段前置
+# 旁白。只认正文开头的前两段：正文中段才引用同一句话术（如正常回答里解释拒答话术）仍判 answered。
+FIXED_REPLY_LEAD_PARAGRAPHS = 2
+
+
+def _starts_with_fixed_reply(content: str, prefixes: tuple[str, ...]) -> bool:
+    """固定话术是否位于正文开头（允许其前置至多一段旁白，按空行分段）。"""
+    leading = [block.strip() for block in content.strip().split("\n\n") if block.strip()]
+    return any(block.startswith(prefixes) for block in leading[:FIXED_REPLY_LEAD_PARAGRAPHS])
+
+
 def classify_knowledge_disposition(content: str, evidence: dict[str, Any] | None) -> dict[str, Any]:
     """按最终回复文案与检索证据判定拒答归属。
 
@@ -361,10 +374,9 @@ def classify_knowledge_disposition(content: str, evidence: dict[str, Any] | None
     无检索证据的拒答打 judgment_required，交由 judge_refusal 进一步区分
     （知识缺口 / 跑题 / 跨域 / 策略拦截）。
     """
-    normalized = content.strip()
-    if normalized.startswith((SYSTEM_ERROR_REPLY, SYSTEM_ERROR_REPLY_EN)):
+    if _starts_with_fixed_reply(content, (SYSTEM_ERROR_REPLY, SYSTEM_ERROR_REPLY_EN)):
         return _disposition("system_error", "retrieval_error")
-    if not normalized.startswith((KNOWLEDGE_REFUSAL_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN)):
+    if not _starts_with_fixed_reply(content, (KNOWLEDGE_REFUSAL_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN)):
         return _disposition("answered", None)
     if evidence is None:
         return _disposition("knowledge_refusal", "no_enabled_knowledge_base", judgment_required=True)

@@ -70,6 +70,22 @@ def test_build_prompt_includes_bilingual_fixed_refusals():
     assert "英文问题只回复" in prompt
 
 
+def test_prompt_forbids_process_narration_and_pins_refusal_reply_first():
+    """线上 636 回归：固定话术被一句过程旁白挤到第二段，拒答被当成正常回答；提示词要两头都堵。"""
+    prompt = build_prompt_with_context(_empty_context())
+
+    assert "不输出检索过程、内心思考或自我说明" in prompt
+    assert "必须是正文第一个字符" in prompt
+
+
+def test_prompt_refuses_off_business_requests_before_tools():
+    """业务外请求不得进工具链：线上曾把「介绍一下CUDA Stream」当成任务，在沙箱写并试图编译代码。"""
+    prompt = build_prompt_with_context(_empty_context())
+
+    assert "与本企业业务无关的请求" in prompt
+    assert "不在沙箱执行命令、不写文件、不产出交付物" in prompt
+
+
 def test_business_response_prompt_covers_question_types_and_product_line():
     prompt = build_prompt_with_context(_empty_context())
 
@@ -87,6 +103,15 @@ def test_business_response_section_defers_to_unified_refusal():
 
     assert prompt.index(BUSINESS_RESPONSE_PROMPT.strip()) < prompt.index(HARD_GUARDRAILS_PROMPT.strip())
     assert "仍按“知识证据与统一拒答”处理" in BUSINESS_RESPONSE_PROMPT
+
+
+def test_business_response_prompt_forbids_generic_greeting_for_phenomenon():
+    """现象短语必须就原话追问：flash 档模型曾无视输入、回退成自我介绍+能力菜单（2026-10 conv 602 回归）。"""
+    prompt = build_prompt_with_context(_empty_context())
+
+    assert "追问必须落在用户原话上" in prompt
+    assert "不得无视用户输入" in prompt
+    assert "通用引导" in prompt
 
 
 def test_build_prompt_requires_artifact_registration():

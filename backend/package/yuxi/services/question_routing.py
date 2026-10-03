@@ -4,7 +4,7 @@
 宁可多花一次完整模型的调用。
 
 分档按 免费规则 → 小模型确认 的层级早退（形状仿 knowledge_scope_gate）：
-- 规则命中（附件/长问题/复杂意图词/短问题无复杂信号）→ 零开销返回；
+- 规则命中（附件/长问题/复杂意图词/短问题且看得出意图）→ 零开销返回；
 - 规则未决才调用一次小模型；未配置判定模型或调用失败 → complex。
 
 续问轮复杂度向上粘滞：同 thread 上一 run 判过 complex，本轮直接 complex、不再分档。
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from fastapi import HTTPException
@@ -66,10 +67,67 @@ COMPLEXITY_TERMS: frozenset[str] = frozenset(
     }
 )
 
-# 短问题上限：不超过该长度且无复杂信号 → simple；超过 COMPLEX_MIN_CHARS → complex；
-# 两者之间交由小模型分档。
+# 短问题上限：不超过该长度、无复杂信号且看得出意图 → simple；超过 COMPLEX_MIN_CHARS → complex；
+# 其余交由小模型分档。
 SIMPLE_MAX_CHARS = 30
 COMPLEX_MIN_CHARS = 120
+
+# 意图线索：短问题只有带这些线索才算“事实型单点问题”可以走快速模型。缺了线索的短输入
+# 是语义不完整的片段（产品词、型号、报错原文，如「Triton Kernel 融合」「MDM-初始化安装终止」），
+# 连“要问什么”都还没确定，交给关掉思考的快速模型只会自由发挥——已两次现场复现：这两句
+# 都让快速模型照系统提示词回了一段通用引导（线上对话 602、631）。这类输入不早退，按复杂处理。
+# 线索只收明确的问句/诉求词，容易夹在名词里的字（请/查/几，如「申请流程」「检查记录」「几何尺寸」）
+# 一律放进双字词，宁可漏判多花一次完整模型。
+SIMPLE_INTENT_CUES: frozenset[str] = frozenset(
+    {
+        "?",
+        "？",
+        "吗",
+        "呢",
+        "吧",
+        "如何",
+        "怎么",
+        "怎样",
+        "怎么办",
+        "为什么",
+        "什么",
+        "哪些",
+        "哪个",
+        "哪里",
+        "多少",
+        "多久",
+        "多大",
+        "是否",
+        "能否",
+        "能不能",
+        "可不可以",
+        "有没有",
+        "是不是",
+        "支持",
+        "请问",
+        "帮我",
+        "帮忙",
+        "查询",
+        "查一下",
+        "介绍",
+        "说明",
+        "解释",
+        "告诉",
+        "推荐",
+        "你好",
+        "您好",
+        "在吗",
+        "谢谢",
+        "感谢",
+        "再见",
+        "早上好",
+        "下午好",
+        "晚上好",
+    }
+)
+
+# 英文寒暄按整词匹配：子串匹配会让 “this/which” 之类误命中 “hi”。
+SIMPLE_INTENT_WORDS: frozenset[str] = frozenset({"hello", "hi", "hey", "thanks", "thank"})
 
 JUDGE_COMPLEXITY_SYSTEM_PROMPT = """\
 你是企业知识库客服的问题分档器。仅判断一件事：用户问题应该由轻量模型还是完整模型回答。
@@ -148,13 +206,21 @@ async def classify_complexity(
     hit = next((term for term in COMPLEXITY_TERMS if term in q), None)
     if hit:
         return {"complexity": "complex", "tier": "rule", "reason": f"命中复杂意图词「{hit}」"}
-    if len(q) <= SIMPLE_MAX_CHARS:
+    if len(q) <= SIMPLE_MAX_CHARS and _has_intent_cue(q):
         return {"complexity": "simple", "tier": "rule", "reason": "短问题且无复杂信号"}
 
     complexity = await _judge_complexity(q, caller=caller)
     if complexity is None:
         return {"complexity": "complex", "tier": "fallback", "reason": "分档判定不可用，按复杂处理"}
     return {"complexity": complexity, "tier": "llm", "reason": "小模型分档"}
+
+
+def _has_intent_cue(question: str) -> bool:
+    """短输入是否看得出意图（问句、诉求或寒暄），而不是只有一串名词或报错原文。"""
+    lowered = question.lower()
+    if any(cue in lowered for cue in SIMPLE_INTENT_CUES):
+        return True
+    return any(word in SIMPLE_INTENT_WORDS for word in re.findall(r"[a-z]+", lowered))
 
 
 async def _thread_last_route_complex(db, thread_id: str, uid) -> bool:

@@ -8,6 +8,7 @@ from typing import Any
 from langgraph.prebuilt.tool_node import ToolRuntime
 from pydantic import BaseModel, Field
 
+from yuxi import config as sys_config
 from yuxi.agents.toolkits.registry import tool
 from yuxi.knowledge.base import KnowledgeBase
 from yuxi.knowledge.schemas import (
@@ -262,6 +263,74 @@ def _number_query_sources(output: dict[str, Any], runtime: ToolRuntime | None) -
     return output
 
 
+# 跨轮去重占位与预算截断标记：见 _apply_injection_budget
+_REINJECTED_CHUNK_PLACEHOLDER = (
+    "（此片段已在前文注入，不重复展开；需要完整原文时用 find_kb_document / open_kb_document 核对）"
+)
+_BUDGET_TRUNCATION_MARKER = "\n……（超出单次注入预算，此处截断）"
+
+
+def _apply_injection_budget(
+    results: list[dict[str, Any]],
+    runtime: ToolRuntime | None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """检索结果的跨轮去重 + 注入字符预算，返回 (裁剪后的新列表, 本次计数)。
+
+    检索结果在上下文卸载豁免名单里（backends/composite.py），多轮全文累积是 run 内
+    滚雪球的主因。去重状态挂在 runtime.context 上（与 _knowledge_source_references
+    同一模式，天然 run 级）：同一 chunk（kb_id, chunk_id）只注入一次正文，重复命中以
+    占位行替代——占位条目仍带 kb_id/file_id，_number_query_sources 会给出与首注入
+    一致的来源编号，引用链不断。预算按相关性顺序累计正文长度，装不下的片段截断、
+    其余丢弃（因此 results 非空时返回也非空，ok 状态契约不被破坏）。
+
+    计数（截断/丢弃/占位 + 生效预算值）随返回值带出，调用方挂到工具结果的 `_budget`
+    键上，由 RunTimingMiddleware 摘走累积进 run_metrics 落库——预算动作不留痕的话，
+    答案质量问题无法归因到预算裁剪。不能挂 context 直读：chat 主路径在
+    base.py::_stream_input_with_state 里按 input_context 重建 context，工具与落库
+    拿到的不是同一实例。
+    """
+    char_limit = sys_config.retrieval_injection_char_limit
+    context = getattr(runtime, "context", None)
+    injected = getattr(context, "_knowledge_injected_chunks", None)
+    if injected is None and context is not None:
+        injected = context._knowledge_injected_chunks = set()
+
+    truncated_chunks = 0
+    dedup_placeholders = 0
+    kept: list[dict[str, Any]] = []
+    used_chars = 0
+    for item in results:
+        if used_chars >= char_limit:
+            break
+        original = str(item.get("content") or "")
+        key = (str(item.get("kb_id") or ""), str(item.get("id") or ""))
+        deduped = injected is not None and key in injected
+        truncated = False
+        content = _REINJECTED_CHUNK_PLACEHOLDER if deduped else original
+        if used_chars + len(content) > char_limit:
+            remaining = char_limit - used_chars - len(_BUDGET_TRUNCATION_MARKER)
+            if remaining <= 0:
+                break
+            content = original[:remaining] + _BUDGET_TRUNCATION_MARKER
+            deduped = False
+            truncated = True
+        if injected is not None and not deduped:
+            injected.add(key)
+        if deduped:
+            dedup_placeholders += 1
+        elif truncated:
+            truncated_chunks += 1
+        kept.append({**item, "content": content} if content != original else item)
+        used_chars += len(content)
+    delta = {
+        "injection_char_limit": char_limit,
+        "injection_truncated_chunks": truncated_chunks,
+        "injection_dropped_chunks": len(results) - len(kept),
+        "injection_dedup_placeholders": dedup_placeholders,
+    }
+    return kept, delta
+
+
 @tool(category="knowledge", tags=["知识库"], args_schema=QueryKBInput)
 async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, runtime: ToolRuntime = None) -> Any:
     """在指定知识库中检索内容
@@ -299,7 +368,9 @@ async def query_kb(kb_id: str, query_text: str, file_name: str | None = None, ru
         else:
             result = retriever(query_text, **kwargs)
 
-        return _number_query_sources(await _build_query_output(target_kb_id, result), runtime)
+        output = await _build_query_output(target_kb_id, result)
+        output["results"], output["_budget"] = _apply_injection_budget(output["results"], runtime)
+        return _number_query_sources(output, runtime)
 
     except Exception as e:
         logger.exception("知识库检索失败 kb_id={}: {}", target_kb_id, e)
@@ -426,14 +497,15 @@ async def retrieve_kbs(
     # 各库并行检索，单库失败不阻断其余库
     per_kb_outputs = await asyncio.gather(*[_retrieve_one(r, kid) for r, kid in targets])
 
-    # 合并各库非空结果并全局排序，结果内自带来源 kb_id
-    merged_results = _merge_kb_results(per_kb_outputs)
+    # 合并各库非空结果并全局排序，结果内自带来源 kb_id；注入预算/跨轮去重在合并后统一施加
+    merged_results, budget_delta = _apply_injection_budget(_merge_kb_results(per_kb_outputs), runtime)
 
     if not merged_results:
         return SearchOutputSchema(status="insufficient", reason="no_results", kb_id="").model_dump()
 
     queried_kb_ids = ",".join(target_kb_id for _, target_kb_id in targets)
     output = SearchOutputSchema(status="ok", kb_id=queried_kb_ids, results=merged_results).model_dump()
+    output["_budget"] = budget_delta
     return _number_query_sources(output, runtime)
 
 

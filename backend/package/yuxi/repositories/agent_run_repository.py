@@ -180,6 +180,15 @@ class AgentRunRepository:
         await self.db.flush()
         return run
 
+    async def set_metrics(self, run_id: str, metrics: dict) -> AgentRun | None:
+        run = await self.get_run(run_id)
+        if not run:
+            return None
+        run.metrics = metrics
+        run.updated_at = utc_now_naive()
+        await self.db.flush()
+        return run
+
     async def mark_running(self, run_id: str) -> AgentRun | None:
         run = await self._lock_run(run_id)
         if not run:

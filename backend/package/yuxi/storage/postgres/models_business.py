@@ -588,9 +588,7 @@ class MessageFeedback(Base):
     """Message feedback table - 消息反馈表"""
 
     __tablename__ = "message_feedbacks"
-    __table_args__ = (
-        UniqueConstraint("message_id", "uid", name="uq_message_feedback_message_uid"),
-    )
+    __table_args__ = (UniqueConstraint("message_id", "uid", name="uq_message_feedback_message_uid"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="Primary key")
     message_id = Column(
@@ -971,6 +969,7 @@ class AgentRun(Base):
     output_message_id = Column(Integer, nullable=True, comment="Output message ID")
     last_event_id = Column(String(64), nullable=True, comment="Last Redis stream event ID")
     input_payload = Column(JSON, nullable=False, default=dict, comment="Original input payload")
+    metrics = Column(JSON, nullable=True, comment="Run 级执行指标：模型/检索轮数与耗时、token 峰值与累计")
     error_type = Column(String(64), nullable=True, comment="Error type")
     error_message = Column(Text, nullable=True, comment="Error message")
     started_at = Column(DateTime, nullable=True, comment="Start time")

@@ -76,6 +76,50 @@ async def test_classify_short_plain_question_is_simple():
     assert verdict["tier"] == "rule"
 
 
+@pytest.mark.asyncio
+async def test_classify_short_question_with_intent_cue_is_simple():
+    """短问题带意图线索（问句/诉求/寒暄）仍走规则层早退。"""
+    for question in ("p10 支持几张扩展卡", "如何重启设备", "Hello", "谢谢"):
+        verdict = await classify_complexity(question)
+        assert verdict["complexity"] == "simple", question
+        assert verdict["tier"] == "rule", question
+
+
+@pytest.mark.asyncio
+async def test_classify_short_fragment_without_intent_cue_goes_to_judge():
+    """无线索短片段不是“事实型单点问题”，不再在规则层判 simple。
+
+    回归：线上对话 602「MDM-初始化安装终止」、631「Triton Kernel 融合」正是被规则层
+    判成 simple 后交给快速模型，结果两轮都照系统提示词回了通用引导。
+    """
+    asked: list[list[dict]] = []
+
+    async def caller(messages):
+        asked.append(messages)
+        return '{"complexity": "complex"}'
+
+    for question in ("Triton Kernel 融合", "MDM-初始化安装终止"):
+        verdict = await classify_complexity(question, caller=caller)
+        assert verdict["complexity"] == "complex", question
+        assert verdict["tier"] == "llm", question
+    assert len(asked) == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_short_fragment_defaults_complex_without_judge(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(question_routing, "QUESTION_ROUTE_JUDGE_MODEL", "")
+    verdict = await classify_complexity("Triton Kernel 融合")
+    assert verdict == {"complexity": "complex", "tier": "fallback", "reason": "分档判定不可用，按复杂处理"}
+
+
+@pytest.mark.asyncio
+async def test_classify_english_cue_requires_whole_word(monkeypatch: pytest.MonkeyPatch):
+    """含 “hi” 的英文单词（this/which）不是寒暄线索，不能因此早早判 simple。"""
+    monkeypatch.setattr(question_routing, "QUESTION_ROUTE_JUDGE_MODEL", "")
+    verdict = await classify_complexity("p10 which")
+    assert verdict["tier"] == "fallback"
+
+
 # ---------- classify_complexity：judge 层 ----------
 
 

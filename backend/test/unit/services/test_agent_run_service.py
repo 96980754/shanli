@@ -1674,6 +1674,17 @@ async def test_route_scenario_complex_start_keeps_simple_insert_on_base(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_route_scenario_cue_free_fragment_keeps_base_model(monkeypatch: pytest.MonkeyPatch):
+    # 回归（线上对话 631）：无线索短片段不是简单问题，不得交给快速响应模型
+    db = _patch_routed_thread(monkeypatch)
+    monkeypatch.setattr(question_routing, "QUESTION_ROUTE_JUDGE_MODEL", "")
+
+    turns = await _create_thread_turns(db, ["Triton Kernel 融合"])
+
+    assert turns == [("agent-default-model", "complex", "fallback")]
+
+
+@pytest.mark.asyncio
 async def test_create_chat_run_with_image_persists_multimodal_message_type(monkeypatch: pytest.MonkeyPatch):
     db = _patch_agent_run_creation(monkeypatch)
 

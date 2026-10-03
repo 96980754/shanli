@@ -40,6 +40,13 @@ def load_chat_model(fully_specified_name: str | None, **kwargs) -> BaseChatModel
 
     logger.debug(f"Loading model {fully_specified_name} with provider_type={info.provider_type}")
 
+    disable_thinking = _in_disable_thinking_specs(fully_specified_name)
+    if disable_thinking and info.provider_type in {"anthropic", "gemini"}:
+        logger.warning(
+            f"enable_thinking 仅适用于 OpenAI 兼容模型，忽略 {info.provider_type} 模型 {fully_specified_name}"
+        )
+        disable_thinking = False
+
     if info.provider_type == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -58,6 +65,12 @@ def load_chat_model(fully_specified_name: str | None, **kwargs) -> BaseChatModel
             **kwargs,
         )
 
+    if disable_thinking:
+        # 关闭思考输出：qwen3 系列等默认带思考，快路径下思考 token 是纯延迟
+        # （实测单轮 5.3~6.8s → 1.9~2.5s）。参数按模型白名单挂载，见配置
+        # disable_thinking_model_specs——不支持该参数的模型（如 glm 部分档位）会直接 400。
+        kwargs.setdefault("extra_body", {}).setdefault("enable_thinking", False)
+
     return _ToolCallChunkFixChatOpenAI(
         model=info.model_id,
         api_key=SecretStr(api_key),
@@ -65,6 +78,11 @@ def load_chat_model(fully_specified_name: str | None, **kwargs) -> BaseChatModel
         stream_usage=True,
         **kwargs,
     )
+
+
+def _in_disable_thinking_specs(fully_specified_name: str) -> bool:
+    specs = getattr(sys_config, "disable_thinking_model_specs", None) or []
+    return fully_specified_name in specs
 
 
 class _ToolCallChunkFixChatOpenAI(ChatOpenAI):

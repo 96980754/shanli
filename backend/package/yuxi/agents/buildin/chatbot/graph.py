@@ -16,6 +16,7 @@ from yuxi.agents.context import (
 from yuxi.agents.middlewares import (
     ImageInputCompatibilityMiddleware,
     KnowledgeRefusalMiddleware,
+    RunTimingMiddleware,
     TokenUsageMiddleware,
     create_summary_middleware,
     save_attachments_to_fs,
@@ -74,6 +75,9 @@ async def _build_middlewares(context):
             ImageInputCompatibilityMiddleware(product_detect=True),
             KnowledgeRefusalMiddleware(),
             TokenUsageMiddleware(),
+            # 最内层：只计真正打到模型的调用（外层拒答短路不会产生幻影计数），
+            # run 级耗时/轮数随 run 落库到 agent_runs.metrics。
+            RunTimingMiddleware(),
         ]
     )
     return middlewares

@@ -261,6 +261,23 @@ class Config(BaseModel):
         default="siliconflow-cn:Pro/MiniMaxAI/MiniMax-M2.5",
         description="快速响应模型；简单问题自动使用，复杂问题使用默认对话模型，也用于生成会话标题",
     )
+    disable_thinking_model_specs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "关闭思考输出的模型白名单（OpenAI 兼容 extra_body 传 enable_thinking=false）。"
+            "仅适用于支持该参数的模型（如 qwen3 系列）；不支持的模型（如 glm 部分档位）"
+            "会直接报 400，配置前先用模型连通性测试验证"
+        ),
+    )
+    retrieval_injection_char_limit: int = Field(
+        default=30000,
+        ge=2000,
+        description=(
+            "单次 query_kb/query_kbs 工具结果注入正文的字符预算（合并后按相关性顺序累计，"
+            "超出的片段截断、余量丢弃）。检索结果在上下文卸载豁免名单里，多轮全文累积是 "
+            "run 内滚雪球主因（实测 query_kbs 单次结果 P90 约 7.7 万字符）。应不小于 2000"
+        ),
+    )
     embed_model: str = Field(
         default="siliconflow-cn:Pro/BAAI/bge-m3",
         description="默认 Embedding 模型",
@@ -579,9 +596,7 @@ class Config(BaseModel):
         """跨字段引用校验：业务线绑定的客服 id 必须存在于 wecom_customer_services。"""
         rows = self.business_lines or []
         services = self.wecom_customer_services or []
-        known_ids = {
-            str(entry["id"]) for entry in services if isinstance(entry, dict) and entry.get("id")
-        }
+        known_ids = {str(entry["id"]) for entry in services if isinstance(entry, dict) and entry.get("id")}
         invalid: list[str] = []
         for row in rows:
             if not isinstance(row, dict):

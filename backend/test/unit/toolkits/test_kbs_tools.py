@@ -161,6 +161,7 @@ async def test_query_kb_allows_dify_knowledge_base(monkeypatch) -> None:
 
     runtime = SimpleNamespace(context=SimpleNamespace())
     result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
+    del result["_budget"]  # 计数通道，不参与输出形状断言
 
     assert result == {
         "schema_version": 1,
@@ -238,6 +239,7 @@ async def test_query_kb_returns_insufficient_for_empty_results(monkeypatch) -> N
     monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
 
     result = await _run_query_kb(kb_id="db-1", query_text="missing", runtime=SimpleNamespace(context=SimpleNamespace()))
+    del result["_budget"]  # 计数通道，不参与输出形状断言
 
     assert result == {
         "schema_version": 1,
@@ -916,3 +918,126 @@ async def test_search_file_total_reflects_full_set_not_page(monkeypatch) -> None
     assert result["total"] == 50
     assert len(result["files"]) == 10
     assert result["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_query_kb_applies_injection_char_budget(monkeypatch) -> None:
+    monkeypatch.setattr(tools.sys_config, "retrieval_injection_char_limit", 100)
+
+    async def _fake_retriever(query_text: str, **kwargs):
+        del kwargs, query_text
+        return [
+            {"content": "a" * 60, "metadata": {"file_id": "f-1", "chunk_id": "c-1"}},
+            {"content": "b" * 60, "metadata": {"file_id": "f-2", "chunk_id": "c-2"}},
+            {"content": "c" * 60, "metadata": {"file_id": "f-3", "chunk_id": "c-3"}},
+        ]
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=SimpleNamespace(context=SimpleNamespace()))
+
+    assert result["status"] == "ok"
+    contents = [item["content"] for item in result["results"]]
+    # 第一条完整保留，第二条截断，第三条丢弃；正文总长不超预算
+    assert contents[0] == "a" * 60
+    assert len(contents) == 2
+    assert contents[1].endswith(tools._BUDGET_TRUNCATION_MARKER)
+    assert sum(len(content) for content in contents) == 100
+
+
+@pytest.mark.asyncio
+async def test_query_kb_dedupes_reinjected_chunks_within_run(monkeypatch) -> None:
+    async def _fake_retriever(query_text: str, **kwargs):
+        del kwargs
+        return [{"content": f"shared-{query_text}", "metadata": {"file_id": "f-1", "chunk_id": "c-1"}}]
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    first = await _run_query_kb(kb_id="db-1", query_text="one", runtime=runtime)
+    second = await _run_query_kb(kb_id="db-1", query_text="two", runtime=runtime)
+
+    assert first["results"][0]["content"] == "shared-one"
+    assert second["results"][0]["content"] == tools._REINJECTED_CHUNK_PLACEHOLDER
+    # 占位条目仍带来源信息，编号与首注入一致，引用链不断
+    assert second["results"][0]["file_id"] == "f-1"
+    assert first["results"][0]["metadata"]["source_reference"] == 1
+    assert second["results"][0]["metadata"]["source_reference"] == 1
+
+
+@pytest.mark.asyncio
+async def test_query_kb_exposes_budget_delta_on_result(monkeypatch) -> None:
+    monkeypatch.setattr(tools.sys_config, "retrieval_injection_char_limit", 100)
+
+    async def _fake_retriever(query_text: str, **kwargs):
+        del kwargs, query_text
+        return [
+            {"content": "a" * 60, "metadata": {"file_id": "f-1", "chunk_id": "c-1"}},
+            {"content": "b" * 60, "metadata": {"file_id": "f-2", "chunk_id": "c-2"}},
+            {"content": "c" * 60, "metadata": {"file_id": "f-3", "chunk_id": "c-3"}},
+        ]
+
+    _patch_retrievers(monkeypatch, retriever=_fake_retriever)
+    monkeypatch.setattr(tools, "_resolve_visible_knowledge_bases_for_query", _fake_visible_kbs)
+
+    # 计数随结果 `_budget` 键带出（RunTimingMiddleware 摘走累积），
+    # 与 test_query_kb_applies_injection_char_budget 同场景：1 条截断、1 条丢弃
+    runtime = SimpleNamespace(context=SimpleNamespace())
+    result = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
+    assert result["_budget"] == {
+        "injection_char_limit": 100,
+        "injection_truncated_chunks": 1,
+        "injection_dropped_chunks": 1,
+        "injection_dedup_placeholders": 0,
+    }
+
+    # 第二轮同 runtime 同 chunks：首条以占位替代（跨调用去重状态在 runtime.context 上）
+    second = await _run_query_kb(kb_id="db-1", query_text="auth", runtime=runtime)
+    assert second["_budget"]["injection_dedup_placeholders"] == 1
+
+
+@pytest.mark.asyncio
+async def test_query_kbs_applies_budget_after_merge(monkeypatch) -> None:
+    monkeypatch.setattr(tools.sys_config, "retrieval_injection_char_limit", 100)
+
+    async def _retriever(query_text: str, **kwargs):
+        del kwargs, query_text
+        return [
+            {"content": "x" * 50, "metadata": {"file_id": "f-1", "chunk_id": "c-1"}, "score": 0.9},
+            {"content": "y" * 50, "metadata": {"file_id": "f-2", "chunk_id": "c-2"}, "score": 0.8},
+        ]
+
+    _patch_multi_retrievers(monkeypatch, retrievers={"db-1": ("milvus", _retriever), "db-2": ("milvus", _retriever)})
+
+    result = await _run_query_kbs(
+        kb_ids=["db-1", "db-2"], query_text="cert", runtime=SimpleNamespace(context=SimpleNamespace())
+    )
+
+    assert result["status"] == "ok"
+    total_chars = sum(len(item["content"]) for item in result["results"])
+    # 两库共 4 条合并后受同一预算约束（此前实测 P90 单次 7.7 万字符，靠此预算压回）
+    assert total_chars <= 100
+    assert result["results"]
+
+
+def test_apply_injection_budget_without_context_keeps_budget_stateless(monkeypatch) -> None:
+    monkeypatch.setattr(tools.sys_config, "retrieval_injection_char_limit", 100)
+
+    results = [
+        {"id": "c-1", "kb_id": "db-1", "content": "a" * 60, "metadata": {}},
+        {"id": "c-2", "kb_id": "db-1", "content": "b" * 60, "metadata": {}},
+    ]
+
+    # runtime 为 None（外部复用 retrieve_kbs 的调用方）时：预算照常生效，无跨调用去重状态
+    first, first_delta = tools._apply_injection_budget(results, None)
+    second, second_delta = tools._apply_injection_budget(results, None)
+
+    assert [item["content"] for item in first] == [item["content"] for item in second]
+    assert sum(len(item["content"]) for item in first) <= 100
+    # 每次调用返回各自的计数（60+60 > 100：一条截断、无丢弃的边界恰好装下）
+    assert first_delta["injection_char_limit"] == 100
+    assert first_delta == second_delta
+    # 原列表不被修改
+    assert results[1]["content"] == "b" * 60

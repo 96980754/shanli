@@ -14,11 +14,13 @@ share the same runtime behavior once they reach the worker.
 
 import asyncio
 import json
+import re
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from langchain.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.types import Command
@@ -164,15 +166,9 @@ def _build_agent_context(agent, input_context: dict):
     return context
 
 
-async def _get_langgraph_messages(agent_instance, config_dict, *, context):
+async def _get_langgraph_state(agent_instance, config_dict, *, context):
     graph = await agent_instance.get_graph(context=context)
-    state = await graph.aget_state(config_dict)
-
-    if not state or not state.values:
-        logger.warning("No state found in LangGraph")
-        return None
-
-    return state.values.get("messages", [])
+    return await graph.aget_state(config_dict)
 
 
 def _build_langfuse_run_context(
@@ -747,6 +743,63 @@ async def save_partial_message(
         return None
 
 
+def _repair_knowledge_image_urls(content: Any, messages: list[Any]) -> Any:
+    """修正模型截短的知识库图片 URL，不凭空添加来源图片。
+
+    模型返回的是 v1 内容块列表（`[{"type": "text", "text": ...}]`），少数情况才是纯字符串；
+    两种形状都必须修——只认 str 会让块列表形态静默失效，裂图照旧。
+    """
+    source_urls: set[str] = set()
+    current_turn = False
+    url_pattern = re.compile(r"https?://[^\s)\"'<>]+/public/[^\s)\"'<>]+")
+    for message in messages:
+        data = message.model_dump() if hasattr(message, "model_dump") else message if isinstance(message, dict) else {}
+        message_type = data.get("type") or data.get("role")
+        if message_type in {"human", "user"}:
+            source_urls.clear()
+            current_turn = True
+            continue
+        if current_turn and message_type == "tool":
+            source_urls.update(url_pattern.findall(str(data.get("content") or "")))
+
+    if not source_urls:
+        return content
+
+    source_paths = {urlsplit(url).path.split("/public/", 1)[-1]: url for url in source_urls}
+    image_url_pattern = re.compile(r"(?:https?://[^\s)\"'<>]+)?/(?:minio/)?public/[^\s)\"'<>]+")
+
+    def replace(match: re.Match[str]) -> str:
+        original = match.group(0)
+        object_path = original.split("/public/", 1)[-1]
+        if object_path in source_paths:
+            return original
+        # 模型截短的只是文件名部分（丢掉上传时加的微秒前缀），目录保持不变；
+        # 按同目录 + 文件名后缀唯一匹配，匹配不上或多义时保持原样。
+        directory, _, basename = object_path.rpartition("/")
+        matches: list[str] = []
+        for path in source_paths:
+            path_directory, _, path_name = path.rpartition("/")
+            if path_directory == directory and path_name.endswith(f"_{basename}"):
+                matches.append(path)
+        if len(matches) != 1:
+            return original
+        return f"/minio/public/{matches[0]}"
+
+    def repair(text: str) -> str:
+        return image_url_pattern.sub(replace, text) if text else text
+
+    if isinstance(content, list):
+        return [
+            {**block, "text": repair(block["text"])}
+            if isinstance(block, dict) and isinstance(block.get("text"), str)
+            else block
+            for block in content
+        ]
+    if isinstance(content, str):
+        return repair(content)
+    return content
+
+
 async def save_messages_from_langgraph_state(
     agent_instance,
     thread_id: str,
@@ -757,9 +810,14 @@ async def save_messages_from_langgraph_state(
     run_id: str | None = None,
     request_id: str | None = None,
 ) -> None:
-    messages = await _get_langgraph_messages(agent_instance, config_dict, context=context)
-    if messages is None:
+    state = await _get_langgraph_state(agent_instance, config_dict, context=context)
+    if not state or not state.values:
+        logger.warning("No state found in LangGraph")
         return
+
+    messages = state.values.get("messages", [])
+    # run 级耗时/轮数指标（RunTimingMiddleware 累积，含注入预算计数）：随本次落库事务一并写 agent_runs.metrics
+    run_metrics = state.values.get("run_metrics")
 
     existing_ids = await _get_existing_message_ids(conv_repo, thread_id)
     knowledge_question, knowledge_evidence = build_knowledge_evidence(messages)
@@ -793,6 +851,7 @@ async def save_messages_from_langgraph_state(
             continue
 
         if msg_type == "ai":
+            msg_dict["content"] = _repair_knowledge_image_urls(msg_dict.get("content"), messages)
             msg_dict = apply_knowledge_disposition(
                 msg_dict,
                 question=knowledge_question,
@@ -849,6 +908,8 @@ async def save_messages_from_langgraph_state(
     if run_id and output_message:
         run_repo = AgentRunRepository(conv_repo.db)
         await run_repo.set_output_message(run_id, output_message.id)
+        if isinstance(run_metrics, dict) and run_metrics:
+            await run_repo.set_metrics(run_id, run_metrics)
         await conv_repo.db.commit()
 
     if final_ai_message and isinstance(final_ai_metadata, dict):
@@ -1581,6 +1642,21 @@ async def stream_agent_chat(
                 run_id=meta.get("run_id"),
                 request_id=meta.get("request_id"),
             )
+
+        # 病理 run（如递归超限）恰恰最需要指标：尽力把 checkpoint 里已累积的
+        # run_metrics 落库，失败只记日志，不影响上面的错误上报。
+        if meta.get("run_id"):
+            try:
+                state = await _get_langgraph_state(
+                    agent, {"configurable": {"thread_id": thread_id, "uid": uid}}, context=context
+                )
+                metrics = (getattr(state, "values", {}) or {}).get("run_metrics")
+                if isinstance(metrics, dict) and metrics:
+                    async with pg_manager.get_async_session_context() as metrics_db:
+                        await AgentRunRepository(metrics_db).set_metrics(meta["run_id"], metrics)
+                        await metrics_db.commit()
+            except Exception as metrics_error:
+                logger.warning(f"Persist run metrics on error path failed: {metrics_error}")
 
         yield make_chunk(status="error", error_type=error_type, meta=meta)
     finally:

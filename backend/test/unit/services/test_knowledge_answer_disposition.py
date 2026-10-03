@@ -109,6 +109,38 @@ def test_refusal_detected_by_prefix_ignoring_suffix():
     assert disposition["judgment_required"] is True
 
 
+def test_refusal_detected_after_one_leading_narration_paragraph():
+    """线上 636 回归：固定话术前多写一句过程旁白，仍要认成拒答（否则不落缺口、不给转人工按钮）。"""
+    content = (
+        "两次针对性检索（全文关键词搜索 + 多库语义检索）均未命中 “BlackWell”。按规则执行统一拒答。\n\n"
+        f"{KNOWLEDGE_REFUSAL_REPLY}\n\n- 缺少能直接说明该名称的定义或介绍性正文。"
+    )
+    disposition = classify_knowledge_disposition(content, _evidence([_query(status="ok")]))
+
+    assert (disposition["type"], disposition["reason"]) == ("knowledge_refusal", "insufficient_evidence")
+    assert disposition["judgment_required"] is True
+
+
+def test_refusal_quoted_in_answer_body_is_not_a_refusal():
+    """正文中段引用同一句话术（如正常回答里解释拒答话术）不是拒答。"""
+    content = f"## 拒答话术\n\n无依据时系统统一回复：\n{KNOWLEDGE_REFUSAL_REPLY}"
+
+    assert classify_knowledge_disposition(content, None)["type"] == "answered"
+
+
+def test_refusal_beyond_leading_paragraphs_is_not_tolerated():
+    """容忍上限是一段旁白：再多一段就按正常回答处理，避免正文中段引用被误判。"""
+    content = f"先说明背景。\n\n再补充一次。\n\n{KNOWLEDGE_REFUSAL_REPLY}"
+
+    assert classify_knowledge_disposition(content, None)["type"] == "answered"
+
+
+def test_system_error_detected_after_one_leading_narration_paragraph():
+    content = f"检索服务返回异常。\n\n{SYSTEM_ERROR_REPLY}"
+
+    assert classify_knowledge_disposition(content, None)["type"] == "system_error"
+
+
 def test_system_error_detected_by_prefix():
     disposition = classify_knowledge_disposition(SYSTEM_ERROR_REPLY + "（请稍后重试）", None)
     assert disposition["type"] == "system_error"

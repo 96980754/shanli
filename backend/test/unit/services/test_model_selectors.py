@@ -196,6 +196,37 @@ def test_load_chat_model_keeps_non_siliconflow_openai_streaming(monkeypatch):
     assert explicit.disable_streaming is True
 
 
+def test_load_chat_model_injects_enable_thinking_for_whitelisted_spec(monkeypatch):
+    """白名单内的 OpenAI 兼容模型注入 enable_thinking=false，名单外不注入。"""
+    monkeypatch.setattr(
+        "yuxi.agents.models.model_cache.get_model_info",
+        lambda spec: _chat_model_info("alibaba", "qwen3.8-flash") if spec == "alibaba:qwen3.8-flash" else None,
+    )
+
+    monkeypatch.setattr("yuxi.agents.models.sys_config.disable_thinking_model_specs", ["alibaba:qwen3.8-flash"])
+    listed = load_chat_model("alibaba:qwen3.8-flash")
+    assert listed.extra_body == {"enable_thinking": False}
+
+    monkeypatch.setattr("yuxi.agents.models.sys_config.disable_thinking_model_specs", [])
+    unlisted = load_chat_model("alibaba:qwen3.8-flash")
+    assert unlisted.extra_body is None
+
+
+def test_load_chat_model_keeps_caller_extra_body_and_explicit_choice(monkeypatch):
+    """调用方自带 extra_body 时合并不覆盖；显式 enable_thinking 优先于配置默认。"""
+    monkeypatch.setattr(
+        "yuxi.agents.models.model_cache.get_model_info",
+        lambda spec: _chat_model_info("alibaba", "qwen3.8-flash") if spec == "alibaba:qwen3.8-flash" else None,
+    )
+    monkeypatch.setattr("yuxi.agents.models.sys_config.disable_thinking_model_specs", ["alibaba:qwen3.8-flash"])
+
+    merged = load_chat_model("alibaba:qwen3.8-flash", extra_body={"foo": 1})
+    assert merged.extra_body == {"foo": 1, "enable_thinking": False}
+
+    explicit = load_chat_model("alibaba:qwen3.8-flash", extra_body={"enable_thinking": True})
+    assert explicit.extra_body == {"enable_thinking": True}
+
+
 @pytest.mark.asyncio
 async def test_langchain_chat_adapter_preserves_call_response_contract():
     from langchain_core.messages import AIMessage

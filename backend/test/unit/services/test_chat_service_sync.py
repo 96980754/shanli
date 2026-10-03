@@ -9,7 +9,7 @@ from langchain.messages import AIMessage, HumanMessage
 
 from yuxi.agents import context as agent_context
 from yuxi.agents.backends.sandbox import paths as workspace_paths
-from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN
+from yuxi.agents.buildin.chatbot.prompt import IDENTITY_REPLY, KNOWLEDGE_REFUSAL_REPLY, KNOWLEDGE_REFUSAL_REPLY_EN
 from yuxi.config.app import config as runtime_config
 from yuxi.services import chat_service as svc
 
@@ -724,6 +724,47 @@ async def test_save_messages_classifies_english_fixed_refusal(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
+async def test_save_messages_classifies_refusal_after_narration_paragraph(monkeypatch: pytest.MonkeyPatch) -> None:
+    """线上 636 回归：固定话术前多一句过程旁白，仍要落拒答判定 + 转人工按钮 + 知识缺口。"""
+    recorded: list[dict] = []
+
+    async def record(**kwargs):
+        recorded.append(kwargs)
+
+    async def no_judgment(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(svc, "record_knowledge_gap", record)
+    monkeypatch.setattr(svc, "judge_refusal", no_judgment)
+
+    refusal = f"两次针对性检索均未命中。按规则执行统一拒答。\n\n{KNOWLEDGE_REFUSAL_REPLY}\n\n- 缺少定义性正文。"
+    conv_repo = _FakeConvRepo(None)
+    await svc.save_messages_from_langgraph_state(
+        agent_instance=_save_fake_agent(
+            [
+                {"type": "human", "content": "BlackWell介绍"},
+                {
+                    "type": "tool",
+                    "name": "query_kbs",
+                    "content": '{"schema_version": 1, "status": "ok", "kb_id": "kb_a", "reason": null, "results": []}',
+                },
+                {"type": "ai", "content": refusal},
+            ]
+        ),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        config_dict={"configurable": {"thread_id": "thread-1", "uid": "user-1"}},
+        context=object(),
+    )
+
+    metadata = conv_repo.saved_messages[0]["extra_metadata"]
+    assert metadata["knowledge_disposition"]["type"] == "knowledge_refusal"
+    assert metadata["knowledge_disposition"]["reason"] == "insufficient_evidence"
+    assert metadata["handoff_available"] is True
+    assert recorded and recorded[0]["reason"] == "insufficient_evidence"
+
+
+@pytest.mark.asyncio
 async def test_save_messages_revokes_answer_after_query_attempt_without_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -953,6 +994,76 @@ def test_assistant_meta_is_answer_treats_refusals_as_unanswered() -> None:
         )
         is False
     )
+
+
+def test_repair_knowledge_image_urls_restores_full_source_filename() -> None:
+    messages = [
+        {"type": "human", "content": "查看截图"},
+        {
+            "type": "tool",
+            "name": "query_kb",
+            "content": (
+                '{"status":"ok","results":[{"content":"![image_1789646981087410.png]'
+                "(http://localhost:9000/public/kb_3cm2gz6tyb/kb-images/"
+                '1789646981105128_image_1789646981087410.png)"}]}'
+            ),
+        },
+    ]
+    content = '<img src="/minio/public/kb_3cm2gz6tyb/kb-images/1789646981087410.png">'
+
+    assert svc._repair_knowledge_image_urls(content, messages) == (
+        '<img src="/minio/public/kb_3cm2gz6tyb/kb-images/1789646981105128_image_1789646981087410.png">'
+    )
+
+
+def test_repair_knowledge_image_urls_handles_v1_content_blocks() -> None:
+    """线上回答的 content 是 v1 内容块列表：修复必须逐块生效，非文本块与原列表不动。"""
+    messages = [
+        {"type": "human", "content": "查看截图"},
+        {
+            "type": "tool",
+            "name": "query_kb",
+            "content": (
+                '{"status":"ok","results":[{"content":"![image_1789646981087410.png]'
+                "(http://localhost:9000/public/kb_3cm2gz6tyb/kb-images/"
+                '1789646981105128_image_1789646981087410.png)"}]}'
+            ),
+        },
+    ]
+    truncated = '<img src="/minio/public/kb_3cm2gz6tyb/kb-images/1789646981087410.png">'
+    blocks = [
+        {"type": "text", "text": truncated, "index": 0},
+        {"type": "tool_call", "id": "c1", "name": "query_kb", "args": {}},
+    ]
+
+    assert svc._repair_knowledge_image_urls(blocks, messages) == [
+        {
+            "type": "text",
+            "text": '<img src="/minio/public/kb_3cm2gz6tyb/kb-images/1789646981105128_image_1789646981087410.png">',
+            "index": 0,
+        },
+        {"type": "tool_call", "id": "c1", "name": "query_kb", "args": {}},
+    ]
+    # 原列表不被就地改写
+    assert blocks[0]["text"] == truncated
+
+
+def test_repair_knowledge_image_urls_does_not_guess_ambiguous_source() -> None:
+    messages = [
+        {"type": "human", "content": "查看截图"},
+        {
+            "type": "tool",
+            "name": "query_kb",
+            "content": (
+                '{"status":"ok","results":[{"content":"http://localhost:9000/'
+                "public/kb/kb-images/a_figure.png http://localhost:9000/"
+                'public/kb/kb-images/b_figure.png"}]}'
+            ),
+        },
+    ]
+    content = "![截图](/minio/public/kb/kb-images/figure.png)"
+
+    assert svc._repair_knowledge_image_urls(content, messages) == content
 
 
 def test_requires_knowledge_preflight_skips_greeting_and_identity_but_keeps_business() -> None:

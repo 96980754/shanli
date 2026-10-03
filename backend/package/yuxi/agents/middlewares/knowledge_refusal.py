@@ -9,7 +9,8 @@ from typing import Any
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
-_QUERY_TOOLS = frozenset({"query_kb", "query_kbs"})
+# 知识检索工具集合：拒答早停与 run 级耗时统计（run_timing）共用的口径。
+QUERY_TOOLS = frozenset({"query_kb", "query_kbs"})
 _EMPTY_RESULT_LIMIT = 2
 
 
@@ -41,7 +42,7 @@ def _consecutive_empty_searches(messages: Sequence[BaseMessage]) -> int:
     for message in reversed(messages):
         if isinstance(message, HumanMessage):
             break
-        if isinstance(message, ToolMessage) and message.name in _QUERY_TOOLS:
+        if isinstance(message, ToolMessage) and message.name in QUERY_TOOLS:
             if not _is_empty_search(message):
                 break
             count += 1
